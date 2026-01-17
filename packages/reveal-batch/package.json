@@ -1,0 +1,31 @@
+{
+  "name": "@reveal/batch",
+  "version": "1.0.0",
+  "description": "Command-line batch processing tool for screen print color separation using @reveal/core",
+  "main": "src/index.js",
+  "bin": {
+    "reveal-batch": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "dependencies": {
+    "@reveal/core": "1.0.0",
+    "sharp": "^0.33.0",
+    "commander": "^11.1.0",
+    "chalk": "^4.1.2"
+  },
+  "keywords": [
+    "cli",
+    "batch-processing",
+    "screen-printing",
+    "color-separation",
+    "image-processing"
+  ],
+  "author": "Electrosaur Labs",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
