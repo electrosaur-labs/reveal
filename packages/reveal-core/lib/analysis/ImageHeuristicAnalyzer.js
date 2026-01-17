@@ -5,7 +5,7 @@
  * NOTE: Expects Lab pixels directly from Photoshop (3 bytes per pixel: L, a, b)
  * Photoshop encoding: L: 0-255 (0-100), a: 0-255 (-128 to +127), b: 0-255 (-128 to +127)
  */
-const logger = require("../../utils/logger");
+const logger = require("../utils/logger");
 
 const ImageHeuristicAnalyzer = {
     analyze: function(pixels, width, height) {
