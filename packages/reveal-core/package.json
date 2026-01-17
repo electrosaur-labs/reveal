@@ -1,0 +1,49 @@
+{
+  "name": "@reveal/core",
+  "version": "1.0.0",
+  "description": "Pure JavaScript color separation engines for screen printing and AI agents",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "screen-printing",
+    "color-separation",
+    "posterization",
+    "halftone",
+    "image-processing",
+    "lab-color",
+    "median-cut",
+    "reveal",
+    "ai-agent",
+    "openai-function"
+  ],
+  "author": "Electrosaur",
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/electrosaur-labs/reveal-project.git",
+    "directory": "packages/reveal-core"
+  },
+  "bugs": {
+    "url": "https://github.com/electrosaur-labs/reveal-project/issues"
+  },
+  "homepage": "https://github.com/electrosaur-labs/reveal-project/tree/main/packages/reveal-core#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "lib/",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "vitest": "^1.6.1",
+    "@vitest/coverage-v8": "^1.6.1"
+  }
+}
