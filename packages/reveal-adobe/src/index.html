@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Reveal - Screen Printing Color Separation</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Adobe Clean', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #ffffff;
+            color: #323232;
+            font-size: 14px;
+        }
+
+        dialog {
+            border: none;
+            border-radius: 8px;
+            padding: 0;
+            background: #ffffff;
+        }
+
+        .reveal-dialog {
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #ffffff;
+            position: relative;    /* For absolute positioning of buttons */
+            box-sizing: border-box;
+        }
+
+        /* Palette dialog - larger and resizable */
+        dialog.palette-dialog {
+            width: 1200px !important;
+            height: 800px !important;
+            max-width: none !important;
+            max-height: none !important;
+            min-width: 800px !important;
+            min-height: 600px !important;
+        }
+
+        .reveal-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 80px;          /* Leave space for buttons (height + padding) */
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+
+        /* CRITICAL: Explicit heights for palette editor (UXP won't calculate without them) */
+        #paletteEditorSection {
+            min-height: 550px !important;
+            height: auto !important;
+        }
+
+        #paletteEditorSection .form-section {
+            min-height: 500px !important;
+        }
+
+        #paletteEditorSection .form-section > div {
+            min-height: 450px !important;
+        }
+
+        .reveal-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #323232;
+        }
+
+        .info-box {
+            background: #f0f7ff;
+            border-left: 4px solid #1473e6;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .info-box strong {
+            color: #0d66d0;
+        }
+
+        /* Form Sections */
+        .form-section {
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #323232;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e1e1e1;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 24px;
+        }
+
+        .section-title::after {
+            content: '▼';
+            position: absolute;
+            right: 0;
+            font-size: 12px;
+            transition: transform 0.2s;
+        }
+
+        .section-title.collapsed::after {
+            content: '▶';
+        }
+
+        .form-section.collapsed .section-title ~ * {
+            display: none;
+        }
+
+        /* Form Groups */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group-inline {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .form-group-inline > .form-group {
+            flex: 1;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #505050;
+            margin-bottom: 6px;
+        }
+
+        label .hint {
+            font-weight: 400;
+            color: #6e6e6e;
+            font-size: 12px;
+        }
+
+        /* Checkboxes */
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 400;
+            color: #505050;
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        /* Input Fields */
+        input[type="number"],
+        input[type="text"],
+        select {
+            display: block;
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #cacaca;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+            color: #323232;
+            background: #ffffff;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+        }
+
+        input[type="number"]:focus,
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #1473e6;
+            box-shadow: 0 0 0 1px #1473e6;
+        }
+
+        input[type="number"]:disabled,
+        input[type="text"]:disabled,
+        select:disabled {
+            background: #f5f5f5;
+            color: #959595;
+            cursor: not-allowed;
+        }
+
+        /* Spectrum Component Overrides */
+        sp-slider {
+            width: 100%;
+            margin: 4px 0;
+        }
+
+        sp-label {
+            font-size: 13px;
+            color: #323232;
+        }
+
+        /* Radio Buttons */
+        .radio-group {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        input[type="radio"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .radio-option label {
+            margin-bottom: 0;
+            cursor: pointer;
+            font-weight: 400;
+        }
+
+        /* Buttons */
+        .reveal-buttons {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 16px 24px;
+            border-top: 1px solid #e1e1e1;
+            background: #fdfdfd;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            z-index: 100;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-cancel {
+            background: #f5f5f5;
+            color: #323232;
+        }
+
+        .btn-cancel:hover:not(:disabled) {
+            background: #e8e8e8;
+        }
+
+        .btn-primary {
+            background: #1473e6;
+            color: #ffffff;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #0d66d0;
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #323232;
+            border: 1px solid #cacaca;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #e8e8e8;
+            border-color: #1473e6;
+        }
+
+        /* Version Badge */
+        .version-badge {
+            font-size: 11px;
+            color: #6e6e6e;
+            background: #f5f5f5;
+            padding: 4px 8px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-bottom: 16px;
+        }
+
+        /* Helper Text */
+        .helper-text {
+            font-size: 12px;
+            color: #6e6e6e;
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        /* Preview Section */
+        #previewSection {
+            display: none;
+        }
+
+        #previewSection.visible {
+            display: block !important;
+        }
+
+        .preview-grid {
+            /* UXP BUG: CSS Grid refuses to calculate width even with explicit parent width */
+            /* Switching to Flexbox with flex-wrap for 2-column layout */
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 20px;
+            width: 100%;
+            min-width: 400px;
+        }
+
+        .preview-item {
+            border: 2px solid #e1e1e1;
+            border-radius: 6px;
+            padding: 12px;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 150px;
+            /* Flexbox 2-column layout: calc((100% - gap) / 2) */
+            flex: 0 0 calc(50% - 8px);
+            width: calc(50% - 8px);
+            max-width: calc(50% - 8px);
+        }
+
+        .preview-item:hover {
+            border-color: #1473e6;
+            background: #f0f7ff;
+        }
+
+        .preview-item.selected {
+            border-color: #1473e6;
+            background: #f0f7ff;
+            box-shadow: 0 2px 8px rgba(20, 115, 230, 0.2);
+        }
+
+        .preview-item input[type="radio"] {
+            display: none;
+        }
+
+        .preview-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 8px;
+            color: #323232;
+        }
+
+        .preview-label .radio-indicator {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #cacaca;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .preview-item.selected .radio-indicator {
+            border-color: #1473e6;
+            background: #1473e6;
+        }
+
+        .preview-item.selected .radio-indicator::after {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .preview-image {
+            width: 100%;
+            height: auto;
+            border: 1px solid #e1e1e1;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .preview-palette {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .color-swatch {
+            width: 24px;
+            height: 24px;
+            border: 1px solid #cacaca;
+            border-radius: 3px;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Swatch container for larger swatches with labels */
+        .preview-palette > div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .preview-info {
+            font-size: 11px;
+            color: #6e6e6e;
+            margin-top: 4px;
+        }
+
+        /* Editable Palette Section */
+        .editable-palette {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+
+        .editable-swatch-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            border: 2px solid #e1e1e1;
+            border-radius: 6px;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 0 0 auto;        /* Don't grow or shrink */
+            width: 120px;          /* Accommodate 90px input + padding + border */
+        }
+
+        .editable-swatch-container:hover {
+            border-color: #1473e6;
+            background: #f0f7ff;
+        }
+
+        .editable-swatch {
+            width: 64px;
+            height: 64px;
+            border: 2px solid #cacaca;
+            border-radius: 6px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s;
+            position: relative;  /* For lightness badge positioning */
+
+            /* Checkered background to show dark colors */
+            background-image:
+                linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
+                linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
+                linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+            background-size: 8px 8px;
+            background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+            background-color: #ffffff;
+        }
+
+        /* Lightness badge - shows L value (the "bones" of the image) */
+        .lightness-badge {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(0, 0, 0, 0.75);
+            color: #ffffff;
+            font-size: 9px;
+            font-weight: 600;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.5px;
+            pointer-events: none;  /* Don't block clicks on swatch */
+        }
+
+        /* Clickable swatch - artist chooses ink by eye (printer mindset) */
+        .editable-swatch.clickable {
+            cursor: pointer;
+        }
+
+        .editable-swatch.clickable:hover {
+            border-color: #1473e6;
+            box-shadow: 0 2px 8px rgba(20, 115, 230, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .editable-swatch.clickable:active {
+            transform: translateY(0);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        .editable-swatch-label {
+            font-size: 12px;
+            color: #323232;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .editable-swatch-lab {
+            font-size: 10px;
+            color: #6e6e6e;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            letter-spacing: 0.5px;
+        }
+
+        .editable-swatch-lab.warning {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+
+        /* Solo Mode Styles */
+        #previewContainer.solo-mode {
+            border-color: #1473e6;
+            box-shadow: 0 0 0 2px rgba(20, 115, 230, 0.2);
+        }
+
+        .editable-swatch.active-solo {
+            border: 3px solid #1473e6 !important;
+            box-shadow: 0 0 0 2px rgba(20, 115, 230, 0.3);
+        }
+
+        /* Hex Input Field */
+        .hex-input {
+            width: 90px;
+            height: 36px;          /* Increased breathability for professional aesthetic */
+            line-height: 24px;     /* Taller line height for better vertical centering */
+            padding: 6px;          /* Symmetrical padding */
+            border: none;          /* Remove border - use outline instead */
+            outline: 1px solid #cacaca; /* Outline doesn't take up space */
+            border-radius: 3px;
+            font-size: 12px;       /* Professional font size */
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;   /* Improved readability for hex codes */
+            transition: outline-color 0.2s;
+            box-sizing: border-box; /* Include padding in height calculation */
+        }
+
+        .hex-input:focus {
+            outline: 2px solid #1473e6;
+            outline-offset: 0px;
+        }
+
+        .hex-input.error {
+            outline-color: #d7373f;
+            animation: errorFlash 0.5s ease-out;
+        }
+
+        .hex-input.warning {
+            outline-color: #f59e0b;
+            background: #fffbeb;
+        }
+
+        @keyframes errorFlash {
+            0%, 100% {
+                border-color: #d7373f;
+            }
+            50% {
+                border-color: #ff6b6b;
+                box-shadow: 0 0 0 2px rgba(215, 55, 63, 0.3);
+            }
+        }
+
+        .pixel-count {
+            font-size: 10px;
+            color: #6e6e6e;
+            margin-top: 2px;
+        }
+
+        /* Error Dialog */
+        #errorDialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #ffffff;
+            border: 2px solid #d7373f;
+            border-radius: 8px;
+            padding: 24px;
+            min-width: 400px;
+            max-width: 500px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            z-index: 999999;  /* Ultra high to appear above UXP modal dialogs */
+        }
+
+        #errorDialog.visible {
+            display: block;
+        }
+
+        .error-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #d7373f;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .error-message {
+            font-size: 14px;
+            color: #000000;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        /* Collapsible Sections */
+        .collapsible-section {
+            margin-bottom: 16px;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+
+        .collapsible-section.open {
+            background: #ffffff;
+        }
+
+        .collapsible-header {
+            font-weight: 600;
+            font-size: 14px;
+            padding: 12px 16px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f0f0f0;
+            border-radius: 4px;
+            transition: background 0.2s;
+            pointer-events: auto;
+            position: relative;
+            z-index: 10;
+        }
+
+        .collapsible-header:hover {
+            background: #e8e8e8;
+        }
+
+        .collapsible-section.open .collapsible-header {
+            background: #1473e6;
+            color: #ffffff;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .collapsible-header::after {
+            content: "▼";
+            font-size: 12px;
+            transition: transform 0.2s;
+        }
+
+        .collapsible-section:not(.open) .collapsible-header::after {
+            content: "▶";
+        }
+
+        .collapsible-section > .collapsible-content {
+            padding: 16px;
+            display: block;
+        }
+
+        .collapsible-section:not(.open) > .collapsible-content {
+            display: none;
+        }
+
+        .error-details {
+            background: #fff5f5;
+            border-left: 4px solid #d7373f;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #505050;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .error-details ul {
+            margin: 0;
+            padding-left: 20px;
+            list-style-type: disc;
+        }
+
+        .error-details li {
+            font-size: 13px;
+            color: #000000;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .error-buttons {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .btn-error-ok {
+            background: #d7373f;
+            color: #ffffff;
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .btn-error-ok:hover {
+            background: #c42a32;
+        }
+
+        /* Success Dialog */
+        .success-dialog-wrapper {
+            border: 2px solid #2d9d78;
+        }
+
+        .success-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d9d78;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .success-message {
+            font-size: 14px;
+            color: #323232;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .success-info {
+            background: #f0fff9;
+            border-left: 4px solid #2d9d78;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .success-info strong {
+            color: #2d9d78;
+        }
+
+        .success-buttons {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .btn-success-secondary {
+            background: #f5f5f5;
+            color: #323232;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .btn-success-secondary:hover {
+            background: #e8e8e8;
+        }
+
+        .btn-success-primary {
+            background: #2d9d78;
+            color: #ffffff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .btn-success-primary:hover {
+            background: #268768;
+        }
+
+        .btn-success-primary:disabled {
+            background: #95c9b8;
+            cursor: not-allowed;
+        }
+
+        #captureStatus {
+            font-size: 12px;
+            color: #6e6e6e;
+            text-align: center;
+            margin-top: 12px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <dialog id="mainDialog" class="reveal-dialog">
+        <div class="reveal-content">
+            <h1 class="reveal-title">Reveal - Posterization Parameters</h1>
+            <div class="version-badge">Posterization Engine</div>
+
+            <div id="parameterEntrySection">
+                <div class="info-box">
+                    <strong>🎨 Posterization Settings</strong><br>
+                    Reduce your image to a limited color palette for screen printing. Choose your engine, color mode, and target palette size.
+                </div>
+
+                <!-- Color Separation Settings -->
+                <div class="form-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px;">
+                    <!-- Left side: Preset selector -->
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <sp-label style="font-size: 12px; white-space: nowrap;">Quick Preset:</sp-label>
+                        <select id="presetSelector" class="form-control" style="padding: 6px 12px; font-size: 12px; min-width: 200px;">
+                            <option value="" selected>-- Select Preset --</option>
+                            <option value="standard-image">Standard Default</option>
+                            <option value="halftone-portrait">Halftone Portrait</option>
+                            <option value="vibrant-graphic">Vibrant Graphic</option>
+                            <option value="atmospheric-photo">Atmospheric Photo</option>
+                            <option value="pastel-high-key">Pastel / High-Key</option>
+                            <option value="vintage-muted">Vintage / Muted</option>
+                            <option value="deep-shadow-noir">Deep Shadow / Noir</option>
+                            <option value="neon-fluorescent">Neon / Fluorescent</option>
+                            <option value="textural-grunge">Textural / Grunge</option>
+                            <option value="commercial-offset">Commercial Offset</option>
+                        </select>
+                    </div>
+
+                    <!-- Right side: Action buttons -->
+                    <div style="display: flex; gap: 8px;">
+                        <button id="btnAnalyzeAndSet" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;" title="Automatically detect image type and set parameters">
+                            🔍 Analyze and Set
+                        </button>
+                        <button id="btnResetDefaults" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;">
+                            Reset to Defaults
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Engine & Strategy Section -->
+                <div class="collapsible-section open">
+                    <div class="collapsible-header">Engine & Strategy</div>
+                    <div class="collapsible-content">
+                        <!-- Posterization Engine Selection -->
+                        <div class="form-group">
+                            <label for="engineType">
+                                <strong>Posterization Engine</strong>
+                            </label>
+                            <select id="engineType" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                                <option value="reveal" selected>Reveal - Maximum Quality (Hue-Aware, Recommended)</option>
+                                <option value="balanced">Balanced - Fast & Accurate (Lab Space, No Hue Analysis)</option>
+                                <option value="classic">Classic - Fastest (RGB Median Cut)</option>
+                                <option value="stencil">Stencil - Monochrome (Lightness Only)</option>
+                            </select>
+                            <div class="helper-text">
+                                <strong>Reveal</strong> ensures all hues are represented (best for complex images).
+                                <strong>Balanced</strong> is faster with good quality.
+                                <strong>Classic</strong> is fastest for quick tests.
+                                <strong>Stencil</strong> creates grayscale separations (L-channel only).
+                            </div>
+                        </div>
+
+                        <!-- Centroid Strategy Selection -->
+                        <div class="form-group">
+                            <label for="centroidStrategy">
+                                <strong>Centroid Strategy</strong>
+                                <span class="hint">(color selection method)</span>
+                            </label>
+                            <select id="centroidStrategy" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                                <option value="SALIENCY" selected>SALIENCY</option>
+                                <option value="VOLUMETRIC">VOLUMETRIC</option>
+                            </select>
+                            <div class="helper-text">
+                                <strong>SALIENCY:</strong> Averages the top 5% most vibrant/bright pixels to capture the "soul" of each color. Prevents muddy washout. Best for portraits with skin tones (e.g., JethroAsMonroe.tif).
+                                <strong>VOLUMETRIC:</strong> Standard weighted average respecting pixel frequency. Smooth and stable. Best for photos with soft gradients.
+                            </div>
+                        </div>
+
+                        <!-- Saliency Lightness Weight -->
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>Saliency L-Weight</sp-label>
+                                <sp-label id="lWeightValue" style="font-weight: 600;">1.1</sp-label>
+                            </div>
+                            <sp-slider id="lWeight"
+                                       min="0.5"
+                                       max="2.0"
+                                       step="0.1"
+                                       value="1.1"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>0.5</span>
+                                <span>2.0</span>
+                            </div>
+                            <div class="helper-text">
+                                Lightness priority in Saliency centroid calculation. Higher = favor brighter pixels.
+                                <strong>Balanced:</strong> 1.1 (default).
+                            </div>
+                        </div>
+
+                        <!-- Saliency Chroma Weight -->
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>Saliency C-Weight</sp-label>
+                                <sp-label id="cWeightValue" style="font-weight: 600;">2.0</sp-label>
+                            </div>
+                            <sp-slider id="cWeight"
+                                       min="0.5"
+                                       max="3.0"
+                                       step="0.1"
+                                       value="2.0"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>0.5</span>
+                                <span>3.0</span>
+                            </div>
+                            <div class="helper-text">
+                                Chroma priority in Saliency centroid calculation. Higher = favor more saturated pixels.
+                                <strong>Balanced:</strong> 2.0 (default).
+                            </div>
+                        </div>
+
+                        <!-- Black Bias (Halftone Protection) -->
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>Black Bias</sp-label>
+                                <sp-label id="blackBiasValue" style="font-weight: 600;">5.0</sp-label>
+                            </div>
+                            <sp-slider id="blackBias"
+                                       min="0"
+                                       max="10"
+                                       step="0.5"
+                                       value="5.0"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>0</span>
+                                <span>10</span>
+                            </div>
+                            <div class="helper-text">
+                                Boost multiplier for absolute black (L&lt;10) in Saliency centroid calculation.
+                                <strong>Critical for halftones:</strong> Prevents black from averaging into mid-tone grey.
+                                <strong>0</strong> = disabled, <strong>5.0</strong> = balanced (default), <strong>10</strong> = maximum protection.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Substrate Handling Section -->
+                <div class="collapsible-section open">
+                    <div class="collapsible-header">Substrate Handling</div>
+                    <div class="collapsible-content">
+                        <!-- Substrate Awareness -->
+                        <div class="form-group">
+                            <label for="substrateMode">
+                                <strong>Substrate Awareness</strong>
+                                <span class="hint">(background detection)</span>
+                            </label>
+                            <select id="substrateMode" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                                <option value="auto" selected>Auto-Detect (Recommended)</option>
+                                <option value="white">Force White Paper</option>
+                                <option value="black">Force Black Shirt</option>
+                                <option value="none">Disable (Full-Bleed Art)</option>
+                            </select>
+                            <div class="helper-text">
+                                Automatically detects and excludes background color from palette generation, saving palette slots for actual artwork.
+                                <strong>Auto-Detect</strong> samples image corners to identify substrate.
+                                <strong>Disable</strong> for full-bleed designs with no background.
+                            </div>
+                        </div>
+
+                        <!-- Substrate Tolerance -->
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>Substrate Tolerance (ΔE)</sp-label>
+                                <sp-label id="substrateToleranceValue" style="font-weight: 600;">3.5</sp-label>
+                            </div>
+                            <sp-slider id="substrateTolerance"
+                                       min="1.0"
+                                       max="8.0"
+                                       step="0.5"
+                                       value="3.5"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>1.0</span>
+                                <span>8.0</span>
+                            </div>
+                            <div class="helper-text">
+                                How aggressively to filter background pixels. Lower = more selective (only exact matches). Higher = more aggressive (includes similar shades).
+                                <strong>Typical:</strong> 3.0-4.0 for clean backgrounds, 5.0-6.0 for textured substrates.
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Vibrancy & Highlights Section -->
+                <div class="collapsible-section open">
+                    <div class="collapsible-header">Vibrancy & Highlights</div>
+                    <div class="collapsible-content">
+                        <!-- Vibrancy Boost Mode -->
+                        <div class="form-group">
+                            <label for="vibrancyMode">
+                                Vibrancy Mode
+                                <span class="hint">(algorithm)</span>
+                            </label>
+                            <select id="vibrancyMode">
+                                <option value="linear">Linear - Proportional boost</option>
+                                <option value="aggressive" selected>Aggressive - Direct multiplier (default)</option>
+                                <option value="exponential">Exponential - Power-law boost</option>
+                            </select>
+                            <div class="helper-text">
+                                <strong>Linear:</strong> boost = 1 + (chroma/50) × (multiplier - 1) - Gentle scaling
+                                <br><strong>Aggressive:</strong> boost = 1 + (chroma/50) × multiplier - Strong scaling
+                                <br><strong>Exponential:</strong> boost = (chroma/25)^(multiplier/5) - Maximum impact
+                            </div>
+                        </div>
+
+                        <!-- Vibrancy Boost Intensity -->
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>Vibrancy Boost</sp-label>
+                                <sp-label id="vibrancyBoostValue" style="font-weight: 600;">1.6</sp-label>
+                            </div>
+                            <sp-slider id="vibrancyBoost"
+                                       min="1.0"
+                                       max="3.0"
+                                       step="0.1"
+                                       value="1.6"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>1.0</span>
+                                <span>3.0</span>
+                            </div>
+                            <div class="helper-text">
+                                Fixed priority multiplier for chroma-rich pixels (greens, skin tones).
+                                <strong>Balanced:</strong> 1.6× (default), <strong>Higher:</strong> 2.0-3.0× for punchy colors.
+                            </div>
+                        </div>
+
+                        <!-- White Point (Highlight Protection Threshold) -->
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>White Point</sp-label>
+                                <sp-label id="highlightThresholdValue" style="font-weight: 600;">85</sp-label>
+                            </div>
+                            <sp-slider id="highlightThreshold"
+                                       min="80"
+                                       max="95"
+                                       step="1"
+                                       value="85"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>80</span>
+                                <span>95</span>
+                            </div>
+                            <div class="helper-text">
+                                L-value floor for white layer protection. Prevents bright highlights from merging with light grays.
+                                <strong>Lower:</strong> protect more bright colors, <strong>Higher:</strong> only extreme highlights.
+                            </div>
+                        </div>
+
+                        <!-- Highlight Boost Multiplier -->
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>Highlight Boost</sp-label>
+                                <sp-label id="highlightBoostValue" style="font-weight: 600;">2.2</sp-label>
+                            </div>
+                            <sp-slider id="highlightBoost"
+                                       min="1.0"
+                                       max="5.0"
+                                       step="0.1"
+                                       value="2.2"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>1.0</span>
+                                <span>5.0</span>
+                            </div>
+                            <div class="helper-text">
+                                Priority multiplier for facial highlights during palette generation.
+                                <strong>Balanced:</strong> 2.2× (default), <strong>Higher:</strong> 3.0-5.0× for extreme protection.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Color Merging & Pruning Section -->
+                <div class="collapsible-section open">
+                    <div class="collapsible-header">Color Merging & Pruning</div>
+                    <div class="collapsible-content">
+                        <!-- Palette Reduction Threshold -->
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enablePaletteReduction" checked>
+                                Color Merging (Palette Reduction)
+                            </label>
+                            <div class="helper-text" style="margin-bottom: 8px;">
+                                Merge similar colors to optimize for screen printing. Only runs when palette exceeds target count.
+                            </div>
+                            <div id="paletteReductionControl">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                    <sp-label>Palette Reduction (ΔE)</sp-label>
+                                    <sp-label id="paletteReductionValue" style="font-weight: 600;">10.0</sp-label>
+                                </div>
+                                <sp-slider id="paletteReduction"
+                                           min="6.0"
+                                           max="15.0"
+                                           step="0.5"
+                                           value="10.0"
+                                           variant="filled">
+                                </sp-slider>
+                                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                    <span>6.0</span>
+                                    <span>15.0</span>
+                                </div>
+                            </div>
+                            <div class="helper-text">
+                                Threshold: Colors closer than this perceptual distance will be merged.
+                                <strong>Lower</strong> = keep more colors. <strong>Higher</strong> = merge more aggressively.
+                            </div>
+                        </div>
+
+                        <!-- Hue Lock Angle -->
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>Hue Lock Angle (degrees)</sp-label>
+                                <sp-label id="hueLockAngleValue" style="font-weight: 600;">18</sp-label>
+                            </div>
+                            <sp-slider id="hueLockAngle"
+                                       min="10"
+                                       max="30"
+                                       step="1"
+                                       value="18"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>10</span>
+                                <span>30</span>
+                            </div>
+                            <div class="helper-text">
+                                Minimum hue difference (degrees) to prevent distinct color families from merging during pruning.
+                                <strong>Protects:</strong> Green from Beige, Yellow skin from Neutral backgrounds.
+                                <strong>JethroAsMonroe tip:</strong> Use 12-15° for tight hue family isolation.
+                            </div>
+                        </div>
+
+                        <!-- Shadow Point Protection -->
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>Shadow Point (L-value)</sp-label>
+                                <sp-label id="shadowPointValue" style="font-weight: 600;">15</sp-label>
+                            </div>
+                            <sp-slider id="shadowPoint"
+                                       min="5"
+                                       max="25"
+                                       step="1"
+                                       value="15"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>5</span>
+                                <span>25</span>
+                            </div>
+                            <div class="helper-text">
+                                L-value ceiling for shadow protection. Prevents deep shadows (L&lt;15) from merging with lighter colors.
+                                <strong>Critical for halftones:</strong> Keeps neutral black dots from merging into skin tones or backgrounds.
+                                <strong>Lower:</strong> protect only deepest shadows, <strong>Higher:</strong> protect more dark colors.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Color Mode & Target Section -->
+                <div class="collapsible-section open">
+                    <div class="collapsible-header">Color Mode & Target</div>
+                    <div class="collapsible-content">
+                        <!-- Color Mode Selection -->
+                        <div class="form-group">
+                            <label for="colorMode">
+                                <strong>Color Mode</strong>
+                            </label>
+                            <select id="colorMode" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                                <option value="color" selected>Color (Full Lab Channels)</option>
+                                <option value="bw">B/W (Lightness Only)</option>
+                            </select>
+                            <div class="helper-text">
+                                <strong>Color</strong> preserves hue and saturation.
+                                <strong>B/W</strong> quantizes lightness only (grayscale separations).
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <sp-label>Target Colors</sp-label>
+                                <sp-label id="targetColorsValue" style="font-weight: 600;">6</sp-label>
+                            </div>
+                            <sp-slider id="targetColorsSlider"
+                                       min="2"
+                                       max="20"
+                                       value="6"
+                                       step="1"
+                                       variant="filled">
+                            </sp-slider>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
+                                <span>2</span>
+                                <span>20</span>
+                            </div>
+                            <div style="font-size: 10px; color: #888; margin-bottom: 8px; margin-top: 4px; text-align: center;">
+                                ← 2 Simple | 6 Standard | 12 Complex | 20 Max →
+                            </div>
+                            <div class="helper-text">
+                                <strong>Typical ranges:</strong> 2-3 (logos/graphics) • 4-6 (photos) • 7-10 (complex artwork)
+                                <br>More colors = more detail, but more screens to print
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Color Preservation</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="preserveWhite">
+                                    <span>Preserve White (L>95)</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="preserveBlack">
+                                    <span>Preserve Black (L<10)</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="ignoreTransparent" checked>
+                                    <span>Ignore Transparent Pixels</span>
+                                </label>
+                            </div>
+                            <div class="helper-text">Exclude specific colors from quantization. Similar to Photoshop's "Force Black and White" in Indexed Color mode.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Hue Diversity</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="enableHueGapAnalysis" checked>
+                                    <span>Force Hue Diversity (Hue Gap Analysis)</span>
+                                </label>
+                            </div>
+                            <div class="helper-text">
+                                <strong>Enabled:</strong> Ensures all major hue sectors are represented in the palette (may exceed target color count).
+                                <br><strong>Disabled:</strong> Respects exact color count (default).
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Edge Quality Section -->
+                <div class="collapsible-section open">
+                    <div class="collapsible-header">Edge Quality</div>
+                    <div class="collapsible-content">
+                        <!-- Edge Quality -->
+                        <div class="form-group">
+                            <label for="maskProfile">
+                                <strong>Edge Quality</strong>
+                            </label>
+                            <select id="maskProfile" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                                <option value="Gray Gamma 2.2" selected>Gray Gamma 2.2 (Recommended - Hard Edges)</option>
+                                <option value="Dot Gain 20%">Dot Gain 20% (Traditional Print - Soft Edges)</option>
+                                <option value="Gray Gamma 1.8">Gray Gamma 1.8 (Mac Legacy)</option>
+                                <option value="sGray">sGray (sRGB Grayscale)</option>
+                            </select>
+                            <div class="helper-text">
+                                <strong>Gray Gamma 2.2</strong> provides hard edges ideal for screen printing's binary ink coverage.
+                                <strong>Dot Gain 20%</strong> softens edges for offset printing workflows.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            </div> <!-- End parameterEntrySection -->
+
+            <!-- Auto-detection info (shown during analysis) -->
+            <div id="autoDetectSection" style="display: none;">
+                <div class="form-section">
+                    <div class="info-box">
+                        <strong>🎨 Analyzing image complexity...</strong><br>
+                        <span id="autoDetectMessage">Determining optimal color count for screen printing</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        </div> <!-- End reveal-content -->
+
+        <!-- Action Buttons -->
+        <div class="reveal-buttons">
+            <div style="display: flex; gap: 12px;">
+                <button id="btnCancel" class="btn-cancel">Cancel</button>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button id="btnPosterize" class="btn-primary" title="Generate color palette and preview">Posterize →</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Palette Customization Dialog (separate from main dialog) -->
+    <dialog id="paletteDialog" class="palette-dialog" style="width: 1200px; height: 800px; min-width: 800px; min-height: 600px; padding: 0; background: #ffffff; position: relative; box-sizing: border-box;">
+        <!-- Title Bar -->
+        <div class="reveal-title">Reveal - Customize Palette & Separate</div>
+
+        <!-- Content Area -->
+        <div class="reveal-content">
+            <div class="form-section">
+                <!-- Preview + Palette Content (Flexbox Layout) -->
+                <div style="display: flex; gap: 16px; align-items: flex-start;">
+
+                    <!-- Preview Panel (left side) -->
+                    <div style="flex: 1 1 400px; min-width: 300px; display: flex; flex-direction: column;">
+                        <div style="
+                            position: relative;
+                            background-image:
+                                linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
+                                linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
+                                linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
+                                linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+                            background-size: 16px 16px;
+                            background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+                            background-color: #ffffff;
+                            border: 1px solid #ddd;
+                            border-radius: 4px;
+                            overflow: auto;
+                            max-height: 600px;
+                            min-height: 200px;
+                            display: flex;
+                            align-items: flex-start;
+                            justify-content: center;
+                            padding: 8px;">
+                            <canvas id="previewCanvas" style="
+                                image-rendering: pixelated;
+                                image-rendering: crisp-edges;
+                                cursor: crosshair;
+                                display: block;"></canvas>
+                            <div id="previewStatus" style="
+                                position: absolute;
+                                bottom: 8px;
+                                right: 8px;
+                                background: rgba(0,0,0,0.7);
+                                color: white;
+                                padding: 4px 8px;
+                                border-radius: 3px;
+                                font-size: 11px;
+                                pointer-events: none;">
+                                Click swatch to highlight
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Palette Content (right side) -->
+                    <div style="flex: 0 0 450px; min-width: 400px;">
+                        <div class="info-box" style="background: #e3f2fd; border-left: 4px solid #1473e6; margin-bottom: 16px;">
+                            <strong>🎨 Edit Your Palette Colors</strong><br>
+                            <ul style="margin: 8px 0 0 0; padding-left: 20px; line-height: 1.8;">
+                                <li>Click swatch to highlight in preview</li>
+                                <li>Click Lab text to open Color Picker</li>
+                                <li><strong>L badge</strong> shows Lightness (0-100): perceptual brightness</li>
+                                <li>Lab coordinates (L, a, b) show <strong>perceptual relationships</strong> between colors</li>
+                                <li>Warning appears if colors are too similar (ΔE &lt; 12) — may not separate cleanly</li>
+                            </ul>
+                        </div>
+
+                        <!-- Palette swatches container - now scrollable -->
+                        <div id="editablePaletteContainer" class="editable-palette" style="
+                            max-height: 300px;
+                            overflow-y: auto;
+                            padding-right: 8px;">
+                            <!-- Color swatches will be added here dynamically -->
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="reveal-buttons">
+            <div style="display: flex; gap: 12px;">
+                <button id="btnPaletteCancel" class="btn-cancel">Cancel</button>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button id="btnBack" class="btn-secondary">← Back to Settings</button>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button id="btnApplySeparation" class="btn-primary">Separate with this palette →</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Error Dialog (modal) -->
+    <dialog id="errorDialog" style="padding: 24px; border: 2px solid #d7373f; border-radius: 8px; min-width: 400px; max-width: 500px;">
+        <div class="error-title" style="font-size: 16px; font-weight: 600; color: #d7373f; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>⚠️</span>
+            <span id="errorTitle">Error</span>
+        </div>
+        <div class="error-message" id="errorMessage" style="font-size: 14px; color: #000000; line-height: 1.6; margin-bottom: 20px; font-weight: 500;"></div>
+        <div class="error-details" id="errorDetails" style="display: none; font-size: 12px; color: #6e6e6e; margin-bottom: 20px; padding: 12px; background: #f5f5f5; border-radius: 4px;"></div>
+        <ul id="errorList" style="margin: 12px 0 20px 20px; padding: 0;"></ul>
+        <div class="error-buttons" style="display: flex; justify-content: flex-end; gap: 12px;">
+            <button class="btn-error-ok" id="btnErrorOk" style="background: #d7373f; color: white; border: none; padding: 8px 24px; border-radius: 4px; cursor: pointer; font-weight: 600;">OK</button>
+        </div>
+    </dialog>
+
+    <!-- Success Dialog -->
+    <dialog id="successDialog" class="reveal-dialog success-dialog-wrapper">
+        <div class="success-title">
+            <span>✓</span>
+            <span>Separation Complete!</span>
+        </div>
+        <div class="success-message" id="successMessage">
+            Created <strong id="layerCount">0</strong> separated layers.
+        </div>
+        <div class="success-info">
+            <strong>📊 Capture Golden Stats (Optional)</strong><br>
+            Save statistical validation data for automated regression testing.
+            JSON will be written to the Developer Console where you can copy and save it
+            (~10KB JSON vs ~95MB PSD).
+        </div>
+        <div class="success-buttons">
+            <button class="btn-success-secondary" id="btnSuccessDone">Done</button>
+            <button class="btn-success-primary" id="btnCaptureGoldenStats">Capture Golden Stats</button>
+        </div>
+        <div id="captureStatus"></div>
+    </dialog>
+
+    <script src="index.js"></script>
+</body>
+</html>

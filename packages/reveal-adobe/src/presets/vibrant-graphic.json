@@ -1,0 +1,16 @@
+{
+  "id": "vibrant-graphic",
+  "name": "Vibrant Graphic",
+  "description": "Optimized for high-chroma graphics (e.g., 0B9A4230)",
+  "settings": {
+    "engineType": "reveal",
+    "centroidStrategy": "SALIENCY",
+    "blackBias": 0.0,
+    "lWeight": 1.0,
+    "cWeight": 2.5,
+    "paletteReduction": 12.0,
+    "hueLockAngle": 22,
+    "shadowPoint": 15,
+    "highlightThreshold": 90
+  }
+}
