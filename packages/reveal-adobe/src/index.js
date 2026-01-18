@@ -18,6 +18,9 @@ const logger = Reveal.logger;
 // Photoshop-specific API (stays in reveal-adobe)
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 
+// Test utilities
+const { testTransparencySelection } = require("./test-16bit-transparency-selection");
+
 // GoldenStatsCapture is Photoshop-specific (if it exists)
 let GoldenStatsCapture = null;
 try {
@@ -447,17 +450,24 @@ function rgbToHex(r, g, b) {
  * @returns {object|null} - Preview state object or null if failed
  */
 function initializePreviewCanvas(width, height, palette, assignments) {
-    const canvas = document.getElementById("previewCanvas");
+    let canvas = document.getElementById("previewCanvas");
     if (!canvas) {
         logger.error("Preview canvas not found in DOM");
         return null;
     }
 
-    // CLEANUP: Clear any previous canvas state
-    const oldCtx = canvas.getContext("2d");
-    if (oldCtx) {
-        oldCtx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    // AGGRESSIVE CLEANUP: Completely destroy and recreate canvas element
+    // This fixes stale rendering context issues on second+ runs
+    logger.log('Destroying old canvas element and creating fresh one...');
+    const parent = canvas.parentNode;
+    const newCanvas = document.createElement('canvas');
+    newCanvas.id = 'previewCanvas';
+    newCanvas.style.imageRendering = 'pixelated';
+    newCanvas.style.cursor = 'crosshair';
+    newCanvas.style.display = 'block';
+    parent.replaceChild(newCanvas, canvas);
+    canvas = newCanvas;
+    logger.log('✓ Canvas element recreated');
 
     // Set canvas size to match data dimensions
     canvas.width = width;
@@ -466,7 +476,6 @@ function initializePreviewCanvas(width, height, palette, assignments) {
     // CRITICAL: UXP requires CSS width/height for layout, not just canvas width/height properties
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    canvas.style.display = 'block';
     void canvas.offsetHeight; // Force reflow
 
     logger.log(`Canvas dimensions set: ${width}×${height}, style.width=${canvas.style.width}, offsetHeight=${canvas.offsetHeight}`);
@@ -477,16 +486,25 @@ function initializePreviewCanvas(width, height, palette, assignments) {
         return null;
     }
 
-    // Store preview state globally
+    // Store preview state globally (don't store ctx - get fresh each time)
+    logger.log(`[DEBUG] Creating window.previewState with ${assignments.length} assignments and ${palette.length} colors`);
     window.previewState = {
-        canvas: canvas,
-        ctx: ctx,
         width: width,
         height: height,
         palette: palette,
         assignments: assignments,
         activeSoloIndex: null  // null = show all, number = solo that color
     };
+
+    // Add click handler to canvas - clicking canvas shows all colors
+    canvas.addEventListener('click', () => {
+        const state = window.previewState;
+        if (state && state.activeSoloIndex !== null) {
+            logger.log('Canvas clicked - returning to full preview');
+            state.activeSoloIndex = null;
+            renderPreview();
+        }
+    });
 
     logger.log(`✓ Preview canvas initialized: ${width}×${height}, visible: ${canvas.offsetHeight > 0}`);
     return window.previewState;
@@ -498,20 +516,30 @@ function initializePreviewCanvas(width, height, palette, assignments) {
  */
 function renderPreview() {
     const state = window.previewState;
-    if (!state || !state.ctx) {
+    if (!state) {
         logger.error('Preview state not initialized');
         return;
     }
 
-    const ctx = state.ctx;
+    // Get fresh canvas and context each render (fixes stale state issues)
+    const canvas = document.getElementById('previewCanvas');
+    if (!canvas) {
+        logger.error('Preview canvas not found');
+        return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        logger.error('Failed to get canvas context');
+        return;
+    }
+
     const assignments = state.assignments;
     const palette = state.palette;
     const activeSoloIndex = state.activeSoloIndex;
     const width = state.width;
     const height = state.height;
 
-    // DIAGNOSTIC: Check canvas visibility
-    const canvas = state.canvas;
     logger.log(`Rendering preview (solo mode: ${activeSoloIndex !== null})`);
     logger.log(`  Canvas: ${width}×${height}, display=${canvas.style.display}, offsetHeight=${canvas.offsetHeight}, palette.length=${palette.length}, assignments.length=${assignments.length}`);
 
@@ -582,6 +610,30 @@ function renderPreview() {
 }
 
 /**
+ * Update visual highlighting on swatches to show which is active
+ */
+function updateSwatchHighlights() {
+    const state = window.previewState;
+    if (!state) return;
+
+    const container = document.getElementById('paletteEditorContainer');
+    if (!container) return;
+
+    const swatches = container.querySelectorAll('.editable-swatch');
+    swatches.forEach((swatch, index) => {
+        if (state.activeSoloIndex === index) {
+            // Highlight active swatch
+            swatch.style.border = '3px solid #0078d4';
+            swatch.style.boxShadow = '0 0 8px rgba(0,120,212,0.6)';
+        } else {
+            // Normal swatch appearance
+            swatch.style.border = '1px solid #ccc';
+            swatch.style.boxShadow = 'none';
+        }
+    });
+}
+
+/**
  * Handle swatch click - toggle highlight for that color in preview
  * @param {number} featureIndex - Index of the color feature (0-based)
  */
@@ -602,6 +654,9 @@ function handleSwatchClick(featureIndex) {
         state.activeSoloIndex = featureIndex;
         logger.log(`Highlighting color ${featureIndex + 1}`);
     }
+
+    // Update swatch highlighting
+    updateSwatchHighlights();
 
     // Re-render preview
     renderPreview();
@@ -1069,6 +1124,11 @@ function showPaletteEditor(selectedPalette) {
                         logger.warn(`⚠ No original layer found after cleanup - this shouldn't happen!`);
                     }
 
+                    // Detect document bit depth to route to appropriate layer creation method
+                    const docBitDepth = String(doc.bitsPerChannel).toLowerCase();
+                    const is16bit = docBitDepth.includes('16') || doc.bitsPerChannel === 16;
+                    logger.log(`Document bit depth: ${doc.bitsPerChannel} → Using ${is16bit ? '16-bit' : '8-bit'} layer creation method`);
+
                     let skippedCount = 0;
 
                     for (let i = 0; i < orderedLayers.length; i++) {
@@ -1081,8 +1141,10 @@ function showPaletteEditor(selectedPalette) {
                             maskProfile: posterizationData.params.maskProfile
                         };
 
-                        // Use new Fill Layer + Mask approach (Architect's recommendation)
-                        const createdLayer = await PhotoshopAPI.createLabSeparationLayer(layerDataWithProfile);
+                        // Route to appropriate layer creation method based on bit depth
+                        const createdLayer = is16bit
+                            ? await PhotoshopAPI.createLabSeparationLayer16Bit(layerDataWithProfile)
+                            : await PhotoshopAPI.createLabSeparationLayer(layerDataWithProfile);
 
                         // Handle skipped layers (empty masks)
                         if (createdLayer === null) {
@@ -2173,6 +2235,13 @@ async function showDialog() {
                         // Render initial preview (now that canvas is visible and sized)
                         renderPreview();
                         logger.log('✓ Canvas preview rendered');
+
+                        // CRITICAL: After canvas recreation, UXP needs additional time for layout
+                        // Render again after 100ms to ensure initial preview is visible
+                        setTimeout(() => {
+                            renderPreview();
+                            logger.log('✓ Second render pass to ensure visibility');
+                        }, 100);
                     }, 300); // 300ms delay for UXP layout
 
                 } catch (error) {

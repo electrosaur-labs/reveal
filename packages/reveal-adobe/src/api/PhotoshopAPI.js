@@ -32,19 +32,40 @@ class PhotoshopAPI {
      * Get Lab pixels from active document (full document, all layers flattened)
      *
      * Document must be in Lab color mode (validated at workflow start).
-     * Returns 3 bytes per pixel: L (0-255), a (0-255), b (0-255).
+     * Returns Lab data matching document bit depth (8-bit or 16-bit).
      *
      * @param {number} maxWidth - Maximum width for preview (scales down if needed)
      * @param {number} maxHeight - Maximum height for preview (scales down if needed)
-     * @returns {Promise<Object>} - {pixels: Uint8ClampedArray, width, height, format: 'lab', originalWidth, originalHeight}
+     * @returns {Promise<Object>} - {pixels: Uint8ClampedArray|Uint16Array, width, height, format: 'lab', originalWidth, originalHeight, bitDepth: 8|16}
      */
     static async getDocumentPixels(maxWidth = 800, maxHeight = 800) {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('reveal_checkpoint', 'getDocumentPixels_start');
+        }
+
         const doc = this.getActiveDocument();
         if (!doc) {
             throw new Error("No active document");
         }
 
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('reveal_checkpoint', 'getDocumentPixels_got_doc');
+        }
+
+        // Extract bit depth from document
+        const bitDepthStr = String(doc.bitsPerChannel).toLowerCase();
+        const docBitDepth = bitDepthStr.includes('16') || doc.bitsPerChannel === 16 ? 16 : 8;
+
         logger.log(`Reading document: ${doc.name} (${doc.width}x${doc.height})`);
+        logger.log(`Document bit depth: ${doc.bitsPerChannel} (${docBitDepth}-bit)`);
+
+        // Request matching bit depth for accurate Lab value extraction
+        const componentSize = docBitDepth;
+        logger.log(`Using componentSize: ${componentSize}`);
+
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('reveal_checkpoint', 'getDocumentPixels_bitdepth_checked');
+        }
 
         // Calculate scale to fit within maxWidth x maxHeight
         const scale = Math.min(1.0, maxWidth / doc.width, maxHeight / doc.height);
@@ -60,17 +81,35 @@ class PhotoshopAPI {
         // Lab documents have NO alpha channel - Lab is always 3 channels (L, a, b) only
         let pixelData;
         try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('reveal_checkpoint', 'before_imaging_getPixels');
+            }
+
+            logger.log('STEP 1: About to call imaging.getPixels()...');
+            logger.log(`  documentID: ${doc.id}`);
+            logger.log(`  targetSize: ${scaledWidth}x${scaledHeight}`);
+            logger.log(`  componentSize: ${componentSize}`);
+            logger.log(`  targetComponentCount: 3`);
+            logger.log(`  colorSpace: Lab`);
+
             pixelData = await imaging.getPixels({
                 documentID: doc.id,
                 targetSize: {
                     width: scaledWidth,
                     height: scaledHeight
                 },
-                componentSize: 8,           // 8-bit per channel
-                targetComponentCount: 3,    // 3 channels: L, a, b (Lab has NO alpha)
-                colorSpace: "Lab"           // THE CRITICAL PARAMETER: Request raw Lab channels (no conversion)
+                componentSize: componentSize,  // Always 8 for now (UXP limitation)
+                targetComponentCount: 3,       // 3 channels: L, a, b (Lab has NO alpha)
+                colorSpace: "Lab"              // THE CRITICAL PARAMETER: Request raw Lab channels (no conversion)
             });
+
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('reveal_checkpoint', 'after_imaging_getPixels');
+            }
+
+            logger.log('STEP 2: imaging.getPixels() returned successfully');
         } catch (error) {
+            logger.error('STEP 2 FAILED: imaging.getPixels() threw error:', error);
             // Handle smart object errors
             if (error.message && error.message.includes('-25010')) {
                 throw new Error(
@@ -86,23 +125,56 @@ class PhotoshopAPI {
         let rgbaData;
         let actualWidth, actualHeight;
 
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('reveal_checkpoint', 'extracting_pixel_data');
+        }
+
         if (pixelData.imageData) {
             // ImageData has width and height properties
             actualWidth = pixelData.imageData.width;
             actualHeight = pixelData.imageData.height;
+
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('reveal_checkpoint', 'before_getData');
+            }
+
             rgbaData = await pixelData.imageData.getData({ chunky: true });
+
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('reveal_checkpoint', 'after_getData');
+            }
         } else if (pixelData.pixels) {
             // Already Uint8ClampedArray - use calculated dimensions
             actualWidth = scaledWidth;
             actualHeight = scaledHeight;
             rgbaData = pixelData.pixels;
+
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('reveal_checkpoint', 'got_pixels_directly');
+            }
         } else {
             throw new Error("Could not extract pixel data from imaging.getPixels() result");
         }
 
-        logger.log(`Got ${rgbaData.length} bytes of pixel data`);
+        logger.log(`Got ${rgbaData.length} ${componentSize === 16 ? 'elements' : 'bytes'} of pixel data`);
+        logger.log(`Data type: ${rgbaData.constructor.name}`);
         logger.log(`Actual dimensions: ${actualWidth}x${actualHeight} (expected ${scaledWidth}x${scaledHeight})`);
-        logger.log(`Expected bytes (RGBA): ${actualWidth * actualHeight * 4}, got: ${rgbaData.length}`);
+
+        // Verify we got the expected data type
+        if (componentSize === 16 && !(rgbaData instanceof Uint16Array)) {
+            logger.error(`⚠️ Expected Uint16Array for 16-bit but got ${rgbaData.constructor.name}`);
+            logger.error(`   UXP may not support 16-bit extraction properly`);
+        } else if (componentSize === 8 && !(rgbaData instanceof Uint8Array) && !(rgbaData instanceof Uint8ClampedArray)) {
+            logger.error(`⚠️ Expected Uint8Array for 8-bit but got ${rgbaData.constructor.name}`);
+        }
+
+        const bytesPerElement = componentSize / 8;
+        const expectedSize = actualWidth * actualHeight * 3;
+        logger.log(`Expected ${expectedSize} elements (Lab ${componentSize}-bit), got: ${rgbaData.length}`);
+
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('reveal_checkpoint', 'pixel_data_extracted');
+        }
 
         // Check document mode
         const docMode = String(doc.mode);
@@ -120,18 +192,36 @@ class PhotoshopAPI {
         }
 
         // Lab mode: 3 channels (L, a, b)
-        // L: 0-100, a: -128 to 127, b: -128 to 127
+        // 8-bit:  L: 0-255, a: 0-255, b: 0-255
+        // 16-bit: L: 0-32768, a: 0-32768 (neutral=16384), b: 0-32768 (neutral=16384)
         // NOTE: Lab has NO alpha channel - all pixels are opaque
         const expectedLab = actualWidth * actualHeight * 3;
 
         if (rgbaData.length !== expectedLab) {
             throw new Error(
-                `Unexpected Lab pixel data size: got ${rgbaData.length} bytes, ` +
+                `Unexpected Lab pixel data size: got ${rgbaData.length} elements, ` +
                 `expected ${expectedLab} (Lab 3 channels) for ${actualWidth}x${actualHeight}`
             );
         }
 
-        logger.log(`✓ Got Lab data (3 channels/pixel)`);
+        logger.log(`✓ Got Lab data (3 channels/pixel, ${componentSize}-bit per channel)`);
+
+        // DIAGNOSTIC: Sample some Lab values to verify correctness
+        logger.log(`\n=== DIAGNOSTIC: LAB VALUE CHECK ===`);
+        logger.log(`Sampling first 5 pixels:`);
+        for (let i = 0; i < Math.min(5, actualWidth * actualHeight); i++) {
+            const idx = i * 3;
+            const L = rgbaData[idx];
+            const a = rgbaData[idx + 1];
+            const b = rgbaData[idx + 2];
+            logger.log(`  Pixel ${i}: L=${L} a=${a} b=${b}`);
+        }
+        if (componentSize === 8) {
+            logger.log(`Expected ranges: L[0-255], a[0-255], b[0-255]`);
+        } else {
+            logger.log(`Expected ranges: L[0-32768], a[0-32768 neutral=16384], b[0-32768 neutral=16384]`);
+        }
+        logger.log(`=== END DIAGNOSTIC ===\n`);
 
         // DIAGNOSTIC: Check Lab uniformity in specific regions
         if (doc.name.includes('luma-stress')) {
@@ -170,11 +260,32 @@ class PhotoshopAPI {
             logger.log(`=== END DIAGNOSTIC ===\n`);
         }
 
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('reveal_checkpoint', 'getDocumentPixels_success');
+        }
+
+        // Normalize 16-bit Lab to standard 8-bit ranges for posterization engine
+        if (componentSize === 16) {
+            logger.log('Normalizing 16-bit Lab to 8-bit ranges...');
+            const normalized = new Uint8ClampedArray(rgbaData.length);
+            for (let i = 0; i < rgbaData.length; i += 3) {
+                // L: 0-32768 → 0-255 (linear scale)
+                normalized[i] = Math.round((rgbaData[i] / 32768) * 255);
+                // a: 0-32768 (neutral=16384) → 0-255 (neutral=128)
+                normalized[i + 1] = Math.round((rgbaData[i + 1] / 32768) * 255);
+                // b: 0-32768 (neutral=16384) → 0-255 (neutral=128)
+                normalized[i + 2] = Math.round((rgbaData[i + 2] / 32768) * 255);
+            }
+            logger.log(`Normalized ${normalized.length / 3} pixels from 16-bit to 8-bit ranges`);
+            rgbaData = normalized;
+        }
+
         return {
-            pixels: rgbaData,  // Lab values (L, a, b) as bytes
+            pixels: rgbaData,  // Lab values (Uint8ClampedArray, normalized to 8-bit ranges)
             width: actualWidth,
             height: actualHeight,
             format: 'lab',
+            bitDepth: componentSize,  // 8 or 16 (original bit depth)
             originalWidth: doc.width,
             originalHeight: doc.height,
             scale: Math.min(actualWidth / doc.width, actualHeight / doc.height)
@@ -254,6 +365,9 @@ class PhotoshopAPI {
 
         // Use pure validation logic (testable without UXP)
         const result = DocumentValidator.validate(doc);
+
+        // Dump full validation result JSON
+        logger.log("Validation result JSON:", JSON.stringify(result, null, 2));
 
         // Debug logging
         logger.log(`  Total errors: ${result.errors.length}`);
@@ -489,12 +603,58 @@ class PhotoshopAPI {
      * @returns {Promise<Layer>} - Created layer
      */
     static async createLabSeparationLayer(layerData) {
+        localStorage.setItem('reveal_checkpoint', 'createLabSep_start');
+
         const { name, labColor, mask, width, height } = layerData;
+
+        localStorage.setItem('reveal_checkpoint', 'createLabSep_after_destructure');
+
         const doc = this.getActiveDocument();
 
+        localStorage.setItem('reveal_checkpoint', 'createLabSep_got_doc');
+
         logger.log(`Creating Lab Fill Layer "${name}" with mask...`);
+        logger.log(`  Input: ${width}x${height}, mask: ${mask.length} bytes`);
+
+        // DIAGNOSTIC: Verify mask data integrity
+        logger.log(`\n=== MASK DATA VERIFICATION ===`);
+        logger.log(`  Mask is Uint8Array: ${mask instanceof Uint8Array}`);
+        logger.log(`  Mask constructor: ${mask.constructor.name}`);
+        logger.log(`  Expected length: ${width * height}`);
+        logger.log(`  Actual length: ${mask.length}`);
+        logger.log(`  Length match: ${mask.length === width * height ? 'YES' : 'NO'}`);
+
+        // Count values
+        let count255 = 0;
+        let count0 = 0;
+        let countOther = 0;
+        for (let i = 0; i < mask.length; i++) {
+            if (mask[i] === 255) count255++;
+            else if (mask[i] === 0) count0++;
+            else countOther++;
+        }
+        logger.log(`  Pixels with value 255 (opaque): ${count255} (${(count255 / mask.length * 100).toFixed(1)}%)`);
+        logger.log(`  Pixels with value 0 (transparent): ${count0} (${(count0 / mask.length * 100).toFixed(1)}%)`);
+        logger.log(`  Pixels with other values: ${countOther}`);
+
+        // Sample first 20 pixels
+        const sampleSize = Math.min(20, mask.length);
+        const sample = [];
+        for (let i = 0; i < sampleSize; i++) {
+            sample.push(mask[i]);
+        }
+        logger.log(`  First ${sampleSize} mask values: ${sample.join(', ')}`);
+        logger.log(`=== END MASK VERIFICATION ===\n`);
+
+        localStorage.setItem('reveal_checkpoint', 'createLabSep_logged_basic_info');
+
+        logger.log(`  Lab color: L=${labColor.L}, a=${labColor.a}, b=${labColor.b}`);
+
+        localStorage.setItem('reveal_checkpoint', 'createLabSep_logged_lab_color');
 
         try {
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_before_protective');
+
             // STEP 1: Create protective layer (prevents background corruption)
             logger.log(`  Step 1: Creating protective layer...`);
             await action.batchPlay([{
@@ -502,6 +662,8 @@ class PhotoshopAPI {
                 "_target": [{ "_ref": "layer" }],
                 "name": "__PROTECTIVE__"
             }], {});
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_protective');
 
             // STEP 2: Create temporary raster layer to hold mask data
             logger.log(`  Step 2: Creating temp layer with mask data...`);
@@ -511,11 +673,31 @@ class PhotoshopAPI {
                 "name": "__TEMP_MASK__"
             }], {});
 
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_temp_layer');
+
             const tempLayer = doc.activeLayers[0];
             const tempLayerID = tempLayer.id;
 
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_before_rgba_build');
+
             // STEP 3: Write RGBA mask data to temp layer (alpha channel = mask)
             logger.log(`  Step 3: Writing RGBA data (alpha = mask transparency)...`);
+            logger.log(`  Document bit depth: ${doc.bitsPerChannel}`);
+
+            // Count mask statistics
+            let opaqueCount = 0;
+            let transparentCount = 0;
+            for (let i = 0; i < mask.length; i++) {
+                if (mask[i] === 255) opaqueCount++;
+                else if (mask[i] === 0) transparentCount++;
+            }
+            logger.log(`  Mask stats: ${opaqueCount} opaque (255), ${transparentCount} transparent (0), ${mask.length - opaqueCount - transparentCount} partial`);
+
+            // CRITICAL: Temp layer is RGB and only used for transparency selection
+            // ALWAYS use 8-bit RGB regardless of document bit depth
+            // The alpha channel carries the mask data - bit depth doesn't matter for this purpose
+            logger.log(`  Creating 8-bit RGBA data (temp layer for selection)...`);
+
             const rgbaData = new Uint8Array(width * height * 4);
             for (let i = 0; i < mask.length; i++) {
                 const idx = i * 4;
@@ -525,23 +707,55 @@ class PhotoshopAPI {
                 rgbaData[idx + 3] = mask[i];   // A = mask value (0=transparent, 255=opaque)
             }
 
+            logger.log(`  Created Uint8Array: ${rgbaData.length} bytes`);
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_before_imageData');
+
             const imageData = await imaging.createImageDataFromBuffer(rgbaData, {
-                width, height, components: 4, chunky: true,
+                width, height,
+                components: 4,
+                componentSize: 8,
+                chunky: true,
                 colorSpace: "RGB",
                 colorProfile: "sRGB IEC61966-2.1"
             });
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_imageData');
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_imageData_create');
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_before_putPixels');
 
             await imaging.putPixels({
                 layerID: tempLayer.id,
                 imageData: imageData,
                 replace: true
             });
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_putPixels');
+
             imageData.dispose();
             logger.log(`  ✓ RGBA data written to temp layer`);
 
+            // DIAGNOSTIC: Check if temp layer has transparency
+            logger.log(`  DIAGNOSTIC: Checking temp layer properties...`);
+            logger.log(`    Temp layer ID: ${tempLayer.id}`);
+            logger.log(`    Temp layer name: ${tempLayer.name}`);
+            logger.log(`    Temp layer opacity: ${tempLayer.opacity}`);
+            logger.log(`    Temp layer blendMode: ${tempLayer.blendMode}`);
+            logger.log(`    Temp layer kind: ${tempLayer.kind}`);
+
+            // Try to get layer bounds (indicates non-transparent content)
+            try {
+                logger.log(`    Temp layer bounds: ${JSON.stringify(tempLayer.bounds)}`);
+            } catch (e) {
+                logger.log(`    Could not read layer bounds: ${e.message}`);
+            }
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_before_transparency_select');
+
             // STEP 4: Load temp layer's TRANSPARENCY as selection
             logger.log(`  Step 4: Loading transparency as selection...`);
-            await action.batchPlay([{
+            const selectResult = await action.batchPlay([{
                 "_obj": "set",
                 "_target": [{ "_ref": "channel", "_property": "selection" }],
                 "to": {
@@ -550,6 +764,18 @@ class PhotoshopAPI {
                     "_value": "transparencyEnum"
                 }
             }], {});
+            logger.log(`  Selection command result: ${JSON.stringify(selectResult)}`);
+
+            // DIAGNOSTIC: Check selection bounds
+            try {
+                const bounds = doc.selection.bounds;
+                logger.log(`  Selection bounds: ${JSON.stringify(bounds)}`);
+                const selWidth = bounds.right - bounds.left;
+                const selHeight = bounds.bottom - bounds.top;
+                logger.log(`  Selection size: ${selWidth}x${selHeight}`);
+            } catch (e) {
+                logger.log(`  No active selection or error reading bounds: ${e.message}`);
+            }
 
             // STEP 5: Delete temp layer and protective layer
             logger.log(`  Step 5: Deleting temp layers...`);
@@ -581,7 +807,7 @@ class PhotoshopAPI {
                     "_obj": "make",
                     "new": { "_class": "mask" },
                     "at": { "_ref": "layer", "_enum": "ordinal", "_value": "targetEnum" },
-                    "using": { "_enum": "userMaskEnabled", "_value": "hideSelection" }
+                    "using": { "_enum": "userMaskEnabled", "_value": "revealSelection" }
                 }
             ], { "synchronousExecution": true });
 
@@ -615,6 +841,256 @@ class PhotoshopAPI {
             }
 
             throw new Error(`Failed to create Lab separation layer: ${error.message}`);
+        }
+    }
+
+    /**
+     * Create Lab separation layer for 16-BIT Lab documents
+     *
+     * 16-bit Lab documents do not support transparency-based selection (Photoshop error -25920).
+     * This method uses direct mask writing instead of the 5-7 step transparency approach.
+     *
+     * DO NOT use for 8-bit documents - use createLabSeparationLayer instead.
+     *
+     * @param {Object} layerData - Layer specification
+     * @param {string} layerData.name - Layer name
+     * @param {Object} layerData.labColor - Lab color {L, a, b}
+     * @param {Uint8Array} layerData.mask - Grayscale mask (0-255, where 255=reveal, 0=hide)
+     * @param {number} layerData.width - Layer width
+     * @param {number} layerData.height - Layer height
+     * @returns {Promise<Layer>} - Created layer
+     */
+    static async createLabSeparationLayer16Bit(layerData) {
+        localStorage.setItem('reveal_checkpoint', 'createLabSep16_start');
+
+        const { name, labColor, mask, width, height } = layerData;
+
+        localStorage.setItem('reveal_checkpoint', 'createLabSep16_destructured');
+
+        logger.log(`Creating Lab Fill Layer "${name}" with mask (16-bit transparency method)...`);
+        logger.log(`  Input: ${width}x${height}, mask: ${mask.length} bytes`);
+        logger.log(`  Lab color: L=${labColor.L}, a=${labColor.a}, b=${labColor.b}`);
+
+        localStorage.setItem('reveal_checkpoint', 'createLabSep16_logged_info');
+
+        const doc = this.getActiveDocument();
+        const bitDepthStr = String(doc.bitsPerChannel).toLowerCase();
+        const is16bit = bitDepthStr.includes('16') || doc.bitsPerChannel === 16;
+        const componentSize = is16bit ? 16 : 8;
+        const maxValue = is16bit ? 32768 : 255;
+
+        try {
+            // STEP 1: Create temp layer for transparency-based selection
+            logger.log(`  Step 1: Creating temp layer with mask as alpha channel...`);
+            localStorage.setItem('reveal_checkpoint', 'createLabSep16_before_temp_layer');
+
+            await action.batchPlay([{
+                "_obj": "make",
+                "_target": [{ "_ref": "layer" }],
+                "name": `__TEMP_${name}__`
+            }], {});
+
+            const tempLayer = doc.activeLayers[0];
+            logger.log(`  ✓ Temp layer created: ID ${tempLayer.id}`);
+
+            // STEP 2: Write RGBA data with mask as alpha channel
+            logger.log(`  Step 2: Writing RGBA with mask as alpha (${componentSize}-bit)...`);
+            localStorage.setItem('reveal_checkpoint', 'createLabSep16_before_rgba');
+
+            const rgbaData = is16bit
+                ? new Uint16Array(width * height * 4)
+                : new Uint8Array(width * height * 4);
+
+            for (let i = 0; i < width * height; i++) {
+                const idx = i * 4;
+                rgbaData[idx] = maxValue;     // R = white
+                rgbaData[idx + 1] = maxValue; // G = white
+                rgbaData[idx + 2] = maxValue; // B = white
+                // Alpha = mask value (255 or 32768 for visible, 0 for transparent)
+                const maskValue = mask[i];
+                rgbaData[idx + 3] = is16bit ? (maskValue * 128) : maskValue;  // Scale 0-255 to 0-32768 for 16-bit
+            }
+
+            const imageData = await imaging.createImageDataFromBuffer(rgbaData, {
+                width, height,
+                components: 4,
+                componentSize: componentSize,
+                chunky: true,
+                colorSpace: "RGB",
+                colorProfile: "sRGB IEC61966-2.1"
+            });
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep16_before_putPixels');
+
+            await imaging.putPixels({
+                layerID: tempLayer.id,
+                imageData: imageData,
+                replace: true
+            });
+
+            imageData.dispose();
+            logger.log(`  ✓ RGBA data written with mask as alpha`);
+
+            // STEP 3: Load transparency as selection
+            logger.log(`  Step 3: Loading transparency as selection...`);
+            localStorage.setItem('reveal_checkpoint', 'createLabSep16_before_selection');
+
+            await action.batchPlay([{
+                "_obj": "set",
+                "_target": [{ "_ref": "channel", "_property": "selection" }],
+                "to": {
+                    "_ref": "channel",
+                    "_enum": "channel",
+                    "_value": "transparencyEnum"
+                }
+            }], {});
+
+            logger.log(`  ✓ Selection created from transparency`);
+
+            // STEP 4: Create fill layer AND mask in SINGLE batchPlay (critical for 16-bit!)
+            logger.log(`  Step 4: Creating fill layer with mask (combined command)...`);
+            localStorage.setItem('reveal_checkpoint', 'createLabSep16_before_fill_and_mask');
+
+            await action.batchPlay([
+                // First: create the fill layer
+                {
+                    "_obj": "make",
+                    "_target": [{ "_ref": "contentLayer" }],
+                    "using": {
+                        "_obj": "contentLayer",
+                        "type": {
+                            "_obj": "solidColorLayer",
+                            "color": {
+                                "_obj": "labColor",
+                                "luminance": labColor.L,
+                                "a": labColor.a,
+                                "b": labColor.b
+                            }
+                        }
+                    }
+                },
+                // Second: immediately add mask from selection (in same batch!)
+                {
+                    "_obj": "make",
+                    "_target": [{ "_ref": "channel", "_enum": "channel", "_value": "mask" }],
+                    "new": { "_class": "channel" },
+                    "at": { "_ref": "layer", "_enum": "ordinal", "_value": "targetEnum" },
+                    "using": { "_enum": "userMaskEnabled", "_value": "revealSelection" }
+                }
+            ], {});
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep16_after_fill_and_mask');
+
+            const createdLayer = doc.activeLayers[0];
+            createdLayer.name = name;
+            logger.log(`  ✓ Fill layer with mask created: ID ${createdLayer.id}`);
+
+            // STEP 5: Delete temp layer
+            logger.log(`  Step 5: Deleting temp layer...`);
+            localStorage.setItem('reveal_checkpoint', 'createLabSep16_before_delete_temp');
+
+            await tempLayer.delete();
+            logger.log(`  ✓ Temp layer deleted`);
+
+            // STEP 6: Clear selection
+            logger.log(`  Step 6: Clearing selection...`);
+            await action.batchPlay([{
+                "_obj": "set",
+                "_target": [{ "_ref": "channel", "_property": "selection" }],
+                "to": { "_enum": "ordinal", "_value": "none" }
+            }], {});
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep16_complete');
+
+            logger.log(`✓ Lab Fill Layer "${name}" created with mask (16-bit transparency method)`);
+            return createdLayer;
+
+        } catch (error) {
+            logger.error(`Failed to create 16-bit layer ${name}:`, error);
+            // Try cleanup
+            try {
+                const tempLayers = doc.layers.filter(l => l.name.startsWith('__TEMP_'));
+                for (const layer of tempLayers) {
+                    await layer.delete();
+                }
+            } catch (cleanupErr) {
+                logger.error(`Could not clean up temp layers: ${cleanupErr.message}`);
+            }
+            throw new Error(`Failed to create 16-bit Lab fill layer: ${error.message}`);
+        }
+    }
+
+    /**
+     * Add layer mask for 16-BIT Lab documents (direct mask writing)
+     *
+     * DO NOT use for 8-bit documents - use addLayerMask instead.
+     *
+     * @param {number} layerID - Layer ID to add mask to
+     * @param {Uint8Array} maskData - Grayscale mask data (255 = visible, 0 = hidden)
+     * @param {number} width - Mask width
+     * @param {number} height - Mask height
+     * @returns {Promise<void>}
+     */
+    static async addLayerMask16Bit(layerID, maskData, width, height) {
+        localStorage.setItem('reveal_checkpoint', 'addMask16_start');
+
+        logger.log(`Adding layer mask (16-bit method) (${width}x${height}) to layer ${layerID}...`);
+        logger.log(`  Mimicking 8-bit structure with targetEnum...`);
+
+        try {
+            // NOTE: Layer should already be active from createLabSeparationLayer16Bit
+            // Mimic 8-bit code structure: create mask on targetEnum (active layer)
+
+            // STEP 1: Create mask channel on active layer (targetEnum pattern from 8-bit code)
+            logger.log(`  Step 1: Creating mask channel on active layer...`);
+
+            localStorage.setItem('reveal_checkpoint', 'addMask16_before_create_mask');
+
+            await action.batchPlay([{
+                _obj: "make",
+                _target: [{ _ref: "channel", _enum: "channel", _value: "mask" }],
+                new: { _class: "channel" },
+                at: { _ref: "layer", _enum: "ordinal", _value: "targetEnum" }, // Active layer, like 8-bit code
+                using: { _enum: "userMaskEnabled", _value: "revealAll" }
+            }], {
+                synchronousExecution: false,
+                modalBehavior: "execute"
+            });
+
+            localStorage.setItem('reveal_checkpoint', 'addMask16_after_create_mask');
+
+            logger.log(`  ✓ Mask channel created`);
+
+            // STEP 2: Write mask data using batchPlay "put" with rawData
+            // Masks are always 8-bit, even in 16-bit documents
+            logger.log(`  Step 2: Writing 8-bit mask data via batchPlay "put"...`);
+
+            localStorage.setItem('reveal_checkpoint', 'addMask16_before_put');
+
+            // Match the example code exactly - no synchronousExecution parameter
+            await action.batchPlay([{
+                _obj: "put",
+                _target: {
+                    _ref: "channel",
+                    _enum: "channel",
+                    _value: "mask" // Target the active layer's mask
+                },
+                using: {
+                    _obj: "rawData",
+                    data: maskData.buffer, // Use 8-bit mask data buffer
+                    width: width,
+                    height: height,
+                    depth: 8 // Masks are always 8-bit
+                }
+            }], {});
+
+            localStorage.setItem('reveal_checkpoint', 'addMask16_success');
+
+            logger.log(`✓ Layer mask applied successfully (16-bit via batchPlay "put")`);
+        } catch (error) {
+            logger.error(`Failed to add 16-bit layer mask:`, error);
+            logger.error(`Error details:`, error.message, error.stack);
+            throw new Error(`Failed to add 16-bit layer mask: ${error.message}`);
         }
     }
 

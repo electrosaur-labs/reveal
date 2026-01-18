@@ -40,14 +40,16 @@ class DocumentValidator {
             );
         }
 
-        // Check bit depth - Photoshop returns string like "bitDepth8", "bitDepth16", "bitDepth32"
+        // Check bit depth - Support both 8-bit and 16-bit
+        // Photoshop returns string like "bitDepth8", "bitDepth16", "bitDepth32"
         const bitDepthStr = String(doc.bitsPerChannel).toLowerCase();
-        const is8Bit = bitDepthStr.includes('8') || doc.bitsPerChannel === 8;
+        const is8or16Bit = bitDepthStr.includes('8') || bitDepthStr.includes('16') ||
+                           doc.bitsPerChannel === 8 || doc.bitsPerChannel === 16;
 
-        if (!is8Bit) {
+        if (!is8or16Bit) {
             errors.push(
-                `Document must be 8 bits/channel (currently: ${doc.bitsPerChannel}). ` +
-                `Convert via Image > Mode > 8 Bits/Channel.`
+                `Document must be 8 or 16 bits/channel (currently: ${doc.bitsPerChannel}). ` +
+                `Convert via Image > Mode > 8 Bits/Channel or 16 Bits/Channel.`
             );
         }
 
