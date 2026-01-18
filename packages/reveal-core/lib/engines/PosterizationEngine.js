@@ -2067,6 +2067,19 @@ class PosterizationEngine {
             }
 
             logger.log(`[MedianCut] Color grid sampling (stride ${GRID_STRIDE}): ${totalPixels} pixels → ${sampledPixels} sampled → ${colors.length} unique Lab colors`);
+
+            // SPARSE COLOR PRE-FILTER: Remove colors that appear in very few pixels
+            // This prevents noise/outliers from consuming palette slots in median cut
+            // Apply BEFORE median cut so these colors never participate in the algorithm
+            const MIN_OCCURRENCE_COUNT = Math.max(2, Math.ceil(sampledPixels * 0.001)); // 0.1% or minimum 2 pixels
+            const beforeFilter = colors.length;
+
+            colors = colors.filter(c => c.count >= MIN_OCCURRENCE_COUNT);
+
+            if (colors.length < beforeFilter) {
+                const removed = beforeFilter - colors.length;
+                logger.log(`[MedianCut] ✓ Sparse color pre-filter: Removed ${removed} rare color(s) appearing < ${MIN_OCCURRENCE_COUNT} times (${colors.length} remain)`);
+            }
         }
 
         // DEBUG: Check Lab value ranges (avoid stack overflow with large arrays)
