@@ -1,0 +1,16 @@
+{
+  "id": "vintage-muted",
+  "name": "Vintage / Muted",
+  "description": "Subdued tones with balanced approach for vintage and muted images",
+  "settings": {
+    "engineType": "balanced",
+    "centroidStrategy": "VOLUMETRIC",
+    "blackBias": 2.0,
+    "lWeight": 0.8,
+    "cWeight": 1.0,
+    "paletteReduction": 10.0,
+    "hueLockAngle": 18,
+    "shadowPoint": 12,
+    "highlightThreshold": 90
+  }
+}
