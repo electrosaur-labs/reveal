@@ -2712,6 +2712,55 @@ class PosterizationEngine {
         );
         logger.log(`✓ Curated palette: ${curatedPaletteLab.length} colors`);
 
+        // SPARSE COLOR SUPPRESSION: Remove colors representing too few pixels
+        // This eliminates outliers (JPEG artifacts, sensor noise, rare edge colors)
+        // that survive median cut and perceptual snap
+        if (initialPaletteLab._allColors && initialPaletteLab._allColors.length > 0) {
+            const MIN_PIXEL_PERCENTAGE = 0.005; // 0.5%
+            const totalPixels = initialPaletteLab._allColors.reduce((sum, c) => sum + c.count, 0);
+            const beforeFilterCount = curatedPaletteLab.length;
+
+            // For each palette color, count how many pixels map to it
+            const paletteWithCounts = curatedPaletteLab.map(paletteColor => {
+                let pixelCount = 0;
+                // Find all original colors that are closest to this palette color
+                initialPaletteLab._allColors.forEach(originalColor => {
+                    // Find nearest palette color to this original color
+                    let minDistSq = Infinity;
+                    let nearestIdx = 0;
+                    for (let i = 0; i < curatedPaletteLab.length; i++) {
+                        const dL = originalColor.L - curatedPaletteLab[i].L;
+                        const da = originalColor.a - curatedPaletteLab[i].a;
+                        const db = originalColor.b - curatedPaletteLab[i].b;
+                        const distSq = dL * dL + da * da + db * db;
+                        if (distSq < minDistSq) {
+                            minDistSq = distSq;
+                            nearestIdx = i;
+                        }
+                    }
+                    // If this original color maps to our palette color, add its count
+                    if (curatedPaletteLab[nearestIdx] === paletteColor) {
+                        pixelCount += originalColor.count;
+                    }
+                });
+                return { color: paletteColor, pixelCount };
+            });
+
+            // Filter out colors with too few pixels
+            const filteredPalette = paletteWithCounts
+                .filter(entry => {
+                    const percentage = entry.pixelCount / totalPixels;
+                    return percentage >= MIN_PIXEL_PERCENTAGE;
+                })
+                .map(entry => entry.color);
+
+            if (filteredPalette.length < beforeFilterCount) {
+                const removedCount = beforeFilterCount - filteredPalette.length;
+                logger.log(`✓ Sparse color filter: Removed ${removedCount} color(s) with < ${(MIN_PIXEL_PERCENTAGE * 100).toFixed(2)}% of pixels (${filteredPalette.length} remain)`);
+                curatedPaletteLab = filteredPalette;
+            }
+        }
+
         // ARCHITECT'S PALETTE REDUCTION: Prune colors that are too similar
         // User-configurable threshold (6.0-15.0 ΔE, default: 10.0)
         // Balances screen printing practicality with color richness
