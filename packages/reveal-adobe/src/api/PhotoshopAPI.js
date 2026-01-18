@@ -264,12 +264,28 @@ class PhotoshopAPI {
             localStorage.setItem('reveal_checkpoint', 'getDocumentPixels_success');
         }
 
+        // Normalize 16-bit Lab to standard 8-bit ranges for posterization engine
+        if (componentSize === 16) {
+            logger.log('Normalizing 16-bit Lab to 8-bit ranges...');
+            const normalized = new Uint8ClampedArray(rgbaData.length);
+            for (let i = 0; i < rgbaData.length; i += 3) {
+                // L: 0-32768 → 0-255 (linear scale)
+                normalized[i] = Math.round((rgbaData[i] / 32768) * 255);
+                // a: 0-32768 (neutral=16384) → 0-255 (neutral=128)
+                normalized[i + 1] = Math.round((rgbaData[i + 1] / 32768) * 255);
+                // b: 0-32768 (neutral=16384) → 0-255 (neutral=128)
+                normalized[i + 2] = Math.round((rgbaData[i + 2] / 32768) * 255);
+            }
+            logger.log(`Normalized ${normalized.length / 3} pixels from 16-bit to 8-bit ranges`);
+            rgbaData = normalized;
+        }
+
         return {
-            pixels: rgbaData,  // Lab values (Uint8Array for 8-bit, Uint16Array for 16-bit)
+            pixels: rgbaData,  // Lab values (Uint8ClampedArray, normalized to 8-bit ranges)
             width: actualWidth,
             height: actualHeight,
             format: 'lab',
-            bitDepth: componentSize,  // 8 or 16
+            bitDepth: componentSize,  // 8 or 16 (original bit depth)
             originalWidth: doc.width,
             originalHeight: doc.height,
             scale: Math.min(actualWidth / doc.width, actualHeight / doc.height)
