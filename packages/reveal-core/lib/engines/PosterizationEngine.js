@@ -486,6 +486,154 @@ class PosterizationEngine {
         return distinct;
     }
 
+    /**
+     * REVELATION HEURISTIC: Density Floor
+     * Prunes palette colors with < 0.5% coverage and reassigns pixels.
+     * This treats targetColorCount as a HINT rather than a mandate.
+     *
+     * @private
+     * @param {Uint8Array} assignments - Pixel-to-palette index mappings
+     * @param {Array<{L, a, b}>} palette - Lab palette
+     * @param {number} threshold - Minimum coverage threshold (default: 0.005 = 0.5%)
+     * @param {Set<number>} protectedIndices - Indices that should never be removed (preserved colors, substrate)
+     * @returns {Object} - {palette, assignments, actualCount}
+     */
+    static _applyDensityFloor(assignments, palette, threshold = 0.005, protectedIndices = new Set()) {
+        // Input validation
+        if (!assignments || !palette || palette.length === 0) {
+            logger.log('⚠️ Density floor: Invalid input, skipping');
+            return { palette, assignments, actualCount: palette.length };
+        }
+
+        const totalPixels = assignments.length;
+        const counts = new Array(palette.length).fill(0);
+
+        // Count pixel occupancy for each palette color (skip transparent pixels = 255)
+        for (let i = 0; i < totalPixels; i++) {
+            const idx = assignments[i];
+
+            // Skip transparent pixels (special value 255)
+            if (idx === 255) {
+                continue;
+            }
+
+            // Validate index bounds
+            if (idx < 0 || idx >= palette.length) {
+                logger.log(`⚠️ Density floor: Invalid assignment index ${idx} at pixel ${i}, skipping`);
+                continue;
+            }
+
+            counts[idx]++;
+        }
+
+        // Find indices of colors that meet the threshold (or are protected)
+        const viableIndices = [];
+        counts.forEach((count, i) => {
+            // Always keep protected colors (preserved colors, substrate)
+            if (protectedIndices.has(i)) {
+                viableIndices.push(i);
+                return;
+            }
+
+            const coverage = count / totalPixels;
+            if (coverage >= threshold) {
+                viableIndices.push(i);
+            } else {
+                logger.log(`Pruning "Ghost" color: Index ${i} (Coverage: ${(coverage * 100).toPrecision(2)}%)`);
+            }
+        });
+
+        // If all colors are viable, return original data
+        if (viableIndices.length === palette.length) {
+            return { palette, assignments, actualCount: palette.length };
+        }
+
+        // Edge case: All colors pruned (shouldn't happen in practice)
+        if (viableIndices.length === 0) {
+            logger.log('⚠️ Density floor: All colors pruned (edge case), keeping original palette');
+            return { palette, assignments, actualCount: palette.length };
+        }
+
+        // Create the new, pruned palette
+        const cleanPalette = viableIndices.map(idx => palette[idx]);
+        const remappedAssignments = new Uint8Array(totalPixels);
+
+        // Re-allocate pixels (preserve transparent pixels)
+        for (let i = 0; i < totalPixels; i++) {
+            const oldIdx = assignments[i];
+
+            // Preserve transparent pixels (special value 255)
+            if (oldIdx === 255) {
+                remappedAssignments[i] = 255;
+                continue;
+            }
+
+            // Validate index bounds
+            if (oldIdx < 0 || oldIdx >= palette.length) {
+                // Fallback: assign to first color in clean palette
+                remappedAssignments[i] = 0;
+                continue;
+            }
+
+            const newIdxInClean = viableIndices.indexOf(oldIdx);
+
+            if (newIdxInClean !== -1) {
+                // Pixel belongs to a survivor
+                remappedAssignments[i] = newIdxInClean;
+            } else {
+                // Pixel belongs to a pruned color; find the nearest SURVIVING color
+                const targetColor = palette[oldIdx];
+                if (targetColor && cleanPalette.length > 0) {
+                    remappedAssignments[i] = this._findNearestInPalette(targetColor, cleanPalette);
+                } else {
+                    // Fallback: assign to first color
+                    remappedAssignments[i] = 0;
+                }
+            }
+        }
+
+        return {
+            palette: cleanPalette,
+            assignments: remappedAssignments,
+            actualCount: cleanPalette.length
+        };
+    }
+
+    /**
+     * Helper to find the nearest color in a specific subset of the palette
+     *
+     * @private
+     * @param {{L, a, b}} targetLab - Target Lab color
+     * @param {Array<{L, a, b}>} subPalette - Subset of palette to search
+     * @returns {number} - Index of nearest color in subPalette
+     */
+    static _findNearestInPalette(targetLab, subPalette) {
+        // Input validation
+        if (!targetLab || !subPalette || subPalette.length === 0) {
+            return 0;  // Fallback to first color
+        }
+
+        let minDistance = Infinity;
+        let closestIdx = 0;
+
+        for (let i = 0; i < subPalette.length; i++) {
+            const p = subPalette[i];
+            if (!p) continue;  // Skip invalid entries
+
+            // Standard Euclidean distance in Lab space
+            const d = Math.sqrt(
+                Math.pow(targetLab.L - p.L, 2) +
+                Math.pow(targetLab.a - p.a, 2) +
+                Math.pow(targetLab.b - p.b, 2)
+            );
+            if (d < minDistance) {
+                minDistance = d;
+                closestIdx = i;
+            }
+        }
+        return closestIdx;
+    }
+
 
     /**
      * Convert RGB to CIELAB color space (D65 illuminant, 2° observer)
@@ -2846,18 +2994,18 @@ class PosterizationEngine {
         }
 
         // Final palette: quantized colors + preserved colors + substrate
-        const finalPaletteLab = [...curatedPaletteLab, ...preservedColors, ...substrateColors];
+        let finalPaletteLab = [...curatedPaletteLab, ...preservedColors, ...substrateColors];
         logger.log(`✓ Final palette: ${finalPaletteLab.length} colors (${curatedPaletteLab.length} quantized + ${preservedColors.length} preserved + ${substrateColors.length} substrate)`);
 
         // Step 4: Convert palette back to RGB
-        const paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
+        let paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
 
         // Step 5: Assign each pixel to nearest palette color (HARD SNAP - Zero Dither)
         // Every pixel belongs 100% to one feature color - no error diffusion, no dithering.
         // This ensures razor-sharp boundaries required for high-end spot color separations.
         logger.log("Assigning pixels to palette...");
         // Lab = 3 channels (L,a,b), RGB = 4 channels (RGBA)
-        const assignments = new Uint8Array(pixels.length / (isLabInput ? 3 : 4));
+        let assignments = new Uint8Array(pixels.length / (isLabInput ? 3 : 4));
 
         // Calculate palette indices for preserved colors (based on checkbox state, not pixel detection)
         let preservedColorIndex = curatedPaletteLab.length;
@@ -2929,6 +3077,33 @@ class PosterizationEngine {
 
         if (finalPaletteLab.length < targetColors) {
             logger.log(`ℹ Final palette: ${finalPaletteLab.length} colors (requested: ${targetColors})`);
+        }
+
+        // Apply density floor to remove ghost colors (<0.5% coverage)
+        // IMPORTANT: Never remove preserved colors (white/black) or substrate
+        const protectedIndices = new Set();
+        if (preserveWhite) protectedIndices.add(whiteIndex);
+        if (preserveBlack) protectedIndices.add(blackIndex);
+        if (substrateLab) protectedIndices.add(finalPaletteLab.length - 1);  // Substrate is always last
+
+        const densityResult = this._applyDensityFloor(
+            assignments,
+            finalPaletteLab,
+            0.005,  // 0.5% threshold
+            protectedIndices
+        );
+
+        if (densityResult.actualCount < finalPaletteLab.length) {
+            const removed = finalPaletteLab.length - densityResult.actualCount;
+            logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < 0.5% coverage`);
+            logger.log(`  Final palette: ${densityResult.actualCount} colors (down from ${finalPaletteLab.length})`);
+
+            // Use the cleaned palette and remapped assignments
+            finalPaletteLab = densityResult.palette;
+            assignments = densityResult.assignments;
+
+            // CRITICAL: Regenerate RGB palette to match filtered Lab palette
+            paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
         }
 
         // Track substrate index for UI filtering and layer identification
