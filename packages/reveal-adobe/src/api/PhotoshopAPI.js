@@ -60,6 +60,13 @@ class PhotoshopAPI {
         // Lab documents have NO alpha channel - Lab is always 3 channels (L, a, b) only
         let pixelData;
         try {
+            logger.log('STEP 1: About to call imaging.getPixels()...');
+            logger.log(`  documentID: ${doc.id}`);
+            logger.log(`  targetSize: ${scaledWidth}x${scaledHeight}`);
+            logger.log(`  componentSize: 8`);
+            logger.log(`  targetComponentCount: 3`);
+            logger.log(`  colorSpace: Lab`);
+
             pixelData = await imaging.getPixels({
                 documentID: doc.id,
                 targetSize: {
@@ -70,7 +77,10 @@ class PhotoshopAPI {
                 targetComponentCount: 3,    // 3 channels: L, a, b (Lab has NO alpha)
                 colorSpace: "Lab"           // THE CRITICAL PARAMETER: Request raw Lab channels (no conversion)
             });
+
+            logger.log('STEP 2: imaging.getPixels() returned successfully');
         } catch (error) {
+            logger.error('STEP 2 FAILED: imaging.getPixels() threw error:', error);
             // Handle smart object errors
             if (error.message && error.message.includes('-25010')) {
                 throw new Error(
@@ -254,6 +264,9 @@ class PhotoshopAPI {
 
         // Use pure validation logic (testable without UXP)
         const result = DocumentValidator.validate(doc);
+
+        // Dump full validation result JSON
+        logger.log("Validation result JSON:", JSON.stringify(result, null, 2));
 
         // Debug logging
         logger.log(`  Total errors: ${result.errors.length}`);
@@ -489,12 +502,18 @@ class PhotoshopAPI {
      * @returns {Promise<Layer>} - Created layer
      */
     static async createLabSeparationLayer(layerData) {
+        localStorage.setItem('reveal_checkpoint', 'createLabSep_start');
+
         const { name, labColor, mask, width, height } = layerData;
         const doc = this.getActiveDocument();
 
         logger.log(`Creating Lab Fill Layer "${name}" with mask...`);
+        logger.log(`  Input: ${width}x${height}, mask: ${mask.length} bytes`);
+        logger.log(`  Lab color: L=${labColor.L}, a=${labColor.a}, b=${labColor.b}`);
 
         try {
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_before_protective');
+
             // STEP 1: Create protective layer (prevents background corruption)
             logger.log(`  Step 1: Creating protective layer...`);
             await action.batchPlay([{
@@ -502,6 +521,8 @@ class PhotoshopAPI {
                 "_target": [{ "_ref": "layer" }],
                 "name": "__PROTECTIVE__"
             }], {});
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_protective');
 
             // STEP 2: Create temporary raster layer to hold mask data
             logger.log(`  Step 2: Creating temp layer with mask data...`);
@@ -511,8 +532,12 @@ class PhotoshopAPI {
                 "name": "__TEMP_MASK__"
             }], {});
 
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_temp_layer');
+
             const tempLayer = doc.activeLayers[0];
             const tempLayerID = tempLayer.id;
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_before_rgba_build');
 
             // STEP 3: Write RGBA mask data to temp layer (alpha channel = mask)
             logger.log(`  Step 3: Writing RGBA data (alpha = mask transparency)...`);
@@ -525,19 +550,28 @@ class PhotoshopAPI {
                 rgbaData[idx + 3] = mask[i];   // A = mask value (0=transparent, 255=opaque)
             }
 
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_rgba_build');
+
             const imageData = await imaging.createImageDataFromBuffer(rgbaData, {
                 width, height, components: 4, chunky: true,
                 colorSpace: "RGB",
                 colorProfile: "sRGB IEC61966-2.1"
             });
 
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_imageData_create');
+
             await imaging.putPixels({
                 layerID: tempLayer.id,
                 imageData: imageData,
                 replace: true
             });
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_after_putPixels');
+
             imageData.dispose();
             logger.log(`  ✓ RGBA data written to temp layer`);
+
+            localStorage.setItem('reveal_checkpoint', 'createLabSep_before_transparency_select');
 
             // STEP 4: Load temp layer's TRANSPARENCY as selection
             logger.log(`  Step 4: Loading transparency as selection...`);
