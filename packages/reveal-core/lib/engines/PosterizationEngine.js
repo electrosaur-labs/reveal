@@ -2067,6 +2067,19 @@ class PosterizationEngine {
             }
 
             logger.log(`[MedianCut] Color grid sampling (stride ${GRID_STRIDE}): ${totalPixels} pixels → ${sampledPixels} sampled → ${colors.length} unique Lab colors`);
+
+            // SPARSE COLOR SUPPRESSION: Filter out colors with too few pixels BEFORE median cut
+            // This prevents outliers (JPEG artifacts, sensor noise) from entering the algorithm
+            const MIN_PIXEL_PERCENTAGE = 0.005; // 0.5%
+            const minPixelCount = Math.ceil(sampledPixels * MIN_PIXEL_PERCENTAGE);
+            const beforeFilter = colors.length;
+
+            colors = colors.filter(color => color.count >= minPixelCount);
+
+            if (colors.length < beforeFilter) {
+                const removed = beforeFilter - colors.length;
+                logger.log(`[MedianCut] Sparse color filter: Removed ${removed} color(s) with < ${minPixelCount} pixels (${(MIN_PIXEL_PERCENTAGE * 100).toFixed(2)}% threshold, ${colors.length} remain)`);
+            }
         }
 
         // DEBUG: Check Lab value ranges (avoid stack overflow with large arrays)
