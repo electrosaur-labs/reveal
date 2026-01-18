@@ -2157,9 +2157,26 @@ class PosterizationEngine {
 
         logger.log(`[MedianCut] Final: ${boxes.length} boxes after ${splitIteration} iterations`);
 
+        // SPARSE COLOR SUPPRESSION: Filter out boxes representing too few pixels
+        // This eliminates visually insignificant outlier colors (e.g., JPEG artifacts, sensor noise)
+        const MIN_PIXEL_PERCENTAGE = 0.005; // 0.5%
+        const totalSampledPixels = colors.reduce((sum, c) => sum + c.count, 0);
+        const beforeFilterCount = boxes.length;
+
+        const filteredBoxes = boxes.filter(box => {
+            const boxPixelCount = box.colors.reduce((sum, c) => sum + c.count, 0);
+            const percentage = boxPixelCount / totalSampledPixels;
+            return percentage >= MIN_PIXEL_PERCENTAGE;
+        });
+
+        if (filteredBoxes.length < beforeFilterCount) {
+            const removedCount = beforeFilterCount - filteredBoxes.length;
+            logger.log(`[MedianCut] Sparse color filter: Removed ${removedCount} box(es) with < ${(MIN_PIXEL_PERCENTAGE * 100).toFixed(2)}% of pixels (${filteredBoxes.length} remain)`);
+        }
+
         // Calculate representative color for each box (centroid in Lab space)
         // Use injected strategy or fallback to VOLUMETRIC
-        const palette = boxes.map(box => this._calculateLabCentroid(box.colors, grayscaleOnly, strategy, tuning));
+        const palette = filteredBoxes.map(box => this._calculateLabCentroid(box.colors, grayscaleOnly, strategy, tuning));
 
         // Store colors array in palette for later hue gap analysis
         // This allows us to force-include gap colors AFTER perceptual snap
