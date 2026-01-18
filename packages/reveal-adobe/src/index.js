@@ -447,17 +447,24 @@ function rgbToHex(r, g, b) {
  * @returns {object|null} - Preview state object or null if failed
  */
 function initializePreviewCanvas(width, height, palette, assignments) {
-    const canvas = document.getElementById("previewCanvas");
+    let canvas = document.getElementById("previewCanvas");
     if (!canvas) {
         logger.error("Preview canvas not found in DOM");
         return null;
     }
 
-    // CLEANUP: Clear any previous canvas state
-    const oldCtx = canvas.getContext("2d");
-    if (oldCtx) {
-        oldCtx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    // AGGRESSIVE CLEANUP: Completely destroy and recreate canvas element
+    // This fixes stale rendering context issues on second+ runs
+    logger.log('Destroying old canvas element and creating fresh one...');
+    const parent = canvas.parentNode;
+    const newCanvas = document.createElement('canvas');
+    newCanvas.id = 'previewCanvas';
+    newCanvas.style.imageRendering = 'pixelated';
+    newCanvas.style.cursor = 'crosshair';
+    newCanvas.style.display = 'block';
+    parent.replaceChild(newCanvas, canvas);
+    canvas = newCanvas;
+    logger.log('✓ Canvas element recreated');
 
     // Set canvas size to match data dimensions
     canvas.width = width;
@@ -477,16 +484,26 @@ function initializePreviewCanvas(width, height, palette, assignments) {
         return null;
     }
 
-    // Store preview state globally
+    // Store preview state globally (don't store ctx - get fresh each time)
+    logger.log(`[DEBUG] Creating window.previewState with ${assignments.length} assignments and ${palette.length} colors`);
     window.previewState = {
-        canvas: canvas,
-        ctx: ctx,
         width: width,
         height: height,
         palette: palette,
         assignments: assignments,
         activeSoloIndex: null  // null = show all, number = solo that color
     };
+
+    // Add click handler to canvas - clicking canvas shows all colors
+    canvas.addEventListener('click', () => {
+        const state = window.previewState;
+        if (state && state.activeSoloIndex !== null) {
+            logger.log('Canvas clicked - returning to full preview');
+            state.activeSoloIndex = null;
+            updateSwatchHighlights();
+            renderPreview();
+        }
+    });
 
     logger.log(`✓ Preview canvas initialized: ${width}×${height}, visible: ${canvas.offsetHeight > 0}`);
     return window.previewState;
@@ -498,22 +515,34 @@ function initializePreviewCanvas(width, height, palette, assignments) {
  */
 function renderPreview() {
     const state = window.previewState;
-    if (!state || !state.ctx) {
+    if (!state) {
         logger.error('Preview state not initialized');
         return;
     }
 
-    const ctx = state.ctx;
+    // Get fresh canvas element from DOM
+    const canvas = document.getElementById('previewCanvas');
+    if (!canvas) {
+        logger.error('Canvas element not found in DOM');
+        return;
+    }
+
+    // Get fresh context from canvas
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        logger.error('Failed to get 2D context from canvas');
+        return;
+    }
+
     const assignments = state.assignments;
     const palette = state.palette;
     const activeSoloIndex = state.activeSoloIndex;
     const width = state.width;
     const height = state.height;
 
-    // DIAGNOSTIC: Check canvas visibility
-    const canvas = state.canvas;
     logger.log(`Rendering preview (solo mode: ${activeSoloIndex !== null})`);
-    logger.log(`  Canvas: ${width}×${height}, display=${canvas.style.display}, offsetHeight=${canvas.offsetHeight}, palette.length=${palette.length}, assignments.length=${assignments.length}`);
+    logger.log(`  Canvas: ${canvas.width}x${canvas.height}, State: ${width}x${height}, Context valid: ${!!ctx}`);
+    logger.log(`  Assignments length: ${assignments.length}, Palette length: ${palette.length}`);
 
     // Clear canvas
     ctx.clearRect(0, 0, width, height);
@@ -578,7 +607,75 @@ function renderPreview() {
         }
     }
 
-    logger.log(`✓ Preview rendered`);
+    // AGGRESSIVE REPAINT: Force multiple layout/paint cycles
+    // UXP canvas sometimes needs extra encouragement to update visually
+    void canvas.offsetHeight;
+    void canvas.offsetWidth;
+    canvas.style.display = 'block'; // Reassert display property
+    void canvas.offsetHeight; // Force another reflow
+
+    logger.log(`✓ Preview rendered (${activeSoloIndex !== null ? 'solo color ' + (activeSoloIndex + 1) : 'all colors'})`);
+
+    // Update preview status message
+    updatePreviewStatus();
+}
+
+/**
+ * Update preview status message and make it interactive
+ */
+function updatePreviewStatus() {
+    const statusDiv = document.getElementById('previewStatus');
+    if (!statusDiv) return;
+
+    const state = window.previewState;
+    if (!state) return;
+
+    if (state.activeSoloIndex !== null) {
+        // In solo mode - show which color and make clickable to exit
+        statusDiv.textContent = `Showing color ${state.activeSoloIndex + 1} - Click here to show all colors`;
+        statusDiv.style.cursor = 'pointer';
+        statusDiv.style.pointerEvents = 'auto';
+        statusDiv.style.background = 'rgba(0,100,200,0.9)'; // Blue background for solo mode
+
+        // Add click handler to exit solo mode
+        statusDiv.onclick = () => {
+            state.activeSoloIndex = null;
+            updateSwatchHighlights();
+            renderPreview();
+            logger.log('✓ Exited solo mode - showing all colors');
+        };
+    } else {
+        // Showing all colors
+        statusDiv.textContent = 'Showing all colors - Click swatch to highlight';
+        statusDiv.style.cursor = 'default';
+        statusDiv.style.pointerEvents = 'none';
+        statusDiv.style.background = 'rgba(0,0,0,0.7)'; // Normal background
+        statusDiv.onclick = null;
+    }
+}
+
+/**
+ * Update visual highlighting on swatches to show which is active
+ */
+function updateSwatchHighlights() {
+    const state = window.previewState;
+    if (!state) return;
+
+    const container = document.getElementById('paletteEditorContainer');
+    if (!container) return;
+
+    const swatches = container.querySelectorAll('.editable-swatch');
+    swatches.forEach((swatch, index) => {
+        if (state.activeSoloIndex === index) {
+            // Highlight active swatch
+            swatch.style.border = '3px solid #0078d4';
+            swatch.style.boxShadow = '0 0 8px rgba(0,120,212,0.6)';
+        } else {
+            // Normal swatch appearance
+            swatch.style.border = '1px solid #ccc';
+            swatch.style.boxShadow = 'none';
+        }
+    });
 }
 
 /**
@@ -586,25 +683,49 @@ function renderPreview() {
  * @param {number} featureIndex - Index of the color feature (0-based)
  */
 function handleSwatchClick(featureIndex) {
-    const state = window.previewState;
-    if (!state) {
-        logger.log("Preview not available");
+    // Prevent re-entrant calls
+    if (swatchClickBusy) {
+        logger.log('Swatch click ignored - previous click still processing');
         return;
     }
+    swatchClickBusy = true;
 
-    // Toggle solo mode for this color
-    if (state.activeSoloIndex === featureIndex) {
-        // Already showing this color - turn off solo mode (show all)
-        state.activeSoloIndex = null;
-        logger.log(`Showing all colors`);
-    } else {
-        // Show only this color
-        state.activeSoloIndex = featureIndex;
-        logger.log(`Highlighting color ${featureIndex + 1}`);
+    try {
+        const state = window.previewState;
+        if (!state) {
+            logger.log("Preview not available");
+            return;
+        }
+
+        // Count how many pixels have this color
+        const pixelCount = state.assignments.filter(a => a === featureIndex).length;
+        const percentage = (pixelCount / state.assignments.length * 100).toFixed(1);
+        logger.log(`Color ${featureIndex} appears in ${pixelCount} pixels (${percentage}%)`);
+
+        // Toggle solo mode for this color
+        if (state.activeSoloIndex === featureIndex) {
+            // Already showing this color - turn off solo mode (show all)
+            state.activeSoloIndex = null;
+            logger.log(`✓ Toggled OFF - showing all colors`);
+        } else {
+            // Show only this color
+            state.activeSoloIndex = featureIndex;
+            logger.log(`✓ Solo mode ON - showing only color ${featureIndex + 1}`);
+
+            // Warn if this color has very few pixels
+            if (parseFloat(percentage) < 1.0) {
+                logger.warn(`  ⚠️ This color only covers ${percentage}% of the image - it may be hard to see!`);
+            }
+        }
+
+        // Update visual highlights on swatches
+        updateSwatchHighlights();
+
+        // Re-render preview
+        renderPreview();
+    } finally {
+        swatchClickBusy = false;
     }
-
-    // Re-render preview
-    renderPreview();
 }
 
 /**
@@ -680,8 +801,14 @@ function showPaletteEditor(selectedPalette) {
         container.innerHTML = swatchesHTML;
         logger.log(`Injected ${selectedPalette.hexColors.length} editable swatches via innerHTML`);
 
-        // Re-attach click handlers after re-render
-        attachSwatchClickHandlers();
+        // Set cursor pointer on all swatches (visual indicator)
+        const swatches = container.querySelectorAll('.editable-swatch');
+        swatches.forEach(swatch => {
+            swatch.style.cursor = 'pointer';
+        });
+
+        // Initialize swatch highlights (none active initially)
+        updateSwatchHighlights();
     }
 
     // Initial render
@@ -716,133 +843,203 @@ function showPaletteEditor(selectedPalette) {
         }
     });
 
-    // Attach click handlers to swatches - extracted for re-rendering after color changes
-    function attachSwatchClickHandlers() {
-        const container = document.getElementById('editablePaletteContainer');
+    // Attach click handlers using EVENT DELEGATION (prevents listener accumulation)
+    // This is called ONCE and handles all clicks on dynamically re-rendered swatches
+    const container = document.getElementById('editablePaletteContainer');
 
-        // Handler: Lab text click → Color Picker
-        const labTexts = container.querySelectorAll('.clickable-lab');
-        logger.log(`Found ${labTexts.length} Lab text elements for color picker`);
-
-        labTexts.forEach(labText => {
-            // Add hover effects via event listeners (UXP doesn't allow inline handlers)
-            labText.addEventListener('mouseenter', () => {
-                labText.style.background = '#e3f2fd';
-            });
-            labText.addEventListener('mouseleave', () => {
-                labText.style.background = 'transparent';
-            });
-
-            labText.addEventListener('click', async (event) => {
-                event.stopPropagation(); // Prevent triggering swatch click
-
-                const featureIndex = parseInt(labText.dataset.featureIndex);
-                const currentHex = labText.dataset.hex;
-                const currentRgb = hexToRgb(currentHex);
-
-                logger.log(`🎨 Opening Color Picker for Feature ${featureIndex + 1}: ${currentHex} (RGB: ${currentRgb.r}, ${currentRgb.g}, ${currentRgb.b})`);
-
-                // Highlight this color in canvas preview (solo mode)
-                if (window.previewState) {
-                    window.previewState.activeSoloIndex = featureIndex;
-                    renderPreview();
-                    logger.log(`✓ Highlighted color ${featureIndex + 1} in canvas preview`);
-                }
-
-                try {
-                    // Show Photoshop's Color Picker with current color
-                    const result = await showPhotoshopColorPicker(currentRgb);
-
-                    // User cancelled?
-                    if (!result) {
-                        logger.log(`⚠️ Color picker cancelled by user`);
-                        // Keep solo mode active (user may want to try again)
-                        return;
-                    }
-
-                    // Convert RGB result to hex
-                    const newHex = rgbToHex(result.red, result.green, result.blue);
-                    logger.log(`✓ Color picker returned: ${newHex} (RGB: ${result.red}, ${result.green}, ${result.blue})`);
-
-                    // No change?
-                    if (newHex === currentHex) {
-                        logger.log(`  No change - keeping ${currentHex}`);
-                        return;
-                    }
-
-                    // Convert to Lab for perceptual distance check
-                    const newLab = PosterizationEngine.rgbToLab({ r: result.red, g: result.green, b: result.blue });
-                    logger.log(`  Lab values: L${Math.round(newLab.L)} a${Math.round(newLab.a)} b${Math.round(newLab.b)}`);
-
-                    // Check perceptual distance against other colors (Palette Sovereignty)
-                    const MIN_DISTANCE = 12; // L-weighted ΔE threshold
-                    let tooSimilar = false;
-                    let similarTo = null;
-                    let minDistance = Infinity;
-
-                    for (let i = 0; i < selectedPalette.hexColors.length; i++) {
-                        if (i === featureIndex) continue; // Skip self
-
-                        const otherHex = selectedPalette.hexColors[i];
-                        const distance = PosterizationEngine.calculateHexDistance(newHex, otherHex);
-
-                        if (distance < MIN_DISTANCE) {
-                            tooSimilar = true;
-                            similarTo = i + 1;
-                            minDistance = distance;
-                            logger.log(`⚠️ Warning: ${newHex} is too similar to Feature ${similarTo} (${otherHex}) - ΔE=${distance.toFixed(1)}`);
-                            break;
-                        }
-                    }
-
-                    // Show warning if too similar (but still allow)
-                    if (tooSimilar) {
-                        logger.log(`⚠️ Palette Sovereignty warning: ΔE=${minDistance.toFixed(1)} (threshold: ${MIN_DISTANCE})`);
-                        alert(`⚠️ Warning: This color is very similar to Feature ${similarTo} (ΔE=${minDistance.toFixed(1)}). Colors may not separate cleanly in final output.`);
-                    }
-
-                    // Update palette data using feature index (maintains alignment with originalHexColors)
-                    selectedPalette.hexColors[featureIndex] = newHex;
-                    selectedPalette.paletteLab[featureIndex] = newLab;  // CRITICAL: Update Lab palette (used for layer creation)
-                    logger.log(`✓ Updated Feature ${featureIndex + 1}: ${currentHex} → ${newHex}`);
-                    logger.log(`  Lab: L${newLab.L.toFixed(1)} a${newLab.a.toFixed(1)} b${newLab.b.toFixed(1)}`);
-                    logger.log(`  Entire feature group will remap to new ink (editing bones, not pixels)`);
-
-                    // Re-render entire palette to show new color, re-sort by L, and update all Lab values
-                    logger.log(`🔄 Re-rendering palette with updated color...`);
-                    renderPaletteSwatches();
-
-                    // Update canvas preview with new color
-                    logger.log(`🔄 Updating canvas preview with new color...`);
-                    if (window.previewState) {
-                        window.previewState.palette = selectedPalette.hexColors;
-                        renderPreview();
-                        logger.log(`✓ Canvas preview updated with new color`);
-                    }
-
-                } catch (error) {
-                    logger.error(`Failed to show color picker:`, error);
-                    alert(`Error showing color picker: ${error.message}`);
-                }
-            });
-        });
-
-        // Handler: Swatch click → Highlight color in canvas preview
-        const swatches = container.querySelectorAll('.editable-swatch');
-        logger.log(`Found ${swatches.length} swatches for preview highlighting`);
-
-        swatches.forEach(swatch => {
-            swatch.addEventListener('click', (event) => {
-                event.stopPropagation(); // Prevent bubbling
-
-                const featureIndex = parseInt(swatch.dataset.featureIndex);
-                logger.log(`🔍 Swatch ${featureIndex + 1} clicked - highlighting in preview`);
-
-                // Toggle highlight for this color in canvas preview
-                handleSwatchClick(featureIndex);
-            });
-        });
+    // Only attach event delegation listener ONCE (not on every posterize)
+    logger.log(`[DEBUG] paletteListenersAttached flag: ${paletteListenersAttached}`);
+    logger.log(`[DEBUG] Container element: ${container ? 'exists' : 'null'}`);
+    if (container) {
+        logger.log(`[DEBUG] Container has ${container.children.length} children`);
     }
+
+    if (!paletteListenersAttached) {
+        logger.log('Attaching palette editor event delegation listeners (first time only)...');
+        paletteListenersAttached = true;
+
+        // Use event delegation on container for ALL swatch interactions
+        container.addEventListener('click', async (event) => {
+        const target = event.target;
+
+        // Check if click was on a swatch (for preview highlighting)
+        const swatch = target.closest('.editable-swatch');
+        if (swatch) {
+            event.stopPropagation();
+            const featureIndex = parseInt(swatch.dataset.featureIndex);
+            logger.log(`🔍 Swatch ${featureIndex + 1} clicked - highlighting in preview`);
+            handleSwatchClick(featureIndex);
+            return;
+        }
+
+        // Check if click was on Lab text (for color picker)
+        const labText = target.closest('.clickable-lab');
+        if (labText) {
+            event.stopPropagation();
+
+            // Prevent re-entrant calls
+            if (colorPickerBusy) {
+                logger.log('Color picker click ignored - previous picker still open');
+                return;
+            }
+            colorPickerBusy = true;
+
+            const featureIndex = parseInt(labText.dataset.featureIndex);
+            const currentHex = labText.dataset.hex;
+            const currentRgb = hexToRgb(currentHex);
+
+            logger.log(`🎨 Opening Color Picker for Feature ${featureIndex + 1}: ${currentHex} (RGB: ${currentRgb.r}, ${currentRgb.g}, ${currentRgb.b})`);
+
+            // Highlight this color in canvas preview (solo mode)
+            if (window.previewState) {
+                window.previewState.activeSoloIndex = featureIndex;
+                renderPreview();
+                logger.log(`✓ Highlighted color ${featureIndex + 1} in canvas preview`);
+            }
+
+            try {
+                // Show Photoshop's Color Picker with current color
+                const result = await showPhotoshopColorPicker(currentRgb);
+
+                // User cancelled?
+                if (!result) {
+                    logger.log(`⚠️ Color picker cancelled by user`);
+                    // Keep solo mode active (user may want to try again)
+                    return;
+                }
+
+                // Convert RGB result to hex
+                const newHex = rgbToHex(result.red, result.green, result.blue);
+                logger.log(`✓ Color picker returned: ${newHex} (RGB: ${result.red}, ${result.green}, ${result.blue})`);
+
+                // No change?
+                if (newHex === currentHex) {
+                    logger.log(`  No change - keeping ${currentHex}`);
+                    return;
+                }
+
+                // Convert to Lab for perceptual distance check
+                const newLab = PosterizationEngine.rgbToLab({ r: result.red, g: result.green, b: result.blue });
+                logger.log(`  Lab values: L${Math.round(newLab.L)} a${Math.round(newLab.a)} b${Math.round(newLab.b)}`);
+
+                // Check perceptual distance against other colors (Palette Sovereignty)
+                const MIN_DISTANCE = 12; // L-weighted ΔE threshold
+                let tooSimilar = false;
+                let similarTo = null;
+                let minDistance = Infinity;
+
+                for (let i = 0; i < selectedPalette.hexColors.length; i++) {
+                    if (i === featureIndex) continue; // Skip self
+
+                    const otherHex = selectedPalette.hexColors[i];
+                    const distance = PosterizationEngine.calculateHexDistance(newHex, otherHex);
+
+                    if (distance < MIN_DISTANCE) {
+                        tooSimilar = true;
+                        similarTo = i + 1;
+                        minDistance = distance;
+                        logger.log(`⚠️ Warning: ${newHex} is too similar to Feature ${similarTo} (${otherHex}) - ΔE=${distance.toFixed(1)}`);
+                        break;
+                    }
+                }
+
+                // Show warning if too similar (but still allow)
+                if (tooSimilar) {
+                    logger.log(`⚠️ Palette Sovereignty warning: ΔE=${minDistance.toFixed(1)} (threshold: ${MIN_DISTANCE})`);
+                    alert(`⚠️ Warning: This color is very similar to Feature ${similarTo} (ΔE=${minDistance.toFixed(1)}). Colors may not separate cleanly in final output.`);
+                }
+
+                // Update palette data using feature index (maintains alignment with originalHexColors)
+                selectedPalette.hexColors[featureIndex] = newHex;
+                selectedPalette.paletteLab[featureIndex] = newLab;  // CRITICAL: Update Lab palette (used for layer creation)
+                logger.log(`✓ Updated Feature ${featureIndex + 1}: ${currentHex} → ${newHex}`);
+                logger.log(`  Lab: L${newLab.L.toFixed(1)} a${newLab.a.toFixed(1)} b${newLab.b.toFixed(1)}`);
+                logger.log(`  Entire feature group will remap to new ink (editing bones, not pixels)`);
+
+                // Re-render entire palette to show new color, re-sort by L, and update all Lab values
+                logger.log(`🔄 Re-rendering palette with updated color...`);
+                renderPaletteSwatches();
+
+                // Update canvas preview with new color
+                logger.log(`🔄 Updating canvas preview with new color...`);
+                if (window.previewState) {
+                    // CRITICAL: Use allHexColors to match assignments indices
+                    window.previewState.palette = selectedPalette.allHexColors || selectedPalette.hexColors;
+                    renderPreview();
+                    logger.log(`✓ Canvas preview updated with new color`);
+                }
+
+            } catch (error) {
+                logger.error(`Failed to show color picker:`, error);
+                alert(`Error showing color picker: ${error.message}`);
+            } finally {
+                colorPickerBusy = false;
+            }
+            return;
+        }
+        });
+
+        // Add hover effects for Lab text using event delegation
+        container.addEventListener('mouseenter', (event) => {
+            const labText = event.target.closest('.clickable-lab');
+            if (labText) {
+                labText.style.background = '#e3f2fd';
+            }
+        }, true);
+
+        container.addEventListener('mouseleave', (event) => {
+            const labText = event.target.closest('.clickable-lab');
+            if (labText) {
+                labText.style.background = 'transparent';
+            }
+        }, true);
+
+        logger.log('✓ Palette editor event delegation listeners attached');
+    } else {
+        logger.log('Palette editor listeners already attached, skipping');
+    }
+
+    // Initialize preview canvas with posterization results
+    // CRITICAL: Wait for UXP layout to complete before initializing canvas
+    logger.log('Waiting for UXP layout before initializing canvas...');
+    setTimeout(() => {
+        // Check if canvas is ready (in paletteDialog)
+        const canvas = document.getElementById('previewCanvas');
+        if (!canvas) {
+            logger.error('⚠️ Canvas element not found after 300ms delay!');
+            logger.error('   Palette dialog might have closed before canvas could initialize.');
+            return;
+        }
+
+        logger.log(`Canvas offsetHeight after layout: ${canvas.offsetHeight}`);
+
+        if (canvas.offsetHeight === 0) {
+            logger.warn('⚠️ Canvas offsetHeight is 0 - element not visible in DOM');
+        }
+
+        // CRITICAL: Use allHexColors (full palette) to match assignments indices
+        const previewPalette = selectedPalette.allHexColors || selectedPalette.hexColors;
+        const previewState = initializePreviewCanvas(
+            posterizationData.originalWidth,
+            posterizationData.originalHeight,
+            previewPalette,
+            selectedPalette.assignments
+        );
+
+        if (previewState) {
+            renderPreview();
+            logger.log('✓ Preview canvas initialized and rendered');
+
+            // CRITICAL: After canvas recreation, UXP needs additional time for layout
+            // Render again after 100ms to ensure initial preview is visible
+            setTimeout(() => {
+                renderPreview();
+                logger.log('✓ Second render pass to ensure visibility');
+            }, 100);
+        } else {
+            logger.error('⚠️ Failed to initialize preview canvas - check console for errors');
+        }
+    }, 300); // 300ms delay for UXP layout
 
     // Hide "Posterize" button, show "Apply Separation" and "Back" buttons
     const btnPosterize = document.getElementById('btnPosterize');
@@ -917,6 +1114,8 @@ function showPaletteEditor(selectedPalette) {
         logger.log("Applying separation with Sovereign Palette:", selectedPreview.hexColors);
         logger.log("✓ User-edited colors are law - generating plates with exact hex values");
 
+        localStorage.setItem('reveal_checkpoint', 'separation_start');
+
         // Track separation start time for golden stats
         const separationStartTime = Date.now();
 
@@ -925,32 +1124,56 @@ function showPaletteEditor(selectedPalette) {
         let fullResLayers = null;
 
         try {
+            localStorage.setItem('reveal_checkpoint', 'before_executeAsModal');
+
             // Wrap ALL work in executeAsModal so Photoshop's progress dialog appears immediately
             // FILL LAYER + MASK APPROACH: Native Photoshop layer injection
             // Creates solid color fill layers (no pixel pushing) then applies masks
             // This avoids Lab colorspace errors by treating layers as mathematical primitives
 
             await core.executeAsModal(async (executionContext) => {
+                localStorage.setItem('reveal_checkpoint', 'inside_executeAsModal');
+
                 // Phase 4.1: Separate the image (ASYNC with progress)
                 logger.log("Step 1: Separating image into color layers...");
 
-                // Use original colors for assignment, edited colors for rendering
-                // This ensures pixels stay assigned to the same features even if ink colors change
-                const layers = await SeparationEngine.separateImage(
-                    posterizationData.originalPixels,
-                    posterizationData.originalWidth,
-                    posterizationData.originalHeight,
-                    selectedPreview.hexColors,          // Rendering palette (user-edited)
-                    selectedPreview.originalHexColors,  // Assignment palette (original discovery)
-                    selectedPreview.paletteLab,         // Lab palette (NO RGB→Lab conversion)
-                    {
-                        onProgress: (percent) => {
-                            logger.log(`Preview separation progress: ${percent}%`);
-                        }
-                    }
-                );
+                // Get dithering setting from UI
+                const ditherTypeEl = document.getElementById('ditherType');
+                const ditherType = ditherTypeEl ? ditherTypeEl.value : 'floyd-steinberg';
+                logger.log(`Using dithering: ${ditherType}`);
 
-                logger.log(`Generated ${layers.length} separated layers`);
+                localStorage.setItem('reveal_checkpoint', 'before_preview_mask_generation');
+
+                // Use existing assignments from posterization (no need to separate again at preview res!)
+                logger.log('Using assignments from posterization...');
+                logger.log(`  Assignments: ${selectedPreview.assignments.length} pixels`);
+                logger.log(`  Expected: ${posterizationData.originalWidth * posterizationData.originalHeight} pixels`);
+
+                // Generate masks for each color using existing assignments
+                logger.log('Generating preview layer masks...');
+
+                // CRITICAL: Use allHexColors (full palette) to match assignments indices
+                const previewPalette = selectedPreview.allHexColors || selectedPreview.hexColors;
+                const layers = previewPalette.map((hexColor, colorIndex) => {
+                    const mask = Reveal.generateMask(
+                        selectedPreview.assignments,  // Use existing assignments!
+                        colorIndex,
+                        posterizationData.originalWidth,
+                        posterizationData.originalHeight
+                    );
+
+                    logger.log(`  Layer ${colorIndex + 1}: ${hexColor}, mask size: ${mask.length} bytes`);
+
+                    return {
+                        color: hexColor,
+                        mask: mask,
+                        colorIndex: colorIndex
+                    };
+                });
+
+                localStorage.setItem('reveal_checkpoint', 'after_preview_mask_generation');
+
+                logger.log(`Generated ${layers.length} preview layers (using cached assignments)`);
 
                 // Phase 4.2: Create layers in Photoshop
                 logger.log("Step 2: Creating layers in Photoshop...");
@@ -959,23 +1182,120 @@ function showPaletteEditor(selectedPalette) {
                 const docInfo = PhotoshopAPI.getDocumentInfo();
                 logger.log(`Document: ${docInfo.width}x${docInfo.height}`);
 
+                localStorage.setItem('reveal_checkpoint', 'before_fullres_getpixels');
+
                 // Re-separate at full resolution (ASYNC with progress)
                 fullResPixels = await PhotoshopAPI.getDocumentPixels(docInfo.width, docInfo.height);
-                logger.log(`Full-resolution separation: ${fullResPixels.width}x${fullResPixels.height}`);
 
-                fullResLayers = await SeparationEngine.separateImage(
+                localStorage.setItem('reveal_checkpoint', 'after_fullres_getpixels');
+
+                logger.log(`Full-resolution separation: ${fullResPixels.width}x${fullResPixels.height}`);
+                logger.log(`Full-res pixels: ${fullResPixels.pixels.length} bytes`);
+                logger.log(`Expected: ${fullResPixels.width * fullResPixels.height * 3} bytes`);
+                logger.log(`Palette: ${selectedPreview.paletteLab.length} colors`);
+
+                // Validate data before separation
+                const expectedBytes = fullResPixels.width * fullResPixels.height * 3;
+                if (fullResPixels.pixels.length !== expectedBytes) {
+                    throw new Error(`Full-res byte mismatch: expected ${expectedBytes}, got ${fullResPixels.pixels.length}`);
+                }
+
+                localStorage.setItem('reveal_checkpoint', 'before_fullres_separation_call');
+
+                // Step 1: Separate full-res image to get color indices
+                logger.log('Calling Reveal.separateImage() at full resolution...');
+                logger.log(`  Input: ${fullResPixels.pixels.length} bytes (${fullResPixels.pixels.constructor.name})`);
+                logger.log(`  Palette: ${selectedPreview.paletteLab.length} Lab colors`);
+                logger.log(`  Size: ${fullResPixels.width}x${fullResPixels.height}`);
+
+                const fullResSeparation = await Reveal.separateImage(
                     fullResPixels.pixels,
-                    fullResPixels.width,
-                    fullResPixels.height,
-                    selectedPreview.hexColors,          // Rendering palette (user-edited)
-                    selectedPreview.originalHexColors,  // Assignment palette (original discovery)
-                    selectedPreview.paletteLab,         // Lab palette (NO RGB→Lab conversion)
+                    selectedPreview.paletteLab,  // Lab palette
                     {
-                        onProgress: (percent) => {
-                            logger.log(`Full-res separation progress: ${percent}%`);
-                        }
+                        ditherType: ditherType,
+                        width: fullResPixels.width,
+                        height: fullResPixels.height
+                    },
+                    (percent) => {
+                        logger.log(`Full-res separation progress: ${percent}%`);
                     }
                 );
+
+                localStorage.setItem('reveal_checkpoint', 'after_fullres_separation_call');
+
+                logger.log(`✓ Full-res separation complete: ${fullResSeparation.colorIndices.length} pixels mapped`);
+
+                // Analyze color index distribution
+                const indexCounts = new Array(selectedPreview.paletteLab.length).fill(0);
+                for (let i = 0; i < fullResSeparation.colorIndices.length; i++) {
+                    const idx = fullResSeparation.colorIndices[i];
+                    indexCounts[idx]++;
+                }
+                logger.log('Color index distribution:');
+                indexCounts.forEach((count, idx) => {
+                    const pct = (count / fullResSeparation.colorIndices.length * 100).toFixed(1);
+                    const isSubstrate = idx === selectedPreview.substrateIndex ? ' (SUBSTRATE)' : '';
+                    logger.log(`  Index ${idx}: ${count} pixels (${pct}%)${isSubstrate}`);
+                });
+
+                localStorage.setItem('reveal_checkpoint', 'before_fullres_mask_generation');
+
+                // Step 2: Generate masks for each color
+                logger.log('Generating full-res layer masks...');
+                logger.log(`  Generating masks for ${selectedPreview.hexColors.length} colors`);
+                logger.log(`  Substrate index: ${selectedPreview.substrateIndex}`);
+
+                fullResLayers = [];
+                // CRITICAL: Use allHexColors (full palette) not hexColors (substrate filtered)
+                // This ensures colorIndex matches assignments indices
+                const fullPalette = selectedPreview.allHexColors || selectedPreview.hexColors;
+                logger.log(`Full palette: ${fullPalette.length} colors`);
+                logger.log(`Palette Lab: ${selectedPreview.paletteLab.length} colors`);
+                logger.log(`Color indices: ${fullResSeparation.colorIndices.length} pixels`);
+
+                for (let colorIndex = 0; colorIndex < fullPalette.length; colorIndex++) {
+                    const hexColor = fullPalette[colorIndex];
+                    const labColor = selectedPreview.paletteLab[colorIndex];
+
+                    localStorage.setItem('reveal_checkpoint', `fullres_mask_${colorIndex}_start`);
+                    logger.log(`  Generating mask ${colorIndex + 1}/${fullPalette.length}: ${hexColor}...`);
+
+                    const mask = Reveal.generateMask(
+                        fullResSeparation.colorIndices,
+                        colorIndex,
+                        fullResPixels.width,
+                        fullResPixels.height
+                    );
+
+                    // Count non-zero pixels in mask
+                    let nonZeroCount = 0;
+                    for (let i = 0; i < mask.length; i++) {
+                        if (mask[i] > 0) nonZeroCount++;
+                    }
+                    const coverage = (nonZeroCount / mask.length * 100).toFixed(1);
+
+                    localStorage.setItem('reveal_checkpoint', `fullres_mask_${colorIndex}_done`);
+                    logger.log(`    ✓ Mask ${colorIndex + 1}: ${mask.length} bytes, ${nonZeroCount} pixels (${coverage}% coverage)`);
+
+                    // Skip layers with 0% coverage (no pixels assigned to this color)
+                    if (nonZeroCount === 0) {
+                        logger.log(`    ⚠️ Skipping layer ${colorIndex + 1} (${hexColor}) - 0% coverage (no pixels assigned)`);
+                        continue;
+                    }
+
+                    fullResLayers.push({
+                        color: hexColor,
+                        labColor: labColor,
+                        mask: mask,
+                        colorIndex: colorIndex,
+                        name: `Color ${colorIndex + 1} (${hexColor})`,
+                        width: fullResPixels.width,
+                        height: fullResPixels.height
+                    });
+                }
+
+                localStorage.setItem('reveal_checkpoint', 'after_fullres_mask_generation');
+                localStorage.setItem('reveal_checkpoint', 'before_layer_sorting');
 
                 // Sort layers for screen printing: Light to Dark (Bottom to Top)
                 // Substrate always goes at bottom regardless of lightness
@@ -1018,6 +1338,8 @@ function showPaletteEditor(selectedPalette) {
                     logger.log(`  0. ${substrateLayer.name} (SUBSTRATE - always bottom)`);
                 }
                 orderedLayers.push(...inkLayers);
+
+                localStorage.setItem('reveal_checkpoint', 'after_layer_sorting');
                 const doc = PhotoshopAPI.getActiveDocument();
                 if (!doc) {
                     throw new Error("No active document");
@@ -1040,6 +1362,8 @@ function showPaletteEditor(selectedPalette) {
                 }
 
                 try {
+                    localStorage.setItem('reveal_checkpoint', 'before_layer_visibility');
+
                     // CRITICAL: Show all layers before cleanup (might be hidden from previous run)
                     logger.log(`Ensuring all layers are visible before cleanup...`);
                     try {
@@ -1053,11 +1377,15 @@ function showPaletteEditor(selectedPalette) {
                         logger.warn(`⚠ Could not show hidden layers: ${err.message}`);
                     }
 
+                    localStorage.setItem('reveal_checkpoint', 'before_layer_cleanup');
+
                     // CRITICAL: Delete all existing separation layers before creating new ones
                     // This prevents duplicates/conflicts when running the plugin multiple times
                     logger.log(`Deleting existing layers (current count: ${doc.layers.length})...`);
                     await PhotoshopAPI.deleteAllLayersExceptBackground();
                     logger.log(`✓ Cleaned up existing layers (remaining: ${doc.layers.length})`);
+
+                    localStorage.setItem('reveal_checkpoint', 'after_layer_cleanup');
 
                     // Store reference to the original source layer (what remains after cleanup)
                     // This is the layer we'll hide after creating separation layers
@@ -1069,10 +1397,13 @@ function showPaletteEditor(selectedPalette) {
                         logger.warn(`⚠ No original layer found after cleanup - this shouldn't happen!`);
                     }
 
+                    localStorage.setItem('reveal_checkpoint', 'before_layer_creation_loop');
+
                     let skippedCount = 0;
 
                     for (let i = 0; i < orderedLayers.length; i++) {
                         const layerData = orderedLayers[i];
+                        localStorage.setItem('reveal_checkpoint', `creating_layer_${i}`);
                         logger.log(`Creating layer ${i + 1}/${orderedLayers.length}: ${layerData.name}`);
 
                         // Add maskProfile to layerData (from form values)
@@ -1561,21 +1892,10 @@ function applyAnalyzedSettings(settings) {
 }
 
 /**
- * Load all presets from JSON files
- * Auto-discovers presets - just add new JSON file to src/presets/ to add preset
+ * Import presets from @reveal/core (single source of truth)
+ * Presets define algorithm parameters for different image types
  */
-const PARAMETER_PRESETS = {
-    'standard-image': require('./presets/standard-image.json'),
-    'halftone-portrait': require('./presets/halftone-portrait.json'),
-    'vibrant-graphic': require('./presets/vibrant-graphic.json'),
-    'atmospheric-photo': require('./presets/atmospheric-photo.json'),
-    'pastel-high-key': require('./presets/pastel-high-key.json'),
-    'vintage-muted': require('./presets/vintage-muted.json'),
-    'deep-shadow-noir': require('./presets/deep-shadow-noir.json'),
-    'neon-fluorescent': require('./presets/neon-fluorescent.json'),
-    'textural-grunge': require('./presets/textural-grunge.json'),
-    'commercial-offset': require('./presets/commercial-offset.json')
-};
+const PARAMETER_PRESETS = Reveal.PRESETS;
 
 // Validate presets on load
 Object.keys(PARAMETER_PRESETS).forEach(id => {
@@ -1623,6 +1943,9 @@ async function showDialog() {
         // CRITICAL: Validate document BEFORE showing dialog
         logger.log("Validating document...");
         const validation = PhotoshopAPI.validateDocument();
+
+        // Dump full validation JSON to console
+        logger.log("Document validation:", JSON.stringify(validation, null, 2));
 
         if (!validation.valid) {
             logger.log("Document validation failed - showing error without opening dialog");
@@ -1674,9 +1997,21 @@ async function showDialog() {
 
         // Clear preview state from previous session
         if (window.previewState) {
-            logger.log("Clearing preview state...");
+            logger.log("[DEBUG] Clearing preview state...");
+            logger.log(`[DEBUG] Old state had ${window.previewState.assignments ? window.previewState.assignments.length : 'null'} assignments`);
             window.previewState = null;
+        } else {
+            logger.log("[DEBUG] No preview state to clear");
         }
+
+        // DO NOT reset paletteListenersAttached - listeners stay on container permanently
+        // Resetting would cause duplicate listeners to accumulate on the persistent container element
+        logger.log(`[DEBUG] NOT resetting paletteListenersAttached (currently: ${paletteListenersAttached})`);
+
+        // Reset busy flags from any interrupted previous operations
+        logger.log(`[DEBUG] Resetting busy flags (swatchClickBusy: ${swatchClickBusy}, colorPickerBusy: ${colorPickerBusy})`);
+        swatchClickBusy = false;
+        colorPickerBusy = false;
 
         logger.log("UI reset complete - showing parameter entry screen");
 
@@ -1942,238 +2277,81 @@ async function showDialog() {
 
             // Posterization handler - reads color mode from form values
             const handlePosterization = async (buttonElement, buttonOriginalText) => {
-                // Validate form
-                const errors = validateForm();
-
-                if (errors.length > 0) {
-                    showError("Validation Error", "Please correct the following errors:", errors);
-                    return;
-                }
-
-                // Get form values
-                const params = getFormValues();
-                const grayscaleOnly = params.colorMode === 'bw';  // Determine from dropdown
-
-                // Log parameters for debugging
-                logger.log("Posterization parameters:", params);
+                logger.log("Posterize button clicked!");
 
                 try {
-                    // Validate document (includes Lab mode check)
-                    logger.log("Validating document...");
-                    const validation = PhotoshopAPI.validateDocument();
-                    logger.log("Validation result:", validation);
-
-                    if (!validation.valid) {
-                        logger.log("Document validation failed, showing error");
-                        logger.log("Errors:", validation.errors);
-                        validation.errors.forEach((err, i) => logger.log(`  Error ${i+1}: ${err}`));
-                        showError("Document Error", "Your document doesn't meet the requirements for Reveal:", validation.errors);
-                        return;
-                    }
-
-                    logger.log("Document validation passed!");
-
-                    // Get document info
-                    const docInfo = PhotoshopAPI.getDocumentInfo();
-                    logger.log("Document info:", docInfo);
-
-                    // Show processing message
-                    buttonElement.disabled = true;
-                    buttonElement.textContent = "Analyzing...";
-
-                    // Read document pixels (scaled to 800x800 max for preview)
-                    logger.log("Reading document pixels...");
+                    logger.log("TEST: Reading document pixels (800x800)...");
                     const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
-                    logger.log(`Read ${pixelData.width}x${pixelData.height} pixels (${pixelData.scale.toFixed(2)}x scale)`);
-                    logger.log(`Pixel format flag: "${pixelData.format}" (undefined means RGB, "lab" means Lab)`);
 
-                    // Determine color count (manual override or auto-detect)
-                    let colorCount;
-                    if (params.targetColors > 0) {
-                        colorCount = params.targetColors;
-                        logger.log(`Using manual color count: ${colorCount} colors`);
-                        buttonElement.textContent = `Posterizing to ${colorCount} colors...`;
-                    } else {
-                        logger.log("Auto-detecting optimal color count...");
-                        buttonElement.textContent = "Analyzing complexity...";
+                    const expectedBytes = pixelData.width * pixelData.height * 3;
+                    logger.log(`Dimension check: ${pixelData.width} x ${pixelData.height} x 3 channels = ${expectedBytes} bytes`);
+                    logger.log(`Actual bytes received: ${pixelData.pixels.length}`);
+                    logger.log(`Match: ${pixelData.pixels.length === expectedBytes ? 'YES' : 'NO'}`);
 
-                        colorCount = PosterizationEngine.analyzeOptimalColorCount(
-                            pixelData.pixels,
-                            pixelData.width,
-                            pixelData.height
-                        );
-
-                        logger.log(`✓ Auto-detected: ${colorCount} colors recommended`);
-                        buttonElement.textContent = `Posterizing to ${colorCount} colors...`;
+                    if (pixelData.pixels.length !== expectedBytes) {
+                        throw new Error(`Byte count mismatch! Expected ${expectedBytes}, got ${pixelData.pixels.length}`);
                     }
 
-                    // Generate posterization using selected engine
-                    // Factory method dispatches to appropriate algorithm based on engineType
-                    // Build tuning config from UI parameters
-                    const tuning = {
-                        split: {
-                            highlightBoost: params.highlightBoost,     // Facial highlight protection (default: 2.2)
-                            vibrancyBoost: params.vibrancyBoost,       // Chroma-rich pixel weighting (default: 1.6)
-                            minVariance: 10                             // Minimum variance to split
-                        },
-                        prune: {
-                            threshold: params.paletteReduction,         // Delta-E merge distance (default: 9.0)
-                            hueLockAngle: params.hueLockAngle,          // Hue protection angle (default: 18°)
-                            whitePoint: params.highlightThreshold,      // L-value floor for white protection (default: 85)
-                            shadowPoint: params.shadowPoint             // L-value ceiling for shadow protection (default: 15)
-                        },
-                        centroid: {
-                            lWeight: params.lWeight,                    // Saliency lightness priority (default: 1.1)
-                            cWeight: params.cWeight,                    // Saliency chroma priority (default: 2.0)
-                            blackBias: params.blackBias                 // Black boost multiplier for halftones (default: 5.0)
-                        }
-                    };
+                    logger.log(`Pixel array type: ${pixelData.pixels.constructor.name}`);
+                    logger.log(`TEST: Calling Reveal.posterizeImage() with 8-bit data...`);
+                    logger.log(`  pixels.length: ${pixelData.pixels.length} bytes`);
+                    logger.log(`  width: ${pixelData.width}`);
+                    logger.log(`  height: ${pixelData.height}`);
+                    logger.log(`  targetColors: 6`);
 
-                    const result = PosterizationEngine.posterize(
-                        pixelData.pixels,
+                    localStorage.setItem('reveal_checkpoint', 'before_posterize');
+
+                    // API wrapper handles 8-bit → Float32 promotion internally
+                    const result = await Reveal.posterizeImage(
+                        pixelData.pixels,  // 8-bit Lab data (Uint8Array)
                         pixelData.width,
                         pixelData.height,
-                        colorCount,
+                        6,  // 6 colors
                         {
-                            engineType: params.engineType,           // NEW: Engine selection (reveal, balanced, classic, stencil)
-                            centroidStrategy: params.centroidStrategy,  // NEW: User-selected strategy (SALIENCY or VOLUMETRIC)
-                            enableGridOptimization: true,            // NEW: Default ON (Architect's requirement)
-                            enableHueGapAnalysis: params.enableHueGapAnalysis,  // USER-CONTROLLED: Force hue diversity (default: ON, may exceed target count)
-                            snapThreshold: 8.0,                      // Perceptual snap threshold (ΔE < 8 = noise)
-                            format: pixelData.format,                // Pass Lab format flag for optimization
-                            grayscaleOnly,                           // User-selected mode: grayscale (L-only) or color (full Lab)
-                            preserveWhite: params.preserveWhite,
-                            preserveBlack: params.preserveBlack,
-                            substrateMode: params.substrateMode,     // Substrate awareness mode (auto, white, black, none)
-                            substrateTolerance: params.substrateTolerance,  // ΔE threshold for substrate culling
-                            vibrancyMode: params.vibrancyMode,       // Vibrancy algorithm (linear, aggressive, exponential)
-                            vibrancyBoost: params.vibrancyBoost,     // Fixed vibrancy multiplier (split.vibrancyBoost)
-                            highlightThreshold: params.highlightThreshold,  // White point (prune.whitePoint)
-                            highlightBoost: params.highlightBoost,   // Highlight boost (split.highlightBoost)
-                            enablePaletteReduction: params.enablePaletteReduction,  // Enable/disable palette reduction (default: true)
-                            paletteReduction: params.paletteReduction,  // Color merging threshold (prune.threshold)
-                            tuning: tuning                           // NEW: Centralized tuning configuration
-                            // ignoreTransparent is handled during RGB→Lab conversion (alpha channel check)
+                            engineType: 'reveal',
+                            centroidStrategy: 'SALIENCY'
                         }
                     );
 
-                    logger.log(`⚠️ POSTERIZATION RESULT: Requested ${colorCount} colors, got ${result.palette.length} colors`);
-                    const hexColors = PosterizationEngine.paletteToHex(result.palette);
-                    logger.log(`\n${'='.repeat(60)}`);
-                    logger.log('POSTERIZATION RESULTS');
-                    logger.log('='.repeat(60));
-                    logger.log(`Colors found: ${hexColors.length}`);
+                    logger.log(`✓ Posterization complete! Got ${result.paletteLab.length} colors`);
 
-                    // Show palette in Lab space (primary) with hex (secondary)
-                    if (result.paletteLab) {
-                        const labSummary = result.paletteLab.map((lab, i) => {
-                            const chroma = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
-                            const hue = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
-                            return `Lab(${lab.L.toFixed(0)},${lab.a.toFixed(0)},${lab.b.toFixed(0)})`;
-                        }).join(', ');
-                        logger.log(`Palette (Lab): ${labSummary}`);
-                    }
-                    logger.log(`Palette (RGB): ${hexColors.join(", ")}`);
-
-                    // Analyze palette composition (Lab first, then RGB hex)
-                    logger.log('\nPalette Details:');
-                    hexColors.forEach((color, i) => {
-                        if (result.paletteLab && result.paletteLab[i]) {
-                            const lab = result.paletteLab[i];
-                            const chroma = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
-                            const hue = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
-                            logger.log(`  ${i + 1}. Lab(${lab.L.toFixed(1)}, ${lab.a.toFixed(1)}, ${lab.b.toFixed(1)}) C=${chroma.toFixed(1)} H=${hue.toFixed(0)}° → ${color}`);
-                        } else {
-                            logger.log(`  ${i + 1}. ${color}`);
-                        }
-                    });
-
-                    // Count pixel assignments per color
-                    if (result.assignments) {
-                        logger.log('\nPixel distribution:');
-                        const counts = new Array(hexColors.length).fill(0);
-                        for (let i = 0; i < result.assignments.length; i++) {
-                            counts[result.assignments[i]]++;
-                        }
-                        counts.forEach((count, i) => {
-                            const percent = ((count / result.assignments.length) * 100).toFixed(1);
-                            if (result.paletteLab && result.paletteLab[i]) {
-                                const lab = result.paletteLab[i];
-                                logger.log(`  Color ${i + 1} Lab(${lab.L.toFixed(1)}, ${lab.a.toFixed(1)}, ${lab.b.toFixed(1)}) ${hexColors[i]}: ${count} pixels (${percent}%)`);
-                            } else {
-                                logger.log(`  Color ${i + 1} (${hexColors[i]}): ${count} pixels (${percent}%)`);
-                            }
-                        });
-                    }
-
-                    // Log curation info if colors were merged
-                    if (result.metadata.finalColors < result.metadata.targetColors) {
-                        logger.log(`\nℹ️ Curated from ${result.metadata.targetColors} to ${result.metadata.finalColors} perceptually distinct features (Fidelity to Feature)`);
-                    }
-
-                    logger.log('='.repeat(60) + '\n');
+                    // Convert Lab palette to Hex for display
+                    const hexColors = PosterizationEngine.paletteToHex(result.paletteLab);
+                    logger.log(`Palette (Hex): ${hexColors.join(', ')}`);
 
                     // Filter out substrate from UI display (but keep in full palette for separation)
-                    // Substrate is the paper/medium, not an ink color
                     const inkHexColors = result.substrateIndex !== null
                         ? hexColors.filter((_, i) => i !== result.substrateIndex)
                         : hexColors;
 
                     logger.log(`Substrate handling: ${result.substrateIndex !== null ? `Substrate at index ${result.substrateIndex}, showing ${inkHexColors.length} ink colors` : 'No substrate detected'}`);
 
-                    // Store results for later use
+                    // Store results for palette editor
                     const selectedPreview = {
-                        colorCount: inkHexColors.length,    // Count of INK colors (excludes substrate)
-                        assignments: result.assignments,    // Pixel→palette assignments
-                        palette: result.palette,            // RGB palette for UI display (includes substrate)
-                        paletteLab: result.paletteLab,      // Lab palette for layer creation (includes substrate)
-                        hexColors: inkHexColors,            // INK colors for UI swatches (excludes substrate)
-                        allHexColors: hexColors,            // ALL colors including substrate (for separation)
-                        originalHexColors: [...inkHexColors],  // Store original ink colors before edits
-                        substrateIndex: result.substrateIndex,  // Index of substrate in full palette (null if none)
-                        substrateLab: result.substrateLab   // Substrate Lab color for layer identification
+                        colorCount: inkHexColors.length,
+                        assignments: result.assignments,
+                        palette: result.paletteLab,
+                        paletteLab: result.paletteLab,
+                        hexColors: inkHexColors,
+                        allHexColors: hexColors,
+                        originalHexColors: [...inkHexColors],
+                        substrateIndex: result.substrateIndex,
+                        substrateLab: result.substrateLab
                     };
 
                     posterizationData = {
-                        params,
-                        originalPixels: pixelData.pixels,  // Lab format (3 bytes/pixel)
+                        params: { ditherType: 'floyd-steinberg' },  // Default for now
+                        originalPixels: pixelData.pixels,
                         originalWidth: pixelData.width,
                         originalHeight: pixelData.height,
-                        docInfo,
+                        docInfo: { width: pixelData.width, height: pixelData.height },
                         selectedPreview
                     };
 
-                    // Reset button
-                    buttonElement.disabled = false;
-                    buttonElement.textContent = buttonOriginalText;
+                    logger.log('Showing palette editor...');
 
-                    // Show palette editor first (sets up UI layout)
-                    logger.log(`Showing palette editor with ${result.palette.length} colors`);
+                    // Open palette editor with results
                     showPaletteEditor(selectedPreview);
-
-                    // CRITICAL: Wait for UXP layout to complete before rendering canvas
-                    // UXP needs time to calculate element dimensions after DOM changes
-                    logger.log('✓ Posterization complete - waiting for layout...');
-                    setTimeout(() => {
-                        // Check if canvas is ready (in paletteDialog)
-                        const canvas = document.getElementById('previewCanvas');
-                        if (canvas) {
-                            logger.log(`[After delay] Canvas offsetHeight BEFORE init: ${canvas.offsetHeight}`);
-                        }
-
-                        // Initialize canvas preview AFTER palette dialog layout is complete
-                        logger.log('Initializing canvas preview...');
-                        initializePreviewCanvas(
-                            pixelData.width,
-                            pixelData.height,
-                            hexColors,
-                            result.assignments
-                        );
-
-                        // Render initial preview (now that canvas is visible and sized)
-                        renderPreview();
-                        logger.log('✓ Canvas preview rendered');
-                    }, 300); // 300ms delay for UXP layout
 
                 } catch (error) {
                     logger.error("Error processing document:", error);
@@ -2390,8 +2568,8 @@ async function showDialog() {
 
                         logger.log(`✓ Retrieved ${result.pixels.length} bytes (${result.width}×${result.height})`);
 
-                        // Run analyzer
-                        const analysis = ImageHeuristicAnalyzer.analyze(
+                        // Run analyzer (using API wrapper that handles 8-bit promotion)
+                        const analysis = Reveal.analyzeImage(
                             result.pixels,
                             result.width,
                             result.height
@@ -2539,6 +2717,14 @@ async function showDialog() {
 // Ensure DOM is loaded before registering commands
 let isInitialized = false;
 let listenersAttached = false; // Track if event listeners have been set up
+let paletteListenersAttached = false; // Track if palette editor event delegation is set up
+
+// Busy flags to prevent re-entrant calls
+let swatchClickBusy = false;
+let colorPickerBusy = false;
+
+// Debug counter to track run number
+let posterizeRunCount = 0;
 
 function ensureInitialized() {
     if (!isInitialized) {

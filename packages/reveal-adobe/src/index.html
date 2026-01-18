@@ -19,11 +19,31 @@
             font-size: 14px;
         }
 
+        /* CRITICAL: ALL DIALOGS MUST HAVE BLACK TEXT ON WHITE BACKGROUND */
+        /* This fixes persistent readability issues in UXP */
         dialog {
             border: none;
             border-radius: 8px;
             padding: 0;
             background: #ffffff;
+            color: #000000;
+        }
+
+        /* Force black text on ALL dialog content */
+        dialog *:not(button):not(.btn-primary):not(.btn-success-primary):not(.btn-error-ok) {
+            color: #000000;
+        }
+
+        /* Ensure white background for all dialog containers */
+        .error-dialog-wrapper,
+        .success-dialog-wrapper,
+        .palette-dialog,
+        #errorDialog,
+        #successDialog,
+        #paletteDialog,
+        #mainDialog {
+            background: #ffffff;
+            color: #000000;
         }
 
         .reveal-dialog {
@@ -643,7 +663,7 @@
 
         .error-message {
             font-size: 14px;
-            color: #000000;
+            color: #323232;
             line-height: 1.6;
             margin-bottom: 20px;
             font-weight: 500;
@@ -728,7 +748,7 @@
 
         .error-details li {
             font-size: 13px;
-            color: #000000;
+            color: #323232;
             margin-bottom: 8px;
             font-weight: 500;
         }
@@ -783,6 +803,7 @@
             border-radius: 4px;
             font-size: 13px;
             line-height: 1.5;
+            color: #323232;
         }
 
         .success-info strong {
@@ -1042,7 +1063,7 @@
                             </div>
                         </div>
                     </div>
-                </details>
+                </div>
 
                 <!-- Vibrancy & Highlights Section -->
                 <div class="collapsible-section open">
@@ -1325,6 +1346,29 @@
                     </div>
                 </div>
 
+                <!-- Dithering Section -->
+                <div class="collapsible-section open">
+                    <div class="collapsible-header">Dithering (Gradient Smoothing)</div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label for="ditherType">
+                                <strong>Dithering Algorithm</strong>
+                            </label>
+                            <select id="ditherType" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                                <option value="floyd-steinberg" selected>Floyd-Steinberg (Smooth Gradients)</option>
+                                <option value="none">None (Posterized Look)</option>
+                                <option value="blue-noise">Blue Noise (Dispersed Dots)</option>
+                            </select>
+                            <div class="helper-text">
+                                <strong>Floyd-Steinberg:</strong> Error diffusion creates smooth gradients by distributing quantization error to neighboring pixels. Best for photographic images with faces and skin tones.
+                                <br><strong>None:</strong> Nearest-neighbor mapping creates hard color boundaries. Best for graphic/vector art.
+                                <br><strong>Blue Noise:</strong> Stochastic threshold creates dispersed dot patterns. More forgiving for screen printing than Floyd-Steinberg (prevents "worming" artifacts). Best for high-quality photographic prints.
+                                <br><strong>Black Protection:</strong> Dithering is automatically reduced in pure blacks (L&lt;8) to prevent noise.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             </div> <!-- End parameterEntrySection -->
 
@@ -1338,7 +1382,6 @@
                 </div>
             </div>
 
-        </div>
         </div> <!-- End reveal-content -->
 
         <!-- Action Buttons -->
