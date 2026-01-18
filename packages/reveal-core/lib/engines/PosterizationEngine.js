@@ -361,9 +361,13 @@ class PosterizationEngine {
      */
     static _medianCut(colors, targetCount) {
         const MIN_DISTANCE = 12; // Minimum CIE76 ΔE distance between palette colors
+        const MIN_PIXEL_PERCENTAGE = 0.005; // 0.5% - suppress colors representing too few pixels
         let buckets = [colors];
         let attempts = 0;
         const MAX_ATTEMPTS = 10;
+
+        // Calculate total pixels in image (for sparse color filtering)
+        const totalImagePixels = colors.reduce((sum, c) => sum + c.count, 0);
 
         // Iteratively split and check distinctiveness until we get targetCount distinct colors
         while (attempts < MAX_ATTEMPTS) {
@@ -373,6 +377,19 @@ class PosterizationEngine {
             // More aggressive splitting: add full attempt count to find all available colors
             const splitTarget = targetCount + attempts;
             buckets = this._splitToTarget(buckets, splitTarget);
+
+            // SPARSE COLOR SUPPRESSION: Filter out buckets with too few pixels
+            // This eliminates outlier colors that are visually insignificant
+            const beforeFilterCount = buckets.length;
+            buckets = buckets.filter(bucket => {
+                const bucketPixels = bucket.reduce((sum, c) => sum + c.count, 0);
+                const percentage = bucketPixels / totalImagePixels;
+                return percentage >= MIN_PIXEL_PERCENTAGE;
+            });
+
+            if (buckets.length < beforeFilterCount) {
+                logger.log(`Sparse color filter: Removed ${beforeFilterCount - buckets.length} bucket(s) with < ${(MIN_PIXEL_PERCENTAGE * 100).toFixed(2)}% of pixels`);
+            }
 
             // Average each bucket to get candidate palette
             const candidatePalette = buckets.map(bucket => this._averageBucket(bucket));
