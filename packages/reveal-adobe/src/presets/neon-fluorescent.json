@@ -1,0 +1,16 @@
+{
+  "id": "neon-fluorescent",
+  "name": "Neon / Fluorescent",
+  "description": "Ultra-saturated with strong chroma priority for neon and fluorescent colors",
+  "settings": {
+    "engineType": "reveal",
+    "centroidStrategy": "SALIENCY",
+    "blackBias": 0.0,
+    "lWeight": 1.0,
+    "cWeight": 3.0,
+    "paletteReduction": 14.0,
+    "hueLockAngle": 25,
+    "shadowPoint": 20,
+    "highlightThreshold": 88
+  }
+}

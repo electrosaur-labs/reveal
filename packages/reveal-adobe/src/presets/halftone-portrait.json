@@ -1,0 +1,16 @@
+{
+  "id": "halftone-portrait",
+  "name": "Halftone Portrait",
+  "description": "Optimized for portraits with halftone blacks (e.g., JethroAsMonroe)",
+  "settings": {
+    "engineType": "reveal",
+    "centroidStrategy": "SALIENCY",
+    "blackBias": 10.0,
+    "lWeight": 2.0,
+    "cWeight": 0.4,
+    "paletteReduction": 6.0,
+    "hueLockAngle": 8,
+    "shadowPoint": 8,
+    "highlightThreshold": 85
+  }
+}
