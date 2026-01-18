@@ -18,6 +18,9 @@ const logger = Reveal.logger;
 // Photoshop-specific API (stays in reveal-adobe)
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 
+// Test utilities
+const { testTransparencySelection } = require("./test-16bit-transparency-selection");
+
 // GoldenStatsCapture is Photoshop-specific (if it exists)
 let GoldenStatsCapture = null;
 try {
@@ -1190,14 +1193,15 @@ function showPaletteEditor(selectedPalette) {
                 localStorage.setItem('reveal_checkpoint', 'after_fullres_getpixels');
 
                 logger.log(`Full-resolution separation: ${fullResPixels.width}x${fullResPixels.height}`);
-                logger.log(`Full-res pixels: ${fullResPixels.pixels.length} bytes`);
-                logger.log(`Expected: ${fullResPixels.width * fullResPixels.height * 3} bytes`);
+                logger.log(`Full-res pixels: ${fullResPixels.pixels.length} elements`);
+                logger.log(`Bit depth: ${fullResPixels.bitDepth}-bit`);
+                const expectedFullResElements = fullResPixels.width * fullResPixels.height * 3;
+                logger.log(`Expected: ${expectedFullResElements} elements`);
                 logger.log(`Palette: ${selectedPreview.paletteLab.length} colors`);
 
                 // Validate data before separation
-                const expectedBytes = fullResPixels.width * fullResPixels.height * 3;
-                if (fullResPixels.pixels.length !== expectedBytes) {
-                    throw new Error(`Full-res byte mismatch: expected ${expectedBytes}, got ${fullResPixels.pixels.length}`);
+                if (fullResPixels.pixels.length !== expectedFullResElements) {
+                    throw new Error(`Full-res element mismatch: expected ${expectedFullResElements}, got ${fullResPixels.pixels.length}`);
                 }
 
                 localStorage.setItem('reveal_checkpoint', 'before_fullres_separation_call');
@@ -1399,6 +1403,11 @@ function showPaletteEditor(selectedPalette) {
 
                     localStorage.setItem('reveal_checkpoint', 'before_layer_creation_loop');
 
+                    // Detect document bit depth to route to appropriate layer creation method
+                    const docBitDepth = String(doc.bitsPerChannel).toLowerCase();
+                    const is16bit = docBitDepth.includes('16') || doc.bitsPerChannel === 16;
+                    logger.log(`Document bit depth: ${doc.bitsPerChannel} → Using ${is16bit ? '16-bit' : '8-bit'} layer creation method`);
+
                     let skippedCount = 0;
 
                     for (let i = 0; i < orderedLayers.length; i++) {
@@ -1412,8 +1421,12 @@ function showPaletteEditor(selectedPalette) {
                             maskProfile: posterizationData.params.maskProfile
                         };
 
-                        // Use new Fill Layer + Mask approach (Architect's recommendation)
-                        const createdLayer = await PhotoshopAPI.createLabSeparationLayer(layerDataWithProfile);
+                        // Route to appropriate layer creation method based on bit depth
+                        // 8-bit: Use transparency-based selection (5-7 step process)
+                        // 16-bit: Use direct mask writing (Photoshop blocks selection in 16-bit Lab)
+                        const createdLayer = is16bit
+                            ? await PhotoshopAPI.createLabSeparationLayer16Bit(layerDataWithProfile)
+                            : await PhotoshopAPI.createLabSeparationLayer(layerDataWithProfile);
 
                         // Handle skipped layers (empty masks)
                         if (createdLayer === null) {
@@ -2283,27 +2296,28 @@ async function showDialog() {
                     logger.log("TEST: Reading document pixels (800x800)...");
                     const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
 
-                    const expectedBytes = pixelData.width * pixelData.height * 3;
-                    logger.log(`Dimension check: ${pixelData.width} x ${pixelData.height} x 3 channels = ${expectedBytes} bytes`);
-                    logger.log(`Actual bytes received: ${pixelData.pixels.length}`);
-                    logger.log(`Match: ${pixelData.pixels.length === expectedBytes ? 'YES' : 'NO'}`);
+                    const expectedElements = pixelData.width * pixelData.height * 3;
+                    logger.log(`Dimension check: ${pixelData.width} x ${pixelData.height} x 3 channels = ${expectedElements} elements`);
+                    logger.log(`Actual elements received: ${pixelData.pixels.length}`);
+                    logger.log(`Bit depth: ${pixelData.bitDepth}-bit`);
+                    logger.log(`Match: ${pixelData.pixels.length === expectedElements ? 'YES' : 'NO'}`);
 
-                    if (pixelData.pixels.length !== expectedBytes) {
-                        throw new Error(`Byte count mismatch! Expected ${expectedBytes}, got ${pixelData.pixels.length}`);
+                    if (pixelData.pixels.length !== expectedElements) {
+                        throw new Error(`Element count mismatch! Expected ${expectedElements}, got ${pixelData.pixels.length}`);
                     }
 
                     logger.log(`Pixel array type: ${pixelData.pixels.constructor.name}`);
-                    logger.log(`TEST: Calling Reveal.posterizeImage() with 8-bit data...`);
-                    logger.log(`  pixels.length: ${pixelData.pixels.length} bytes`);
+                    logger.log(`TEST: Calling Reveal.posterizeImage() with ${pixelData.bitDepth}-bit Lab data...`);
+                    logger.log(`  pixels.length: ${pixelData.pixels.length} elements`);
                     logger.log(`  width: ${pixelData.width}`);
                     logger.log(`  height: ${pixelData.height}`);
                     logger.log(`  targetColors: 6`);
 
                     localStorage.setItem('reveal_checkpoint', 'before_posterize');
 
-                    // API wrapper handles 8-bit → Float32 promotion internally
+                    // API wrapper handles 8-bit or 16-bit → Float32 promotion internally
                     const result = await Reveal.posterizeImage(
-                        pixelData.pixels,  // 8-bit Lab data (Uint8Array)
+                        pixelData.pixels,  // Lab data (Uint8Array or Uint16Array depending on document bit depth)
                         pixelData.width,
                         pixelData.height,
                         6,  // 6 colors
@@ -2369,6 +2383,32 @@ async function showDialog() {
                 const originalText = btnPosterize.textContent;
                 btnPosterize.addEventListener("click", () => {
                     handlePosterization(btnPosterize, originalText);
+                });
+            }
+
+            // Set up 16-bit Transparency Selection Test button
+            const btnTest16BitTransparency = document.getElementById("btnTest16BitTransparency");
+            if (btnTest16BitTransparency) {
+                btnTest16BitTransparency.addEventListener("click", async () => {
+                    const originalText = btnTest16BitTransparency.textContent;
+                    btnTest16BitTransparency.disabled = true;
+                    btnTest16BitTransparency.textContent = "Running test...";
+
+                    try {
+                        logger.log("Running 16-bit transparency selection test...");
+                        await core.executeAsModal(async () => {
+                            await testTransparencySelection();
+                        }, {
+                            commandName: "Test Transparency Selection"
+                        });
+                        logger.log("✓ Test completed - check console for results");
+                    } catch (error) {
+                        logger.error("Test failed:", error);
+                        showError("Test Error", `Test failed: ${error.message}`);
+                    } finally {
+                        btnTest16BitTransparency.disabled = false;
+                        btnTest16BitTransparency.textContent = originalText;
+                    }
                 });
             }
 
@@ -2560,15 +2600,15 @@ async function showDialog() {
                         const result = await core.executeAsModal(async () => {
                             const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
                             return {
-                                pixels: pixelData.pixels,  // Lab bytes (Uint8ClampedArray, 3 bytes per pixel)
+                                pixels: pixelData.pixels,  // Lab data (Uint8Array or Uint16Array)
                                 width: pixelData.width,
                                 height: pixelData.height
                             };
                         }, { commandName: "Analyze Document" });
 
-                        logger.log(`✓ Retrieved ${result.pixels.length} bytes (${result.width}×${result.height})`);
+                        logger.log(`✓ Retrieved ${result.pixels.length} elements (${result.width}×${result.height})`);
 
-                        // Run analyzer (using API wrapper that handles 8-bit promotion)
+                        // Run analyzer (using API wrapper that handles 8-bit or 16-bit promotion)
                         const analysis = Reveal.analyzeImage(
                             result.pixels,
                             result.width,
