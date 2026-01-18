@@ -75,33 +75,6 @@ describe('Document Validation - Unit Tests', () => {
     });
 
     describe('Bit Depth Validation', () => {
-        test('should require 8-bit color depth (reject 16-bit)', () => {
-            const mockDoc = createMockDocument({
-                mode: 'LabColorMode',
-                bitsPerChannel: 'bitDepth16'
-            });
-
-            const validation = Reveal.validateDocument(mockDoc);
-
-            expect(validation.valid).toBe(false);
-            expect(validation.errors).toHaveLength(1);
-            expect(validation.errors[0]).toMatch(/8 bits\/channel/i);
-            expect(validation.errors[0]).toMatch(/bitDepth16/);
-        });
-
-        test('should require 8-bit color depth (reject 32-bit)', () => {
-            const mockDoc = createMockDocument({
-                mode: 'LabColorMode',
-                bitsPerChannel: 'bitDepth32'
-            });
-
-            const validation = Reveal.validateDocument(mockDoc);
-
-            expect(validation.valid).toBe(false);
-            expect(validation.errors.length).toBeGreaterThan(0);
-            expect(validation.errors[0]).toMatch(/8 bits\/channel/i);
-        });
-
         test('should accept 8-bit color depth (string format)', () => {
             const mockDoc = createMockDocument({
                 mode: 'LabColorMode',
@@ -124,6 +97,57 @@ describe('Document Validation - Unit Tests', () => {
 
             expect(validation.valid).toBe(true);
             expect(validation.errors).toHaveLength(0);
+        });
+
+        test('should accept 16-bit color depth (string format)', () => {
+            const mockDoc = createMockDocument({
+                mode: 'LabColorMode',
+                bitsPerChannel: 'bitDepth16'
+            });
+
+            const validation = Reveal.validateDocument(mockDoc);
+
+            expect(validation.valid).toBe(true);
+            expect(validation.errors).toHaveLength(0);
+        });
+
+        test('should accept 16-bit color depth (numeric format)', () => {
+            const mockDoc = createMockDocument({
+                mode: 'LabColorMode',
+                bitsPerChannel: 16
+            });
+
+            const validation = Reveal.validateDocument(mockDoc);
+
+            expect(validation.valid).toBe(true);
+            expect(validation.errors).toHaveLength(0);
+        });
+
+        test('should reject 32-bit color depth (string format)', () => {
+            const mockDoc = createMockDocument({
+                mode: 'LabColorMode',
+                bitsPerChannel: 'bitDepth32'
+            });
+
+            const validation = Reveal.validateDocument(mockDoc);
+
+            expect(validation.valid).toBe(false);
+            expect(validation.errors.length).toBeGreaterThan(0);
+            expect(validation.errors[0]).toMatch(/8 or 16 bits\/channel/i);
+            expect(validation.errors[0]).toMatch(/bitDepth32/);
+        });
+
+        test('should reject 32-bit color depth (numeric format)', () => {
+            const mockDoc = createMockDocument({
+                mode: 'LabColorMode',
+                bitsPerChannel: 32
+            });
+
+            const validation = Reveal.validateDocument(mockDoc);
+
+            expect(validation.valid).toBe(false);
+            expect(validation.errors.length).toBeGreaterThan(0);
+            expect(validation.errors[0]).toMatch(/8 or 16 bits\/channel/i);
         });
     });
 
@@ -176,7 +200,7 @@ describe('Document Validation - Unit Tests', () => {
         test('should report multiple errors (wrong mode + wrong bit depth)', () => {
             const mockDoc = createMockDocument({
                 mode: 'RGBColorMode',
-                bitsPerChannel: 'bitDepth16'
+                bitsPerChannel: 'bitDepth32'
             });
 
             const validation = Reveal.validateDocument(mockDoc);
@@ -185,7 +209,7 @@ describe('Document Validation - Unit Tests', () => {
             expect(validation.errors).toHaveLength(2);
             const allErrors = validation.errors.join(' ');
             expect(allErrors).toMatch(/Lab color mode/i);
-            expect(allErrors).toMatch(/8 bits\/channel/i);
+            expect(allErrors).toMatch(/8 or 16 bits\/channel/i);
         });
 
         test('should report errors + warnings (wrong mode + large size)', () => {
