@@ -24,13 +24,14 @@ class PSDWriter {
         this.colorMode = options.colorMode || 'lab';
         this.bitsPerChannel = options.bitsPerChannel || 8;
         this.layers = [];
+        this.nextLayerID = 1;  // Counter for unique layer IDs
 
         // Validate constraints
         if (this.colorMode !== 'lab') {
             throw new Error('Only Lab color mode is currently supported');
         }
-        if (this.bitsPerChannel !== 8) {
-            throw new Error('Only 8-bit per channel is currently supported');
+        if (this.bitsPerChannel !== 8 && this.bitsPerChannel !== 16) {
+            throw new Error('Only 8-bit and 16-bit per channel are supported');
         }
     }
 
@@ -40,7 +41,7 @@ class PSDWriter {
      * @param {Object} options - Layer options
      * @param {string} options.name - Layer name
      * @param {Object} options.color - Lab color { L, a, b }
-     * @param {Uint8Array} options.mask - Layer mask (width * height bytes, 255=visible)
+     * @param {Uint8Array} options.mask - Layer mask (8-bit: width×height bytes, 16-bit: width×height×2 bytes)
      */
     addFillLayer(options) {
         if (!options.name) {
@@ -49,11 +50,20 @@ class PSDWriter {
         if (!options.color || typeof options.color.L === 'undefined') {
             throw new Error('Lab color is required');
         }
-        if (!options.mask || options.mask.length !== this.width * this.height) {
-            throw new Error(`Mask must be ${this.width * this.height} bytes`);
+        // Validate mask size: 8-bit (1 byte/pixel) or 16-bit (2 bytes/pixel)
+        const pixelCount = this.width * this.height;
+        const expectedSize8 = pixelCount;
+        const expectedSize16 = pixelCount * 2;
+
+        if (!options.mask) {
+            throw new Error('Mask is required');
+        }
+        if (options.mask.length !== expectedSize8 && options.mask.length !== expectedSize16) {
+            throw new Error(`Mask must be ${expectedSize8} bytes (8-bit) or ${expectedSize16} bytes (16-bit)`);
         }
 
         this.layers.push({
+            id: this.nextLayerID++,
             name: options.name,
             color: options.color,
             mask: options.mask
@@ -99,7 +109,10 @@ class PSDWriter {
             writer.writeUint8(0);
         }
 
-        writer.writeUint16(3);        // Channels: 3 (L, a, b)
+        // Channels: 3 Lab (L,a,b) + transparency/alpha channels
+        // Reference files have 7 channels total (3 Lab + 4 extra)
+        const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
+        writer.writeUint16(channelCount);
         writer.writeUint32(this.height);
         writer.writeUint32(this.width);
         writer.writeUint16(this.bitsPerChannel);  // Depth
@@ -118,10 +131,52 @@ class PSDWriter {
     /**
      * Section 3: Image Resources
      *
-     * Minimal implementation - just length field
+     * Write resolution info (required by Photoshop)
      */
     _writeImageResources(writer) {
-        writer.writeUint32(0);  // Length = 0 (no resources)
+        const startPos = writer.tell();
+        const updateLength = writer.reserveUint32();
+
+        // Resource 1005: ResolutionInfo
+        writer.writeString('8BIM');     // Signature
+        writer.writeUint16(1005);       // ID: ResolutionInfo
+        writer.writeUint8(0);           // Name length (0 = no name)
+        writer.writeUint8(0);           // Padding
+
+        // Data length: 16 bytes
+        writer.writeUint32(16);
+
+        // Resolution: 300 DPI (fixed-point 16.16 format)
+        // Horizontal resolution
+        writer.writeUint32(0x012c0000); // 300.0 DPI (300 << 16)
+        writer.writeUint16(1);          // Unit: 1 = pixels/inch
+        writer.writeUint16(1);          // Width unit: 1 = inches
+
+        // Vertical resolution
+        writer.writeUint32(0x012c0000); // 300.0 DPI (300 << 16)
+        writer.writeUint16(1);          // Unit: 1 = pixels/inch
+        writer.writeUint16(1);          // Height unit: 1 = inches
+
+        // Resource 1077: DisplayInfo (copy exact format from reference 16-bit file)
+        writer.writeString('8BIM');     // Signature
+        writer.writeUint16(1077);       // ID: DisplayInfo
+        writer.writeUint8(0);           // Name length
+        writer.writeUint8(0);           // Padding
+        writer.writeUint32(56);         // Data length
+
+        // Write exact DisplayInfo structure from reference (56 bytes)
+        const displayInfo = Buffer.from(
+            '000000010000ffff0000000000000064' +
+            '010000ffff0000000000000032' +
+            '010000ffff0000000000000032' +
+            '010000ffff000000000000003201',
+            'hex'
+        );
+        writer.writeBytes(displayInfo);
+
+        // Update section length
+        const length = writer.tell() - startPos - 4;
+        updateLength(length);
     }
 
     /**
@@ -133,15 +188,91 @@ class PSDWriter {
         const startPos = writer.tell();
         const updateSectionLength = writer.reserveUint32();
 
-        // Write layer info subsection
-        this._writeLayerInfo(writer);
+        if (this.bitsPerChannel === 16) {
+            // 16-bit format: empty layer info, use Lr16 block
+            writer.writeUint32(0);  // Layer info length = 0
+            writer.writeUint32(0);  // Global mask length = 0
 
-        // Write global layer mask info (empty for now)
-        writer.writeUint32(0);  // Length = 0
+            // Mt16 block (empty marker)
+            writer.writeString('8BIM');
+            writer.writeString('Mt16');
+            writer.writeUint32(0);  // Length = 0
+
+            // Lr16 block with actual layer data
+            this._writeLr16Block(writer);
+
+            // Global layer mask info (LMsk block) - required for 16-bit files
+            this._writeGlobalLayerMask(writer);
+        } else {
+            // 8-bit format: traditional layer info section
+            this._writeLayerInfo(writer);
+            writer.writeUint32(0);  // Global mask length = 0
+        }
 
         // Update section length (total bytes after the length field)
         const sectionLength = writer.tell() - startPos - 4;
         updateSectionLength(sectionLength);
+    }
+
+    /**
+     * Write Lr16 block (16-bit layer data)
+     */
+    _writeLr16Block(writer) {
+        writer.writeString('8BIM');
+        writer.writeString('Lr16');
+
+        // Write Lr16 data to separate buffer to calculate length
+        const lr16Writer = new BinaryWriter();
+
+        // Layer count (negative indicates transparency data)
+        lr16Writer.writeInt16(-this.layers.length);
+
+        // Write each layer record
+        for (const layer of this.layers) {
+            this._writeLayerRecord(lr16Writer, layer);
+        }
+
+        // Write channel image data for each layer
+        for (const layer of this.layers) {
+            this._writeLayerChannelData(lr16Writer, layer);
+        }
+
+        const lr16Data = lr16Writer.toBuffer();
+
+        // Write Lr16 length and data
+        writer.writeUint32(lr16Data.length);
+        writer.writeBytes(lr16Data);
+
+        // Add padding for 4-byte alignment (PSD spec requirement for tagged blocks)
+        const padding = (4 - (lr16Data.length % 4)) % 4;
+        for (let i = 0; i < padding; i++) {
+            writer.writeUint8(0);
+        }
+    }
+
+    /**
+     * Write global layer mask info block (LMsk) for 16-bit files
+     * This block is expected by Photoshop and prevents "corrupt layers" warning
+     */
+    _writeGlobalLayerMask(writer) {
+        // LMsk tagged block
+        writer.writeString('8BIM');
+        writer.writeString('LMsk');
+        writer.writeUint32(14);  // Length: 14 bytes
+
+        // Global layer mask data (14 bytes) - values from reference file
+        writer.writeUint16(0);     // Overlay color space (0 = no color selected)
+        writer.writeUint16(0xFFFF);  // Color component 1 (red)
+        writer.writeUint16(0);     // Color component 2 (green)
+        writer.writeUint16(0);     // Color component 3 (blue)
+        writer.writeUint16(0);     // Color component 4 (alpha)
+        writer.writeUint16(50);    // Opacity (50)
+        writer.writeUint8(128);    // Kind (128 = 0x80)
+        writer.writeUint8(0);      // Reserved
+
+        // Padding to 4-byte boundary (block is 26 bytes, needs 2 bytes padding)
+        writer.writeUint8(0);
+        writer.writeUint8(0);
     }
 
     /**
@@ -173,38 +304,63 @@ class PSDWriter {
      * Write a single layer record
      */
     _writeLayerRecord(writer, layer) {
-        // Bounding rectangle (layer covers entire canvas)
-        writer.writeInt32(0);              // Top
-        writer.writeInt32(0);              // Left
-        writer.writeInt32(this.height);   // Bottom
-        writer.writeInt32(this.width);    // Right
+        // Bounding rectangle
+        if (this.bitsPerChannel === 16) {
+            // 16-bit fill layers: zero-size bounds
+            writer.writeInt32(0);  // Top
+            writer.writeInt32(0);  // Left
+            writer.writeInt32(0);  // Bottom
+            writer.writeInt32(0);  // Right
+        } else {
+            // 8-bit fill layers: full canvas bounds
+            writer.writeInt32(0);              // Top
+            writer.writeInt32(0);              // Left
+            writer.writeInt32(this.height);   // Bottom
+            writer.writeInt32(this.width);    // Right
+        }
 
         // Number of channels (1 transparency + 3 Lab channels + 1 user mask)
         writer.writeUint16(5);
 
-        // Channel data size: 2 bytes (compression) + pixel data
-        const channelDataSize = 2 + (this.width * this.height);
+        // Channel data sizes
+        let transparencySize, labChannelSize, maskSize;
+
+        if (this.bitsPerChannel === 16) {
+            const zlib = require('zlib');
+            // 16-bit: L/a/b have no pixel data, just compression header
+            transparencySize = 2;  // Just compression
+            labChannelSize = 2;    // Just compression
+            // Mask: compression (2 bytes) + compressed mask data
+            const compressedMask = zlib.deflateSync(layer.mask, { level: 9 });
+            maskSize = 2 + compressedMask.length;
+        } else {
+            // 8-bit: all channels have pixel data
+            const pixelCount = this.width * this.height;
+            transparencySize = 2 + pixelCount;
+            labChannelSize = 2 + pixelCount;
+            maskSize = 2 + pixelCount;
+        }
 
         // Channel information
         // Transparency mask (ID = -1)
         writer.writeInt16(-1);
-        writer.writeUint32(channelDataSize);
+        writer.writeUint32(transparencySize);
 
         // L channel (ID = 0)
         writer.writeInt16(0);
-        writer.writeUint32(channelDataSize);
+        writer.writeUint32(labChannelSize);
 
         // a channel (ID = 1)
         writer.writeInt16(1);
-        writer.writeUint32(channelDataSize);
+        writer.writeUint32(labChannelSize);
 
         // b channel (ID = 2)
         writer.writeInt16(2);
-        writer.writeUint32(channelDataSize);
+        writer.writeUint32(labChannelSize);
 
         // User mask (ID = -2)
         writer.writeInt16(-2);
-        writer.writeUint32(channelDataSize);
+        writer.writeUint32(maskSize);
 
         // Blend mode signature
         writer.writeString('8BIM');
@@ -231,8 +387,30 @@ class PSDWriter {
         // Layer mask data
         this._writeLayerMask(writer);
 
-        // Layer blending ranges (empty)
-        writer.writeUint32(0);
+        // Layer blending ranges (40 bytes for Lab mode)
+        writer.writeUint32(40);  // Length
+
+        // Gray blend ranges (8 bytes): source and dest, black and white
+        writer.writeUint8(0);    // Source black low
+        writer.writeUint8(0);    // Source black high
+        writer.writeUint8(255);  // Source white low
+        writer.writeUint8(255);  // Source white high
+        writer.writeUint8(0);    // Dest black low
+        writer.writeUint8(0);    // Dest black high
+        writer.writeUint8(255);  // Dest white low
+        writer.writeUint8(255);  // Dest white high
+
+        // Channel blend ranges: 4 ranges × 8 bytes (Lab has 3 channels, but format uses 4)
+        for (let i = 0; i < 4; i++) {
+            writer.writeUint8(0);    // Source black low
+            writer.writeUint8(0);    // Source black high
+            writer.writeUint8(255);  // Source white low
+            writer.writeUint8(255);  // Source white high
+            writer.writeUint8(0);    // Dest black low
+            writer.writeUint8(0);    // Dest black high
+            writer.writeUint8(255);  // Dest white low
+            writer.writeUint8(255);  // Dest white high
+        }
 
         // Layer name (Pascal string)
         writer.writePascalString(layer.name);
@@ -242,6 +420,12 @@ class PSDWriter {
 
         // Additional layer information: Unicode layer name (luni)
         this._writeUnicodeLayerName(writer, layer.name);
+
+        // Additional layer information: Layer ID (lyid) - required for 16-bit
+        this._writeLayerID(writer, layer.id);
+
+        // Note: Omitting optional metadata blocks (clbl, infx, knko, lspf, lclr, shmd, fxrp)
+        // These are not strictly required and may cause validation warnings if not perfect
 
         // Update extra data length (total bytes after the length field)
         const extraLength = writer.tell() - extraStartPos - 4;
@@ -266,6 +450,8 @@ class PSDWriter {
 
         // Descriptor data
         writer.writeBytes(descriptorData);
+
+        // Note: No padding for per-layer blocks (only global blocks need padding)
     }
 
     /**
@@ -294,6 +480,116 @@ class PSDWriter {
 
         // Null terminator
         writer.writeUint16(0);
+
+        // Note: No padding for per-layer blocks (only global blocks need padding)
+    }
+
+    /**
+     * Write layer ID ('lyid')
+     */
+    _writeLayerID(writer, id) {
+        writer.writeString('8BIM');
+        writer.writeString('lyid');
+        writer.writeUint32(4);  // Length: 4 bytes
+        writer.writeUint32(id);
+    }
+
+    /**
+     * Write blend clipping ('clbl')
+     */
+    _writeLayerBlendClipping(writer) {
+        writer.writeString('8BIM');
+        writer.writeString('clbl');
+        writer.writeUint32(4);  // Length: 4 bytes
+        writer.writeUint8(0);   // Blend clipped layers as a group: base
+        writer.writeUint8(0);   // Padding
+        writer.writeUint8(0);   // Padding
+        writer.writeUint8(0);   // Padding
+    }
+
+    /**
+     * Write blend interior elements ('infx')
+     */
+    _writeLayerBlendInterior(writer) {
+        writer.writeString('8BIM');
+        writer.writeString('infx');
+        writer.writeUint32(4);  // Length: 4 bytes
+        writer.writeUint8(0);   // Blend interior elements: disabled
+        writer.writeUint8(0);   // Padding
+        writer.writeUint8(0);   // Padding
+        writer.writeUint8(0);   // Padding
+    }
+
+    /**
+     * Write knockout ('knko')
+     */
+    _writeLayerKnockout(writer) {
+        writer.writeString('8BIM');
+        writer.writeString('knko');
+        writer.writeUint32(4);  // Length: 4 bytes
+        writer.writeUint8(0);   // Knockout: none
+        writer.writeUint8(0);   // Padding
+        writer.writeUint8(0);   // Padding
+        writer.writeUint8(0);   // Padding
+    }
+
+    /**
+     * Write layer protected ('lspf')
+     */
+    _writeLayerProtected(writer) {
+        writer.writeString('8BIM');
+        writer.writeString('lspf');
+        writer.writeUint32(4);  // Length: 4 bytes
+        writer.writeUint8(0);   // Protection flags: none
+        writer.writeUint8(0);   // Padding
+        writer.writeUint8(0);   // Padding
+        writer.writeUint8(0);   // Padding
+    }
+
+    /**
+     * Write sheet color setting ('lclr')
+     */
+    _writeLayerSheetColor(writer) {
+        writer.writeString('8BIM');
+        writer.writeString('lclr');
+        writer.writeUint32(8);  // Length: 8 bytes
+        writer.writeUint16(0);  // Color: none
+        writer.writeUint16(0);  // Padding
+        writer.writeUint16(0);  // Padding
+        writer.writeUint16(0);  // Padding
+    }
+
+    /**
+     * Write metadata setting ('shmd')
+     */
+    _writeLayerMetadata(writer) {
+        writer.writeString('8BIM');
+        writer.writeString('shmd');
+        writer.writeUint32(72); // Length: 72 bytes
+
+        // Use exact shmd content from reference file
+        const shmdData = Buffer.from(
+            '000000013842494d6375737400000000' +
+            '00000034000000100000000100000000' +
+            '00086d65746164617461000000010000' +
+            '00096c6179657254696d65646f756241' +
+            'da5b6f2950834d00',
+            'hex'
+        );
+        writer.writeBytes(shmdData);
+    }
+
+    /**
+     * Write reference point ('fxrp')
+     */
+    _writeLayerReferencePoint(writer) {
+        writer.writeString('8BIM');
+        writer.writeString('fxrp');
+        writer.writeUint32(16); // Length: 16 bytes
+        writer.writeUint32(0);  // X: 0.0 (double, first half)
+        writer.writeUint32(0);  // X: 0.0 (double, second half)
+        writer.writeUint32(0);  // Y: 0.0 (double, first half)
+        writer.writeUint32(0);  // Y: 0.0 (double, second half)
     }
 
     /**
@@ -330,40 +626,64 @@ class PSDWriter {
      */
     _writeLayerChannelData(writer, layer) {
         const { color, mask } = layer;
+        const zlib = require('zlib');
 
-        // Compression type: 0 = raw data (no compression)
-        const compression = 0;
+        // Compression type: 0 = raw, 3 = ZIP
+        const noCompression = 0;
+        const zipCompression = 3;
 
-        // Transparency channel (ID=-1) - all 255 (fully opaque)
-        writer.writeUint16(compression);
-        for (let i = 0; i < this.width * this.height; i++) {
-            writer.writeUint8(255);
+        if (this.bitsPerChannel === 16) {
+            // 16-bit fill layers: L/a/b channels have NO pixel data
+            // Transparency channel (ID=-1) - just compression header
+            writer.writeUint16(noCompression);
+
+            // L channel - just compression header
+            writer.writeUint16(noCompression);
+
+            // a channel - just compression header
+            writer.writeUint16(noCompression);
+
+            // b channel - just compression header
+            writer.writeUint16(noCompression);
+
+            // User mask channel (ID=-2) - actual mask data (16-bit for 16-bit files!)
+            // Compress mask data with ZIP
+            const compressedMask = zlib.deflateSync(mask, { level: 9 });
+            writer.writeUint16(zipCompression);
+            writer.writeBytes(compressedMask);
+        } else {
+            // 8-bit fill layers: write solid pixel data
+            // Transparency channel (ID=-1) - all 255 (fully opaque)
+            writer.writeUint16(compression);
+            for (let i = 0; i < this.width * this.height; i++) {
+                writer.writeUint8(255);
+            }
+
+            // L channel - solid fill with L value
+            writer.writeUint16(compression);
+            const L_byte = Math.round((color.L / 100) * 255);
+            for (let i = 0; i < this.width * this.height; i++) {
+                writer.writeUint8(L_byte);
+            }
+
+            // a channel - solid fill with a value
+            writer.writeUint16(compression);
+            const a_byte = Math.round(color.a + 128);
+            for (let i = 0; i < this.width * this.height; i++) {
+                writer.writeUint8(a_byte);
+            }
+
+            // b channel - solid fill with b value
+            writer.writeUint16(compression);
+            const b_byte = Math.round(color.b + 128);
+            for (let i = 0; i < this.width * this.height; i++) {
+                writer.writeUint8(b_byte);
+            }
+
+            // User mask channel (ID=-2) - actual mask data
+            writer.writeUint16(compression);
+            writer.writeBytes(mask);
         }
-
-        // L channel - solid fill with L value
-        writer.writeUint16(compression);
-        const L_byte = Math.round((color.L / 100) * 255);
-        for (let i = 0; i < this.width * this.height; i++) {
-            writer.writeUint8(L_byte);
-        }
-
-        // a channel - solid fill with a value
-        writer.writeUint16(compression);
-        const a_byte = Math.round(color.a + 128);
-        for (let i = 0; i < this.width * this.height; i++) {
-            writer.writeUint8(a_byte);
-        }
-
-        // b channel - solid fill with b value
-        writer.writeUint16(compression);
-        const b_byte = Math.round(color.b + 128);
-        for (let i = 0; i < this.width * this.height; i++) {
-            writer.writeUint8(b_byte);
-        }
-
-        // User mask channel (ID=-2) - actual mask data
-        writer.writeUint16(compression);
-        writer.writeBytes(mask);
     }
 
     /**
@@ -376,22 +696,53 @@ class PSDWriter {
         // Compression: 0 = raw
         writer.writeUint16(0);
 
-        // Write black Lab values for entire image (3 channels)
         const pixelCount = this.width * this.height;
+        const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
 
-        // L channel: 0 (black)
-        for (let i = 0; i < pixelCount; i++) {
-            writer.writeUint8(0);
-        }
+        if (this.bitsPerChannel === 16) {
+            // 16-bit: 2 bytes per pixel
+            // Composite image uses different scaling than layer data:
+            // - Lab channels: L=white is 0xFFFF, a/b neutral is 0x8000 (32768)
+            // - Layer data uses: L=100 → 32768, a/b neutral=16384
 
-        // a channel: 128 (neutral)
-        for (let i = 0; i < pixelCount; i++) {
-            writer.writeUint8(128);
-        }
+            // Channel 0: L channel (white) = 0xFFFF
+            for (let i = 0; i < pixelCount; i++) {
+                writer.writeUint16(65535);
+            }
 
-        // b channel: 128 (neutral)
-        for (let i = 0; i < pixelCount; i++) {
-            writer.writeUint8(128);
+            // Channel 1: a channel (neutral) = 0x8000 = 32768
+            for (let i = 0; i < pixelCount; i++) {
+                writer.writeUint16(32768);
+            }
+
+            // Channel 2: b channel (neutral) = 0x8000 = 32768
+            for (let i = 0; i < pixelCount; i++) {
+                writer.writeUint16(32768);
+            }
+
+            // Additional alpha/transparency channels (if any)
+            // For now, write zeros for extra channels
+            for (let ch = 3; ch < channelCount; ch++) {
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint16(0);
+                }
+            }
+        } else {
+            // 8-bit: 1 byte per pixel
+            // L channel: 0 (black)
+            for (let i = 0; i < pixelCount; i++) {
+                writer.writeUint8(0);
+            }
+
+            // a channel: 128 (neutral)
+            for (let i = 0; i < pixelCount; i++) {
+                writer.writeUint8(128);
+            }
+
+            // b channel: 128 (neutral)
+            for (let i = 0; i < pixelCount; i++) {
+                writer.writeUint8(128);
+            }
         }
     }
 }

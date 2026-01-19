@@ -106,11 +106,59 @@ class PSDReader {
         const globalMaskLength = this.readUint32();
         const globalMask = this.readBytes(globalMaskLength);
 
+        // Additional layer information (for 16-bit layers, large docs, etc.)
+        // These are global tagged blocks, not per-layer blocks
+        const additionalInfo = [];
+        console.log(`\nAfter global mask: offset=${this.offset}, sectionStart=${sectionStart}, sectionLength=${sectionLength}, sectionEnd=${sectionStart + sectionLength}`);
+        while (this.offset < sectionStart + sectionLength) {
+            console.log(`  Reading tagged block at offset ${this.offset}...`);
+            const sig = this.readString(4);
+            const key = this.readString(4);
+            const length = this.readUint32();
+            const data = this.readBytes(length);
+
+            console.log(`  Global tagged block: sig="${sig}", key="${key}", length=${length} bytes`);
+
+            additionalInfo.push({ sig, key, length, data });
+
+            // Check for 16-bit layer info
+            if (key === 'Lr16') {
+                console.log(`\n*** Found Lr16 block (16-bit layer info): ${length} bytes ***`);
+                // Parse 16-bit layer info from this block
+                // Note: Lr16 data starts directly with layer count, no length field
+                const lr16Reader = new PSDReader(data);
+                const layerCount = lr16Reader.readInt16();
+                const actualCount = Math.abs(layerCount);
+                const layers = [];
+
+                console.log(`Reading ${actualCount} layer records from Lr16 block...`);
+
+                for (let i = 0; i < actualCount; i++) {
+                    console.log(`\n=== Layer ${i + 1} ===`);
+                    layers.push(lr16Reader.readLayerRecord());
+                }
+
+                console.log(`\n=== Reading channel image data for ${actualCount} layers ===`);
+
+                for (let i = 0; i < layers.length; i++) {
+                    console.log(`\nLayer ${i + 1} channel data:`);
+                    layers[i].channelData = lr16Reader.readLayerChannelData(layers[i]);
+                }
+
+                // Replace empty layerInfo with 16-bit version
+                if (layerInfo.layers.length === 0) {
+                    layerInfo.layers = layers;
+                    layerInfo.layerCount = layerCount;
+                }
+            }
+        }
+
         return {
             sectionLength,
             layerInfo,
             globalMaskLength,
-            globalMask
+            globalMask,
+            additionalInfo
         };
     }
 
@@ -120,6 +168,16 @@ class PSDReader {
     readLayerInfo() {
         const length = this.readUint32();
         const startOffset = this.offset;
+
+        // If length is 0, skip layer info entirely (used in 16-bit files)
+        if (length === 0) {
+            console.log(`\nLayer info length = 0, skipping (likely 16-bit format with Lr16 block)`);
+            return {
+                length: 0,
+                layerCount: 0,
+                layers: []
+            };
+        }
 
         const layerCount = this.readInt16();
         const actualCount = Math.abs(layerCount);
