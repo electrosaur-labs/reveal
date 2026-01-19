@@ -149,7 +149,7 @@ async function separateImage(labPixels, palette, width, height, parameters = {},
  * // Returns 800*600 byte array with 255 where color 0 appears
  */
 function generateMask(colorIndices, colorIndex, width, height) {
-    return SeparationEngine.generateMask(colorIndices, colorIndex, width, height);
+    return SeparationEngine.generateLayerMask(colorIndices, colorIndex, width, height);
 }
 
 /**
