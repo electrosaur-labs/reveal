@@ -1,7 +1,7 @@
 {
   "name": "@reveal/psd-writer",
-  "version": "1.0.0",
-  "description": "Minimal PSD file writer for 8-bit Lab documents with fill+mask layers",
+  "version": "1.2.0",
+  "description": "PSD file writer for 8-bit and 16-bit Lab documents with fill+mask and pixel layers",
   "main": "src/index.js",
   "scripts": {
     "test": "node test/PSDWriter.test.js",
