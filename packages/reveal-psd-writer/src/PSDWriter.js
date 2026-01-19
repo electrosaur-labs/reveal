@@ -62,11 +62,28 @@ class PSDWriter {
             throw new Error(`Mask must be ${expectedSize8} bytes (8-bit) or ${expectedSize16} bytes (16-bit)`);
         }
 
+        // Convert 8-bit mask to 16-bit if needed
+        let mask = options.mask;
+        if (this.bitsPerChannel === 16 && mask.length === expectedSize8) {
+            // Convert 8-bit mask (1 byte/pixel) to 16-bit (2 bytes/pixel)
+            // Standard conversion: value8 * 257 gives value16
+            const mask16 = new Uint8Array(expectedSize16);
+
+            for (let i = 0; i < pixelCount; i++) {
+                const value8 = mask[i];
+                const value16 = value8 * 257;
+
+                mask16[i * 2] = (value16 >> 8) & 0xFF;      // High byte
+                mask16[i * 2 + 1] = value16 & 0xFF;          // Low byte
+            }
+            mask = mask16;
+        }
+
         this.layers.push({
             id: this.nextLayerID++,
             name: options.name,
             color: options.color,
-            mask: options.mask
+            mask: mask
         });
     }
 
@@ -326,13 +343,11 @@ class PSDWriter {
         let transparencySize, labChannelSize, maskSize;
 
         if (this.bitsPerChannel === 16) {
-            const zlib = require('zlib');
             // 16-bit: L/a/b have no pixel data, just compression header
-            transparencySize = 2;  // Just compression
-            labChannelSize = 2;    // Just compression
-            // Mask: compression (2 bytes) + compressed mask data
-            const compressedMask = zlib.deflateSync(layer.mask, { level: 9 });
-            maskSize = 2 + compressedMask.length;
+            transparencySize = 2;  // Just compression header
+            labChannelSize = 2;    // Just compression header
+            // Mask: compression header (2 bytes) + raw uncompressed mask data
+            maskSize = 2 + layer.mask.length;
         } else {
             // 8-bit: all channels have pixel data
             const pixelCount = this.width * this.height;
@@ -342,6 +357,9 @@ class PSDWriter {
         }
 
         // Channel information
+        // Format: Channel ID (2 bytes) + Length (4 bytes)
+        // NOTE: 8-byte Uint64 lengths only apply to PSB format, not regular 16-bit PSDs
+
         // Transparency mask (ID = -1)
         writer.writeInt16(-1);
         writer.writeUint32(transparencySize);
@@ -626,11 +644,9 @@ class PSDWriter {
      */
     _writeLayerChannelData(writer, layer) {
         const { color, mask } = layer;
-        const zlib = require('zlib');
 
-        // Compression type: 0 = raw, 3 = ZIP
+        // Compression type: 0 = raw (uncompressed)
         const noCompression = 0;
-        const zipCompression = 3;
 
         if (this.bitsPerChannel === 16) {
             // 16-bit fill layers: L/a/b channels have NO pixel data
@@ -647,41 +663,40 @@ class PSDWriter {
             writer.writeUint16(noCompression);
 
             // User mask channel (ID=-2) - actual mask data (16-bit for 16-bit files!)
-            // Compress mask data with ZIP
-            const compressedMask = zlib.deflateSync(mask, { level: 9 });
-            writer.writeUint16(zipCompression);
-            writer.writeBytes(compressedMask);
+            // Write raw uncompressed mask data
+            writer.writeUint16(noCompression);
+            writer.writeBytes(mask);
         } else {
             // 8-bit fill layers: write solid pixel data
             // Transparency channel (ID=-1) - all 255 (fully opaque)
-            writer.writeUint16(compression);
+            writer.writeUint16(noCompression);
             for (let i = 0; i < this.width * this.height; i++) {
                 writer.writeUint8(255);
             }
 
             // L channel - solid fill with L value
-            writer.writeUint16(compression);
+            writer.writeUint16(noCompression);
             const L_byte = Math.round((color.L / 100) * 255);
             for (let i = 0; i < this.width * this.height; i++) {
                 writer.writeUint8(L_byte);
             }
 
             // a channel - solid fill with a value
-            writer.writeUint16(compression);
+            writer.writeUint16(noCompression);
             const a_byte = Math.round(color.a + 128);
             for (let i = 0; i < this.width * this.height; i++) {
                 writer.writeUint8(a_byte);
             }
 
             // b channel - solid fill with b value
-            writer.writeUint16(compression);
+            writer.writeUint16(noCompression);
             const b_byte = Math.round(color.b + 128);
             for (let i = 0; i < this.width * this.height; i++) {
                 writer.writeUint8(b_byte);
             }
 
             // User mask channel (ID=-2) - actual mask data
-            writer.writeUint16(compression);
+            writer.writeUint16(noCompression);
             writer.writeBytes(mask);
         }
     }
