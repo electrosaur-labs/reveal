@@ -434,15 +434,32 @@ class PSDWriter {
         writer.writeString('norm');  // Normal blend mode
 
         // Opacity (0-255)
-        writer.writeUint8(layer.visible === false ? 0 : 255);
+        // NOTE: Opacity controls transparency (0=transparent, 255=opaque)
+        // Visibility is controlled by bit 1 in flags, NOT opacity!
+        writer.writeUint8(255);  // Always fully opaque
 
         // Clipping (0 = base)
         writer.writeUint8(0);
 
         // Flags:
-        // Pixel layers: 0x00 (pixel data IS relevant)
-        // Fill layers: 0x18 (bits 3 and 4 set - pixel data irrelevant)
-        writer.writeUint8(isPixelLayer ? 0x00 : 0x18);
+        // bit 0: transparency protected
+        // bit 1: HIDDEN (0 = visible, 1 = hidden) - NOTE: inverted logic!
+        // bit 2: obsolete
+        // bit 3: pixel data irrelevant to appearance (for fill layers)
+        // bit 4: pixel data irrelevant (for fill layers)
+        let flags = 0x00;
+
+        // Set visibility bit (bit 1) - NOTE: bit 1 is a "hidden" flag, not "visible"!
+        if (layer.visible === false) {
+            flags |= 0x02;  // bit 1 = hidden
+        }
+
+        // Set pixel data irrelevance bits for fill layers
+        if (!isPixelLayer) {
+            flags |= 0x18;  // bits 3 and 4 set
+        }
+
+        writer.writeUint8(flags);
 
         // Filler
         writer.writeUint8(0);
