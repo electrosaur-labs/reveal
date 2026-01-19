@@ -86,6 +86,20 @@ function showError(title, message, errorList = null) {
     errorDialog.showModal();
     logger.log("✓ Error dialog opened as modal");
 
+    // DEBUG: Log computed styles
+    logger.log('\n=== ERROR DIALOG STYLE DEBUG ===');
+    logger.log('Error Dialog computed styles:');
+    logger.log(`  computed color: ${window.getComputedStyle(errorDialog).color}`);
+    logger.log(`  computed background: ${window.getComputedStyle(errorDialog).backgroundColor}`);
+    logger.log(`  inline style: ${errorDialog.getAttribute('style')}`);
+
+    if (errorMessage) {
+        logger.log('Error Message computed styles:');
+        logger.log(`  computed color: ${window.getComputedStyle(errorMessage).color}`);
+        logger.log(`  inline style: ${errorMessage.getAttribute('style')}`);
+    }
+    logger.log('=== END ERROR DEBUG ===\n');
+
     // Set up OK button to close
     const btnErrorOk = document.getElementById('btnErrorOk');
     if (btnErrorOk) {
@@ -137,6 +151,20 @@ function showErrorDialog(title, message, details = null) {
     errorDialog.showModal();
     logger.log("✓ Error dialog opened as modal");
 
+    // DEBUG: Log computed styles
+    logger.log('\n=== ERROR DIALOG STYLE DEBUG (showErrorDialog) ===');
+    logger.log('Error Dialog computed styles:');
+    logger.log(`  computed color: ${window.getComputedStyle(errorDialog).color}`);
+    logger.log(`  computed background: ${window.getComputedStyle(errorDialog).backgroundColor}`);
+    logger.log(`  inline style: ${errorDialog.getAttribute('style')}`);
+
+    if (errorMessage) {
+        logger.log('Error Message computed styles:');
+        logger.log(`  computed color: ${window.getComputedStyle(errorMessage).color}`);
+        logger.log(`  inline style: ${errorMessage.getAttribute('style')}`);
+    }
+    logger.log('=== END ERROR DEBUG ===\n');
+
     // Set up OK button handler
     const btnOk = document.getElementById('btnErrorOk');
     const closeHandler = () => {
@@ -185,6 +213,36 @@ function showSuccessDialog(layerCount, palette, separationStartTime) {
         // Show dialog using UXP dialog.showModal()
         // Close first if already open to avoid "already open" error
         logger.log('Showing success dialog with showModal()...');
+
+        // LOG CANVAS AND TEXT COLORS BEFORE SHOWING
+        logger.log('\n=== DIALOG STYLE DEBUG ===');
+        logger.log('Success Dialog styles:');
+        logger.log(`  inline style: ${successDialog.getAttribute('style')}`);
+        logger.log(`  computed color: ${window.getComputedStyle(successDialog).color}`);
+        logger.log(`  computed background: ${window.getComputedStyle(successDialog).backgroundColor}`);
+
+        const successTitle = successDialog.querySelector('.success-title');
+        if (successTitle) {
+            logger.log('Success Title styles:');
+            logger.log(`  inline style: ${successTitle.getAttribute('style')}`);
+            logger.log(`  computed color: ${window.getComputedStyle(successTitle).color}`);
+        }
+
+        const successMessage = successDialog.querySelector('.success-message');
+        if (successMessage) {
+            logger.log('Success Message styles:');
+            logger.log(`  inline style: ${successMessage.getAttribute('style')}`);
+            logger.log(`  computed color: ${window.getComputedStyle(successMessage).color}`);
+        }
+
+        const successInfo = successDialog.querySelector('.success-info');
+        if (successInfo) {
+            logger.log('Success Info styles:');
+            logger.log(`  inline style: ${successInfo.getAttribute('style')}`);
+            logger.log(`  computed color: ${window.getComputedStyle(successInfo).color}`);
+        }
+        logger.log('=== END DEBUG ===\n');
+
         if (successDialog.open) {
             logger.log('Dialog already open, closing first...');
             successDialog.close();
@@ -1069,17 +1127,22 @@ function showPaletteEditor(selectedPalette) {
                 inkLayers.sort((a, b) => b.labColor.L - a.labColor.L);
 
                 logger.log('Layer order (bottom→top):');
-                inkLayers.forEach((layer, i) => {
-                    logger.log(`  ${i + 1}. ${layer.name} (L=${layer.labColor.L.toFixed(1)})`);
-                });
-
-                // Build final layer array: Substrate at bottom, then ink layers sorted by L
                 const orderedLayers = [];
+                let layerIndex = 0;
+
+                // Substrate ALWAYS at bottom (if it exists)
                 if (substrateLayer) {
                     orderedLayers.push(substrateLayer);
-                    logger.log(`  0. ${substrateLayer.name} (SUBSTRATE - always bottom)`);
+                    logger.log(`  ${layerIndex + 1}. ${substrateLayer.name} (SUBSTRATE - always at bottom)`);
+                    layerIndex++;
                 }
-                orderedLayers.push(...inkLayers);
+
+                // Then ink layers sorted by L value (light to dark)
+                inkLayers.forEach((layer) => {
+                    orderedLayers.push(layer);
+                    logger.log(`  ${layerIndex + 1}. ${layer.name} (L=${layer.labColor.L.toFixed(1)})`);
+                    layerIndex++;
+                });
                 const doc = PhotoshopAPI.getActiveDocument();
                 if (!doc) {
                     throw new Error("No active document");

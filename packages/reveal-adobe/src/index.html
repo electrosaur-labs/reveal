@@ -19,11 +19,31 @@
             font-size: 14px;
         }
 
+        /* CRITICAL: ALL DIALOGS MUST HAVE BLACK TEXT ON WHITE BACKGROUND */
+        /* This fixes persistent readability issues in UXP */
         dialog {
             border: none;
             border-radius: 8px;
             padding: 0;
             background: #ffffff;
+            color: #000000;
+        }
+
+        /* Force black text on ALL dialog content */
+        dialog *:not(button):not(.btn-primary):not(.btn-success-primary):not(.btn-error-ok) {
+            color: #000000;
+        }
+
+        /* Ensure white background for all dialog containers */
+        .error-dialog-wrapper,
+        .success-dialog-wrapper,
+        .palette-dialog,
+        #errorDialog,
+        #successDialog,
+        #paletteDialog,
+        #mainDialog {
+            background: #ffffff;
+            color: #000000;
         }
 
         .reveal-dialog {
@@ -644,7 +664,7 @@
 
         .error-message {
             font-size: 14px;
-            color: #000000;
+            color: #000000 !important;
             line-height: 1.6;
             margin-bottom: 20px;
             font-weight: 500;
@@ -1476,30 +1496,30 @@
     </dialog>
 
     <!-- Error Dialog (modal) -->
-    <dialog id="errorDialog" style="padding: 24px; border: 2px solid #d7373f; border-radius: 8px; min-width: 400px; max-width: 500px;">
+    <dialog id="errorDialog" style="padding: 24px; border: 2px solid #d7373f; border-radius: 8px; min-width: 400px; max-width: 500px; background: #ffffff !important; color: #000000 !important;">
         <div class="error-title" style="font-size: 16px; font-weight: 600; color: #d7373f; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
             <span>⚠️</span>
             <span id="errorTitle">Error</span>
         </div>
         <div class="error-message" id="errorMessage" style="font-size: 14px; color: #000000; line-height: 1.6; margin-bottom: 20px; font-weight: 500;"></div>
-        <div class="error-details" id="errorDetails" style="display: none; font-size: 12px; color: #6e6e6e; margin-bottom: 20px; padding: 12px; background: #f5f5f5; border-radius: 4px;"></div>
-        <ul id="errorList" style="margin: 12px 0 20px 20px; padding: 0;"></ul>
+        <div class="error-details" id="errorDetails" style="display: none; font-size: 12px; color: #000000; margin-bottom: 20px; padding: 12px; background: #f5f5f5; border-radius: 4px;"></div>
+        <ul id="errorList" style="margin: 12px 0 20px 20px; padding: 0; color: #000000;"></ul>
         <div class="error-buttons" style="display: flex; justify-content: flex-end; gap: 12px;">
             <button class="btn-error-ok" id="btnErrorOk" style="background: #d7373f; color: white; border: none; padding: 8px 24px; border-radius: 4px; cursor: pointer; font-weight: 600;">OK</button>
         </div>
     </dialog>
 
     <!-- Success Dialog -->
-    <dialog id="successDialog" class="reveal-dialog success-dialog-wrapper">
-        <div class="success-title">
+    <dialog id="successDialog" class="reveal-dialog success-dialog-wrapper" style="color: #000000;">
+        <div class="success-title" style="color: #000000;">
             <span>✓</span>
             <span>Separation Complete!</span>
         </div>
-        <div class="success-message" id="successMessage">
-            Created <strong id="layerCount">0</strong> separated layers.
+        <div class="success-message" id="successMessage" style="color: #000000;">
+            Created <strong id="layerCount" style="color: #000000;">0</strong> separated layers.
         </div>
-        <div class="success-info">
-            <strong>📊 Capture Golden Stats (Optional)</strong><br>
+        <div class="success-info" style="color: #000000;">
+            <strong style="color: #000000;">📊 Capture Golden Stats (Optional)</strong><br>
             Save statistical validation data for automated regression testing.
             JSON will be written to the Developer Console where you can copy and save it
             (~10KB JSON vs ~95MB PSD).
