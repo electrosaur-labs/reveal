@@ -9,10 +9,154 @@
 ✅ **Checkbox event dispatch fix** - Removed CustomEvent dispatch for checkboxes
 ✅ **Substrate duplication fix** - Prevented duplicate white layer when preserveWhite + substrate both add white
 ✅ **Full clean rebuild successful** - No new failures, 125 tests passing
+🚧 **Starting @reveal/psd-writer package** - For CQ100 validation dataset generation
 
 ---
 
-## Latest Work: Checkbox Event & Substrate Duplication Fixes ✅
+## Current Work: PSD Writer Package (8-bit Lab Multi-Layer) 🚧
+
+**Date:** 2026-01-19 (Current Session)
+**Status:** IN PROGRESS
+
+### Objective: Create CQ100_v4 Reference Dataset
+
+**Goal:** Process 100 reference test images (CQ100_v4 database) and generate:
+1. 8-bit Lab PSD files with separated layers (fill+mask for each color)
+2. Validation JSON metadata for each separation
+
+**Why PSD Format:**
+- Need multi-layer output to preserve separation structure
+- Multi-layer TIFF writing too complex to implement
+- PSD is the only feasible multi-layer format from Node.js
+- **Constraint:** ag-psd library CANNOT write Lab color mode
+- **Solution:** Implement minimal Lab PSD writer ourselves
+
+### Requirements
+
+**PSD File Structure (Minimal):**
+- 8-bit Lab color mode (mode=9)
+- Multiple layers, each with:
+  - Solid color fill (single Lab value)
+  - 8-bit grayscale layer mask
+- Composite preview image (optional)
+
+**What We DON'T Need:**
+- Text layers, shape layers, adjustment layers
+- Smart objects, layer effects, vector masks
+- Complex blending modes or advanced features
+- Generic PSD writer - only fill+mask layers
+
+### Research Completed
+
+**PSD Format Documentation:**
+- Official Adobe spec: [adobe.com/devnet-apps/photoshop/fileformatashtml](https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/)
+- Lab mode confirmed: Color mode = 9
+- 8-bit per channel Lab mode confirmed valid ([Peachpit](https://www.peachpit.com/articles/article.aspx?p=1377268&seqNum=5))
+
+**PSD File Structure (5 sections):**
+1. File Header - dimensions, channels, bit depth, color mode
+2. Color Mode Data - palette data (empty for Lab)
+3. Image Resources - metadata (minimal)
+4. Layer and Mask Information - layer records, masks, blend modes
+5. Image Data - composite preview (planar format)
+
+**Layer Structure:**
+- Bounding box (top, left, bottom, right)
+- Channel info (ID, compression, data length)
+- Blend mode, opacity, flags
+- Layer mask data (bounds, default color, flags)
+- Solid color fill ('SoCo' key with descriptor format)
+
+**Channel Data Encoding:**
+- Compression type: 0=raw, 1=RLE (PackBits)
+- 8-bit channels: 1 byte per pixel
+- Lab encoding: L (0-255 maps to 0-100), a/b (0-255 maps to -128 to +127)
+
+### Implementation Plan
+
+**Package:** `@reveal/psd-writer` (standalone PSD format writer)
+
+**Phase 1: Synthetic Test Program**
+- Create minimal Lab PSD writer
+- Generate synthetic test file with 2-3 solid color fill+mask layers
+- Verify opens correctly in Photoshop
+
+**Phase 2: Integration with @reveal/core**
+- Accept separation results (palette + masks)
+- Write PSD with proper fill+mask layers
+- Composite preview from separated layers
+
+**Phase 3: CQ100 Batch Processing**
+- Process 100 test images
+- Auto-select presets
+- Generate PSD + JSON for each
+
+### Implementation Status
+
+✅ **Phase 1 Complete:** Synthetic test program working
+
+**Files Created:**
+- `packages/reveal-psd-writer/package.json` - Package manifest
+- `packages/reveal-psd-writer/README.md` - Documentation
+- `packages/reveal-psd-writer/src/BinaryWriter.js` - Binary writing utilities (118 lines)
+- `packages/reveal-psd-writer/src/PSDWriter.js` - Main PSD writer (331 lines)
+- `packages/reveal-psd-writer/src/index.js` - Package exports
+- `packages/reveal-psd-writer/examples/synthetic-test.js` - Test program
+
+**Test Results:**
+- ✅ PSD file generated: `examples/synthetic-test-output.psd` (147 KB)
+- ✅ 100x100 pixels, 8-bit Lab color mode
+- ✅ 3 layers with solid fills and masks
+- ⏳ Awaiting Photoshop validation
+
+**PSD Format Implementation:**
+- File Header: ✅ Complete
+- Color Mode Data: ✅ Complete (empty for Lab)
+- Image Resources: ✅ Complete (minimal)
+- Layer & Mask Info: ✅ Complete (fill layers with masks)
+- Image Data: ✅ Complete (black composite placeholder)
+
+### Current Status - Phase 1 Issues
+
+**Problem:** Generated PSD opens in Photoshop but:
+- ✅ 3 layers appear (correct)
+- ✅ Layers are visible (fixed)
+- ❌ Layers show as raster, not fill layers
+- ❌ Masks don't appear
+- ⚠️ Photoshop warns about "unknown data"
+
+**Root Cause:** SoCo (Solid Color) descriptor format not recognized by Photoshop.
+
+**New Approach:** Empirical validation
+1. Create reference PSD in Photoshop with fill+mask layers
+2. Parse it with our PSD reader to see exact byte structure
+3. Compare with our generated output
+4. Fix writer to match real Photoshop format
+
+**New Tools Created:**
+- `src/PSDReader.js` (323 lines) - Minimal PSD parser
+- `src/DescriptorWriter.js` (130 lines) - Descriptor format writer
+- `examples/analyze-reference.js` - Analysis script
+
+### Next Steps
+
+1. **Create reference PSD in Photoshop:**
+   - 100x100 pixels, 8-bit Lab mode
+   - 2-3 Solid Color Fill layers
+   - Add layer masks to each
+   - Save as `examples/reference-fill-mask.psd`
+
+2. **Analyze reference:** `node examples/analyze-reference.js`
+
+3. **Compare structures** - Find differences between reference and our output
+
+4. **Fix PSDWriter** - Match Photoshop's exact format
+
+5. **Validate** - Test corrected output opens properly
+
+---
+
+## Previous Work: Checkbox Event & Substrate Duplication Fixes ✅
 
 **Date:** 2026-01-19 (Latest Session)
 **Status:** COMPLETE
