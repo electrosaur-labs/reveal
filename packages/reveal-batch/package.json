@@ -10,6 +10,7 @@
     "start": "node src/cli.js",
     "test": "echo \"No tests yet\" && exit 0",
     "process-cq100": "node src/processCQ100.js",
+    "analyze-cq100": "node src/CQ100_MetaAnalyzer.js",
     "test-astronaut": "node test-astronaut.js",
     "debug-ppm": "node debug-ppm.js",
     "debug-lab": "node debug-lab-conversion.js"

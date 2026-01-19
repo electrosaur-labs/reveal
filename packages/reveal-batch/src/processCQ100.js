@@ -15,6 +15,7 @@ const path = require('path');
 const Reveal = require('@reveal/core');
 const { PSDWriter } = require('@reveal/psd-writer');
 const { parsePPM } = require('./ppmParser');
+const MetricsCalculator = require('./MetricsCalculator');
 const chalk = require('chalk');
 
 // Load presets (same as reveal-adobe)
@@ -48,10 +49,15 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
     const basename = path.basename(inputPath, '.ppm');
     console.log(chalk.cyan(`\n[${basename}] Processing...`));
 
+    const timingStart = Date.now();
+    let ioTime = 0;
+
     try {
         // 1. Parse PPM file
+        const ioStart = Date.now();
         const ppm = parsePPM(inputPath);
         const { width, height, pixels } = ppm;
+        ioTime += Date.now() - ioStart;
         console.log(`  Size: ${width}×${height}`);
 
         // 2. Convert RGB to Lab using Reveal's native conversion (keep in memory!)
@@ -130,8 +136,59 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
             masks.push(mask);
         }
 
-        // 8. Write 16-bit PSD
+        // 8. Reconstruct "Virtual Composite" from separated colors for metrics
+        console.log(`  Reconstructing virtual composite...`);
+        const processedLab = new Uint8ClampedArray(pixelCount * 3);
+
+        for (let i = 0; i < pixelCount; i++) {
+            const colorIdx = separateResult.colorIndices[i];
+            const color = posterizeResult.paletteLab[colorIdx];
+
+            // Convert Lab values to byte encoding
+            processedLab[i * 3] = (color.L / 100) * 255;        // L: 0-100 → 0-255
+            processedLab[i * 3 + 1] = color.a + 128;            // a: -128 to +127 → 0-255
+            processedLab[i * 3 + 2] = color.b + 128;            // b: -128 to +127 → 0-255
+        }
+
+        // 9. Calculate palette coverage percentages
+        const coverageCounts = new Uint32Array(posterizeResult.paletteLab.length);
+        for (let i = 0; i < pixelCount; i++) {
+            coverageCounts[separateResult.colorIndices[i]]++;
+        }
+
+        const paletteWithCoverage = posterizeResult.paletteLab.map((color, idx) => {
+            const rgbColor = posterizeResult.palette[idx];
+            const hex = rgbToHex(rgbColor.r, rgbColor.g, rgbColor.b);
+            const coverage = ((coverageCounts[idx] / pixelCount) * 100).toFixed(2);
+
+            return {
+                name: `Ink ${idx + 1} (${hex})`,
+                lab: { L: parseFloat(color.L.toFixed(2)), a: parseFloat(color.a.toFixed(2)), b: parseFloat(color.b.toFixed(2)) },
+                rgb: { r: Math.round(rgbColor.r), g: Math.round(rgbColor.g), b: Math.round(rgbColor.b) },
+                hex: hex,
+                coverage: `${coverage}%`
+            };
+        });
+
+        // 10. Calculate metrics
+        console.log(`  Computing validation metrics...`);
+        const layers = masks.map((mask, i) => ({
+            name: paletteWithCoverage[i].name,
+            color: posterizeResult.paletteLab[i],
+            mask: mask
+        }));
+
+        const metrics = MetricsCalculator.compute(
+            labPixels,      // Original Lab pixels
+            processedLab,   // Virtual composite Lab pixels
+            layers,
+            width,
+            height
+        );
+
+        // 11. Write 16-bit PSD
         console.log(`  Writing 16-bit PSD...`);
+        const ioStartWrite = Date.now();
         const writer = new PSDWriter({
             width,
             height,
@@ -140,13 +197,12 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
         });
 
         // Add original image as invisible pixel layer (bottom layer)
-        // TODO: Implement addPixelLayer() in PSDWriter
-        // console.log(`  Adding original image as reference layer...`);
-        // writer.addPixelLayer({
-        //     name: 'Original Image (Reference)',
-        //     pixels: labPixels,
-        //     visible: false
-        // });
+        console.log(`  Adding original image as reference layer...`);
+        writer.addPixelLayer({
+            name: 'Original Image (Reference)',
+            pixels: labPixels,
+            visible: false
+        });
 
         // Add separated fill+mask layers (top layers)
         for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
@@ -164,8 +220,41 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
         const psdBuffer = writer.write();
         const outputPath = path.join(outputDir, `${basename}.psd`);
         fs.writeFileSync(outputPath, psdBuffer);
+        ioTime += Date.now() - ioStartWrite;
 
         console.log(chalk.green(`  ✓ Saved: ${outputPath} (${(psdBuffer.length / 1024).toFixed(2)} KB)`));
+
+        // 12. Write JSON sidecar with complete metadata and metrics
+        const totalTime = Date.now() - timingStart;
+        const computeTime = totalTime - ioTime;
+
+        const jsonData = {
+            meta: {
+                filename: `${basename}.ppm`,
+                timestamp: new Date().toISOString(),
+                width: width,
+                height: height,
+                outputFile: `${basename}.psd`
+            },
+            input_parameters: {
+                presetName: preset.name,
+                presetId: analysis.presetId,
+                presetSignature: analysis.label,
+                targetColors: params.targetColorsSlider,
+                ...params
+            },
+            palette: paletteWithCoverage,
+            metrics: metrics,
+            timing: {
+                computeTimeMs: computeTime,
+                ioTimeMs: ioTime,
+                totalMs: totalTime
+            }
+        };
+
+        const jsonPath = path.join(outputDir, `${basename}.json`);
+        fs.writeFileSync(jsonPath, JSON.stringify(jsonData, null, 2));
+        console.log(chalk.gray(`  ✓ Metrics saved: ${basename}.json`));
 
         return {
             success: true,
@@ -175,7 +264,8 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
             colors: posterizeResult.paletteLab.length,
             size: psdBuffer.length,
             width,
-            height
+            height,
+            metrics: metrics
         };
     } catch (error) {
         console.error(chalk.red(`  ✗ Error: ${error.message}`));
