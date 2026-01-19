@@ -1660,32 +1660,37 @@ function applyAnalyzedSettings(settings) {
         const value = settings[key];
         logger.log(`  Setting ${key} = ${value}`);
 
-        if (element.type === 'checkbox') {
-            element.checked = value;
-            element.dispatchEvent(new Event('change', { bubbles: true }));
+        try {
+            if (element.type === 'checkbox') {
+                // Checkboxes: Just set the checked state, no event dispatch needed
+                // UXP checkboxes update visually without requiring events
+                element.checked = value;
 
-        } else if (element.tagName === 'SELECT') {
-            element.value = value;
-            element.dispatchEvent(new Event('change', { bubbles: true }));
+            } else if (element.tagName === 'SELECT') {
+                element.value = value;
+                element.dispatchEvent(new CustomEvent('change', { bubbles: true, detail: { value } }));
 
-        } else if (element.tagName === 'SP-SLIDER') {
-            element.value = value;
+            } else if (element.tagName === 'SP-SLIDER') {
+                element.value = value;
 
-            // Update value display label
-            const valueDisplay = document.getElementById(`${key}Value`);
-            if (valueDisplay) {
-                // Find slider config for formatting
-                const config = sliderConfigs.find(c => c.id === key);
-                if (config) {
-                    valueDisplay.textContent = config.format(value);
-                } else {
-                    valueDisplay.textContent = value.toString();
+                // Update value display label
+                const valueDisplay = document.getElementById(`${key}Value`);
+                if (valueDisplay) {
+                    // Find slider config for formatting
+                    const config = sliderConfigs.find(c => c.id === key);
+                    if (config) {
+                        valueDisplay.textContent = config.format(value);
+                    } else {
+                        valueDisplay.textContent = value.toString();
+                    }
                 }
-            }
 
-            // Trigger events
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-            element.dispatchEvent(new Event('change', { bubbles: true }));
+                // Trigger events with CustomEvent to ensure detail property exists
+                element.dispatchEvent(new CustomEvent('input', { bubbles: true, detail: { value } }));
+                element.dispatchEvent(new CustomEvent('change', { bubbles: true, detail: { value } }));
+            }
+        } catch (error) {
+            logger.error(`Failed to apply setting ${key}=${value}:`, error);
         }
     });
 
@@ -1706,7 +1711,10 @@ const PARAMETER_PRESETS = {
     'deep-shadow-noir': require('@reveal/core/presets/deep-shadow-noir.json'),
     'neon-fluorescent': require('@reveal/core/presets/neon-fluorescent.json'),
     'textural-grunge': require('@reveal/core/presets/textural-grunge.json'),
-    'commercial-offset': require('@reveal/core/presets/commercial-offset.json')
+    'commercial-offset': require('@reveal/core/presets/commercial-offset.json'),
+    'minkler-justice': require('@reveal/core/presets/minkler-justice.json'),
+    'warhol-pop': require('@reveal/core/presets/warhol-pop.json'),
+    'technical-enamel': require('@reveal/core/presets/technical-enamel.json')
 };
 
 // Validate presets on load

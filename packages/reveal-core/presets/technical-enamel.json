@@ -1,23 +1,23 @@
 {
-  "id": "commercial-offset",
-  "name": "Commercial Offset",
-  "description": "Optimized for commercial offset printing with precise color control",
+  "id": "technical-enamel",
+  "name": "Industrial Enamel",
+  "description": "High-opacity mapping for 59000 series inks on metal and glass.",
   "settings": {
-    "engineType": "balanced",
+    "engineType": "reveal",
     "centroidStrategy": "VOLUMETRIC",
-    "lWeight": 1.1,
+    "lWeight": 0.5,
     "cWeight": 1.2,
-    "blackBias": 4.0,
-    "substrateMode": "white",
-    "substrateTolerance": 2.0,
+    "blackBias": 8.0,
+    "substrateMode": "none",
+    "substrateTolerance": 2.5,
     "vibrancyMode": "linear",
-    "vibrancyBoost": 1.0,
-    "highlightThreshold": 96,
+    "vibrancyBoost": 1.8,
+    "highlightThreshold": 90,
     "highlightBoost": 1.5,
     "enablePaletteReduction": true,
     "paletteReduction": 6.0,
     "hueLockAngle": 10,
-    "shadowPoint": 12,
+    "shadowPoint": 20,
     "colorMode": "color",
     "targetColorsSlider": 4,
     "preserveWhite": true,
@@ -25,6 +25,6 @@
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
     "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 1.8"
   }
 }

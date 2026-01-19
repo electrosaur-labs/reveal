@@ -1,0 +1,30 @@
+{
+  "id": "minkler-justice",
+  "name": "Minkler Justice",
+  "description": "Bold, high-contrast separation for social commentary and resistance posters.",
+  "settings": {
+    "engineType": "reveal",
+    "centroidStrategy": "VOLUMETRIC",
+    "lWeight": 1.5,
+    "cWeight": 0.5,
+    "blackBias": 10.0,
+    "substrateMode": "none",
+    "substrateTolerance": 1.0,
+    "vibrancyMode": "aggressive",
+    "vibrancyBoost": 2.5,
+    "highlightThreshold": 85,
+    "highlightBoost": 3.0,
+    "enablePaletteReduction": true,
+    "paletteReduction": 6.0,
+    "hueLockAngle": 10,
+    "shadowPoint": 25,
+    "colorMode": "color",
+    "targetColorsSlider": 3,
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "none",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}

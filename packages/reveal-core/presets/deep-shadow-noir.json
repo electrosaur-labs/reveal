@@ -5,12 +5,26 @@
   "settings": {
     "engineType": "reveal",
     "centroidStrategy": "SALIENCY",
-    "blackBias": 8.0,
     "lWeight": 1.5,
     "cWeight": 1.2,
+    "blackBias": 8.0,
+    "substrateMode": "black",
+    "substrateTolerance": 1.5,
+    "vibrancyMode": "exponential",
+    "vibrancyBoost": 1.4,
+    "highlightThreshold": 80,
+    "highlightBoost": 2.5,
+    "enablePaletteReduction": true,
     "paletteReduction": 7.5,
     "hueLockAngle": 12,
     "shadowPoint": 5,
-    "highlightThreshold": 80
+    "colorMode": "color",
+    "targetColorsSlider": 4,
+    "preserveWhite": false,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "none",
+    "maskProfile": "Gray Gamma 2.2"
   }
 }
