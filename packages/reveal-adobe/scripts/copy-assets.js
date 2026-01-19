@@ -39,12 +39,14 @@ if (fs.existsSync(iconsSrc)) {
     console.log('✓ Copied icons/');
 }
 
-// Copy presets directory (for runtime access)
-const presetsSrc = path.join(srcDir, 'presets');
+// Copy presets directory from reveal-core (for runtime access)
+const presetsSrc = path.join(__dirname, '..', '..', 'reveal-core', 'presets');
 const presetsDst = path.join(distDir, 'presets');
 if (fs.existsSync(presetsSrc)) {
     fs.cpSync(presetsSrc, presetsDst, { recursive: true });
-    console.log('✓ Copied presets/');
+    console.log('✓ Copied presets/ from @reveal/core');
+} else {
+    console.warn('⚠ Presets directory not found at', presetsSrc);
 }
 
 console.log('Asset copying complete!');

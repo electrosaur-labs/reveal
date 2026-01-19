@@ -88,9 +88,15 @@ async function posterizeImage(labPixels, width, height, colorCount, parameters =
  * Maps each pixel to nearest palette color using perceptual Lab distance (CIEDE76).
  * Returns color indices array for mask generation. Optimized with spatial caching.
  *
+ * BREAKING CHANGE (v1.1.0): Added width, height parameters for dithering support.
+ * Old callers will fall back to nearest-neighbor (no dithering).
+ *
  * @param {Uint8ClampedArray} labPixels - Lab pixel data (3 bytes per pixel)
  * @param {Array<{L, a, b}>} palette - Color palette from posterizeImage()
+ * @param {number} width - Image width (required for dithering)
+ * @param {number} height - Image height (required for dithering)
  * @param {Object} [parameters] - Separation parameters
+ * @param {string} [parameters.ditherType='none'] - 'none', 'floyd-steinberg', or 'blue-noise'
  * @param {number} [parameters.lWeight=1.5] - Lightness weight for distance
  * @param {number} [parameters.cWeight=0.5] - Chroma weight for distance
  * @param {number} [parameters.snapThreshold=2.0] - Early exit threshold (ΔE)
@@ -100,21 +106,28 @@ async function posterizeImage(labPixels, width, height, colorCount, parameters =
  * @returns {Object} returns.metadata - Processing metadata
  *
  * @example
- * const separation = await separateImage(labPixels, result.labPalette);
+ * const separation = await separateImage(labPixels, result.labPalette, 800, 600, {
+ *   ditherType: 'floyd-steinberg'
+ * });
  * console.log(`Mapped ${separation.metadata.totalPixels} pixels`);
  */
-async function separateImage(labPixels, palette, parameters = {}, onProgress = null) {
+async function separateImage(labPixels, palette, width, height, parameters = {}, onProgress = null) {
+    const ditherType = parameters.ditherType || 'none';
     const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
         labPixels,
         palette,
-        onProgress
+        onProgress,
+        width,
+        height,
+        { ditherType }
     );
 
     return {
         colorIndices,
         metadata: {
             totalPixels: colorIndices.length,
-            paletteSize: palette.length
+            paletteSize: palette.length,
+            ditherType: ditherType
         }
     };
 }

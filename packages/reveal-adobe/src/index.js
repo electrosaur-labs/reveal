@@ -989,6 +989,11 @@ function showPaletteEditor(selectedPalette) {
                 // Phase 4.1: Separate the image (ASYNC with progress)
                 logger.log("Step 1: Separating image into color layers...");
 
+                // Get dithering setting from UI
+                const ditherTypeEl = document.getElementById('ditherType');
+                const ditherType = ditherTypeEl ? ditherTypeEl.value : 'none';
+                logger.log(`Dithering: ${ditherType}`);
+
                 // Use original colors for assignment, edited colors for rendering
                 // This ensures pixels stay assigned to the same features even if ink colors change
                 const layers = await SeparationEngine.separateImage(
@@ -1001,7 +1006,8 @@ function showPaletteEditor(selectedPalette) {
                     {
                         onProgress: (percent) => {
                             logger.log(`Preview separation progress: ${percent}%`);
-                        }
+                        },
+                        ditherType: ditherType
                     }
                 );
 
@@ -1028,7 +1034,8 @@ function showPaletteEditor(selectedPalette) {
                     {
                         onProgress: (percent) => {
                             logger.log(`Full-res separation progress: ${percent}%`);
-                        }
+                        },
+                        ditherType: ditherType
                     }
                 );
 
@@ -1627,16 +1634,16 @@ function applyAnalyzedSettings(settings) {
  * Auto-discovers presets - just add new JSON file to src/presets/ to add preset
  */
 const PARAMETER_PRESETS = {
-    'standard-image': require('./presets/standard-image.json'),
-    'halftone-portrait': require('./presets/halftone-portrait.json'),
-    'vibrant-graphic': require('./presets/vibrant-graphic.json'),
-    'atmospheric-photo': require('./presets/atmospheric-photo.json'),
-    'pastel-high-key': require('./presets/pastel-high-key.json'),
-    'vintage-muted': require('./presets/vintage-muted.json'),
-    'deep-shadow-noir': require('./presets/deep-shadow-noir.json'),
-    'neon-fluorescent': require('./presets/neon-fluorescent.json'),
-    'textural-grunge': require('./presets/textural-grunge.json'),
-    'commercial-offset': require('./presets/commercial-offset.json')
+    'standard-image': require('@reveal/core/presets/standard-image.json'),
+    'halftone-portrait': require('@reveal/core/presets/halftone-portrait.json'),
+    'vibrant-graphic': require('@reveal/core/presets/vibrant-graphic.json'),
+    'atmospheric-photo': require('@reveal/core/presets/atmospheric-photo.json'),
+    'pastel-high-key': require('@reveal/core/presets/pastel-high-key.json'),
+    'vintage-muted': require('@reveal/core/presets/vintage-muted.json'),
+    'deep-shadow-noir': require('@reveal/core/presets/deep-shadow-noir.json'),
+    'neon-fluorescent': require('@reveal/core/presets/neon-fluorescent.json'),
+    'textural-grunge': require('@reveal/core/presets/textural-grunge.json'),
+    'commercial-offset': require('@reveal/core/presets/commercial-offset.json')
 };
 
 // Validate presets on load
