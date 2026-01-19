@@ -4,7 +4,8 @@
   "description": "Minimal PSD file writer for 8-bit Lab documents with fill+mask layers",
   "main": "src/index.js",
   "scripts": {
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "node test/PSDWriter.test.js",
+    "test:generate": "node test/generate-16bit-test.js"
   },
   "dependencies": {},
   "keywords": [
