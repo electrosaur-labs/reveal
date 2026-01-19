@@ -3005,7 +3005,8 @@ class PosterizationEngine {
         // This ensures razor-sharp boundaries required for high-end spot color separations.
         logger.log("Assigning pixels to palette...");
         // Lab = 3 channels (L,a,b), RGB = 4 channels (RGBA)
-        let assignments = new Uint8Array(pixels.length / (isLabInput ? 3 : 4));
+        // CRITICAL: Use Uint16Array to support palettes with >255 colors (quantized + preserved + substrate)
+        let assignments = new Uint16Array(pixels.length / (isLabInput ? 3 : 4));
 
         // Calculate palette indices for preserved colors (based on checkbox state, not pixel detection)
         let preservedColorIndex = curatedPaletteLab.length;
@@ -3218,6 +3219,42 @@ class PosterizationEngine {
             }
 
             assignments[i] = closestIndex;
+        }
+
+        // Apply density floor to remove ghost colors (<0.5% coverage)
+        // IMPORTANT: Never remove preserved colors (white/black)
+        const protectedIndices = new Set();
+        // Note: Classic engine doesn't track white/black indices separately like Reveal does,
+        // so we rely on preserveWhite/preserveBlack flags for intent but don't protect specific indices
+        // in the palette. This is acceptable since Classic uses RGB median cut which doesn't
+        // guarantee white/black are in specific positions.
+
+        const densityResult = this._applyDensityFloor(
+            assignments,
+            paletteLab,
+            0.005,  // 0.5% threshold
+            protectedIndices
+        );
+
+        if (densityResult.actualCount < paletteLab.length) {
+            const removed = paletteLab.length - densityResult.actualCount;
+            logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < 0.5% coverage`);
+            logger.log(`  Final palette: ${densityResult.actualCount} colors (down from ${paletteLab.length})`);
+
+            // Use the cleaned palette and remapped assignments
+            const cleanPaletteRgb = densityResult.palette.map(lab => this.labToRgb(lab));
+
+            return {
+                palette: cleanPaletteRgb,
+                paletteLab: densityResult.palette,
+                assignments: densityResult.assignments,
+                labPixels: null, // Classic doesn't preserve Lab pixels
+                metadata: {
+                    engine: 'classic',
+                    targetColors,
+                    finalColors: densityResult.actualCount
+                }
+            };
         }
 
         return {
