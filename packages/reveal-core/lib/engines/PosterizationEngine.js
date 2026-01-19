@@ -171,6 +171,28 @@ class PosterizationEngine {
         logger.log(`  Grid optimization: ${enableGridOptimization ? 'ON' : 'OFF'}`);
         logger.log(`  Hue gap analysis: ${enableHueGapAnalysis ? 'ON' : 'OFF (respect exact color count)'}`);
 
+        // Build tuning object from options if not provided
+        // This allows presets to pass individual parameters (vibrancyBoost, highlightBoost, etc.)
+        // without manually constructing the full tuning object
+        const tuning = options.tuning || {
+            split: {
+                highlightBoost: options.highlightBoost !== undefined ? options.highlightBoost : this.TUNING.split.highlightBoost,
+                vibrancyBoost: options.vibrancyBoost !== undefined ? options.vibrancyBoost : this.TUNING.split.vibrancyBoost,
+                minVariance: this.TUNING.split.minVariance
+            },
+            prune: {
+                threshold: options.paletteReduction !== undefined ? options.paletteReduction : this.TUNING.prune.threshold,
+                hueLockAngle: options.hueLockAngle !== undefined ? options.hueLockAngle : this.TUNING.prune.hueLockAngle,
+                whitePoint: options.highlightThreshold !== undefined ? options.highlightThreshold : this.TUNING.prune.whitePoint,
+                shadowPoint: options.shadowPoint !== undefined ? options.shadowPoint : this.TUNING.prune.shadowPoint
+            },
+            centroid: {
+                lWeight: options.lWeight !== undefined ? options.lWeight : this.TUNING.centroid.lWeight,
+                cWeight: options.cWeight !== undefined ? options.cWeight : this.TUNING.centroid.cWeight,
+                blackBias: options.blackBias !== undefined ? options.blackBias : this.TUNING.centroid.blackBias
+            }
+        };
+
         // Dispatch to appropriate engine with strategy injection
         switch (engineType) {
             case 'reveal':
@@ -181,7 +203,7 @@ class PosterizationEngine {
                     snapThreshold,
                     strategy,
                     strategyName,  // Pass name for logging
-                    tuning: options.tuning || this.TUNING
+                    tuning
                 });
 
             case 'balanced':
@@ -211,7 +233,7 @@ class PosterizationEngine {
                     snapThreshold,
                     strategy,
                     strategyName,  // Pass name for logging
-                    tuning: options.tuning || this.TUNING
+                    tuning
                 });
         }
     }
@@ -2166,6 +2188,11 @@ class PosterizationEngine {
             }
 
             colors = Array.from(lMap.values());
+
+            // CRITICAL FIX: Sort colors array to ensure deterministic ordering
+            // Sort by L value for grayscale mode
+            colors.sort((a, b) => a.L - b.L);
+
             const sampledPixels = Math.floor(totalPixels / GRID_STRIDE);
             logger.log(`[MedianCut] Grayscale grid sampling (stride ${GRID_STRIDE}): ${totalPixels} pixels → ${sampledPixels} sampled → ${colors.length} unique L values`);
         } else {
@@ -2207,6 +2234,16 @@ class PosterizationEngine {
             }
 
             colors = Array.from(labMap.values());
+
+            // CRITICAL FIX: Sort colors array to ensure deterministic ordering
+            // Map iteration order is insertion-order, which can vary between environments
+            // Sort by L, then a, then b to guarantee identical behavior in UI and batch
+            colors.sort((a, b) => {
+                if (a.L !== b.L) return a.L - b.L;
+                if (a.a !== b.a) return a.a - b.a;
+                return a.b - b.b;
+            });
+
             const sampledPixels = Math.floor(totalPixels / GRID_STRIDE);
 
             if (substrateLab && culledCount > 0) {
@@ -2257,6 +2294,7 @@ class PosterizationEngine {
 
         // Start with single box containing all colors
         const boxes = [{ colors, depth: 0, grayscaleOnly }];
+
 
         // Split until we have targetColors boxes
         let splitIteration = 0;
