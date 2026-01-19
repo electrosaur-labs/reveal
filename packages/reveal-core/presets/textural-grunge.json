@@ -19,7 +19,7 @@
     "hueLockAngle": 12,
     "shadowPoint": 10,
     "colorMode": "color",
-    "targetColorsSlider": 5,
+    "targetColorsSlider": 8,
     "preserveWhite": false,
     "preserveBlack": true,
     "ignoreTransparent": true,
