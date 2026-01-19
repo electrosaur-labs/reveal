@@ -1,0 +1,296 @@
+/**
+ * PPM → Lab PSD + Separated PSD Processor
+ *
+ * Single-pass processor: reads PPM, converts to Lab in memory, writes intermediate
+ * Lab PSD, then continues with separation using the same Lab data in memory.
+ * Automatically detects optimal presets and generates multi-layer separated PSDs.
+ *
+ * Input:  data/CQ100_v4/input/ppm/*.ppm (source RGB images)
+ * Intermediate: data/CQ100_v4/input/psd/*.psd (16-bit Lab composite images)
+ * Output: data/CQ100_v4/output/psd/*.psd (separated multi-layer PSDs)
+ */
+
+const fs = require('fs');
+const path = require('path');
+const Reveal = require('@reveal/core');
+const { PSDWriter } = require('@reveal/psd-writer');
+const { parsePPM } = require('./ppmParser');
+const chalk = require('chalk');
+
+// Load presets (same as reveal-adobe)
+const PRESETS = {
+    'standard-image': require('@reveal/core/presets/standard-image.json'),
+    'halftone-portrait': require('@reveal/core/presets/halftone-portrait.json'),
+    'vibrant-graphic': require('@reveal/core/presets/vibrant-graphic.json'),
+    'atmospheric-photo': require('@reveal/core/presets/atmospheric-photo.json'),
+    'pastel-high-key': require('@reveal/core/presets/pastel-high-key.json'),
+    'vintage-muted': require('@reveal/core/presets/vintage-muted.json'),
+    'deep-shadow-noir': require('@reveal/core/presets/deep-shadow-noir.json'),
+    'neon-fluorescent': require('@reveal/core/presets/neon-fluorescent.json'),
+    'textural-grunge': require('@reveal/core/presets/textural-grunge.json'),
+    'commercial-offset': require('@reveal/core/presets/commercial-offset.json')
+};
+
+/**
+ * Convert RGB to hex string
+ */
+function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(x => {
+        const hex = Math.round(x).toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+    }).join('');
+}
+
+/**
+ * Process a single PPM through separation engine
+ */
+async function processImage(inputPath, intermediatePsdDir, outputDir) {
+    const basename = path.basename(inputPath, '.ppm');
+    console.log(chalk.cyan(`\n[${basename}] Processing...`));
+
+    try {
+        // 1. Parse PPM file
+        const ppm = parsePPM(inputPath);
+        const { width, height, pixels } = ppm;
+        console.log(`  Size: ${width}×${height}`);
+
+        // 2. Convert RGB to Lab using Reveal's native conversion (keep in memory!)
+        console.log(`  Converting RGB to Lab...`);
+        const pixelCount = width * height;
+        const labPixels = new Uint8ClampedArray(pixelCount * 3);
+
+        for (let i = 0; i < pixelCount; i++) {
+            const r = pixels[i * 3];
+            const g = pixels[i * 3 + 1];
+            const b = pixels[i * 3 + 2];
+
+            const lab = Reveal.rgbToLab({ r, g, b });  // Pass as object, not separate parameters
+
+            // Store in BYTE ENCODING format (required by PosterizationEngine)
+            // Reveal's rgbToLab returns: L: 0-100, a: -128 to +127, b: -128 to +127
+            // Convert to byte encoding: L: 0-255, a: 0-255 (128=neutral), b: 0-255 (128=neutral)
+            labPixels[i * 3] = (lab.L / 100) * 255;        // L: 0-100 → 0-255
+            labPixels[i * 3 + 1] = lab.a + 128;            // a: -128 to +127 → 0-255
+            labPixels[i * 3 + 2] = lab.b + 128;            // b: -128 to +127 → 0-255
+        }
+
+        // 3. Write intermediate Lab PSD (but keep working with labPixels)
+        // TODO: Implement setCompositeImage() method in PSDWriter
+        // console.log(`  Writing intermediate Lab PSD...`);
+        // For now, skip intermediate PSD - not needed for testing mask fix
+
+        // 3. Auto-detect preset using ImageHeuristicAnalyzer
+        console.log(`  Analyzing image characteristics...`);
+        const analysis = Reveal.analyzeImage(labPixels, width, height);
+
+        console.log(chalk.green(`  ✓ Detected: "${analysis.label}"`));
+        console.log(`  Preset: ${analysis.presetId}`);
+
+        // 4. Get preset parameters
+        const preset = PRESETS[analysis.presetId];
+        if (!preset) {
+            throw new Error(`Unknown preset: ${analysis.presetId}`);
+        }
+
+        const params = preset.settings;
+        console.log(`  Parameters: ${Object.keys(params).length} settings`);
+
+        // 5. Posterize with detected preset
+        console.log(`  Posterizing to ${params.targetColorsSlider} colors...`);
+        const posterizeResult = await Reveal.posterizeImage(
+            labPixels,
+            width, height,
+            params.targetColorsSlider,
+            {
+                ...params,
+                format: 'lab'  // Tell engine we're passing Lab in byte encoding
+            }
+        );
+
+        console.log(`  ✓ Generated ${posterizeResult.paletteLab.length} colors`);
+
+        // 6. Separate into layers
+        console.log(`  Separating layers...`);
+        const separateResult = await Reveal.separateImage(
+            labPixels,
+            posterizeResult.paletteLab,
+            width, height,
+            { ditherType: params.ditherType }
+        );
+
+        // 7. Generate masks (8-bit, PSDWriter handles 16-bit conversion internally)
+        console.log(`  Generating masks...`);
+        const masks = [];
+        for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
+            const mask = Reveal.generateMask(
+                separateResult.colorIndices,
+                i,
+                width, height
+            );
+            masks.push(mask);
+        }
+
+        // 8. Write 16-bit PSD
+        console.log(`  Writing 16-bit PSD...`);
+        const writer = new PSDWriter({
+            width,
+            height,
+            colorMode: 'lab',
+            bitsPerChannel: 16
+        });
+
+        // Add original image as invisible pixel layer (bottom layer)
+        // TODO: Implement addPixelLayer() in PSDWriter
+        // console.log(`  Adding original image as reference layer...`);
+        // writer.addPixelLayer({
+        //     name: 'Original Image (Reference)',
+        //     pixels: labPixels,
+        //     visible: false
+        // });
+
+        // Add separated fill+mask layers (top layers)
+        for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
+            const color = posterizeResult.paletteLab[i];
+            const rgbColor = posterizeResult.palette[i];
+            const hex = rgbToHex(rgbColor.r, rgbColor.g, rgbColor.b);
+
+            writer.addFillLayer({
+                name: `Color ${i + 1} (${hex})`,
+                color: color,
+                mask: masks[i]
+            });
+        }
+
+        const psdBuffer = writer.write();
+        const outputPath = path.join(outputDir, `${basename}.psd`);
+        fs.writeFileSync(outputPath, psdBuffer);
+
+        console.log(chalk.green(`  ✓ Saved: ${outputPath} (${(psdBuffer.length / 1024).toFixed(2)} KB)`));
+
+        return {
+            success: true,
+            filename: basename,
+            signature: analysis.label,
+            presetId: analysis.presetId,
+            colors: posterizeResult.paletteLab.length,
+            size: psdBuffer.length,
+            width,
+            height
+        };
+    } catch (error) {
+        console.error(chalk.red(`  ✗ Error: ${error.message}`));
+        return {
+            success: false,
+            filename: basename,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Main batch processing
+ */
+async function main() {
+    const inputDir = path.join(__dirname, '../data/CQ100_v4/input/ppm');
+    const intermediatePsdDir = path.join(__dirname, '../data/CQ100_v4/input/psd');
+    const outputDir = path.join(__dirname, '../data/CQ100_v4/output/psd');
+
+    // Ensure directories exist
+    if (!fs.existsSync(intermediatePsdDir)) {
+        fs.mkdirSync(intermediatePsdDir, { recursive: true });
+    }
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    // Get all PPM files
+    const files = fs.readdirSync(inputDir)
+        .filter(f => f.endsWith('.ppm'))
+        .sort();
+
+    console.log(chalk.bold(`\n🎨 CQ100_v4 Batch Processor`));
+    console.log(chalk.bold(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`));
+    console.log(`Input:  ${inputDir}`);
+    console.log(`Intermediate: ${intermediatePsdDir}`);
+    console.log(`Output: ${outputDir}`);
+    console.log(`Files:  ${files.length} images\n`);
+
+    const results = [];
+    const startTime = Date.now();
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const inputPath = path.join(inputDir, file);
+
+        console.log(chalk.bold(`\n[${i + 1}/${files.length}] ${file}`));
+        const result = await processImage(inputPath, intermediatePsdDir, outputDir);
+        results.push(result);
+    }
+
+    // Summary report
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    const successResults = results.filter(r => r.success);
+    const failedResults = results.filter(r => !r.success);
+
+    console.log(chalk.bold(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`));
+    console.log(chalk.bold(`📊 SUMMARY`));
+    console.log(chalk.bold(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`));
+    console.log(`Total:     ${files.length} images`);
+    console.log(chalk.green(`Success:   ${successResults.length}`));
+    console.log(chalk.red(`Failed:    ${failedResults.length}`));
+    console.log(`Time:      ${elapsed}s`);
+    console.log(`Avg:       ${(elapsed / files.length).toFixed(2)}s per image\n`);
+
+    // Preset distribution
+    if (successResults.length > 0) {
+        const presetCounts = {};
+        successResults.forEach(r => {
+            presetCounts[r.presetId] = (presetCounts[r.presetId] || 0) + 1;
+        });
+
+        console.log(chalk.bold(`Preset Distribution:`));
+        Object.entries(presetCounts)
+            .sort((a, b) => b[1] - a[1])
+            .forEach(([preset, count]) => {
+                console.log(`  ${preset}: ${count} images`);
+            });
+        console.log();
+    }
+
+    // Save detailed results
+    const reportPath = path.join(outputDir, 'batch-report.json');
+    fs.writeFileSync(reportPath, JSON.stringify({
+        timestamp: new Date().toISOString(),
+        total: files.length,
+        success: successResults.length,
+        failed: failedResults.length,
+        elapsedSeconds: parseFloat(elapsed),
+        presetDistribution: successResults.reduce((acc, r) => {
+            acc[r.presetId] = (acc[r.presetId] || 0) + 1;
+            return acc;
+        }, {}),
+        results: successResults,
+        errors: failedResults.map(r => ({ filename: r.filename, error: r.error }))
+    }, null, 2));
+
+    console.log(chalk.green(`✓ Report saved: ${reportPath}\n`));
+
+    if (failedResults.length > 0) {
+        console.log(chalk.yellow(`Failed files:`));
+        failedResults.forEach(r => {
+            console.log(`  - ${r.filename}: ${r.error}`);
+        });
+        console.log();
+    }
+}
+
+// Run if called directly
+if (require.main === module) {
+    main().catch(err => {
+        console.error(chalk.red(`\n❌ Fatal error: ${err.message}`));
+        console.error(err.stack);
+        process.exit(1);
+    });
+}
+
+module.exports = { processImage };
