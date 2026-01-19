@@ -82,8 +82,44 @@ class PSDWriter {
         this.layers.push({
             id: this.nextLayerID++,
             name: options.name,
+            type: 'fill',
             color: options.color,
             mask: mask
+        });
+    }
+
+    /**
+     * Add a pixel layer with actual Lab image data
+     *
+     * @param {Object} options - Layer options
+     * @param {string} options.name - Layer name
+     * @param {Uint8Array} options.pixels - Lab pixel data (3 bytes per pixel: L, a, b in byte encoding)
+     * @param {boolean} [options.visible=true] - Layer visibility
+     */
+    addPixelLayer(options) {
+        if (!options.name) {
+            throw new Error('Layer name is required');
+        }
+        if (!options.pixels) {
+            throw new Error('Pixel data is required');
+        }
+
+        const pixelCount = this.width * this.height;
+        const expectedSize = pixelCount * 3;  // L, a, b
+
+        if (options.pixels.length !== expectedSize) {
+            throw new Error(
+                `Pixel data must be ${expectedSize} bytes (${this.width}×${this.height}×3), ` +
+                `got ${options.pixels.length} bytes`
+            );
+        }
+
+        this.layers.push({
+            id: this.nextLayerID++,
+            name: options.name,
+            type: 'pixel',
+            pixels: Buffer.from(options.pixels),
+            visible: options.visible !== undefined ? options.visible : true
         });
     }
 
@@ -321,36 +357,47 @@ class PSDWriter {
      * Write a single layer record
      */
     _writeLayerRecord(writer, layer) {
+        const isPixelLayer = layer.type === 'pixel';
+
         // Bounding rectangle
-        if (this.bitsPerChannel === 16) {
+        if (this.bitsPerChannel === 16 && !isPixelLayer) {
             // 16-bit fill layers: zero-size bounds
             writer.writeInt32(0);  // Top
             writer.writeInt32(0);  // Left
             writer.writeInt32(0);  // Bottom
             writer.writeInt32(0);  // Right
         } else {
-            // 8-bit fill layers: full canvas bounds
+            // Pixel layers and 8-bit layers: full canvas bounds
             writer.writeInt32(0);              // Top
             writer.writeInt32(0);              // Left
             writer.writeInt32(this.height);   // Bottom
             writer.writeInt32(this.width);    // Right
         }
 
-        // Number of channels (1 transparency + 3 Lab channels + 1 user mask)
-        writer.writeUint16(5);
+        // Number of channels
+        // Pixel layers: 1 transparency + 3 Lab channels (no mask)
+        // Fill layers: 1 transparency + 3 Lab channels + 1 user mask
+        const channelCount = isPixelLayer ? 4 : 5;
+        writer.writeUint16(channelCount);
 
         // Channel data sizes
         let transparencySize, labChannelSize, maskSize;
+        const pixelCount = this.width * this.height;
 
         if (this.bitsPerChannel === 16) {
-            // 16-bit: L/a/b have no pixel data, just compression header
-            transparencySize = 2;  // Just compression header
-            labChannelSize = 2;    // Just compression header
-            // Mask: compression header (2 bytes) + raw uncompressed mask data
-            maskSize = 2 + layer.mask.length;
+            if (isPixelLayer) {
+                // 16-bit pixel layer: all channels have actual pixel data
+                transparencySize = 2 + (pixelCount * 2);  // Compression + 16-bit pixels
+                labChannelSize = 2 + (pixelCount * 2);    // Compression + 16-bit pixels
+            } else {
+                // 16-bit fill layer: L/a/b have no pixel data, just compression header
+                transparencySize = 2;  // Just compression header
+                labChannelSize = 2;    // Just compression header
+                // Mask: compression header (2 bytes) + raw uncompressed mask data
+                maskSize = 2 + layer.mask.length;
+            }
         } else {
             // 8-bit: all channels have pixel data
-            const pixelCount = this.width * this.height;
             transparencySize = 2 + pixelCount;
             labChannelSize = 2 + pixelCount;
             maskSize = 2 + pixelCount;
@@ -376,24 +423,26 @@ class PSDWriter {
         writer.writeInt16(2);
         writer.writeUint32(labChannelSize);
 
-        // User mask (ID = -2)
-        writer.writeInt16(-2);
-        writer.writeUint32(maskSize);
+        // User mask (ID = -2) - only for fill layers
+        if (!isPixelLayer) {
+            writer.writeInt16(-2);
+            writer.writeUint32(maskSize);
+        }
 
         // Blend mode signature
         writer.writeString('8BIM');
         writer.writeString('norm');  // Normal blend mode
 
         // Opacity (0-255)
-        writer.writeUint8(255);
+        writer.writeUint8(layer.visible === false ? 0 : 255);
 
         // Clipping (0 = base)
         writer.writeUint8(0);
 
-        // Flags: Match real Photoshop files (0x18 = bits 3 and 4 set)
-        // Bit 3 (0x08): Pixel data irrelevant to appearance (fill layers)
-        // Bit 4 (0x10): Related to visibility/transparency
-        writer.writeUint8(0x18);
+        // Flags:
+        // Pixel layers: 0x00 (pixel data IS relevant)
+        // Fill layers: 0x18 (bits 3 and 4 set - pixel data irrelevant)
+        writer.writeUint8(isPixelLayer ? 0x00 : 0x18);
 
         // Filler
         writer.writeUint8(0);
@@ -433,8 +482,10 @@ class PSDWriter {
         // Layer name (Pascal string)
         writer.writePascalString(layer.name);
 
-        // Additional layer information: Solid Color (SoCo)
-        this._writeSolidColorInfo(writer, layer.color);
+        // Additional layer information: Solid Color (SoCo) - only for fill layers
+        if (!isPixelLayer) {
+            this._writeSolidColorInfo(writer, layer.color);
+        }
 
         // Additional layer information: Unicode layer name (luni)
         this._writeUnicodeLayerName(writer, layer.name);
@@ -643,29 +694,64 @@ class PSDWriter {
      * Write channel image data for a layer
      */
     _writeLayerChannelData(writer, layer) {
-        const { color, mask } = layer;
+        const { color, mask, type, pixels } = layer;
 
         // Compression type: 0 = raw (uncompressed)
         const noCompression = 0;
 
         if (this.bitsPerChannel === 16) {
-            // 16-bit fill layers: L/a/b channels have NO pixel data
-            // Transparency channel (ID=-1) - just compression header
-            writer.writeUint16(noCompression);
+            if (type === 'pixel') {
+                // 16-bit pixel layer: write actual Lab pixel data
+                const pixelCount = this.width * this.height;
 
-            // L channel - just compression header
-            writer.writeUint16(noCompression);
+                // Transparency channel (ID=-1) - all fully opaque
+                writer.writeUint16(noCompression);
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint16(65535);  // Fully opaque
+                }
 
-            // a channel - just compression header
-            writer.writeUint16(noCompression);
+                // L channel - actual pixel data (convert byte encoding to 16-bit)
+                writer.writeUint16(noCompression);
+                for (let i = 0; i < pixelCount; i++) {
+                    const L_byte = pixels[i * 3];  // 0-255
+                    const L_16 = Math.round((L_byte / 255) * 65535);
+                    writer.writeUint16(L_16);
+                }
 
-            // b channel - just compression header
-            writer.writeUint16(noCompression);
+                // a channel - actual pixel data
+                writer.writeUint16(noCompression);
+                for (let i = 0; i < pixelCount; i++) {
+                    const a_byte = pixels[i * 3 + 1];  // 0-255 (128 is neutral)
+                    const a_16 = Math.round((a_byte / 255) * 65535);
+                    writer.writeUint16(a_16);
+                }
 
-            // User mask channel (ID=-2) - actual mask data (16-bit for 16-bit files!)
-            // Write raw uncompressed mask data
-            writer.writeUint16(noCompression);
-            writer.writeBytes(mask);
+                // b channel - actual pixel data
+                writer.writeUint16(noCompression);
+                for (let i = 0; i < pixelCount; i++) {
+                    const b_byte = pixels[i * 3 + 2];  // 0-255 (128 is neutral)
+                    const b_16 = Math.round((b_byte / 255) * 65535);
+                    writer.writeUint16(b_16);
+                }
+            } else {
+                // 16-bit fill layers: L/a/b channels have NO pixel data
+                // Transparency channel (ID=-1) - just compression header
+                writer.writeUint16(noCompression);
+
+                // L channel - just compression header
+                writer.writeUint16(noCompression);
+
+                // a channel - just compression header
+                writer.writeUint16(noCompression);
+
+                // b channel - just compression header
+                writer.writeUint16(noCompression);
+
+                // User mask channel (ID=-2) - actual mask data (16-bit for 16-bit files!)
+                // Write raw uncompressed mask data
+                writer.writeUint16(noCompression);
+                writer.writeBytes(mask);
+            }
         } else {
             // 8-bit fill layers: write solid pixel data
             // Transparency channel (ID=-1) - all 255 (fully opaque)
