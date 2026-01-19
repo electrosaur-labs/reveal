@@ -1,0 +1,23 @@
+{
+  "name": "@reveal/psd-writer",
+  "version": "1.0.0",
+  "description": "Minimal PSD file writer for 8-bit Lab documents with fill+mask layers",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "dependencies": {},
+  "keywords": [
+    "psd",
+    "photoshop",
+    "lab-color",
+    "file-writer",
+    "screen-printing",
+    "color-separation"
+  ],
+  "author": "Electrosaur Labs",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
