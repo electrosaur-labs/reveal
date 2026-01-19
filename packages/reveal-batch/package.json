@@ -8,10 +8,15 @@
   },
   "scripts": {
     "start": "node src/cli.js",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "echo \"No tests yet\" && exit 0",
+    "process-cq100": "node src/processCQ100.js",
+    "test-astronaut": "node test-astronaut.js",
+    "debug-ppm": "node debug-ppm.js",
+    "debug-lab": "node debug-lab-conversion.js"
   },
   "dependencies": {
     "@reveal/core": "1.0.0",
+    "@reveal/psd-writer": "1.2.0",
     "sharp": "^0.33.0",
     "commander": "^11.1.0",
     "chalk": "^4.1.2"
