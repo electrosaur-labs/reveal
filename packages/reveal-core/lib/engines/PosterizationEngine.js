@@ -2989,8 +2989,28 @@ class PosterizationEngine {
         // It represents the paper/medium itself, not an ink layer
         const substrateColors = [];
         if (substrateLab) {
-            substrateColors.push(substrateLab);
-            logger.log(`  + Added substrate to palette: L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)} (paper/medium)`);
+            // Check if substrate is similar to any preserved color
+            // If so, skip adding substrate to avoid duplicates (e.g., white substrate + preserveWhite)
+            const DUPLICATE_THRESHOLD = 3.0; // ΔE threshold for considering colors identical
+            let isDuplicate = false;
+
+            for (const preserved of preservedColors) {
+                const dL = substrateLab.L - preserved.L;
+                const da = substrateLab.a - preserved.a;
+                const db = substrateLab.b - preserved.b;
+                const deltaE = Math.sqrt(dL * dL + da * da + db * db);
+
+                if (deltaE < DUPLICATE_THRESHOLD) {
+                    isDuplicate = true;
+                    logger.log(`  ! Substrate (L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)}) is too similar to preserved color (ΔE=${deltaE.toFixed(2)}) - skipping to avoid duplicate`);
+                    break;
+                }
+            }
+
+            if (!isDuplicate) {
+                substrateColors.push(substrateLab);
+                logger.log(`  + Added substrate to palette: L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)} (paper/medium)`);
+            }
         }
 
         // Final palette: quantized colors + preserved colors + substrate
