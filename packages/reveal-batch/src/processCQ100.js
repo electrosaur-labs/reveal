@@ -16,21 +16,12 @@ const Reveal = require('@reveal/core');
 const { PSDWriter } = require('@reveal/psd-writer');
 const { parsePPM } = require('./ppmParser');
 const MetricsCalculator = require('./MetricsCalculator');
+const DynamicConfigurator = require('./DynamicConfigurator');
 const chalk = require('chalk');
 
-// Load presets (same as reveal-adobe)
-const PRESETS = {
-    'standard-image': require('@reveal/core/presets/standard-image.json'),
-    'halftone-portrait': require('@reveal/core/presets/halftone-portrait.json'),
-    'vibrant-graphic': require('@reveal/core/presets/vibrant-graphic.json'),
-    'atmospheric-photo': require('@reveal/core/presets/atmospheric-photo.json'),
-    'pastel-high-key': require('@reveal/core/presets/pastel-high-key.json'),
-    'vintage-muted': require('@reveal/core/presets/vintage-muted.json'),
-    'deep-shadow-noir': require('@reveal/core/presets/deep-shadow-noir.json'),
-    'neon-fluorescent': require('@reveal/core/presets/neon-fluorescent.json'),
-    'textural-grunge': require('@reveal/core/presets/textural-grunge.json'),
-    'commercial-offset': require('@reveal/core/presets/commercial-offset.json')
-};
+// Load presets dynamically from reveal-core/presets directory
+const { loadPresets } = require('@reveal/core/src/presetLoader');
+const PRESETS = loadPresets();
 
 /**
  * Convert RGB to hex string
@@ -40,6 +31,58 @@ function rgbToHex(r, g, b) {
         const hex = Math.round(x).toString(16);
         return hex.length === 1 ? '0' + hex : hex;
     }).join('');
+}
+
+/**
+ * Calculate image DNA statistics from Lab pixel data
+ * @param {Uint8ClampedArray} labPixels - Lab pixel data in byte encoding
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @returns {Object} DNA object with {l, c, k, minL, maxL}
+ */
+function calculateImageDNA(labPixels, width, height) {
+    let sumL = 0;
+    let sumC = 0;
+    let sumLSquared = 0;
+    let minL = 100;
+    let maxL = 0;
+    let maxC = 0;  // Track maximum chroma for Saliency Rescue
+    let sampleCount = 0;
+
+    // Step-sampling for speed (every 40th pixel)
+    const step = 3 * 40;
+    for (let i = 0; i < labPixels.length; i += step) {
+        // Convert from byte encoding to perceptual ranges
+        const L = (labPixels[i] / 255) * 100;
+        const a = labPixels[i + 1] - 128;
+        const b = labPixels[i + 2] - 128;
+        const chroma = Math.sqrt(a**2 + b**2);
+
+        sumL += L;
+        sumLSquared += L * L;
+        sumC += chroma;
+        sampleCount++;
+
+        if (L < minL) minL = L;
+        if (L > maxL) maxL = L;
+        if (chroma > maxC) maxC = chroma;  // Track peak chroma
+    }
+
+    const avgL = sumL / sampleCount;
+    const avgC = sumC / sampleCount;
+
+    // Contrast = standard deviation of lightness
+    const varianceL = (sumLSquared / sampleCount) - (avgL * avgL);
+    const contrastK = Math.sqrt(Math.max(0, varianceL));
+
+    return {
+        l: parseFloat(avgL.toFixed(1)),
+        c: parseFloat(avgC.toFixed(1)),
+        k: parseFloat(contrastK.toFixed(1)),
+        minL: parseFloat(minL.toFixed(1)),
+        maxL: parseFloat(maxL.toFixed(1)),
+        maxC: parseFloat(maxC.toFixed(1))  // Add maxC for Saliency Rescue detection
+    };
 }
 
 /**
@@ -85,21 +128,46 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
         // console.log(`  Writing intermediate Lab PSD...`);
         // For now, skip intermediate PSD - not needed for testing mask fix
 
-        // 3. Auto-detect preset using ImageHeuristicAnalyzer
-        console.log(`  Analyzing image characteristics...`);
-        const analysis = Reveal.analyzeImage(labPixels, width, height);
+        // 3. Calculate image DNA (L, C, K, minL, maxL)
+        console.log(`  Calculating image DNA...`);
+        const dna = calculateImageDNA(labPixels, width, height);
+        dna.filename = basename;  // Add filename for debugging in DynamicConfigurator
 
-        console.log(chalk.green(`  ✓ Detected: "${analysis.label}"`));
-        console.log(`  Preset: ${analysis.presetId}`);
+        console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
 
-        // 4. Get preset parameters
-        const preset = PRESETS[analysis.presetId];
-        if (!preset) {
-            throw new Error(`Unknown preset: ${analysis.presetId}`);
-        }
+        // 4. Generate bespoke configuration using DynamicConfigurator
+        const config = DynamicConfigurator.generate(dna);
 
-        const params = preset.settings;
-        console.log(`  Parameters: ${Object.keys(params).length} settings`);
+        console.log(chalk.green(`  ✓ Configuration: "${config.name}"`));
+        console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
+
+        // Convert config to params format expected by posterization engine
+        const params = {
+            targetColorsSlider: config.targetColors,
+            blackBias: config.blackBias,
+            ditherType: config.ditherType,
+            // Add other necessary parameters with defaults
+            engineType: 'reveal',
+            centroidStrategy: 'SALIENCY',
+            lWeight: 1.0,
+            cWeight: 1.0,
+            substrateMode: 'auto',
+            substrateTolerance: 2.0,
+            vibrancyMode: 'moderate',
+            vibrancyBoost: config.saturationBoost,
+            highlightThreshold: 85,
+            highlightBoost: 1.0,
+            enablePaletteReduction: true,
+            paletteReduction: 10.0,
+            hueLockAngle: 20,
+            shadowPoint: 15,
+            colorMode: 'color',
+            preserveWhite: true,
+            preserveBlack: true,
+            ignoreTransparent: true,
+            enableHueGapAnalysis: true,
+            maskProfile: 'Gray Gamma 2.2'
+        };
 
         // 5. Posterize with detected preset
         console.log(`  Posterizing to ${params.targetColorsSlider} colors...`);
@@ -236,10 +304,11 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
                 height: height,
                 outputFile: `${basename}.psd`
             },
+            dna: dna,  // Store calculated DNA
+            configuration: config,  // Store generated configuration
             input_parameters: {
-                presetName: preset.name,
-                presetId: analysis.presetId,
-                presetSignature: analysis.label,
+                configType: 'dynamic',  // Mark as dynamically generated
+                configId: config.id,
                 targetColors: params.targetColorsSlider,
                 ...params
             },
@@ -259,8 +328,8 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
         return {
             success: true,
             filename: basename,
-            signature: analysis.label,
-            presetId: analysis.presetId,
+            configType: 'dynamic',
+            configId: config.id,
             colors: posterizeResult.paletteLab.length,
             size: psdBuffer.length,
             width,
