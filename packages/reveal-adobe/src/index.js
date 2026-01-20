@@ -1109,10 +1109,23 @@ function showPaletteEditor(selectedPalette) {
 
                 for (const layer of fullResLayers) {
                     // Check if this is the substrate layer
-                    const isSubstrate = selectedPreview.substrateLab &&
+                    // Priority 1: Match detected substrate from posterization
+                    let isSubstrate = selectedPreview.substrateLab &&
                                        Math.abs(layer.labColor.L - selectedPreview.substrateLab.L) < 0.1 &&
                                        Math.abs(layer.labColor.a - selectedPreview.substrateLab.a) < 0.1 &&
                                        Math.abs(layer.labColor.b - selectedPreview.substrateLab.b) < 0.1;
+
+                    // Priority 2: If no substrate detected, treat pure white as substrate (common case)
+                    if (!isSubstrate && !selectedPreview.substrateLab) {
+                        const isWhite = Math.abs(layer.labColor.L - 100) < 0.1 &&
+                                       Math.abs(layer.labColor.a - 0) < 0.1 &&
+                                       Math.abs(layer.labColor.b - 0) < 0.1;
+
+                        if (isWhite) {
+                            isSubstrate = true;
+                            logger.log(`  Treating white as substrate (no substrate detected): ${layer.name}`);
+                        }
+                    }
 
                     if (isSubstrate) {
                         substrateLayer = layer;
@@ -2197,8 +2210,9 @@ async function showDialog() {
                             highlightBoost: params.highlightBoost,   // Highlight boost (split.highlightBoost)
                             enablePaletteReduction: params.enablePaletteReduction,  // Enable/disable palette reduction (default: true)
                             paletteReduction: params.paletteReduction,  // Color merging threshold (prune.threshold)
-                            tuning: tuning                           // NEW: Centralized tuning configuration
+                            tuning: tuning,                          // NEW: Centralized tuning configuration
                             // ignoreTransparent is handled during RGB→Lab conversion (alpha channel check)
+                            isPreview: true                           // Enable 4× stride optimization for preview speed
                         }
                     );
 
