@@ -3,11 +3,25 @@
  *
  * Generates three categories of metrics:
  * 1. Global Fidelity - CIE76 DeltaE measurements
- * 2. Feature Preservation - Saliency-weighted error analysis
+ * 2. Feature Preservation - Saliency-weighted error analysis + efficiency penalty
  * 3. Physical Feasibility - Ink stack analysis and density breaches
+ *
+ * EFFICIENCY PENALTY (2026-01-20):
+ * Penalizes "Screen Bloat" to align metrics with economics of print.
+ * A 16-color image that looks "perfect" is actually a failure (costs too much).
+ * An 8-color image that looks "90% perfect" is a triumph.
+ *
+ * - <= 8 Colors: No penalty (Efficiency Safe Zone)
+ * - > 8 Colors: -1.5 points per extra screen
+ *   - 12 colors: -6.0 points (survivable for good images)
+ *   - 16 colors: -12.0 points (massive hit)
  */
 
 const DensityScanner = require('./DensityScanner');
+
+// --- EFFICIENCY CONSTANTS ---
+const SCREEN_LIMIT = 8;           // No penalty at or below this
+const PENALTY_PER_SCREEN = 1.5;   // Points deducted per extra screen
 
 class MetricsCalculator {
     /**
@@ -18,9 +32,10 @@ class MetricsCalculator {
      * @param {Array} layers - Array of {name, color, mask} objects
      * @param {number} width - Image width
      * @param {number} height - Image height
+     * @param {Object} config - Configuration object (optional, for targetColors)
      * @returns {Object} Complete metrics object
      */
-    static compute(originalLab, processedLab, layers, width, height) {
+    static compute(originalLab, processedLab, layers, width, height, config = {}) {
         const pixelCount = width * height;
 
         // ==================================================================
@@ -57,14 +72,25 @@ class MetricsCalculator {
         const avgDeltaE = totalDeltaE / pixelCount;
 
         // ==================================================================
-        // 2. FEATURE PRESERVATION - Saliency Loss
+        // 2. FEATURE PRESERVATION - Saliency Loss + Efficiency Penalty
         // ==================================================================
 
         const saliencyLoss = this._computeSaliencyWeightedError(deltaEMap, width, height);
 
-        // Revelation Score: Custom metric combining average error and feature loss
+        // Base Revelation Score: Visual fidelity metric
         // Formula: 100 - (avgDeltaE × 1.5) - (saliencyLoss × 2)
-        const revScore = Math.max(0, 100 - (avgDeltaE * 1.5) - (saliencyLoss * 2));
+        const baseRevScore = Math.max(0, 100 - (avgDeltaE * 1.5) - (saliencyLoss * 2));
+
+        // Efficiency Penalty: Penalize screen bloat
+        // <= 8 colors: no penalty, > 8 colors: -1.5 per extra screen
+        const screenCount = config.targetColors || layers.length;
+        let efficiencyPenalty = 0;
+        if (screenCount > SCREEN_LIMIT) {
+            efficiencyPenalty = (screenCount - SCREEN_LIMIT) * PENALTY_PER_SCREEN;
+        }
+
+        // Final Revelation Score with efficiency penalty applied
+        const revScore = Math.max(0, baseRevScore - efficiencyPenalty);
 
         // ==================================================================
         // 3. PHYSICAL FEASIBILITY - Ink Stack Analysis
@@ -128,6 +154,9 @@ class MetricsCalculator {
             },
             feature_preservation: {
                 revelationScore: parseFloat(revScore.toFixed(1)),
+                baseScore: parseFloat(baseRevScore.toFixed(1)),
+                efficiencyPenalty: parseFloat(efficiencyPenalty.toFixed(1)),
+                screenCount: screenCount,
                 saliencyLoss: parseFloat(saliencyLoss.toFixed(2))
             },
             physical_feasibility: {

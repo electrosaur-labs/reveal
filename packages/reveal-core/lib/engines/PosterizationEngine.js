@@ -548,16 +548,24 @@ class PosterizationEngine {
             counts[idx]++;
         }
 
-        // Find indices of colors that meet the threshold (or are protected)
+        // Find indices of colors that meet the threshold (or are protected with actual pixels)
         const viableIndices = [];
         counts.forEach((count, i) => {
-            // Always keep protected colors (preserved colors, substrate)
+            const coverage = count / totalPixels;
+
+            // Protected indices (preserved colors, substrate) are kept ONLY if they have pixels
             if (protectedIndices.has(i)) {
-                viableIndices.push(i);
+                if (count > 0) {
+                    // Protected color with actual pixel assignments - keep it
+                    viableIndices.push(i);
+                } else {
+                    // Protected color with 0% coverage - remove it (creates empty mask)
+                    logger.log(`Pruning protected "Ghost" color: Index ${i} (Coverage: 0.00%) - no pixels assigned`);
+                }
                 return;
             }
 
-            const coverage = count / totalPixels;
+            // Non-protected colors must meet threshold
             if (coverage >= threshold) {
                 viableIndices.push(i);
             } else {
