@@ -6,6 +6,7 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 const Reveal = require('@reveal/core');
+const LabConverter = require('@reveal/core/lib/utils/LabConverter');
 
 class ImageProcessor {
   constructor(inputPath, options = {}) {
@@ -49,16 +50,8 @@ class ImageProcessor {
       .raw()
       .toBuffer();
 
-    // Convert Lab values to Photoshop encoding (0-255)
-    const labPixels = new Uint8ClampedArray(labBuffer.length);
-    for (let i = 0; i < labBuffer.length; i += 3) {
-      // L: 0-100 → 0-255
-      labPixels[i] = Math.round((labBuffer[i] / 100) * 255);
-      // a: -128 to 127 → 0-255
-      labPixels[i + 1] = Math.round(labBuffer[i + 1] + 128);
-      // b: -128 to 127 → 0-255
-      labPixels[i + 2] = Math.round(labBuffer[i + 2] + 128);
-    }
+    // Convert Sharp Lab format to Photoshop encoding (0-255)
+    const labPixels = LabConverter.sharpToPhotoshop(labBuffer);
 
     return {
       pixels: labPixels,
