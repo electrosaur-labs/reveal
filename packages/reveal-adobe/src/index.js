@@ -413,6 +413,62 @@ function hexToRgb(hex) {
 }
 
 /**
+ * Build remap table for soft-deleted colors
+ * Maps each deleted color index to nearest surviving color index
+ * Uses perceptual Lab distance for nearest neighbor search
+ * @param {Array<string>} hexColors - Hex color palette (#RRGGBB)
+ * @param {Set<number>} deletedIndices - Indices of deleted colors
+ * @returns {Uint8Array} - Lookup table: oldIndex → newIndex
+ */
+function buildRemapTable(hexColors, deletedIndices) {
+    const remapTable = new Uint8Array(hexColors.length);
+
+    // Build list of surviving colors with their Lab values
+    const survivorIndices = [];
+    const survivorLabColors = [];
+
+    for (let i = 0; i < hexColors.length; i++) {
+        if (!deletedIndices.has(i)) {
+            survivorIndices.push(i);
+            // Convert hex → RGB → Lab
+            const rgb = hexToRgb(hexColors[i]);
+            const lab = PosterizationEngine.rgbToLab(rgb);
+            survivorLabColors.push(lab);
+        }
+    }
+
+    // For each color (deleted or not), find nearest survivor
+    for (let i = 0; i < hexColors.length; i++) {
+        if (deletedIndices.has(i)) {
+            // Deleted color: find nearest survivor
+            const rgb = hexToRgb(hexColors[i]);
+            const lab = PosterizationEngine.rgbToLab(rgb);
+
+            let nearestIndex = survivorIndices[0];
+            let minDistance = Infinity;
+
+            for (let j = 0; j < survivorLabColors.length; j++) {
+                const distance = PosterizationEngine._calculateLabDistance(
+                    lab,
+                    survivorLabColors[j]
+                );
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestIndex = survivorIndices[j];
+                }
+            }
+
+            remapTable[i] = nearestIndex;
+        } else {
+            // Survivor: maps to itself
+            remapTable[i] = i;
+        }
+    }
+
+    return remapTable;
+}
+
+/**
  * Convert RGB float values (0-1) to hex string
  * Photoshop Color Picker returns RGB as floats 0-1
  * @param {Object} rgbFloat - {red, grain/green, blue} values 0-1
@@ -553,7 +609,8 @@ function initializePreviewCanvas(width, height, palette, assignments) {
         height: height,
         palette: palette,
         assignments: assignments,
-        activeSoloIndex: null  // null = show all, number = solo that color
+        activeSoloIndex: null,  // null = show all, number = solo that color
+        deletedIndices: new Set()  // Track soft-deleted color indices
     };
 
     // Add click handler to canvas - clicking canvas shows all colors
@@ -597,14 +654,34 @@ function renderPreview() {
     const assignments = state.assignments;
     const palette = state.palette;
     const activeSoloIndex = state.activeSoloIndex;
+    const deletedIndices = state.deletedIndices;
     const width = state.width;
     const height = state.height;
 
-    logger.log(`Rendering preview (solo mode: ${activeSoloIndex !== null})`);
+    logger.log(`Rendering preview (solo mode: ${activeSoloIndex !== null}, deleted: ${deletedIndices.size})`);
     logger.log(`  Canvas: ${width}×${height}, display=${canvas.style.display}, offsetHeight=${canvas.offsetHeight}, palette.length=${palette.length}, assignments.length=${assignments.length}`);
 
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
+    // Track deleted colors to show them as black in preview
+    const showDeletedAsBlack = deletedIndices.size > 0;
+    if (showDeletedAsBlack) {
+        logger.log(`  Showing ${deletedIndices.size} deleted colors as black in preview`);
+    }
+
+    // Force complete canvas clear by resetting dimensions
+    // This ensures a clean repaint (fixes "hit or miss" rendering issues)
+    canvas.width = width;
+    canvas.height = height;
+
+    // Also reset CSS dimensions to match (required for UXP)
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    // When in solo mode, fill background with semi-transparent dark gray
+    // This prevents white background from showing through transparent areas
+    if (activeSoloIndex !== null) {
+        ctx.fillStyle = 'rgba(40, 40, 40, 1)';
+        ctx.fillRect(0, 0, width, height);
+    }
 
     // Render pixels with run-length encoding for performance
     for (let y = 0; y < height; y++) {
@@ -612,6 +689,9 @@ function renderPreview() {
         while (x < width) {
             const idx = y * width + x;
             const colorIndex = assignments[idx];
+
+            // Check if this color is deleted
+            const isDeleted = deletedIndices.has(colorIndex);
 
             // In solo mode: show selected color normally, skip others (transparent)
             const isMatching = (activeSoloIndex === null || colorIndex === activeSoloIndex);
@@ -632,7 +712,8 @@ function renderPreview() {
             }
 
             // This pixel matches - render it
-            let hexColor = palette[colorIndex];
+            // Show deleted colors as black
+            let hexColor = isDeleted ? '#000000' : palette[colorIndex];
 
             // DEFENSIVE: Handle undefined palette entries
             if (!hexColor || hexColor === 'undefined') {
@@ -640,15 +721,16 @@ function renderPreview() {
                 hexColor = '#FF00FF'; // Magenta to highlight the issue
             }
 
-            // Find run length of same color (within matching pixels)
+            // Find run length of same color and deletion state (within matching pixels)
             let runLength = 1;
             while (x + runLength < width) {
                 const nextIdx = y * width + (x + runLength);
                 const nextColorIndex = assignments[nextIdx];
+                const nextIsDeleted = deletedIndices.has(nextColorIndex);
                 const nextIsMatching = (activeSoloIndex === null || nextColorIndex === activeSoloIndex);
 
-                // Break if pixel doesn't match OR color changes
-                if (!nextIsMatching || nextColorIndex !== colorIndex) break;
+                // Break if pixel doesn't match OR color changes OR deletion state changes
+                if (!nextIsMatching || nextColorIndex !== colorIndex || nextIsDeleted !== isDeleted) break;
 
                 runLength++;
             }
@@ -679,9 +761,19 @@ function updateSwatchHighlights() {
     const container = document.getElementById('paletteEditorContainer');
     if (!container) return;
 
+    // Get substrate info to convert swatch indices to palette indices
+    const selectedPreview = window.selectedPreview;
+    const substrateIndex = selectedPreview?.substrateIndex;
+
     const swatches = container.querySelectorAll('.editable-swatch');
-    swatches.forEach((swatch, index) => {
-        if (state.activeSoloIndex === index) {
+    swatches.forEach((swatch, swatchIndex) => {
+        // Convert swatch index to palette index (accounting for substrate offset)
+        let paletteIndex = swatchIndex;
+        if (substrateIndex !== null && swatchIndex >= substrateIndex) {
+            paletteIndex = swatchIndex + 1;  // Skip the substrate index
+        }
+
+        if (state.activeSoloIndex === paletteIndex) {
             // Highlight active swatch
             swatch.style.border = '3px solid #0078d4';
             swatch.style.boxShadow = '0 0 8px rgba(0,120,212,0.6)';
@@ -694,8 +786,76 @@ function updateSwatchHighlights() {
 }
 
 /**
+ * Update visual feedback for deleted/restored swatches
+ * Shows opacity, grayscale, and "DELETED" badge for deleted colors
+ * Shows "SUBSTRATE" badge for protected substrate colors
+ */
+function updateSwatchVisuals() {
+    const state = window.previewState;
+    if (!state) return;
+
+    const container = document.getElementById('editablePaletteContainer');
+    if (!container) return;
+
+    // Get substrate info to convert swatch indices to palette indices
+    const selectedPreview = window.selectedPreview;
+    const substrateIndex = selectedPreview?.substrateIndex;
+
+    const swatches = container.querySelectorAll('.editable-swatch');
+    swatches.forEach((swatch, swatchIndex) => {
+        // Convert swatch index to palette index (accounting for substrate offset)
+        let paletteIndex = swatchIndex;
+        if (substrateIndex !== null && swatchIndex >= substrateIndex) {
+            paletteIndex = swatchIndex + 1;  // Skip the substrate index
+        }
+
+        const isDeleted = state.deletedIndices.has(paletteIndex);
+
+        if (isDeleted) {
+            // Deleted state: low opacity + grayscale + badge
+            swatch.style.opacity = '0.4';
+            swatch.style.filter = 'grayscale(100%)';
+
+            // Add "DELETED" badge if not already present
+            if (!swatch.querySelector('.deleted-badge')) {
+                const badge = document.createElement('div');
+                badge.className = 'deleted-badge';
+                badge.textContent = 'DELETED';
+                badge.style.cssText = `
+                    position: absolute;
+                    bottom: 2px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: rgba(255, 0, 0, 0.9);
+                    color: white;
+                    font-size: 9px;
+                    font-weight: bold;
+                    padding: 2px 4px;
+                    border-radius: 3px;
+                    pointer-events: none;
+                `;
+                swatch.appendChild(badge);
+            }
+        } else {
+            // Normal state: full opacity + no filter
+            swatch.style.opacity = '1';
+            swatch.style.filter = 'none';
+
+            // Remove deleted badge if present
+            const deletedBadge = swatch.querySelector('.deleted-badge');
+            if (deletedBadge) {
+                deletedBadge.remove();
+            }
+        }
+    });
+
+    // Also update highlight state (preserves border styling)
+    updateSwatchHighlights();
+}
+
+/**
  * Handle swatch click - toggle highlight for that color in preview
- * @param {number} featureIndex - Index of the color feature (0-based)
+ * @param {number} featureIndex - Index of the color feature (0-based, swatch index)
  */
 function handleSwatchClick(featureIndex) {
     const state = window.previewState;
@@ -704,21 +864,92 @@ function handleSwatchClick(featureIndex) {
         return;
     }
 
+    // Convert swatch index to palette index (accounting for substrate offset)
+    const selectedPreview = window.selectedPreview;
+    const substrateIndex = selectedPreview?.substrateIndex;
+
+    let paletteIndex = featureIndex;
+    if (substrateIndex !== null && featureIndex >= substrateIndex) {
+        paletteIndex = featureIndex + 1;  // Skip the substrate index
+    }
+
     // Toggle solo mode for this color
-    if (state.activeSoloIndex === featureIndex) {
+    if (state.activeSoloIndex === paletteIndex) {
         // Already showing this color - turn off solo mode (show all)
         state.activeSoloIndex = null;
         logger.log(`Showing all colors`);
     } else {
-        // Show only this color
-        state.activeSoloIndex = featureIndex;
-        logger.log(`Highlighting color ${featureIndex + 1}`);
+        // Show only this color (using palette index)
+        state.activeSoloIndex = paletteIndex;
+        logger.log(`Highlighting swatch ${featureIndex + 1} (palette index ${paletteIndex})`);
     }
 
     // Update swatch highlighting
     updateSwatchHighlights();
 
     // Re-render preview
+    renderPreview();
+}
+
+/**
+ * Handle Alt+Click on swatch to toggle soft delete state
+ * @param {number} swatchIndex - Zero-based swatch index (INK colors only, excluding substrate)
+ */
+function handleSwatchDelete(swatchIndex) {
+    const state = window.previewState;
+    if (!state) {
+        logger.log("Preview not available");
+        return;
+    }
+
+    // Convert swatch index to full palette index (accounting for substrate offset)
+    const selectedPreview = window.selectedPreview;
+    const substrateIndex = selectedPreview?.substrateIndex;
+
+    // If there's a substrate and it's before this swatch, offset the palette index
+    let paletteIndex = swatchIndex;
+    if (substrateIndex !== null && swatchIndex >= substrateIndex) {
+        paletteIndex = swatchIndex + 1;  // Skip the substrate index
+    }
+
+    const deletedIndices = state.deletedIndices;
+    const totalColors = state.palette.length;
+
+    // Toggle deleted state
+    if (deletedIndices.has(paletteIndex)) {
+        // Restore color
+        deletedIndices.delete(paletteIndex);
+        logger.log(`Restored swatch ${swatchIndex + 1} (palette index ${paletteIndex})`);
+    } else {
+        // Delete color
+        const survivorCount = totalColors - deletedIndices.size;
+
+        // Edge case: Prevent deleting all colors
+        if (survivorCount === 1) {
+            alert('Cannot delete all colors. At least one color must remain.');
+            return;
+        }
+
+        // Warning: Confirm if deleting to single color
+        if (survivorCount === 2) {
+            const confirmed = confirm('This will leave only 1 color. Continue?');
+            if (!confirmed) return;
+        }
+
+        deletedIndices.add(paletteIndex);
+        logger.log(`Deleted swatch ${swatchIndex + 1} (palette index ${paletteIndex}, ${survivorCount - 1} survivors remaining)`);
+
+        // Clear solo mode if deleted color was active
+        if (state.activeSoloIndex === paletteIndex) {
+            state.activeSoloIndex = null;
+            logger.log('  Cleared solo mode (deleted color was active)');
+        }
+    }
+
+    // Update visual feedback
+    updateSwatchVisuals();
+
+    // Re-render preview with updated deletions
     renderPreview();
 }
 
@@ -779,7 +1010,7 @@ function showPaletteEditor(selectedPalette) {
                      style="background-color: ${hex};"
                      data-feature-index="${featureIndex}"
                      data-hex="${hex}"
-                     title="Click swatch to highlight in preview">
+                     title="Click: Highlight in preview&#10;Alt+Click: Toggle delete">
                     <div class="lightness-badge">L${lightnessPercent}</div>
                 </div>
                 <div class="editable-swatch-label">${lightnessLabel}</div>
@@ -801,6 +1032,9 @@ function showPaletteEditor(selectedPalette) {
 
     // Initial render
     renderPaletteSwatches();
+
+    // Apply visual state (deleted colors, etc.)
+    updateSwatchVisuals();
 
     // CRITICAL: Force UXP to recalculate flex layout after innerHTML injection
     // This fixes the "offsetWidth: 0, offsetHeight: 0" issue in UXP
@@ -951,9 +1185,16 @@ function showPaletteEditor(selectedPalette) {
                 event.stopPropagation(); // Prevent bubbling
 
                 const featureIndex = parseInt(swatch.dataset.featureIndex);
-                logger.log(`🔍 Swatch ${featureIndex + 1} clicked - highlighting in preview`);
 
-                // Toggle highlight for this color in canvas preview
+                // Alt+Click: Toggle delete state
+                if (event.altKey) {
+                    logger.log(`🗑️ Swatch ${featureIndex + 1} Alt+Clicked - toggling delete state`);
+                    handleSwatchDelete(featureIndex);
+                    return;
+                }
+
+                // Normal click: Toggle highlight in preview
+                logger.log(`🔍 Swatch ${featureIndex + 1} clicked - highlighting in preview`);
                 handleSwatchClick(featureIndex);
             });
         });
@@ -1032,6 +1273,25 @@ function showPaletteEditor(selectedPalette) {
         logger.log("Applying separation with Sovereign Palette:", selectedPreview.hexColors);
         logger.log("✓ User-edited colors are law - generating plates with exact hex values");
 
+        // Filter out soft-deleted colors before separation
+        let hexColors = selectedPreview.hexColors;
+        let originalHexColors = selectedPreview.originalHexColors;
+        let paletteLab = selectedPreview.paletteLab;
+
+        if (window.previewState && window.previewState.deletedIndices.size > 0) {
+            const deletedIndices = window.previewState.deletedIndices;
+            logger.log(`🗑️ Filtering out ${deletedIndices.size} soft-deleted colors before separation`);
+
+            // Filter all palette arrays to exclude deleted colors
+            hexColors = selectedPreview.hexColors.filter((_, idx) => !deletedIndices.has(idx));
+            originalHexColors = selectedPreview.originalHexColors.filter((_, idx) => !deletedIndices.has(idx));
+            paletteLab = selectedPreview.paletteLab.filter((_, idx) => !deletedIndices.has(idx));
+
+            logger.log(`  Original palette: ${selectedPreview.hexColors.length} colors`);
+            logger.log(`  Filtered palette: ${hexColors.length} colors`);
+            logger.log(`  Deleted colors: ${Array.from(deletedIndices).map(i => selectedPreview.hexColors[i]).join(', ')}`);
+        }
+
         // Track separation start time for golden stats
         const separationStartTime = Date.now();
 
@@ -1056,13 +1316,14 @@ function showPaletteEditor(selectedPalette) {
 
                 // Use original colors for assignment, edited colors for rendering
                 // This ensures pixels stay assigned to the same features even if ink colors change
+                // Use filtered palettes if colors were soft-deleted
                 const layers = await SeparationEngine.separateImage(
                     posterizationData.originalPixels,
                     posterizationData.originalWidth,
                     posterizationData.originalHeight,
-                    selectedPreview.hexColors,          // Rendering palette (user-edited)
-                    selectedPreview.originalHexColors,  // Assignment palette (original discovery)
-                    selectedPreview.paletteLab,         // Lab palette (NO RGB→Lab conversion)
+                    hexColors,          // Rendering palette (user-edited, filtered)
+                    originalHexColors,  // Assignment palette (original discovery, filtered)
+                    paletteLab,         // Lab palette (NO RGB→Lab conversion, filtered)
                     {
                         onProgress: (percent) => {
                             logger.log(`Preview separation progress: ${percent}%`);
@@ -1088,9 +1349,9 @@ function showPaletteEditor(selectedPalette) {
                     fullResPixels.pixels,
                     fullResPixels.width,
                     fullResPixels.height,
-                    selectedPreview.hexColors,          // Rendering palette (user-edited)
-                    selectedPreview.originalHexColors,  // Assignment palette (original discovery)
-                    selectedPreview.paletteLab,         // Lab palette (NO RGB→Lab conversion)
+                    hexColors,          // Rendering palette (user-edited, filtered)
+                    originalHexColors,  // Assignment palette (original discovery, filtered)
+                    paletteLab,         // Lab palette (NO RGB→Lab conversion, filtered)
                     {
                         onProgress: (percent) => {
                             logger.log(`Full-res separation progress: ${percent}%`);
@@ -2390,7 +2651,7 @@ async function showDialog() {
                         initializePreviewCanvas(
                             pixelData.width,
                             pixelData.height,
-                            hexColors,
+                            hexColors,  // Use ALL colors (matches assignment indices)
                             result.assignments
                         );
 
