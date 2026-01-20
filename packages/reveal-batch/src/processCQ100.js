@@ -234,16 +234,36 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
             visible: false
         });
 
-        // Add separated fill+mask layers (top layers)
-        for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
-            const color = posterizeResult.paletteLab[i];
-            const rgbColor = posterizeResult.palette[i];
-            const hex = rgbToHex(rgbColor.r, rgbColor.g, rgbColor.b);
+        // Sort layers for screen printing: Light to Dark (Bottom to Top)
+        // Create layer objects with all necessary data
+        console.log(`  Sorting layers by lightness (light→dark)...`);
+        const layersToWrite = posterizeResult.paletteLab.map((color, i) => ({
+            index: i,
+            color: color,
+            rgbColor: posterizeResult.palette[i],
+            mask: masks[i],
+            coverage: (coverageCounts[i] / pixelCount) * 100
+        }));
+
+        // Sort by L value: HIGH to LOW (light to dark)
+        // In PSD stacking: First layer created = bottom, last layer created = top
+        // Screen printing order: Light inks print first (bottom), dark inks print last (top)
+        layersToWrite.sort((a, b) => b.color.L - a.color.L);
+
+        console.log(`  Layer order (bottom→top):`);
+        layersToWrite.forEach((layer, idx) => {
+            const hex = rgbToHex(layer.rgbColor.r, layer.rgbColor.g, layer.rgbColor.b);
+            console.log(`    ${idx + 1}. Color ${layer.index + 1} (${hex}) - L=${layer.color.L.toFixed(1)}, Coverage=${layer.coverage.toFixed(2)}%`);
+        });
+
+        // Add separated fill+mask layers in sorted order
+        for (const layer of layersToWrite) {
+            const hex = rgbToHex(layer.rgbColor.r, layer.rgbColor.g, layer.rgbColor.b);
 
             writer.addFillLayer({
-                name: `Color ${i + 1} (${hex})`,
-                color: color,
-                mask: masks[i]
+                name: `Color ${layer.index + 1} (${hex})`,
+                color: layer.color,
+                mask: layer.mask
             });
         }
 
