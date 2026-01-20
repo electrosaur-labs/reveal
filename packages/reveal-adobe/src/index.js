@@ -1112,16 +1112,38 @@ function showPaletteEditor(selectedPalette) {
                 let blackLayer = null;
                 let detectedSubstrateLayer = null;
 
+                // Calculate total pixels for coverage percentage
+                const totalPixels = fullResPixels.width * fullResPixels.height;
+                const SUBSTRATE_MIN_COVERAGE = 5.0; // Minimum 5% coverage to be considered substrate
+
+                logger.log(`Analyzing ${fullResLayers.length} layers for substrate detection:`);
                 for (const layer of fullResLayers) {
+                    // Calculate coverage percentage for this layer
+                    // Count non-zero pixels in mask
+                    let coveragePixels = 0;
+                    for (let i = 0; i < layer.mask.length; i++) {
+                        if (layer.mask[i] > 0) coveragePixels++;
+                    }
+                    const coveragePercent = (coveragePixels / totalPixels) * 100;
+
+                    logger.log(`  Layer: ${layer.name} | L=${layer.labColor.L.toFixed(2)} a=${layer.labColor.a.toFixed(2)} b=${layer.labColor.b.toFixed(2)} | Coverage: ${coveragePercent.toFixed(1)}%`);
+
                     // Check for pure white (L=100, a=0, b=0)
-                    const isWhite = Math.abs(layer.labColor.L - 100) < 0.1 &&
-                                   Math.abs(layer.labColor.a - 0) < 0.1 &&
-                                   Math.abs(layer.labColor.b - 0) < 0.1;
+                    // Tolerance: L within 0.5, a/b within 2 (allows for slight tinting)
+                    // Requires > 5% coverage to avoid treating highlights as substrate
+                    const isWhite = Math.abs(layer.labColor.L - 100) < 0.5 &&
+                                   Math.abs(layer.labColor.a - 0) < 2 &&
+                                   Math.abs(layer.labColor.b - 0) < 2 &&
+                                   coveragePercent >= SUBSTRATE_MIN_COVERAGE;
 
                     // Check for pure black (L=0, a=0, b=0)
-                    const isBlack = Math.abs(layer.labColor.L - 0) < 0.1 &&
-                                   Math.abs(layer.labColor.a - 0) < 0.1 &&
-                                   Math.abs(layer.labColor.b - 0) < 0.1;
+                    // More lenient tolerance: L < 5 (very dark), a/b within 5 (slight color cast ok)
+                    // This catches near-black backgrounds that aren't perfectly L=0
+                    // Requires > 5% coverage to be considered substrate
+                    const isBlack = layer.labColor.L < 5 &&
+                                   Math.abs(layer.labColor.a - 0) < 5 &&
+                                   Math.abs(layer.labColor.b - 0) < 5 &&
+                                   coveragePercent >= SUBSTRATE_MIN_COVERAGE;
 
                     // Check for detected substrate from posterization
                     const matchesDetectedSubstrate = selectedPreview.substrateLab &&
@@ -1131,12 +1153,16 @@ function showPaletteEditor(selectedPalette) {
 
                     if (isWhite) {
                         whiteLayer = layer;
+                        logger.log(`    → Identified as WHITE layer`);
                     } else if (isBlack) {
                         blackLayer = layer;
+                        logger.log(`    → Identified as BLACK layer`);
                     } else if (matchesDetectedSubstrate) {
                         detectedSubstrateLayer = layer;
+                        logger.log(`    → Identified as DETECTED SUBSTRATE`);
                     } else {
                         inkLayers.push(layer);
+                        logger.log(`    → Added to INK LAYERS`);
                     }
                 }
 
