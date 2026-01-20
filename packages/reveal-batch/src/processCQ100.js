@@ -17,6 +17,7 @@ const { PSDWriter } = require('@reveal/psd-writer');
 const { parsePPM } = require('./ppmParser');
 const MetricsCalculator = require('./MetricsCalculator');
 const DynamicConfigurator = require('./DynamicConfigurator');
+const LabConverter = require('@reveal/core/lib/utils/LabConverter');
 const chalk = require('chalk');
 
 // Load presets dynamically from reveal-core/presets directory
@@ -35,54 +36,15 @@ function rgbToHex(r, g, b) {
 
 /**
  * Calculate image DNA statistics from Lab pixel data
+ * Now delegates to LabConverter.generateDNA()
+ *
  * @param {Uint8ClampedArray} labPixels - Lab pixel data in byte encoding
  * @param {number} width - Image width
  * @param {number} height - Image height
- * @returns {Object} DNA object with {l, c, k, minL, maxL}
+ * @returns {Object} DNA object with {l, c, k, minL, maxL, maxC}
  */
 function calculateImageDNA(labPixels, width, height) {
-    let sumL = 0;
-    let sumC = 0;
-    let sumLSquared = 0;
-    let minL = 100;
-    let maxL = 0;
-    let maxC = 0;  // Track maximum chroma for Saliency Rescue
-    let sampleCount = 0;
-
-    // Step-sampling for speed (every 40th pixel)
-    const step = 3 * 40;
-    for (let i = 0; i < labPixels.length; i += step) {
-        // Convert from byte encoding to perceptual ranges
-        const L = (labPixels[i] / 255) * 100;
-        const a = labPixels[i + 1] - 128;
-        const b = labPixels[i + 2] - 128;
-        const chroma = Math.sqrt(a**2 + b**2);
-
-        sumL += L;
-        sumLSquared += L * L;
-        sumC += chroma;
-        sampleCount++;
-
-        if (L < minL) minL = L;
-        if (L > maxL) maxL = L;
-        if (chroma > maxC) maxC = chroma;  // Track peak chroma
-    }
-
-    const avgL = sumL / sampleCount;
-    const avgC = sumC / sampleCount;
-
-    // Contrast = standard deviation of lightness
-    const varianceL = (sumLSquared / sampleCount) - (avgL * avgL);
-    const contrastK = Math.sqrt(Math.max(0, varianceL));
-
-    return {
-        l: parseFloat(avgL.toFixed(1)),
-        c: parseFloat(avgC.toFixed(1)),
-        k: parseFloat(contrastK.toFixed(1)),
-        minL: parseFloat(minL.toFixed(1)),
-        maxL: parseFloat(maxL.toFixed(1)),
-        maxC: parseFloat(maxC.toFixed(1))  // Add maxC for Saliency Rescue detection
-    };
+    return LabConverter.generateDNA(labPixels, width, height, 40);
 }
 
 /**
