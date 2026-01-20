@@ -1,695 +1,277 @@
-# Reveal Project Session State - 2026-01-19
+# Reveal Project Session State - 2026-01-20
 
 ## Executive Summary
-✅ **Complete dithering algorithm integration** - All 6 algorithms fully implemented, tested, and wired to UI
-✅ **Preset architecture refactoring** - Moved from reveal-adobe to reveal-core for reusability
-✅ **Parameter analysis complete** - All 24 UI parameters documented and mapped to engine usage
-✅ **Added 3 new presets with full 23-parameter structure** - Total: 13 presets
-✅ **Existing 10 presets expanded to 23 parameters** - User updated manually
-✅ **Checkbox event dispatch fix** - Removed CustomEvent dispatch for checkboxes
-✅ **Substrate duplication fix** - Prevented duplicate white layer when preserveWhite + substrate both add white
-✅ **Full clean rebuild successful** - No new failures, 125 tests passing
-🚧 **Starting @reveal/psd-writer package** - For CQ100 validation dataset generation
+
+✅ **MetaAnalyzer calibration complete** - Failure threshold tuned to capture only true outliers
+✅ **Efficiency penalty system implemented** - Screen count penalty in revelation score
+✅ **Chroma Driver v1.3 deployed** - Color budget based on saturation, not contrast
+✅ **SP-50 dataset tooling created** - DatasetArchitect analyzes dataset diversity
+✅ **RevealEngine proposal documented** - Future refactor design saved for later
+🚧 **SP-50 dataset needed** - CQ100 too homogeneous for stingy configurator tuning
 
 ---
 
-## Current Work: PSD Writer Package (8-bit Lab Multi-Layer) 🚧
+## Current Work: Metrics Calibration & SP-50 Dataset (2026-01-20)
 
-**Date:** 2026-01-19 (Current Session)
-**Status:** IN PROGRESS
+**Date:** 2026-01-20 (Current Session)
+**Status:** PHASE 1 COMPLETE - Ready for SP-50 image collection
 
-### Objective: Create CQ100_v4 Reference Dataset
+### Session Focus
 
-**Goal:** Process 100 reference test images (CQ100_v4 database) and generate:
-1. 8-bit Lab PSD files with separated layers (fill+mask for each color)
-2. Validation JSON metadata for each separation
-
-**Why PSD Format:**
-- Need multi-layer output to preserve separation structure
-- Multi-layer TIFF writing too complex to implement
-- PSD is the only feasible multi-layer format from Node.js
-- **Constraint:** ag-psd library CANNOT write Lab color mode
-- **Solution:** Implement minimal Lab PSD writer ourselves
-
-### Requirements
-
-**PSD File Structure (Minimal):**
-- 8-bit Lab color mode (mode=9)
-- Multiple layers, each with:
-  - Solid color fill (single Lab value)
-  - 8-bit grayscale layer mask
-- Composite preview image (optional)
-
-**What We DON'T Need:**
-- Text layers, shape layers, adjustment layers
-- Smart objects, layer effects, vector masks
-- Complex blending modes or advanced features
-- Generic PSD writer - only fill+mask layers
-
-### Research Completed
-
-**PSD Format Documentation:**
-- Official Adobe spec: [adobe.com/devnet-apps/photoshop/fileformatashtml](https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/)
-- Lab mode confirmed: Color mode = 9
-- 8-bit per channel Lab mode confirmed valid ([Peachpit](https://www.peachpit.com/articles/article.aspx?p=1377268&seqNum=5))
-
-**PSD File Structure (5 sections):**
-1. File Header - dimensions, channels, bit depth, color mode
-2. Color Mode Data - palette data (empty for Lab)
-3. Image Resources - metadata (minimal)
-4. Layer and Mask Information - layer records, masks, blend modes
-5. Image Data - composite preview (planar format)
-
-**Layer Structure:**
-- Bounding box (top, left, bottom, right)
-- Channel info (ID, compression, data length)
-- Blend mode, opacity, flags
-- Layer mask data (bounds, default color, flags)
-- Solid color fill ('SoCo' key with descriptor format)
-
-**Channel Data Encoding:**
-- Compression type: 0=raw, 1=RLE (PackBits)
-- 8-bit channels: 1 byte per pixel
-- Lab encoding: L (0-255 maps to 0-100), a/b (0-255 maps to -128 to +127)
-
-### Implementation Plan
-
-**Package:** `@reveal/psd-writer` (standalone PSD format writer)
-
-**Phase 1: Synthetic Test Program**
-- Create minimal Lab PSD writer
-- Generate synthetic test file with 2-3 solid color fill+mask layers
-- Verify opens correctly in Photoshop
-
-**Phase 2: Integration with @reveal/core**
-- Accept separation results (palette + masks)
-- Write PSD with proper fill+mask layers
-- Composite preview from separated layers
-
-**Phase 3: CQ100 Batch Processing**
-- Process 100 test images
-- Auto-select presets
-- Generate PSD + JSON for each
-
-### Implementation Status
-
-✅ **Phase 1 Complete:** Synthetic test program working
-
-**Files Created:**
-- `packages/reveal-psd-writer/package.json` - Package manifest
-- `packages/reveal-psd-writer/README.md` - Documentation
-- `packages/reveal-psd-writer/src/BinaryWriter.js` - Binary writing utilities (118 lines)
-- `packages/reveal-psd-writer/src/PSDWriter.js` - Main PSD writer (331 lines)
-- `packages/reveal-psd-writer/src/index.js` - Package exports
-- `packages/reveal-psd-writer/examples/synthetic-test.js` - Test program
-
-**Test Results:**
-- ✅ PSD file generated: `examples/synthetic-test-output.psd` (147 KB)
-- ✅ 100x100 pixels, 8-bit Lab color mode
-- ✅ 3 layers with solid fills and masks
-- ⏳ Awaiting Photoshop validation
-
-**PSD Format Implementation:**
-- File Header: ✅ Complete
-- Color Mode Data: ✅ Complete (empty for Lab)
-- Image Resources: ✅ Complete (minimal)
-- Layer & Mask Info: ✅ Complete (fill layers with masks)
-- Image Data: ✅ Complete (black composite placeholder)
-
-### Current Status - Phase 1 Issues
-
-**Problem:** Generated PSD opens in Photoshop but:
-- ✅ 3 layers appear (correct)
-- ✅ Layers are visible (fixed)
-- ❌ Layers show as raster, not fill layers
-- ❌ Masks don't appear
-- ⚠️ Photoshop warns about "unknown data"
-
-**Root Cause:** SoCo (Solid Color) descriptor format not recognized by Photoshop.
-
-**New Approach:** Empirical validation
-1. Create reference PSD in Photoshop with fill+mask layers
-2. Parse it with our PSD reader to see exact byte structure
-3. Compare with our generated output
-4. Fix writer to match real Photoshop format
-
-**New Tools Created:**
-- `src/PSDReader.js` (323 lines) - Minimal PSD parser
-- `src/DescriptorWriter.js` (130 lines) - Descriptor format writer
-- `examples/analyze-reference.js` - Analysis script
-
-### Next Steps
-
-1. **Create reference PSD in Photoshop:**
-   - 100x100 pixels, 8-bit Lab mode
-   - 2-3 Solid Color Fill layers
-   - Add layer masks to each
-   - Save as `examples/reference-fill-mask.psd`
-
-2. **Analyze reference:** `node examples/analyze-reference.js`
-
-3. **Compare structures** - Find differences between reference and our output
-
-4. **Fix PSDWriter** - Match Photoshop's exact format
-
-5. **Validate** - Test corrected output opens properly
-
----
-
-## Previous Work: Checkbox Event & Substrate Duplication Fixes ✅
-
-**Date:** 2026-01-19 (Latest Session)
-**Status:** COMPLETE
-**Build ID:** e878aca3-369b-4464-8c16-7ad8897342b1
-
-### Issue 1: Checkbox Event Dispatch Error
-
-**Problem:** Checkboxes (`preserveWhite`, `preserveBlack`, `enablePaletteReduction`, etc.) threw "Cannot read properties of undefined (reading 'detail')" errors when presets were applied.
-
-**Root Cause:**
-- UXP checkboxes don't expect `CustomEvent` objects with `detail` properties
-- Dispatching `CustomEvent` on checkboxes caused internal UXP error
-
-**Fix Applied:**
-- Removed event dispatch for checkboxes entirely
-- Now only sets `element.checked = value` which updates UI correctly
-- File: `reveal-adobe/src/index.js:1664-1667`
-
-### Issue 2: Duplicate White Layer (100, 0, 0) in 16-bit Mode
-
-**Problem:** White (L=100, a=0, b=0) appeared TWICE in palette when using Vibrant Graphic preset, creating extra layer with few/no pixels.
-
-**Root Cause:**
-- Vibrant Graphic has `preserveWhite: true` AND `substrateMode: "auto"`
-- White was added as preserved color: L=100, a=0, b=0
-- Substrate detection also detected white and added it again
-- Both additions happened AFTER palette reduction phase, so no deduplication
-- Warhol Pop preset unaffected because `preserveWhite: false`
-
-**Fix Applied:**
-- Added duplicate detection before adding substrate to palette
-- If substrate is within ΔE < 3.0 of any preserved color, skip it with warning
-- File: `reveal-core/lib/engines/PosterizationEngine.js:2991-3014`
-- Log message: `! Substrate (L=X a=Y b=Z) is too similar to preserved color (ΔE=N) - skipping to avoid duplicate`
-
-**Files Modified:**
-1. `reveal-adobe/src/index.js:1664-1667` - Checkbox event handling
-2. `reveal-core/lib/engines/PosterizationEngine.js:2991-3014` - Substrate duplication check
-
----
-
-## Previous Work: Event Dispatch Bug Fix ✅
-
-**Date:** 2026-01-19 (Latest Session)
-**Status:** COMPLETE
-
-### Issue: Analysis Button Crashed After Preset Expansion
-
-After expanding all presets to 23 parameters, the "Analyze and Set" button and preset selector both crashed with:
-```
-TypeError: Cannot read properties of undefined (reading 'detail')
-```
-
-**Root Cause:**
-- `applyAnalyzedSettings()` function dispatched basic `Event` objects
-- UXP's internal event handling expected events to have a `detail` property
-- With 23 parameters in presets, more event dispatches occurred, exposing the bug
-
-**Fix Applied:**
-- Changed all `new Event()` to `new CustomEvent()` with `detail: { value }` property
-- Added try/catch error handling around event dispatching
-- Build ID: ab2bf041-3d8e-48db-9923-0d3b0d157e5d
-
-**File Modified:**
-- `reveal-adobe/src/index.js:1650-1697` - `applyAnalyzedSettings()` function
-
----
-
-## Previous Work: New Presets Added (3) ✅
-
-**Date:** 2026-01-19
-**Status:** COMPLETE
+Calibrate the Dynamic Configurator and MetaAnalyzer to produce economically sensible color separations.
 
 ### What Was Done
 
-**Added 3 New Presets** with complete 23-parameter structure:
+#### 1. MetaAnalyzer Calibration
+- **File:** `packages/reveal-batch/src/CQ100_MetaAnalyzer.js`
+- Lowered failure threshold: RevScore 50 → 30 → **20**
+- Now captures only true failures (~10% bottom outliers)
+- Added calibration documentation in file header
+- Rationale: "A validator that flags 32% of images as failures is one users will turn off"
 
-1. **minkler-justice.json** - Bold, high-contrast separation for social commentary and resistance posters (3 colors)
-2. **warhol-pop.json** - Flat color mapping for iconic, pop-art style distributions (5 colors)
-3. **technical-enamel.json** - High-opacity mapping for 59000 series inks on metal and glass (4 colors)
+#### 2. Efficiency Penalty System
+- **File:** `packages/reveal-batch/src/MetricsCalculator.js`
+- Added screen count penalty to revelation score
+- `<= 8 colors`: 0 penalty (efficiency safe zone)
+- `> 8 colors`: -1.5 pts per extra screen
+- 12 colors = -6 pts penalty
+- New fields in metrics: `baseScore`, `efficiencyPenalty`, `screenCount`
 
-### Parameter Clamping Applied
+- **File:** `packages/reveal-batch/src/RevalidateQuality.js` (NEW)
+- Retroactively applies efficiency penalty to existing JSONs
+- `npm run revalidate-quality`
 
-4 values were outside UI slider ranges and were clamped:
+#### 3. Chroma Driver v1.3
+- **File:** `packages/reveal-core/lib/analysis/ParameterGenerator.js`
+- **Key Insight:** K (contrast) is always 90-100 for photographs - not useful for color budgeting
+- Color budget now based on **saturation (C)**, not dynamic range (K)
+- Thresholds:
+  - c ≤ 20: 8 colors (muted, vintage, noir)
+  - c > 20: 10 colors (most photographs)
+  - c > 50: 12 colors (hyper vibrant)
+- K (contrast) still used for dither strategy selection (Atkinson vs BlueNoise)
+- Saliency Rescue preserved: c < 15 AND maxC > 50 → force 12 colors
 
-| Preset | Parameter | Architect Value | Clamped Value | Reason |
-|--------|-----------|-----------------|---------------|--------|
-| minkler-justice | blackBias | 12.0 | **10.0** | UI max = 10 |
-| minkler-justice | paletteReduction | 3.0 | **6.0** | UI min = 6.0 |
-| minkler-justice | hueLockAngle | 5 | **10** | UI min = 10 |
-| warhol-pop | highlightThreshold | 98 | **95** | UI max = 95 |
+#### 4. SP-50 Dataset Tooling
+- **File:** `packages/reveal-batch/src/DatasetArchitect.js` (NEW)
+- Classifies images into 5 archetypes based on DNA
+- Analyzes dataset balance against SP-50 targets
+- `npm run analyze-dataset ./path/to/images`
 
-### Files Modified
+- **File:** `packages/reveal-batch/docs/SP-50-DATASET.md` (NEW)
+- Full specification for diverse dataset
+- Target distribution:
+  - Vector/Flat: 20% (logos, flat illustration)
+  - Vintage/Muted: 20% (faded posters, distress)
+  - Noir/Mono: 15% (B&W, ink drawings)
+  - Neon/Vibrant: 15% (concert posters, 80s)
+  - Photographic: 30% (standard photos)
 
-**3 New Preset Files Created:**
-- `/workspaces/electrosaur/reveal-project/packages/reveal-core/presets/minkler-justice.json`
-- `/workspaces/electrosaur/reveal-project/packages/reveal-core/presets/warhol-pop.json`
-- `/workspaces/electrosaur/reveal-project/packages/reveal-core/presets/technical-enamel.json`
+#### 5. RevealEngine Proposal
+- **File:** `packages/reveal-adobe/docs/REVEAL-ENGINE-PROPOSAL.md` (NEW)
+- Design document for future refactor of reveal-adobe
+- Includes RemapTable for soft-delete feature
+- Deferred until SP-50 validation complete
 
-**Code Files Updated:**
-- `reveal-adobe/src/index.js` (lines 1710-1712) - Added 3 new require() statements
-- `reveal-adobe/src/index.html` (lines 896-898) - Added 3 new dropdown options
+### CQ100 Results (After All Calibrations)
 
-**Build Status:**
-- ✅ Build successful (125 KiB bundle)
-- ✅ All 13 presets copied to dist/presets/
-- ✅ 2 pre-existing warnings (GoldenStatsCapture, netwisdom-mask-test)
+| Metric | Value |
+|--------|-------|
+| Color Distribution | 18% at 8c, 41% at 10c, 41% at 12c |
+| Pass Rate | 82.2% (83/101 passing) |
+| Avg Efficiency Penalty | 3.7 pts |
+| Avg ΔE | 16.02 |
+| Avg Revelation | 30.4 |
+| Avg Integrity | 92.7 |
 
-### Preset Count Summary
+### CQ100 Limitation Identified
 
-**Before:** 10 presets (9 parameters each)
-**After:** 13 presets (23 parameters each)
+Dataset is **91% photographic** - not diverse enough to properly tune "stingy" configurator:
 
-- ✅ Existing 10 presets manually updated to 23 parameters by user
-- ✅ New 3 presets created with 23 parameters
+| Category | CQ100 | SP-50 Target |
+|----------|-------|--------------|
+| Vector/Flat | 0% | 20% |
+| Vintage/Muted | 0% | 20% |
+| Noir/Mono | 6% | 15% |
+| Neon/Vibrant | 4% | 15% |
+| Photographic | 91% | 30% |
 
-**Total:** 13 complete presets, all with full parameter structure
-
----
-
-## Previous Work: Parameter Analysis ✅
-
-**Date:** 2026-01-19 (Late Session)
-**Status:** COMPLETE
-
-### What Was Done
-
-**Created:** `/workspaces/electrosaur/reveal-project/PARAMETER_ANALYSIS.md`
-
-**Comprehensive analysis of:**
-- All 24 UI parameters cataloged
-- Engine usage mapped (19 used, 5 UI-only)
-- Parameter flow architecture documented
-- Default value mismatches identified
-- Preset file structure documented
-
-### Key Findings
-
-**24 Total UI Parameters:**
-1. **Engine Control:** presetSelector, engineType
-2. **Centroid Strategy:** centroidStrategy, lWeight, cWeight, blackBias
-3. **Substrate Detection:** substrateMode, substrateTolerance
-4. **Color Vibrancy:** vibrancyMode, vibrancyBoost
-5. **Highlight/Shadow:** highlightThreshold, highlightBoost
-6. **Palette Reduction:** enablePaletteReduction, paletteReduction, hueLockAngle, shadowPoint
-7. **Color Mode:** colorMode, targetColorsSlider, preserveWhite, preserveBlack
-8. **Hue Diversity:** ignoreTransparent, enableHueGapAnalysis
-9. **Dithering:** ditherType
-10. **Edge Quality:** maskProfile
-
-**3 Issues Identified:**
-1. ⚠️ **vibrancyMode** - UI dropdown exists but engine doesn't use it (only vibrancyBoost multiplier)
-2. ⚠️ **paletteReduction default mismatch** - UI: 10.0, Engine: 9.0
-3. ⚠️ **enableHueGapAnalysis default mismatch** - UI: true, Engine: false
-
-### Parameter → Engine Mapping
-
-**PosterizationEngine.posterize():** Uses 17 parameters
-- Core: engineType, centroidStrategy, grayscaleOnly (from colorMode)
-- Centroid tuning: lWeight, cWeight, blackBias
-- Split tuning: vibrancyBoost, highlightBoost
-- Prune tuning: paletteReduction, hueLockAngle, highlightThreshold, shadowPoint
-- Color preservation: preserveWhite, preserveBlack
-- Substrate: substrateMode, substrateTolerance
-- Features: enableHueGapAnalysis, enablePaletteReduction
-
-**SeparationEngine.mapPixelsToPaletteAsync():** Uses 1 parameter
-- ditherType (none/floyd-steinberg/blue-noise/bayer/atkinson/stucki)
-
-**PhotoshopAPI (Adobe only):** Uses 1 parameter
-- maskProfile (Gray Gamma 2.2 / Dot Gain 20%)
-
-**UI-Only (5 parameters):**
-- presetSelector (loads other parameters)
-- ignoreTransparent (pre-processing in PhotoshopAPI)
-- vibrancyMode ⚠️ (not implemented in engine)
+**Conclusion:** Need SP-50 dataset with diverse image types to validate efficiency tuning.
 
 ---
 
-## Completed Work This Session
+## Files Modified This Session
 
-### Phase 1: Dithering Algorithm Integration ✅
-
-**Status:** COMPLETE
-
-**Algorithms Implemented (6 total):**
-1. ✅ None (Nearest-neighbor/Posterized) - Lines 65-144
-2. ✅ Floyd-Steinberg - Lines 161-229
-3. ✅ Blue Noise - Lines 382-438
-4. ✅ Bayer 8x8 (Ordered) - Lines 460-527
-5. ✅ Atkinson - Lines 547-645
-6. ✅ Stucki (NEW) - Lines 647-762
-
-**File:** `/workspaces/electrosaur/reveal-project/packages/reveal-core/lib/engines/SeparationEngine.js`
-
-**Changes Made:**
-- Lines 44-54: Added routing for 'bayer', 'atkinson', 'stucki' in `mapPixelsToPaletteAsync()`
-- Lines 647-762: Implemented `_mapPixelsStucki()` and `_distributeStuckiError()` helper
-- Updated JSDoc to document all 6 dithering options
-
-**Test Coverage:** 10 new test cases added (all passing)
-- Bayer: 2 tests (basic + edge handling)
-- Atkinson: 3 tests (diffusion + gradient + edges)
-- Stucki: 5 tests (diffusion + gradients + balance + edges + multi-color)
-
-**File:** `/workspaces/electrosaur/reveal-project/packages/reveal-core/test/unit/separation-engine.test.js`
-
-### Phase 2: UI Updates ✅
-
-**Status:** COMPLETE
-
-**File:** `/workspaces/electrosaur/reveal-project/packages/reveal-adobe/src/index.html`
-
-**Dropdown (Lines 1316-1322):**
-- Added "Bayer 8x8" option
-- Added "Atkinson" option
-- Added "Stucki" option
-- Removed "(Not Implemented)" label from Blue Noise
-
-**Documentation (Lines 1323-1329):**
-- Added descriptions for Bayer, Atkinson, Stucki
-- Updated Blue Noise description (removed "Planned")
-- All 6 algorithms now documented with use cases
-
-### Phase 3: Code Validation ✅
-
-**Status:** COMPLETE
-
-**Validation Report:** `/tmp/CODE_VALIDATION_REPORT.md`
-
-**Key Findings:**
-- Helper functions (_getNearest, _getTwoNearest) already existed ✅
-- Existing Bayer, Atkinson implementations were robust
-- Provided code had critical bugs (width/height parameters, missing Lab clamping)
-- **Decision:** Used existing proven implementations as base, added Stucki following same pattern
-
-### Phase 4: Preset Architecture Refactoring ✅
-
-**Status:** COMPLETE
-
-**Moved:** 10 preset JSON files from `reveal-adobe/src/presets/` → `reveal-core/presets/`
-
-**Files Moved:**
-- standard-image.json
-- halftone-portrait.json
-- vibrant-graphic.json
-- atmospheric-photo.json
-- pastel-high-key.json
-- vintage-muted.json
-- deep-shadow-noir.json
-- neon-fluorescent.json
-- textural-grunge.json
-- commercial-offset.json
-
-**Code Updates:**
-
-1. **reveal-adobe/src/index.js (Lines 1637-1646)**
-   - All 10 requires updated from `'./presets/...'` to `'@reveal/core/presets/...'`
-
-2. **reveal-adobe/scripts/copy-assets.js (Lines 42-48)**
-   - Updated to copy presets from reveal-core instead of local src/presets
-   - Added logging: "✓ Copied presets/ from @reveal/core"
-
-3. **reveal-adobe/src/presets/**
-   - Removed old directory (no longer needed)
-
-**Architectural Rationale:**
-- Presets are math/config-based, not UI-specific
-- Now reusable across any implementation (CLI, web, mobile, etc.)
-- Cleaner separation of concerns: core algorithms/configs in reveal-core, Adobe-specific UI in reveal-adobe
-
-### Phase 5: Parameter Analysis ✅
-
-**Status:** COMPLETE
-
-**Created:** `PARAMETER_ANALYSIS.md` (comprehensive documentation)
-
-**Analyzed:**
-- All 24 UI parameters documented
-- Engine usage mapped (17 + 1 + 1 = 19 used)
-- 5 UI-only parameters identified
-- Parameter flow architecture documented
-- Default value mismatches found
-- Preset structure documented (8 parameters per preset)
+| File | Change |
+|------|--------|
+| `reveal-core/lib/analysis/ParameterGenerator.js` | Chroma Driver v1.3 |
+| `reveal-batch/src/MetricsCalculator.js` | Added efficiency penalty |
+| `reveal-batch/src/CQ100_MetaAnalyzer.js` | Calibrated thresholds |
+| `reveal-batch/src/RevalidateQuality.js` | NEW - retroactive penalty |
+| `reveal-batch/src/DatasetArchitect.js` | NEW - dataset balance analyzer |
+| `reveal-batch/docs/SP-50-DATASET.md` | NEW - dataset specification |
+| `reveal-batch/PLAN.md` | NEW - next steps |
+| `reveal-batch/package.json` | Added npm scripts |
+| `reveal-adobe/docs/REVEAL-ENGINE-PROPOSAL.md` | NEW - refactor proposal |
 
 ---
 
-## Current Project State
+## Pending Todos
 
-### Build Status
-- ✅ Full clean rebuild successful
-- ✅ No new errors or warnings related to our changes
-- ✅ 2 pre-existing warnings (GoldenStatsCapture, netwisdom-mask-test)
+### Near-term (SP-50 Dataset)
+1. [ ] Build SP-50 dataset (gather 50 diverse images)
+2. [ ] Run DatasetArchitect on SP-50 candidates to verify balance
+3. [ ] Process SP-50 batch and validate color distribution
 
-### Test Status
-- ✅ **125 tests passing** (core package)
-- ⚠️ 5 pre-existing failures (in hue-priority.test.js and separation-engine Blue Noise test)
-- ✅ All 10 new dithering tests passing
-
-### Distribution
-- ✅ Presets copied to `/workspaces/electrosaur/reveal-project/packages/reveal-adobe/dist/presets/`
-- ✅ Plugin built and ready for deployment
-- ✅ All assets properly bundled
+### Future (RevealEngine Refactor)
+4. [ ] Port MetricsCalculator from reveal-batch to reveal-core
+5. [ ] Implement RemapTable for soft-delete feature
+6. [ ] Refactor reveal-adobe to use RevealEngine facade pattern
 
 ---
 
-## Directory Structure (After Changes)
+## Commands Reference
+
+```bash
+# In packages/reveal-batch:
+
+# Analyze dataset balance
+npm run analyze-dataset ./path/to/images
+
+# Revalidate with efficiency penalty
+npm run revalidate-quality
+
+# Run CQ100 analysis
+npm run analyze-cq100
+
+# Process CQ100 batch
+npm run process-cq100
+```
+
+---
+
+## Key Algorithm: Chroma Driver v1.3
+
+```javascript
+// Color budget based on saturation (C), not dynamic range (K)
+static generate(dna) {
+    let idealColors = 8;  // Baseline: Economic standard
+
+    // Earning upgrades (driven by Chroma)
+    if (dna.c > 20) idealColors = 10;  // Moderate saturation
+    if (dna.c > 50) idealColors = 12;  // Hyper vibrant
+
+    // Saliency Rescue (Astronaut Rule)
+    if (dna.c < 15 && dna.maxC > 50) {
+        idealColors = 12;  // Hidden color spike
+    }
+
+    // Commercial clamp
+    let finalColors = Math.min(idealColors, 12);
+    finalColors = Math.max(4, finalColors);
+
+    // Dither strategy (K still used here)
+    let dither = 'BlueNoise';
+    if (finalColors >= idealColors && dna.k > 80) {
+        dither = 'Atkinson';  // Sharp edges for high contrast
+    }
+
+    return { targetColors: finalColors, ditherType: dither, ... };
+}
+```
+
+---
+
+## Key Algorithm: Efficiency Penalty
+
+```javascript
+// In MetricsCalculator.js
+const SCREEN_LIMIT = 8;
+const PENALTY_PER_SCREEN = 1.5;
+
+// Base score from visual fidelity
+const baseRevScore = 100 - (avgDeltaE * 1.5) - (saliencyLoss * 2);
+
+// Efficiency penalty for screen bloat
+let efficiencyPenalty = 0;
+if (screenCount > SCREEN_LIMIT) {
+    efficiencyPenalty = (screenCount - SCREEN_LIMIT) * PENALTY_PER_SCREEN;
+}
+
+// Final score
+const revScore = Math.max(0, baseRevScore - efficiencyPenalty);
+```
+
+---
+
+## Resume Instructions
+
+1. Read this file for context
+2. Check todos above for next steps
+3. **Primary focus:** Build SP-50 dataset with diverse images
+4. Use `npm run analyze-dataset` to verify balance before processing
+5. Target distribution: 20% Vector, 20% Vintage, 15% Noir, 15% Neon, 30% Photo
+
+---
+
+## Previous Session Work (2026-01-19)
+
+### Completed Previously
+- ✅ Complete dithering algorithm integration (6 algorithms)
+- ✅ Preset architecture refactoring (moved to reveal-core)
+- ✅ Parameter analysis (24 UI parameters documented)
+- ✅ Added 3 new presets with 23-parameter structure
+- ✅ Checkbox event dispatch fix
+- ✅ Substrate duplication fix
+- ✅ @reveal/psd-writer package (8-bit Lab multi-layer)
+
+### PSD Writer Status
+- Phase 1 complete: Synthetic test program working
+- Issue: Layers show as raster, not fill layers
+- Needs: Reference PSD from Photoshop for empirical validation
+- See previous SESSION_STATE.md sections for details
+
+---
+
+## Project Structure
 
 ```
 reveal-project/
-├── PARAMETER_ANALYSIS.md         (NEW - comprehensive parameter documentation)
-├── SESSION_STATE.md               (UPDATED - this file)
+├── SESSION_STATE.md              (this file)
+├── PARAMETER_ANALYSIS.md         (24 parameter documentation)
 ├── packages/
 │   ├── reveal-core/
-│   │   ├── lib/engines/
-│   │   │   ├── PosterizationEngine.js (17 parameters accepted)
-│   │   │   └── SeparationEngine.js (6 dithering algorithms, 1 parameter)
-│   │   ├── presets/              (MOVED HERE - now the source)
-│   │   │   ├── standard-image.json
-│   │   │   ├── halftone-portrait.json
-│   │   │   ├── ... (8 more presets)
-│   │   └── test/unit/
-│   │       └── separation-engine.test.js (10 new dithering tests)
-│   └── reveal-adobe/
-│       ├── src/
-│       │   ├── index.js (requires presets from @reveal/core, collects 24 params)
-│       │   └── index.html (24 input controls, 6 dithering options)
-│       ├── dist/
-│       │   └── presets/ (copied from reveal-core during build)
-│       └── scripts/
-│           └── copy-assets.js (updated to copy from reveal-core)
+│   │   ├── lib/
+│   │   │   ├── engines/
+│   │   │   │   ├── PosterizationEngine.js
+│   │   │   │   └── SeparationEngine.js (6 dithering algorithms)
+│   │   │   └── analysis/
+│   │   │       └── ParameterGenerator.js (Chroma Driver v1.3)
+│   │   └── presets/ (13 JSON files)
+│   ├── reveal-batch/
+│   │   ├── src/
+│   │   │   ├── MetricsCalculator.js (efficiency penalty)
+│   │   │   ├── CQ100_MetaAnalyzer.js (calibrated thresholds)
+│   │   │   ├── RevalidateQuality.js (NEW)
+│   │   │   └── DatasetArchitect.js (NEW)
+│   │   ├── docs/
+│   │   │   └── SP-50-DATASET.md (NEW)
+│   │   └── data/
+│   │       ├── CQ100_v4/ (100 test images)
+│   │       └── SP50_Candidates/ (NEW - empty, needs images)
+│   ├── reveal-adobe/
+│   │   ├── src/
+│   │   │   ├── index.js (~127KB plugin)
+│   │   │   └── DNAGenerator.js
+│   │   └── docs/
+│   │       └── REVEAL-ENGINE-PROPOSAL.md (NEW)
+│   └── reveal-psd-writer/
+│       └── (8-bit Lab PSD writer)
 ```
 
 ---
 
-## Known Issues & Limitations
-
-### Newly Discovered (Parameter Analysis)
-
-1. **vibrancyMode Not Implemented** ⚠️
-   - UI has dropdown with 3 options (linear, aggressive, exponential)
-   - Engine only uses `vibrancyBoost` multiplier
-   - **Options:** Implement, remove dropdown, or document as future feature
-   - **Status:** User decision needed
-
-2. **Default Value Mismatches** ⚠️
-   - `paletteReduction`: UI default (10.0) ≠ Engine default (9.0)
-   - `enableHueGapAnalysis`: UI default (true) ≠ Engine default (false)
-   - **Impact:** Low (user values always passed, defaults rarely used)
-   - **Status:** Should align for consistency
-
-### Pre-existing (Not introduced this session)
-
-1. **Blue Noise test failure** - separation-engine.test.js:250
-   - Test expects Blue Noise to "fall back gracefully" but it's now actually implemented
-   - Status: Low priority, test logic needs updating
-
-2. **Hue priority test failures** - hue-priority.test.js (4 tests)
-   - Unrelated to dithering work
-   - Appear to be in PosterizationEngine hue sector calculations
-   - Status: Pre-existing, not impacted by our changes
-
-### Dependencies
-- All algorithms depend on Lab color space (CIELAB) - working correctly ✅
-- Error diffusion algorithms depend on proper width/height - all passing ✅
-- Stucki distributes error to 12 neighbors (intensive) - optimized with async yielding ✅
-
----
-
-## Dithering Algorithms - Technical Details
-
-| Algorithm | Error Distribution | Neighbors | Performance | Best For |
-|-----------|-------------------|-----------|-------------|----------|
-| None | N/A | N/A | ⚡ Fastest | Posterized graphics, graphic art |
-| Floyd-Steinberg | 16x full error | 4 | ⚡ Fast | Photographic smoothness |
-| Blue Noise | Pseudo-random | Grid-based | ⚡ Medium | Screen printing (prevents worming) |
-| Bayer 8x8 | Ordered matrix | 8x8 tile | ⚡ Fast | Retro appearance, predictable structure |
-| Atkinson | 75% error (6/8) | 6 | ⚡ Medium | High-contrast output, crisp edges |
-| Stucki | 100% error (42/42) | 12 | ⚠️ Intensive | High-fidelity photos, smooth skin tones |
-
-**All algorithms:**
-- Operate in CIELAB color space (perceptual, not RGB)
-- Handle edge pixels correctly (boundary checking)
-- Support progress callbacks for long operations
-- Include error handling for empty/single-color palettes
-- Use async/await with yielding for UI responsiveness
-
----
-
-## Next Steps (For Future Sessions)
-
-### Priority 1: Parameter Issues (NEW)
-- [ ] Decide on vibrancyMode: implement, remove, or document as future
-- [ ] Align default value mismatches (paletteReduction, enableHueGapAnalysis)
-- [ ] Add JSDoc for all 24 parameters in index.js
-
-### Priority 2: Bug Fixes
-- [ ] Fix Blue Noise test (test logic expects unimplemented behavior)
-- [ ] Investigate hue-priority test failures (4 tests)
-
-### Priority 3: Enhancements
-- [ ] Consider adding true blue noise lookup tables (currently pseudo-random)
-- [ ] Benchmark dithering algorithms for performance optimization
-- [ ] Add visual previews to dithering dropdown (showing result of each algorithm)
-
-### Priority 4: Testing
-- [ ] Manual UI testing: Verify all 6 dithering options appear in Photoshop plugin
-- [ ] Test with large images (1000x1000+) to verify performance
-- [ ] Cross-platform testing (Windows, Mac)
-- [ ] Validate all 17 posterization parameters actually work
-
-### Priority 5: Documentation
-- [ ] Add dithering algorithm guide to user documentation
-- [ ] Document preset system for developers
-- [ ] Create guide for adding new presets
-- [ ] Create user-facing parameter guide (from PARAMETER_ANALYSIS.md)
-
----
-
-## How to Resume Work
-
-### Verify Everything is Working
-```bash
-cd /workspaces/electrosaur/reveal-project
-npm run build          # Should show "✓ Copied presets/ from @reveal/core"
-npm test              # Should show 125 tests passing
-```
-
-### Access Key Files
-
-**Core Analysis:**
-- **Parameter documentation:** `/workspaces/electrosaur/reveal-project/PARAMETER_ANALYSIS.md`
-- **Session state:** `/workspaces/electrosaur/reveal-project/SESSION_STATE.md`
-
-**Implementation:**
-- **Dithering implementation:** `/workspaces/electrosaur/reveal-project/packages/reveal-core/lib/engines/SeparationEngine.js` (lines 44-762)
-- **Posterization engine:** `/workspaces/electrosaur/reveal-project/packages/reveal-core/lib/engines/PosterizationEngine.js` (lines 144-217)
-- **Dithering tests:** `/workspaces/electrosaur/reveal-project/packages/reveal-core/test/unit/separation-engine.test.js`
-
-**UI & Configuration:**
-- **UI controls:** `/workspaces/electrosaur/reveal-project/packages/reveal-adobe/src/index.html` (lines 884-1375)
-- **Parameter collection:** `/workspaces/electrosaur/reveal-project/packages/reveal-adobe/src/index.js` (lines 1572-1593)
-- **Preset loading:** `/workspaces/electrosaur/reveal-project/packages/reveal-adobe/src/index.js` (lines 1637-1646)
-- **Presets source:** `/workspaces/electrosaur/reveal-project/packages/reveal-core/presets/` (10 JSON files)
-
-### To Add a New Feature
-1. If it's core algorithm: Add to `reveal-core/lib/engines/`
-2. If it's a preset: Add to `reveal-core/presets/` (auto-discovered)
-3. If it's UI: Add to `reveal-adobe/src/`
-4. Test: Add tests to `reveal-core/test/unit/`
-5. Build: `npm run build`
-
----
-
-## Validation Checklist for Next Session
-
-**Dithering:**
-- [ ] Verify all 6 dithering algorithms appear in UI dropdown
-- [ ] Test each algorithm produces output (not crashing)
-
-**Parameters:**
-- [ ] Verify all 24 UI parameters collect correctly
-- [ ] Test preset loading (all 10 presets)
-- [ ] Validate vibrancyMode behavior (currently not used by engine)
-- [ ] Check default value behavior for mismatched parameters
-
-**General:**
-- [ ] Run full test suite: `npm test`
-- [ ] Full clean rebuild: `npm run build`
-- [ ] Manual testing in Photoshop with test image
-
----
-
-## Git Notes
-
-**Not yet committed.** Recommended commit message:
-
-```
-Complete dithering integration, preset refactoring, and parameter analysis
-
-Dithering:
-- Implement Stucki dithering algorithm (12-neighbor error distribution)
-- Add routing for Bayer, Atkinson, Stucki in mapPixelsToPaletteAsync
-- Add 10 comprehensive tests for Bayer, Atkinson, Stucki algorithms
-- Update UI dropdown and documentation for all 6 dithering options
-
-Presets:
-- Move 10 presets from reveal-adobe to reveal-core for reusability
-- Update reveal-adobe to require presets from @reveal/core
-- Update copy-assets.js to copy from reveal-core package
-
-Analysis:
-- Document all 24 UI parameters with comprehensive analysis
-- Map parameter usage across engines (17+1+1=19 used, 5 UI-only)
-- Identify 3 issues: vibrancyMode unimplemented, 2 default mismatches
-- Create PARAMETER_ANALYSIS.md with full technical details
-
-Testing:
-- All dithering tests passing (125/130 total, 5 pre-existing failures)
-- Zero regressions introduced
-
-Files changed:
-- packages/reveal-core/lib/engines/SeparationEngine.js (+116 lines)
-- packages/reveal-core/lib/engines/PosterizationEngine.js (analysis only)
-- packages/reveal-core/presets/ (new directory with 10 JSON files)
-- packages/reveal-core/test/unit/separation-engine.test.js (+159 lines)
-- packages/reveal-adobe/src/index.js (10 preset requires updated)
-- packages/reveal-adobe/src/index.html (dropdown and docs updated)
-- packages/reveal-adobe/scripts/copy-assets.js (copy from reveal-core)
-- packages/reveal-adobe/src/presets/ (deleted, moved to reveal-core)
-- PARAMETER_ANALYSIS.md (new comprehensive documentation)
-- SESSION_STATE.md (updated with parameter analysis phase)
-```
-
----
-
-## Session Artifacts
-
-- **Parameter Analysis:** `/workspaces/electrosaur/reveal-project/PARAMETER_ANALYSIS.md` (comprehensive)
-- **Validation Report:** `/tmp/CODE_VALIDATION_REPORT.md` (dithering code analysis)
-- **This Session State:** `/workspaces/electrosaur/reveal-project/SESSION_STATE.md`
-
----
-
-## Contact Notes
-- All work validated against provided code (Bayer, Atkinson, Stucki algorithms)
-- Identified critical bugs in provided code and used existing proven implementations
-- Parameter analysis completed: 24 UI parameters documented, 3 issues found
-- Zero regressions introduced - all new features isolated and tested
-
----
-
-**Session started:** 2026-01-19 00:00 UTC
-**Session updated:** 2026-01-19 (parameter analysis added)
-**Status:** ✅ ALL OBJECTIVES COMPLETE + PARAMETER ANALYSIS COMPLETE
-**Ready for:** Next session pickup or immediate deployment
+**Session started:** 2026-01-20
+**Session ended:** 2026-01-20
+**Status:** ✅ CALIBRATION COMPLETE - Ready for SP-50 dataset collection
+**Ready for:** Image gathering for SP-50 dataset

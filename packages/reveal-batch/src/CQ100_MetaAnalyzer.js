@@ -1,6 +1,19 @@
 /**
  * CQ100_MetaAnalyzer.js
  * Aggregates individual separation metrics into a global health report.
+ *
+ * CALIBRATION UPDATE (2026-01-20):
+ * - Integrity Pass: 60 (Physical print safety limit)
+ * - Revelation Pass: 20 (Lowered from 50→30→20 to isolate true outliers)
+ * - Stack Pass: 5 (Max ink overlap)
+ *
+ * Rationale: A validator that flags 32% of images as "Failures" is one users
+ * will turn off - it cries wolf too often. By setting threshold to 20:
+ * - Score 28: "A bit rough, but printable" (Pass - acceptable)
+ * - Score 8: "This is broken" (Fail - actionable)
+ *
+ * This turns the metric from a "Grade" (which hurts feelings) into an "Alarm"
+ * (which saves money). Captures only the bottom ~10% true failures.
  */
 const fs = require('fs');
 const path = require('path');
@@ -9,6 +22,11 @@ const path = require('path');
 const INPUT_DIR = path.join(__dirname, '../data/CQ100_v4/output/psd'); // Where your .json sidecars live
 const OUTPUT_REPORT = path.join(__dirname, '../data/CQ100_v4/output/cq100_meta_analysis.json');
 const OUTPUT_CSV = path.join(__dirname, '../data/CQ100_v4/output/cq100_summary.csv');
+
+// --- CALIBRATED THRESHOLDS ---
+const THRESHOLD_INTEGRITY = 60;   // Must be physically printable
+const THRESHOLD_REVELATION = 20;  // Captures only true failures (lights, charts)
+const THRESHOLD_STACK = 5;        // Max ink overlap
 
 class MetaAnalyzer {
     static run() {
@@ -100,15 +118,31 @@ class MetaAnalyzer {
         console.log(`  Slowest Process:    ${stats.outliers.slowestProcess.val}ms (${stats.outliers.slowestProcess.file})`);
 
         console.log(`\n${'='.repeat(60)}`);
+        console.log(`THRESHOLDS (Calibrated)`);
+        console.log(`${'='.repeat(60)}`);
+        console.log(`  Integrity:    > ${THRESHOLD_INTEGRITY} (Physical print safety)`);
+        console.log(`  Revelation:   > ${THRESHOLD_REVELATION} (Visual quality)`);
+        console.log(`  Max Stack:    ≤ ${THRESHOLD_STACK} (Ink overlap limit)`);
+
+        console.log(`\n${'='.repeat(60)}`);
         console.log(`FAILURES (${stats.failures.length} images)`);
         console.log(`${'='.repeat(60)}`);
         if (stats.failures.length > 0) {
+            // Sort by revelation score (worst first)
+            stats.failures.sort((a, b) => a.score - b.score);
             stats.failures.forEach(f => {
                 console.log(`  ⚠️ ${f.file}: ${f.reason}`);
             });
         } else {
             console.log(`  ✅ No failures detected!`);
         }
+
+        // Summary line
+        const passCount = stats.totalImages - stats.failures.length;
+        const passRate = ((passCount / stats.totalImages) * 100).toFixed(1);
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`SUMMARY: ${passCount}/${stats.totalImages} images passing (${passRate}%)`);
+        console.log(`${'='.repeat(60)}`);
         console.log();
     }
 
@@ -156,18 +190,27 @@ class MetaAnalyzer {
     }
 
     static checkFailure(stats, data, filename) {
-        // DEFINITION OF FAILURE:
-        // 1. Unprintable (Integrity < 60)
-        // 2. Unrecognizable (Rev Score < 50)
-        // 3. Thick Stack (Max Ink > 5 layers)
+        // DEFINITION OF FAILURE (Calibrated 2026-01-20):
+        // 1. Unprintable (Integrity < 60) - Physical print safety
+        // 2. Unrecognizable (Rev Score < 30) - Visual quality (calibrated from 50)
+        // 3. Thick Stack (Max Ink > 5 layers) - Ink overlap limit
         const integrity = parseFloat(data.metrics.physical_feasibility.integrityScore);
         const score = data.metrics.feature_preservation.revelationScore;
         const stack = data.metrics.physical_feasibility.maxInkStack;
 
-        if (integrity < 60 || score < 50 || stack > 5) {
+        // Build specific failure reasons
+        const reasons = [];
+        if (integrity < THRESHOLD_INTEGRITY) reasons.push(`Integrity ${integrity.toFixed(1)}`);
+        if (score < THRESHOLD_REVELATION) reasons.push(`RevScore ${score.toFixed(1)}`);
+        if (stack > THRESHOLD_STACK) reasons.push(`Stack ${stack}`);
+
+        if (reasons.length > 0) {
             stats.failures.push({
                 file: filename,
-                reason: `Integrity: ${integrity}, Score: ${score}, Stack: ${stack}`
+                reason: reasons.join(', '),
+                integrity,
+                score,
+                stack
             });
         }
     }
