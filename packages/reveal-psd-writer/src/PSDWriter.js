@@ -182,8 +182,8 @@ class PSDWriter {
             writer.writeUint8(0);
         }
 
-        // Channels: 3 Lab (L,a,b) + transparency/alpha channels
-        // Reference files have 7 channels total (3 Lab + 4 extra)
+        // Channels: 3 Lab (L,a,b) + spot color channels from layers
+        // Note: Photoshop requires these extra channels for layer masks
         const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
         writer.writeUint16(channelCount);
         writer.writeUint32(this.height);
@@ -898,9 +898,7 @@ class PSDWriter {
         if (this.bitsPerChannel === 16) {
             if (pixelLayer && pixelLayer.pixels) {
                 // 16-bit with pixel data: write actual Lab composite
-                // PSD composite uses different scaling:
-                // - L: 0-255 byte → 0-65535 (multiply by 257)
-                // - a/b: 0-255 byte (128=neutral) → 0-65535 (multiply by 257)
+                // Convert 8-bit byte encoding to 16-bit (multiply by 257)
 
                 // L channel (planar)
                 for (let i = 0; i < pixelCount; i++) {
@@ -933,7 +931,7 @@ class PSDWriter {
                 }
             }
 
-            // Additional alpha/transparency channels
+            // Additional alpha/spot channels (required by header channel count)
             for (let ch = 3; ch < channelCount; ch++) {
                 for (let i = 0; i < pixelCount; i++) {
                     writer.writeUint16(0);
