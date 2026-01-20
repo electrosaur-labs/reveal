@@ -1107,32 +1107,71 @@ function showPaletteEditor(selectedPalette) {
                 let substrateLayer = null;
                 let inkLayers = [];
 
+                // First pass: identify white and black layers if present
+                let whiteLayer = null;
+                let blackLayer = null;
+                let detectedSubstrateLayer = null;
+
                 for (const layer of fullResLayers) {
-                    // Check if this is the substrate layer
-                    // Priority 1: Match detected substrate from posterization
-                    let isSubstrate = selectedPreview.substrateLab &&
+                    // Check for pure white (L=100, a=0, b=0)
+                    const isWhite = Math.abs(layer.labColor.L - 100) < 0.1 &&
+                                   Math.abs(layer.labColor.a - 0) < 0.1 &&
+                                   Math.abs(layer.labColor.b - 0) < 0.1;
+
+                    // Check for pure black (L=0, a=0, b=0)
+                    const isBlack = Math.abs(layer.labColor.L - 0) < 0.1 &&
+                                   Math.abs(layer.labColor.a - 0) < 0.1 &&
+                                   Math.abs(layer.labColor.b - 0) < 0.1;
+
+                    // Check for detected substrate from posterization
+                    const matchesDetectedSubstrate = selectedPreview.substrateLab &&
                                        Math.abs(layer.labColor.L - selectedPreview.substrateLab.L) < 0.1 &&
                                        Math.abs(layer.labColor.a - selectedPreview.substrateLab.a) < 0.1 &&
                                        Math.abs(layer.labColor.b - selectedPreview.substrateLab.b) < 0.1;
 
-                    // Priority 2: If no substrate detected, treat pure white as substrate (common case)
-                    if (!isSubstrate && !selectedPreview.substrateLab) {
-                        const isWhite = Math.abs(layer.labColor.L - 100) < 0.1 &&
-                                       Math.abs(layer.labColor.a - 0) < 0.1 &&
-                                       Math.abs(layer.labColor.b - 0) < 0.1;
-
-                        if (isWhite) {
-                            isSubstrate = true;
-                            logger.log(`  Treating white as substrate (no substrate detected): ${layer.name}`);
-                        }
-                    }
-
-                    if (isSubstrate) {
-                        substrateLayer = layer;
-                        logger.log(`  Found substrate layer: ${layer.name} (L=${layer.labColor.L.toFixed(1)})`);
+                    if (isWhite) {
+                        whiteLayer = layer;
+                    } else if (isBlack) {
+                        blackLayer = layer;
+                    } else if (matchesDetectedSubstrate) {
+                        detectedSubstrateLayer = layer;
                     } else {
                         inkLayers.push(layer);
                     }
+                }
+
+                // Determine substrate with priority: White > Black > Detected
+                // White paper is most common, black paper less common
+                if (whiteLayer) {
+                    substrateLayer = whiteLayer;
+                    logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [WHITE PAPER]`);
+                    // Black becomes an ink layer if white is substrate
+                    if (blackLayer) {
+                        inkLayers.push(blackLayer);
+                        logger.log(`  Demoted black to ink layer: ${blackLayer.name}`);
+                    }
+                    // Detected substrate also becomes an ink layer if white takes priority
+                    // NOTE: detectedSubstrateLayer might be null if it was skipped by SeparationEngine (<0.1% coverage)
+                    if (detectedSubstrateLayer) {
+                        inkLayers.push(detectedSubstrateLayer);
+                        logger.log(`  Demoted detected substrate to ink layer: ${detectedSubstrateLayer.name}`);
+                    } else if (selectedPreview.substrateLab) {
+                        logger.log(`  ⚠ Detected substrate from posterization was skipped (likely <0.1% coverage) - not creating layer`);
+                    }
+                } else if (blackLayer) {
+                    substrateLayer = blackLayer;
+                    logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [BLACK PAPER]`);
+                    // Detected substrate becomes an ink layer if black takes priority
+                    // NOTE: detectedSubstrateLayer might be null if it was skipped by SeparationEngine (<0.1% coverage)
+                    if (detectedSubstrateLayer) {
+                        inkLayers.push(detectedSubstrateLayer);
+                        logger.log(`  Demoted detected substrate to ink layer: ${detectedSubstrateLayer.name}`);
+                    } else if (selectedPreview.substrateLab) {
+                        logger.log(`  ⚠ Detected substrate from posterization was skipped (likely <0.1% coverage) - not creating layer`);
+                    }
+                } else if (detectedSubstrateLayer) {
+                    substrateLayer = detectedSubstrateLayer;
+                    logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [AUTO-DETECTED]`);
                 }
 
                 // Sort ink layers by L value: HIGH to LOW (light to dark)
