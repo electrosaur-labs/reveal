@@ -182,10 +182,10 @@ class PSDWriter {
             writer.writeUint8(0);
         }
 
-        // Channels: 3 Lab (L,a,b) + transparency/alpha channels
-        // Reference files have 7 channels total (3 Lab + 4 extra)
-        const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
-        writer.writeUint16(channelCount);
+        // Channels: 4 (transparency + L, a, b)
+        // Note: QuickLook requires 3 channels, but Photoshop requires this to match layer channels
+        // We prioritize Photoshop compatibility; icon thumbnails still work via Resource 1036
+        writer.writeUint16(4);
         writer.writeUint32(this.height);
         writer.writeUint32(this.width);
         writer.writeUint16(this.bitsPerChannel);  // Depth
@@ -452,6 +452,7 @@ class PSDWriter {
         // Number of channels
         // Pixel layers: 1 transparency + 3 Lab channels (no mask)
         // Fill layers: 1 transparency + 3 Lab channels + 1 user mask
+        // NOTE: Header declares 3 channels for QuickLook, but layers need transparency for compositing
         const channelCount = isPixelLayer ? 4 : 5;
         writer.writeUint16(channelCount);
 
@@ -882,25 +883,23 @@ class PSDWriter {
     /**
      * Section 5: Image Data (composite/merged preview)
      *
-     * This is what macOS Finder/QuickLook uses to render previews.
-     * Must contain actual flattened image data, not neutral values.
+     * Channel order: L, a, b, then alpha (color channels first, then extra channels)
+     * This is the standard PSD order for Section 5 composite data.
      */
     _writeImageData(writer) {
         // Compression: 0 = raw (uncompressed)
         writer.writeUint16(0);
 
         const pixelCount = this.width * this.height;
-        const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
 
         // Find the first pixel layer to use as composite source
         const pixelLayer = this.layers.find(layer => layer.type === 'pixel');
 
+        // Write 4 channels: L, a, b, then alpha (color channels first)
         if (this.bitsPerChannel === 16) {
             if (pixelLayer && pixelLayer.pixels) {
                 // 16-bit with pixel data: write actual Lab composite
-                // PSD composite uses different scaling:
-                // - L: 0-255 byte → 0-65535 (multiply by 257)
-                // - a/b: 0-255 byte (128=neutral) → 0-65535 (multiply by 257)
+                // Convert 8-bit byte encoding to 16-bit (multiply by 257)
 
                 // L channel (planar)
                 for (let i = 0; i < pixelCount; i++) {
@@ -920,8 +919,8 @@ class PSDWriter {
                     writer.writeUint16(b_byte * 257);
                 }
             } else {
-                // 16-bit without pixel data: write neutral white
-                // L=white is 0xFFFF, a/b neutral is 0x8000 (32768)
+                // 16-bit without pixel data: write solid white (Lab white)
+                // L=100% is 0xFFFF, a/b neutral is 0x8000 (32768)
                 for (let i = 0; i < pixelCount; i++) {
                     writer.writeUint16(65535);  // L (white)
                 }
@@ -933,11 +932,9 @@ class PSDWriter {
                 }
             }
 
-            // Additional alpha/transparency channels
-            for (let ch = 3; ch < channelCount; ch++) {
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint16(0);
-                }
+            // Alpha channel last (fully opaque)
+            for (let i = 0; i < pixelCount; i++) {
+                writer.writeUint16(65535);  // Fully opaque
             }
         } else {
             // 8-bit mode
@@ -956,9 +953,9 @@ class PSDWriter {
                     writer.writeUint8(pixelLayer.pixels[i * 3 + 2]);
                 }
             } else {
-                // 8-bit without pixel data: write neutral gray
+                // 8-bit without pixel data: write solid white (Lab white)
                 for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint8(128);  // L (mid-gray)
+                    writer.writeUint8(255);  // L (white)
                 }
                 for (let i = 0; i < pixelCount; i++) {
                     writer.writeUint8(128);  // a (neutral)
@@ -966,6 +963,11 @@ class PSDWriter {
                 for (let i = 0; i < pixelCount; i++) {
                     writer.writeUint8(128);  // b (neutral)
                 }
+            }
+
+            // Alpha channel last (fully opaque)
+            for (let i = 0; i < pixelCount; i++) {
+                writer.writeUint8(255);  // Fully opaque
             }
         }
     }
