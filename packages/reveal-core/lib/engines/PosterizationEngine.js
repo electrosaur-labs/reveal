@@ -3116,7 +3116,6 @@ class PosterizationEngine {
         // Step 5: Assign each pixel to nearest palette color (HARD SNAP - Zero Dither)
         // Every pixel belongs 100% to one feature color - no error diffusion, no dithering.
         // This ensures razor-sharp boundaries required for high-end spot color separations.
-        logger.log("Assigning pixels to palette...");
         // Lab = 3 channels (L,a,b), RGB = 4 channels (RGBA)
         // CRITICAL: Use Uint16Array to support palettes with >255 colors (quantized + preserved + substrate)
         let assignments = new Uint16Array(pixels.length / (isLabInput ? 3 : 4));
@@ -3126,8 +3125,22 @@ class PosterizationEngine {
         const whiteIndex = preserveWhite ? preservedColorIndex++ : -1;
         const blackIndex = preserveBlack ? preservedColorIndex++ : -1;
 
+        // PERFORMANCE OPTIMIZATION: Preview mode uses stride sampling
+        // This reduces distance calculations by 75% (4× stride = 1/4 pixels computed)
+        // For 800×800 preview: 640k → 160k distance calculations
+        const isPreview = options.isPreview === true;
+        const useStride = isPreview && options.optimizePreview !== false;
+        const ASSIGNMENT_STRIDE = useStride ? 4 : 1;
+
+        if (useStride) {
+            logger.log(`Assigning pixels to palette (preview mode with ${ASSIGNMENT_STRIDE}× stride)...`);
+        } else {
+            logger.log(`Assigning pixels to palette...`);
+        }
+
         // CRITICAL: REUSE labPixels instead of re-converting (eliminates second conversion)
-        for (let i = 0; i < assignments.length; i++) {
+        // Pass 1: Process sampled pixels (every ASSIGNMENT_STRIDE-th pixel)
+        for (let i = 0; i < assignments.length; i += ASSIGNMENT_STRIDE) {
             // Skip transparent pixels - they don't get assigned to any palette color
             if (transparentPixels.has(i)) {
                 assignments[i] = 255; // Special value for transparent (won't be used in layer creation)
@@ -3182,6 +3195,18 @@ class PosterizationEngine {
 
                 // Hard assignment: this pixel is 100% this color (no blending)
                 assignments[i] = closestIndex;
+            }
+        }
+
+        // Pass 2: Interpolate skipped pixels (if stride was used)
+        if (useStride && ASSIGNMENT_STRIDE > 1) {
+            for (let i = 0; i < assignments.length; i++) {
+                if (i % ASSIGNMENT_STRIDE !== 0) {
+                    // Interpolate from nearest sampled pixel
+                    // Use simple nearest-neighbor: copy from previous sampled pixel
+                    const nearestSampled = Math.floor(i / ASSIGNMENT_STRIDE) * ASSIGNMENT_STRIDE;
+                    assignments[i] = assignments[nearestSampled];
+                }
             }
         }
 

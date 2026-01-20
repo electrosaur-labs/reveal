@@ -135,21 +135,22 @@ describe('PosterizationEngine - Performance Benchmarks', () => {
         const height = 800;
         const totalPixels = width * height;
 
-        it('Baseline: Photo-like image with 8 colors', () => {
+        it('Baseline: Photo-like image with 8 colors (NO stride)', () => {
             const labPixels = generatePhotoImage(width, height);
 
             const measurement = measurePerformance(() => {
                 return PosterizationEngine.posterize(labPixels, width, height, 8, {
                     engineType: 'reveal',
                     centroidStrategy: 'SALIENCY',
-                    format: 'lab'
+                    format: 'lab',
+                    isPreview: false  // Full resolution, no stride
                 });
-            }, 'Full Workflow: Photo 8c');
+            }, 'Full Workflow: Photo 8c (no stride)');
 
             const { result, durationMs, memoryDeltaMB } = measurement;
 
             // Record baseline
-            benchmarkResults.benchmarks.fullWorkflow_photo_8c = {
+            benchmarkResults.benchmarks.fullWorkflow_photo_8c_noStride = {
                 width,
                 height,
                 totalPixels,
@@ -157,20 +158,58 @@ describe('PosterizationEngine - Performance Benchmarks', () => {
                 durationMs,
                 memoryDeltaMB,
                 pixelsPerMs: Math.round(totalPixels / durationMs),
-                paletteSize: result.palette.length
+                paletteSize: result.palette.length,
+                strideEnabled: false
             };
 
-            console.log(`\n📊 Full Workflow (Photo 8c): ${durationMs}ms (${Math.round(totalPixels / durationMs)} pixels/ms)`);
+            console.log(`\n📊 Full Workflow (Photo 8c, NO stride): ${durationMs}ms (${Math.round(totalPixels / durationMs)} pixels/ms)`);
             console.log(`   Memory delta: ${memoryDeltaMB}MB`);
             console.log(`   Palette size: ${result.palette.length}`);
 
             // Verify result structure
             expect(result.palette.length).toBeGreaterThan(0);
             expect(result.assignments.length).toBe(totalPixels);
+        });
 
-            // Expected baseline: 3.3-4.0s for 800×800
-            // This is the BEFORE measurement
-            console.log(`   ⚠️ BASELINE (BEFORE optimization): Target < 2000ms after stride fix`);
+        it('Optimized: Photo-like image with 8 colors (WITH stride)', () => {
+            const labPixels = generatePhotoImage(width, height);
+
+            const measurement = measurePerformance(() => {
+                return PosterizationEngine.posterize(labPixels, width, height, 8, {
+                    engineType: 'reveal',
+                    centroidStrategy: 'SALIENCY',
+                    format: 'lab',
+                    isPreview: true  // Preview mode with 4× stride
+                });
+            }, 'Full Workflow: Photo 8c (4× stride)');
+
+            const { result, durationMs, memoryDeltaMB } = measurement;
+
+            // Record optimized result
+            benchmarkResults.benchmarks.fullWorkflow_photo_8c_withStride = {
+                width,
+                height,
+                totalPixels,
+                targetColors: 8,
+                durationMs,
+                memoryDeltaMB,
+                pixelsPerMs: Math.round(totalPixels / durationMs),
+                paletteSize: result.palette.length,
+                strideEnabled: true
+            };
+
+            console.log(`\n📊 Full Workflow (Photo 8c, WITH 4× stride): ${durationMs}ms (${Math.round(totalPixels / durationMs)} pixels/ms)`);
+            console.log(`   Memory delta: ${memoryDeltaMB}MB`);
+            console.log(`   Palette size: ${result.palette.length}`);
+
+            // Calculate speedup
+            const baselineMs = benchmarkResults.benchmarks.fullWorkflow_photo_8c_noStride.durationMs;
+            const speedup = ((baselineMs - durationMs) / baselineMs * 100).toFixed(1);
+            console.log(`   🚀 SPEEDUP: ${speedup}% faster than baseline (${baselineMs}ms → ${durationMs}ms)`);
+
+            // Verify result structure
+            expect(result.palette.length).toBeGreaterThan(0);
+            expect(result.assignments.length).toBe(totalPixels);
         });
 
         it('Baseline: High chroma image with 12 colors', () => {
