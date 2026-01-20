@@ -25,6 +25,7 @@ class PSDWriter {
         this.bitsPerChannel = options.bitsPerChannel || 8;
         this.layers = [];
         this.nextLayerID = 1;  // Counter for unique layer IDs
+        this.thumbnail = null;  // Optional JPEG thumbnail for Resource 1036
 
         // Validate constraints
         if (this.colorMode !== 'lab') {
@@ -121,6 +122,25 @@ class PSDWriter {
             pixels: Buffer.from(options.pixels),
             visible: options.visible !== undefined ? options.visible : true
         });
+    }
+
+    /**
+     * Set thumbnail for Resource 1036 (Adobe dialogs) and Finder preview
+     *
+     * @param {Object} options - Thumbnail options
+     * @param {Buffer} options.jpegData - JPEG-encoded thumbnail image (RGB)
+     * @param {number} options.width - Thumbnail width in pixels
+     * @param {number} options.height - Thumbnail height in pixels
+     */
+    setThumbnail(options) {
+        if (!options.jpegData || !options.width || !options.height) {
+            throw new Error('jpegData, width, and height are required');
+        }
+        this.thumbnail = {
+            jpegData: Buffer.from(options.jpegData),
+            width: options.width,
+            height: options.height
+        };
     }
 
     /**
@@ -227,9 +247,64 @@ class PSDWriter {
         );
         writer.writeBytes(displayInfo);
 
+        // Resource 1036: Thumbnail (JPEG) - for Adobe dialogs and Finder preview
+        if (this.thumbnail) {
+            this._writeThumbnailResource(writer);
+        }
+
         // Update section length
         const length = writer.tell() - startPos - 4;
         updateLength(length);
+    }
+
+    /**
+     * Write Resource 1036: Thumbnail Resource
+     *
+     * Format: 28-byte header + JPEG data
+     * This provides thumbnails for Adobe "Open" dialogs and macOS Finder
+     */
+    _writeThumbnailResource(writer) {
+        const { jpegData, width, height } = this.thumbnail;
+
+        // Build 28-byte thumbnail header
+        const header = Buffer.alloc(28);
+        const headerView = new DataView(header.buffer);
+
+        // Format: 1 = kJpegRGB
+        headerView.setUint32(0, 1, false);
+        // Width & Height
+        headerView.setUint32(4, width, false);
+        headerView.setUint32(8, height, false);
+        // WidthBytes: Padded row stride (width * 3 bytes RGB, padded to 4-byte boundary)
+        const widthBytes = Math.floor((width * 24 + 31) / 32) * 4;
+        headerView.setUint32(12, widthBytes, false);
+        // Total Size (uncompressed RGB data size)
+        headerView.setUint32(16, widthBytes * height, false);
+        // Compressed Size (JPEG size)
+        headerView.setUint32(20, jpegData.length, false);
+        // BPP (24 = RGB) and Planes (1)
+        headerView.setUint16(24, 24, false);
+        headerView.setUint16(26, 1, false);
+
+        // Total resource data = header + JPEG
+        const resourceData = Buffer.concat([header, jpegData]);
+
+        // Write 8BIM resource block
+        writer.writeString('8BIM');     // Signature
+        writer.writeUint16(1036);       // ID: Thumbnail Resource
+        writer.writeUint8(0);           // Name length (0 = no name)
+        writer.writeUint8(0);           // Padding
+
+        // Data length
+        writer.writeUint32(resourceData.length);
+
+        // Resource data (header + JPEG)
+        writer.writeBytes(resourceData);
+
+        // Pad to even length if necessary
+        if (resourceData.length % 2 !== 0) {
+            writer.writeUint8(0);
+        }
     }
 
     /**
@@ -805,61 +880,92 @@ class PSDWriter {
     }
 
     /**
-     * Section 5: Image Data (composite preview)
+     * Section 5: Image Data (composite/merged preview)
      *
-     * For now, write empty/black composite
-     * Photoshop will generate preview on first open
+     * This is what macOS Finder/QuickLook uses to render previews.
+     * Must contain actual flattened image data, not neutral values.
      */
     _writeImageData(writer) {
-        // Compression: 0 = raw
+        // Compression: 0 = raw (uncompressed)
         writer.writeUint16(0);
 
         const pixelCount = this.width * this.height;
         const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
 
+        // Find the first pixel layer to use as composite source
+        const pixelLayer = this.layers.find(layer => layer.type === 'pixel');
+
         if (this.bitsPerChannel === 16) {
-            // 16-bit: 2 bytes per pixel
-            // Composite image uses different scaling than layer data:
-            // - Lab channels: L=white is 0xFFFF, a/b neutral is 0x8000 (32768)
-            // - Layer data uses: L=100 → 32768, a/b neutral=16384
+            if (pixelLayer && pixelLayer.pixels) {
+                // 16-bit with pixel data: write actual Lab composite
+                // PSD composite uses different scaling:
+                // - L: 0-255 byte → 0-65535 (multiply by 257)
+                // - a/b: 0-255 byte (128=neutral) → 0-65535 (multiply by 257)
 
-            // Channel 0: L channel (white) = 0xFFFF
-            for (let i = 0; i < pixelCount; i++) {
-                writer.writeUint16(65535);
+                // L channel (planar)
+                for (let i = 0; i < pixelCount; i++) {
+                    const L_byte = pixelLayer.pixels[i * 3];
+                    writer.writeUint16(L_byte * 257);
+                }
+
+                // a channel (planar)
+                for (let i = 0; i < pixelCount; i++) {
+                    const a_byte = pixelLayer.pixels[i * 3 + 1];
+                    writer.writeUint16(a_byte * 257);
+                }
+
+                // b channel (planar)
+                for (let i = 0; i < pixelCount; i++) {
+                    const b_byte = pixelLayer.pixels[i * 3 + 2];
+                    writer.writeUint16(b_byte * 257);
+                }
+            } else {
+                // 16-bit without pixel data: write neutral white
+                // L=white is 0xFFFF, a/b neutral is 0x8000 (32768)
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint16(65535);  // L (white)
+                }
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint16(32768);  // a (neutral)
+                }
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint16(32768);  // b (neutral)
+                }
             }
 
-            // Channel 1: a channel (neutral) = 0x8000 = 32768
-            for (let i = 0; i < pixelCount; i++) {
-                writer.writeUint16(32768);
-            }
-
-            // Channel 2: b channel (neutral) = 0x8000 = 32768
-            for (let i = 0; i < pixelCount; i++) {
-                writer.writeUint16(32768);
-            }
-
-            // Additional alpha/transparency channels (if any)
-            // For now, write zeros for extra channels
+            // Additional alpha/transparency channels
             for (let ch = 3; ch < channelCount; ch++) {
                 for (let i = 0; i < pixelCount; i++) {
                     writer.writeUint16(0);
                 }
             }
         } else {
-            // 8-bit: 1 byte per pixel
-            // L channel: 0 (black)
-            for (let i = 0; i < pixelCount; i++) {
-                writer.writeUint8(0);
-            }
-
-            // a channel: 128 (neutral)
-            for (let i = 0; i < pixelCount; i++) {
-                writer.writeUint8(128);
-            }
-
-            // b channel: 128 (neutral)
-            for (let i = 0; i < pixelCount; i++) {
-                writer.writeUint8(128);
+            // 8-bit mode
+            if (pixelLayer && pixelLayer.pixels) {
+                // 8-bit with pixel data: write actual Lab composite (planar)
+                // L channel
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint8(pixelLayer.pixels[i * 3]);
+                }
+                // a channel
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint8(pixelLayer.pixels[i * 3 + 1]);
+                }
+                // b channel
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint8(pixelLayer.pixels[i * 3 + 2]);
+                }
+            } else {
+                // 8-bit without pixel data: write neutral gray
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint8(128);  // L (mid-gray)
+                }
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint8(128);  // a (neutral)
+                }
+                for (let i = 0; i < pixelCount; i++) {
+                    writer.writeUint8(128);  // b (neutral)
+                }
             }
         }
     }
