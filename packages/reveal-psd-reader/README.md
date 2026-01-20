@@ -86,6 +86,23 @@ This package implements a minimal subset of the Adobe PSD specification:
 - **No editing** - Read-only (use @reveal/psd-writer to create PSDs)
 - **8-bit output** - 16-bit PSDs downsampled to 8-bit automatically
 
+## Round-Trip Testing
+
+A round-trip test script is available at `packages/reveal-batch/test-psd-roundtrip.js`:
+
+```bash
+cd packages/reveal-batch
+node test-psd-roundtrip.js data/SP100/input/loc/psd/loc_2014635594.psd
+```
+
+This tests that PSDs can be read and written back with identical pixel data.
+
+**Important Notes:**
+- **Programmatic validation**: Round-trip test validates that composite data is preserved byte-for-byte
+- **Photoshop display**: Files created by @reveal/psd-writer use pixel layers (not composite data), so the composite section contains neutral Lab values (L=255, a=128, b=128) which displays as white/blank in Photoshop when viewing the background layer
+- **Expected behavior**: Both original and round-trip files will show blank composite in Photoshop, but pixel data matches perfectly programmatically
+- **Production use**: For creating PSDs that display correctly in Photoshop, use the full workflow (source image → Lab conversion → @reveal/psd-writer with pixel layers)
+
 ## Companion Package
 
 See [@reveal/psd-writer](../reveal-psd-writer) for creating Lab PSDs.
