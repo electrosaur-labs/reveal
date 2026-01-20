@@ -1,0 +1,14 @@
+{
+  "name": "@reveal/psd-reader",
+  "version": "0.1.0",
+  "description": "Minimal PSD file reader for Lab color documents",
+  "main": "index.js",
+  "author": "Reveal Project",
+  "license": "Apache-2.0",
+  "keywords": [
+    "psd",
+    "photoshop",
+    "lab",
+    "color-separation"
+  ]
+}
