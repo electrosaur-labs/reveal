@@ -2616,6 +2616,24 @@ class PosterizationEngine {
                 labPixels[i + 1] = pixels[i + 1] - 128;        // a: 0-255 → -128 to +127
                 labPixels[i + 2] = pixels[i + 2] - 128;        // b: 0-255 → -128 to +127
 
+                // THE SHADOW GATE (Final Calibration)
+                // L < 6.0 is effectively black on a t-shirt.
+                // We force these to True Black (0,0,0) to prevent the engine
+                // from wasting a screen on "Dark Noise" (e.g., L=4.81).
+                if (labPixels[i] < 6.0) {
+                    labPixels[i] = 0;
+                    labPixels[i + 1] = 0;
+                    labPixels[i + 2] = 0;
+                }
+                // THE HIGHLIGHT GATE (Kill Scum Dots)
+                // L > 98.0 is effectively paper/white.
+                // We force these to Pure White (100,0,0) so they become "Transparent/Background".
+                else if (labPixels[i] > 98.0) {
+                    labPixels[i] = 100;
+                    labPixels[i + 1] = 0;
+                    labPixels[i + 2] = 0;
+                }
+
                 // Track converted ranges
                 minL = Math.min(minL, labPixels[i]);
                 maxL = Math.max(maxL, labPixels[i]);
@@ -2648,6 +2666,24 @@ class PosterizationEngine {
                 labPixels[j] = lab.L;
                 labPixels[j + 1] = lab.a;
                 labPixels[j + 2] = lab.b;
+
+                // THE SHADOW GATE (Final Calibration)
+                // L < 6.0 is effectively black on a t-shirt.
+                // We force these to True Black (0,0,0) to prevent the engine
+                // from wasting a screen on "Dark Noise" (e.g., L=4.81).
+                if (labPixels[j] < 6.0) {
+                    labPixels[j] = 0;
+                    labPixels[j + 1] = 0;
+                    labPixels[j + 2] = 0;
+                }
+                // THE HIGHLIGHT GATE (Kill Scum Dots)
+                // L > 98.0 is effectively paper/white.
+                // We force these to Pure White (100,0,0) so they become "Transparent/Background".
+                else if (labPixels[j] > 98.0) {
+                    labPixels[j] = 100;
+                    labPixels[j + 1] = 0;
+                    labPixels[j + 2] = 0;
+                }
             }
 
             if (transparentPixels.size > 0) {
@@ -3037,25 +3073,36 @@ class PosterizationEngine {
         if (substrateLab) {
             // Check if substrate is similar to any preserved color
             // If so, skip adding substrate to avoid duplicates (e.g., white substrate + preserveWhite)
-            const DUPLICATE_THRESHOLD = 3.0; // ΔE threshold for considering colors identical
-            let isDuplicate = false;
-
-            for (const preserved of preservedColors) {
-                const dL = substrateLab.L - preserved.L;
-                const da = substrateLab.a - preserved.a;
-                const db = substrateLab.b - preserved.b;
-                const deltaE = Math.sqrt(dL * dL + da * da + db * db);
-
-                if (deltaE < DUPLICATE_THRESHOLD) {
-                    isDuplicate = true;
-                    logger.log(`  ! Substrate (L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)}) is too similar to preserved color (ΔE=${deltaE.toFixed(2)}) - skipping to avoid duplicate`);
-                    break;
-                }
+            // SHADOW GATE FOR SUBSTRATE: If substrate is too dark (L < 6), skip it.
+            // Dark substrates are effectively black and we already have preserved black.
+            if (substrateLab.L < 6.0) {
+                logger.log(`  ! Substrate (L=${substrateLab.L.toFixed(1)}) is too dark (L < 6) - skipping (Shadow Gate)`);
             }
+            // HIGHLIGHT GATE FOR SUBSTRATE: If substrate is too bright (L > 98), skip it.
+            // Bright substrates are effectively white/paper and we already have preserved white.
+            else if (substrateLab.L > 98.0) {
+                logger.log(`  ! Substrate (L=${substrateLab.L.toFixed(1)}) is too bright (L > 98) - skipping (Highlight Gate)`);
+            } else {
+                const DUPLICATE_THRESHOLD = 3.0; // ΔE threshold for considering colors identical
+                let isDuplicate = false;
 
-            if (!isDuplicate) {
-                substrateColors.push(substrateLab);
-                logger.log(`  + Added substrate to palette: L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)} (paper/medium)`);
+                for (const preserved of preservedColors) {
+                    const dL = substrateLab.L - preserved.L;
+                    const da = substrateLab.a - preserved.a;
+                    const db = substrateLab.b - preserved.b;
+                    const deltaE = Math.sqrt(dL * dL + da * da + db * db);
+
+                    if (deltaE < DUPLICATE_THRESHOLD) {
+                        isDuplicate = true;
+                        logger.log(`  ! Substrate (L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)}) is too similar to preserved color (ΔE=${deltaE.toFixed(2)}) - skipping to avoid duplicate`);
+                        break;
+                    }
+                }
+
+                if (!isDuplicate) {
+                    substrateColors.push(substrateLab);
+                    logger.log(`  + Added substrate to palette: L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)} (paper/medium)`);
+                }
             }
         }
 
