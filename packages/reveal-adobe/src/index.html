@@ -878,8 +878,9 @@
                 <!-- Color Separation Settings -->
                 <div class="form-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px;">
-                    <!-- Left side: Preset selector -->
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <!-- Left side: Preset selector (DEPRECATED - DNA analysis now used) -->
+                    <!-- Kept for rollback if needed -->
+                    <!-- <div style="display: flex; align-items: center; gap: 8px;">
                         <sp-label style="font-size: 12px; white-space: nowrap;">Quick Preset:</sp-label>
                         <select id="presetSelector" class="form-control" style="padding: 6px 12px; font-size: 12px; min-width: 200px;">
                             <option value="" selected>-- Select Preset --</option>
@@ -897,12 +898,12 @@
                             <option value="warhol-pop">Warhol Pop</option>
                             <option value="technical-enamel">Industrial Enamel</option>
                         </select>
-                    </div>
+                    </div> -->
 
                     <!-- Right side: Action buttons -->
                     <div style="display: flex; gap: 8px;">
-                        <button id="btnAnalyzeAndSet" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;" title="Automatically detect image type and set parameters">
-                            🔍 Analyze and Set
+                        <button id="btnAnalyzeAndSet" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;" title="Analyze image DNA and automatically configure parameters">
+                            🧬 Analyze DNA
                         </button>
                         <button id="btnResetDefaults" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;">
                             Reset to Defaults

@@ -13,10 +13,12 @@ const Reveal = require("@reveal/core");
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 const SeparationEngine = Reveal.engines.SeparationEngine;
 const ImageHeuristicAnalyzer = Reveal.engines.ImageHeuristicAnalyzer;
+const ParameterGenerator = require("@reveal/core/lib/analysis/ParameterGenerator");
 const logger = Reveal.logger;
 
 // Photoshop-specific API (stays in reveal-adobe)
 const PhotoshopAPI = require("./api/PhotoshopAPI");
+const DNAGenerator = require("./DNAGenerator");
 
 // Test utilities
 const { testTransparencySelection } = require("./test-16bit-transparency-selection");
@@ -1580,17 +1582,17 @@ function getFormValues() {
         colorMode: document.getElementById("colorMode")?.value ?? "color",  // Color or B/W mode
         substrateMode: document.getElementById("substrateMode")?.value ?? "auto",  // Substrate awareness
         substrateTolerance: parseFloat(document.getElementById("substrateTolerance")?.value ?? 3.5),  // ΔE threshold
-        vibrancyMode: document.getElementById("vibrancyMode")?.value ?? "aggressive",  // Vibrancy algorithm
+        vibrancyMode: document.getElementById("vibrancyMode")?.value ?? "moderate",  // Vibrancy algorithm
         vibrancyBoost: parseFloat(document.getElementById("vibrancyBoost")?.value ?? 1.6),  // Fixed vibrancy multiplier (split.vibrancyBoost)
         highlightThreshold: parseInt(document.getElementById("highlightThreshold")?.value ?? 85),  // White point (prune.whitePoint)
-        highlightBoost: parseFloat(document.getElementById("highlightBoost")?.value ?? 2.2),  // Highlight boost (split.highlightBoost)
-        hueLockAngle: parseFloat(document.getElementById("hueLockAngle")?.value ?? 18),  // Hue lock angle (prune.hueLockAngle)
+        highlightBoost: parseFloat(document.getElementById("highlightBoost")?.value ?? 1.0),  // Highlight boost (split.highlightBoost)
+        hueLockAngle: parseFloat(document.getElementById("hueLockAngle")?.value ?? 20),  // Hue lock angle (prune.hueLockAngle)
         shadowPoint: parseFloat(document.getElementById("shadowPoint")?.value ?? 15),  // Shadow point (prune.shadowPoint)
-        lWeight: parseFloat(document.getElementById("lWeight")?.value ?? 1.1),  // Saliency L-weight (centroid.lWeight)
-        cWeight: parseFloat(document.getElementById("cWeight")?.value ?? 2.0),  // Saliency C-weight (centroid.cWeight)
+        lWeight: parseFloat(document.getElementById("lWeight")?.value ?? 1.0),  // Saliency L-weight (centroid.lWeight)
+        cWeight: parseFloat(document.getElementById("cWeight")?.value ?? 1.0),  // Saliency C-weight (centroid.cWeight)
         blackBias: parseFloat(document.getElementById("blackBias")?.value ?? 5.0),  // Black bias (centroid.blackBias)
         enablePaletteReduction: document.getElementById("enablePaletteReduction")?.checked ?? true,  // Enable/disable palette reduction
-        paletteReduction: parseFloat(document.getElementById("paletteReduction")?.value ?? 9.0)  // Color merging threshold (prune.threshold)
+        paletteReduction: parseFloat(document.getElementById("paletteReduction")?.value ?? 10.0)  // Color merging threshold (prune.threshold)
         // CIELAB is always used - no toggle
     };
 }
@@ -2514,11 +2516,12 @@ async function showDialog() {
             }
 
             // Analyze and Set button handler
+            // Analyze DNA button handler (DNA-based dynamic configuration)
             const btnAnalyzeAndSet = document.getElementById("btnAnalyzeAndSet");
             if (btnAnalyzeAndSet) {
                 btnAnalyzeAndSet.addEventListener("click", async () => {
                     logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    logger.log("🔍 ANALYZE AND SET - Starting analysis...");
+                    logger.log("🧬 ANALYZE DNA - Starting analysis...");
                     logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
                     // Disable button and show loading state
@@ -2536,57 +2539,87 @@ async function showDialog() {
                                 width: pixelData.width,
                                 height: pixelData.height
                             };
-                        }, { commandName: "Analyze Document" });
+                        }, { commandName: "Analyze Document DNA" });
 
                         logger.log(`✓ Retrieved ${result.pixels.length} bytes (${result.width}×${result.height})`);
 
-                        // Run analyzer
-                        const analysis = ImageHeuristicAnalyzer.analyze(
-                            result.pixels,
-                            result.width,
-                            result.height
-                        );
+                        // Generate DNA from Lab pixels
+                        const startTime = Date.now();
+                        const dna = DNAGenerator.generate(result.pixels, result.width, result.height, 40);
+                        const dnaTime = Date.now() - startTime;
 
-                        logger.log(`✓ Signature detected: "${analysis.label}"`);
-                        logger.log(`  Analysis time: ${analysis.timing.toFixed(2)}ms`);
-                        logger.log(`  Preset ID: ${analysis.presetId}`);
+                        logger.log("✓ Image DNA extracted:", dna);
+                        logger.log(`  DNA generation time: ${dnaTime.toFixed(2)}ms`);
 
-                        // Look up preset settings
-                        const preset = PARAMETER_PRESETS[analysis.presetId];
-                        if (!preset) {
-                            throw new Error(`Invalid preset ID returned by analyzer: ${analysis.presetId}`);
-                        }
+                        // Run ParameterGenerator to get dynamic configuration
+                        const config = ParameterGenerator.generate(dna);
+                        logger.log("✓ Generated dynamic config:", config);
 
-                        logger.log("  Preset settings:", preset.settings);
+                        // Map ALL parameters to UI elements (matching batch process configuration)
+                        const uiSettings = {
+                            // DNA-driven parameters
+                            targetColorsSlider: config.targetColors,
+                            blackBias: config.blackBias,
+                            ditherType: config.ditherType,
+                            vibrancyBoost: config.saturationBoost,
 
-                        // Apply preset settings (no mapping needed - presets already use correct IDs)
-                        applyAnalyzedSettings(preset.settings);
+                            // Standard configuration parameters (batch defaults)
+                            engineType: 'reveal',
+                            centroidStrategy: 'SALIENCY',
+                            lWeight: 1.0,
+                            cWeight: 1.0,
+                            substrateMode: 'auto',
+                            substrateTolerance: 2.0,
+                            vibrancyMode: 'moderate',
+                            highlightThreshold: 85,
+                            highlightBoost: 1.0,
+                            enablePaletteReduction: true,
+                            paletteReduction: 10.0,
+                            hueLockAngle: 20,
+                            shadowPoint: 15,
+                            colorMode: 'color',
+                            preserveWhite: true,
+                            preserveBlack: true,
+                            ignoreTransparent: true,
+                            enableHueGapAnalysis: true,
+                            maskProfile: 'Gray Gamma 2.2'
+                        };
 
-                        // Show summary to user
-                        const paramCount = Object.keys(preset.settings).length;
-                        const summary =
-                            `═══════════════════════════════════════\n` +
-                            `        ANALYSIS COMPLETE\n` +
-                            `═══════════════════════════════════════\n\n` +
-                            `Detected Signature:\n` +
-                            `  ${analysis.label}\n\n` +
-                            `Applied Preset:\n` +
-                            `  ${preset.name}\n\n` +
-                            `Analysis Time: ${analysis.timing.toFixed(2)}ms\n\n` +
-                            `Parameters Updated: ${paramCount}\n\n` +
-                            `═══════════════════════════════════════`;
+                        logger.log("  Setting ALL UI parameters from DNA analysis:");
+                        logger.log("  DNA-driven:", {
+                            targetColors: config.targetColors,
+                            blackBias: config.blackBias,
+                            ditherType: config.ditherType,
+                            saturationBoost: config.saturationBoost
+                        });
+                        logger.log("  Standard config: lWeight=1.0, cWeight=1.0, vibrancyMode=moderate, etc.");
 
-                        logger.log("\n" + summary);
-                        alert(summary);
+                        // Apply ALL DNA-based settings to UI
+                        applyAnalyzedSettings(uiSettings);
+
+                        // Show simple alert to user
+                        const alertMsg = `DNA Analysis Complete\n\nConfig: ${config.name}\nColors: ${config.targetColors}, Black Bias: ${config.blackBias.toFixed(1)}, Dither: ${config.ditherType}\n\nAll parameters have been set.\nClick "Posterize" to generate separations.`;
+
+                        // Log full details to console
+                        logger.log(`\nDNA ANALYSIS COMPLETE`);
+                        logger.log(`Image DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
+                        logger.log(`Config: ${config.name}`);
+                        logger.log(`  Target Colors: ${config.targetColors}`);
+                        logger.log(`  Black Bias: ${config.blackBias.toFixed(1)}`);
+                        logger.log(`  Vibrancy Boost: ${config.saturationBoost.toFixed(2)}`);
+                        logger.log(`  Dither Type: ${config.ditherType}`);
+                        logger.log(`Analysis Time: ${dnaTime.toFixed(2)}ms`);
+
+                        alert(alertMsg);
 
                         logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                        logger.log("✓ ANALYZE AND SET - Complete");
+                        logger.log("✓ ANALYZE DNA - Complete");
                         logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
                     } catch (error) {
-                        logger.error("❌ Analysis failed:", error);
+                        logger.error("❌ DNA Analysis failed:", error);
                         alert(
-                            `Analysis failed:\n\n${error.message}\n\n` +
+                            `DNA Analysis failed:\n\n${error.message}\n\n` +
                             `Please ensure a document is open and try again.`
                         );
                     } finally {
@@ -2596,11 +2629,13 @@ async function showDialog() {
                         btnAnalyzeAndSet.style.opacity = "1";
                     }
                 });
-                logger.log("✓ Analyze and Set button handler attached");
+                logger.log("✓ Analyze DNA button handler attached");
             }
 
             // Preset selector change handler
-            const presetSelector = document.getElementById("presetSelector");
+            // Preset selector handler (DEPRECATED - DNA analysis now used)
+            // Kept for rollback if needed
+            /* const presetSelector = document.getElementById("presetSelector");
             if (presetSelector) {
                 presetSelector.addEventListener("change", () => {
                     const presetId = presetSelector.value;
@@ -2633,7 +2668,7 @@ async function showDialog() {
                     logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
                 });
                 logger.log("✓ Preset selector handler attached");
-            }
+            } */
 
             // Palette Reduction checkbox toggle
             const enablePaletteReductionCheckbox = document.getElementById("enablePaletteReduction");
