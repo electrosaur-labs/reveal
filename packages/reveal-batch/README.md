@@ -166,11 +166,104 @@ output/
 ```
 reveal-batch/
 ├── src/
-│   ├── cli.js              # Command-line interface
-│   ├── ImageProcessor.js   # Image I/O and workflow
-│   └── index.js           # Main entry point
+│   ├── cli.js                      # Command-line interface
+│   ├── ImageProcessor.js           # Image I/O and workflow
+│   ├── processCQ100.js             # CQ100 benchmark processor
+│   ├── DynamicConfigurator.js      # DNA-based parameter generation
+│   ├── MetricsCalculator.js        # Quality metrics with integrity scoring
+│   ├── CQ100_MetaAnalyzer.js       # Batch results analysis
+│   ├── CQ100_Profiler.js           # Image DNA profiling
+│   ├── Revalidate.js               # Integrity recalculation tool
+│   └── index.js                   # Main entry point
 ├── package.json
 └── README.md
+```
+
+## CQ100 Benchmark System
+
+The CQ100 benchmark processes 100 diverse images to validate color separation quality across different image types.
+
+### Key Features
+
+**🧬 DNA-Based Configuration**
+- Analyzes each image's "DNA" (avg L, C, K, maxC, range)
+- Dynamically generates bespoke parameters per image
+- No manual presets required
+
+**🚑 Saliency Rescue**
+- Detects "hidden color spikes" (low avg chroma, high max chroma)
+- Forces maximum palette (12 colors) to preserve salient features
+- Example: Grey astronaut with bright red flag
+
+**🛡️ Texture Rescue**
+- Detects extreme contrast (K > 28) causing "scum dots"
+- Applies noise suppression with heavy black bias
+- Example: Marrakech museum with fine textures
+
+**📊 Quality Metrics**
+- **Integrity Score (0-100)**: Printability assessment with 12% tolerance
+- **Revelation Score (0-100)**: Visual quality assessment
+- **Global Fidelity**: Average ΔE (CIE76 color difference)
+
+### Running CQ100 Benchmark
+
+```bash
+# Process all 100 images with dynamic configuration
+npm run process-cq100
+
+# Analyze results
+npm run analyze-cq100
+
+# Recalculate integrity scores
+npm run revalidate
+```
+
+### CQ100 Results (Current)
+
+**Global Metrics:**
+- Avg ΔE: 16.53
+- Avg Revelation: 32.3
+- Avg Integrity: 93.8
+- Processing: ~1.4s per image
+
+**Color Distribution:**
+- 51% of images use 12-13 colors (optimal sweet spot)
+- 26% use 12 colors (maximum palette)
+- 3% triggered Saliency Rescue
+
+**Passing Rate:** 92% of images achieve Integrity > 60 (print-ready)
+
+### DynamicConfigurator Logic
+
+The system uses 7 heuristic rules:
+
+1. **Complexity Scaling**: High contrast + high chroma → more colors
+2. **Saliency Rescue**: Hidden color spikes → force 12 colors (avgC < 12, maxC > 50)
+3. **Texture Rescue**: Extreme contrast → noise suppression (K > 28)
+4. **Vintage Optimization**: Flat images → fewer colors (K < 10, C < 10)
+5. **Rich Images**: High chroma + contrast → ensure 12 colors
+6. **Dynamic Black Bias**: Protect blacks in noir, relax in high-key
+7. **Saturation Boost**: Boost dull images, clamp neon images
+
+### Integrity Scoring (Extended Tolerance)
+
+Three-zone scoring model based on screen printing reality:
+
+- **Safe Zone (0-0.5%)**: Score 100 (microscopic noise acceptable)
+- **Good Zone (0.5-8%)**: Linear decay 100→60 (still printable)
+- **Fail Zone (8-12%)**: Linear decay 60→0 (quality issues)
+- **Critical (>12%)**: Score 0 (unprintable)
+
+### Analysis Tools
+
+**analyze-colors.js** - Show color count distribution
+```bash
+node analyze-colors.js
+```
+
+**compare-results.js** - Compare before/after metrics
+```bash
+node compare-results.js
 ```
 
 ## Examples
