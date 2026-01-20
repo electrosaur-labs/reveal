@@ -1,0 +1,30 @@
+{
+  "id": "cinematic-moody",
+  "name": "Cinematic / Moody",
+  "description": "Data-driven preset for darker images with atmospheric quality",
+  "settings": {
+    "engineType": "reveal",
+    "centroidStrategy": "VOLUMETRIC",
+    "lWeight": 1.5,
+    "cWeight": 1.0,
+    "blackBias": 5.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 2.0,
+    "vibrancyMode": "subtle",
+    "vibrancyBoost": 0.95,
+    "highlightThreshold": 85,
+    "highlightBoost": 1.2,
+    "enablePaletteReduction": true,
+    "paletteReduction": 10.0,
+    "hueLockAngle": 20,
+    "shadowPoint": 20,
+    "colorMode": "color",
+    "targetColorsSlider": 8,
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "BlueNoise",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}

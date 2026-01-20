@@ -1699,7 +1699,8 @@ function applyAnalyzedSettings(settings) {
 
 /**
  * Load all presets from JSON files
- * Auto-discovers presets - just add new JSON file to src/presets/ to add preset
+ * Note: Must be hardcoded for UXP/browser environment (no fs module)
+ * To add a preset: Add require() line below AND add JSON file to reveal-core/presets/
  */
 const PARAMETER_PRESETS = {
     'standard-image': require('@reveal/core/presets/standard-image.json'),
@@ -1714,7 +1715,9 @@ const PARAMETER_PRESETS = {
     'commercial-offset': require('@reveal/core/presets/commercial-offset.json'),
     'minkler-justice': require('@reveal/core/presets/minkler-justice.json'),
     'warhol-pop': require('@reveal/core/presets/warhol-pop.json'),
-    'technical-enamel': require('@reveal/core/presets/technical-enamel.json')
+    'technical-enamel': require('@reveal/core/presets/technical-enamel.json'),
+    'punchy-commercial': require('@reveal/core/presets/punchy-commercial.json'),
+    'cinematic-moody': require('@reveal/core/presets/cinematic-moody.json')
 };
 
 // Validate presets on load
