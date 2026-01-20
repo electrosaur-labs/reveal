@@ -170,6 +170,7 @@ class LabConverter {
         let maxC = 0;
         let sampleCount = 0;
 
+        // First pass: accumulate sums and find extrema
         for (let i = 0; i < psBytes.length; i += (3 * sampleStep)) {
             const lab = this.photoshopToPerceptual(psBytes, i);
 
@@ -186,14 +187,28 @@ class LabConverter {
             sampleCount++;
         }
 
+        const avgL = sumL / sampleCount;
+
+        // Second pass: calculate variance for standard deviation
+        let sumSquaredDiffL = 0;
+        for (let i = 0; i < psBytes.length; i += (3 * sampleStep)) {
+            const lab = this.photoshopToPerceptual(psBytes, i);
+            const diffL = lab.L - avgL;
+            sumSquaredDiffL += diffL * diffL;
+        }
+
+        const varianceL = sumSquaredDiffL / sampleCount;
+        const stdDevL = Math.sqrt(varianceL);
+
         return {
-            avgL: sumL / sampleCount,
+            avgL: avgL,
             avgC: this.calculateChroma(sumA / sampleCount, sumB / sampleCount),
             minL: minL,
             maxL: maxL,
             maxC: maxC,
             avgA: sumA / sampleCount,
             avgB: sumB / sampleCount,
+            stdDevL: stdDevL,
             sampleCount: sampleCount
         };
     }
@@ -239,7 +254,8 @@ class LabConverter {
             k: parseFloat(contrast.toFixed(1)),
             maxC: parseFloat(stats.maxC.toFixed(1)),
             minL: parseFloat(stats.minL.toFixed(1)),
-            maxL: parseFloat(stats.maxL.toFixed(1))
+            maxL: parseFloat(stats.maxL.toFixed(1)),
+            l_std_dev: parseFloat(stats.stdDevL.toFixed(1))
         };
     }
 }
