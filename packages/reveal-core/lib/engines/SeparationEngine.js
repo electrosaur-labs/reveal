@@ -988,11 +988,14 @@ class SeparationEngine {
                 if (mask[i] === 255) opaquePixelCount++;
             }
 
-            logger.log(`  Layer has ${opaquePixelCount} pixels (${(opaquePixelCount / (width * height) * 100).toFixed(1)}% coverage)`);
+            const coveragePercent = (opaquePixelCount / (width * height) * 100);
+            logger.log(`  Layer has ${opaquePixelCount} pixels (${coveragePercent.toFixed(1)}% coverage)`);
 
-            // Skip empty layers (caused by scale mismatch between posterization and layer creation)
-            if (opaquePixelCount === 0) {
-                logger.log(`  ⚠ Skipping empty layer (0 pixels at full resolution)`);
+            // Skip empty or near-empty layers
+            // Minimum threshold: 0.1% coverage (prevents artifacts from palette reduction, substrate detection, etc.)
+            const MIN_COVERAGE_PERCENT = 0.1;
+            if (opaquePixelCount === 0 || coveragePercent < MIN_COVERAGE_PERCENT) {
+                logger.log(`  ⚠ Skipping layer (${coveragePercent.toFixed(3)}% coverage < ${MIN_COVERAGE_PERCENT}% threshold)`);
                 return; // Skip this layer
             }
 
