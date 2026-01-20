@@ -1,19 +1,11 @@
 /**
  * DynamicConfigurator.js
- * DEPRECATED: Use @reveal/core/lib/analysis/ParameterGenerator instead
- * This file is kept for backward compatibility only.
+ * The "God Mode" Brain.
+ * Now includes Saliency Rescue to save images like the Astronaut.
  */
-const ParameterGenerator = require('@reveal/core/lib/analysis/ParameterGenerator');
-
 class DynamicConfigurator {
 
     static generate(dna) {
-        // Delegate to core implementation
-        return ParameterGenerator.generate(dna);
-    }
-
-    // Legacy implementation (kept for reference)
-    static _legacyGenerate(dna) {
         // dna = { l: avgL, c: avgC, k: contrast, maxC: maxChroma, minL: ..., maxL: ..., filename: ... }
 
         // DEFAULT: The "Safe" Middle
