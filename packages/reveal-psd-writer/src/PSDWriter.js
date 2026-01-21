@@ -26,6 +26,7 @@ class PSDWriter {
         this.layers = [];
         this.nextLayerID = 1;  // Counter for unique layer IDs
         this.thumbnail = null;  // Optional JPEG thumbnail for Resource 1036
+        this.compression = options.compression !== undefined ? options.compression : 'rle';  // 'none' or 'rle'
 
         // Validate constraints
         if (this.colorMode !== 'lab') {
@@ -33,6 +34,190 @@ class PSDWriter {
         }
         if (this.bitsPerChannel !== 8 && this.bitsPerChannel !== 16) {
             throw new Error('Only 8-bit and 16-bit per channel are supported');
+        }
+    }
+
+    /**
+     * PackBits RLE compression (PSD compression type 1)
+     *
+     * Encodes a single row of data using the PackBits algorithm.
+     * Returns a Buffer with the compressed row data.
+     *
+     * PackBits encoding:
+     * - n = -1 to -127: copy the next byte (-n + 1) times (run of identical bytes)
+     * - n = 0 to 127: copy the next (n + 1) bytes verbatim (literal run)
+     * - n = -128: NOP (skip)
+     *
+     * @param {Buffer|Uint8Array} row - Raw row data
+     * @returns {Buffer} Compressed row data
+     */
+    _packBitsEncode(row) {
+        const output = [];
+        let pos = 0;
+        const len = row.length;
+
+        while (pos < len) {
+            // Look for runs of identical bytes
+            let runStart = pos;
+            let runByte = row[pos];
+            let runLen = 1;
+
+            while (pos + runLen < len && row[pos + runLen] === runByte && runLen < 128) {
+                runLen++;
+            }
+
+            if (runLen >= 3) {
+                // Emit a run (replicate)
+                output.push(-(runLen - 1));  // n = -(count - 1), so -n + 1 = count
+                output.push(runByte);
+                pos += runLen;
+            } else {
+                // Look for literal (non-run) sequence
+                let literalStart = pos;
+                let literalLen = 0;
+
+                while (pos + literalLen < len && literalLen < 128) {
+                    // Check if a run of 3+ starts here
+                    let byte = row[pos + literalLen];
+                    let ahead = 1;
+                    while (pos + literalLen + ahead < len &&
+                           row[pos + literalLen + ahead] === byte &&
+                           ahead < 3) {
+                        ahead++;
+                    }
+
+                    if (ahead >= 3) {
+                        // A run starts here - stop the literal
+                        break;
+                    }
+
+                    literalLen++;
+                }
+
+                if (literalLen === 0) literalLen = 1;
+
+                // Emit a literal
+                output.push(literalLen - 1);  // n = count - 1, so n + 1 = count
+                for (let i = 0; i < literalLen; i++) {
+                    output.push(row[pos + i]);
+                }
+                pos += literalLen;
+            }
+        }
+
+        return Buffer.from(output);
+    }
+
+    /**
+     * Compress a channel using RLE (PackBits) compression
+     * Returns the compressed data with row byte counts prefix
+     *
+     * @param {Buffer|Uint8Array} channelData - Planar channel data (width × height bytes for 8-bit, or width × height × 2 for 16-bit)
+     * @param {number} bytesPerPixel - 1 for 8-bit, 2 for 16-bit
+     * @returns {Object} { rowByteCounts: Uint16Array, compressedData: Buffer, totalSize: number }
+     */
+    _compressChannelRLE(channelData, bytesPerPixel) {
+        const rowByteCounts = new Uint16Array(this.height);
+        const compressedRows = [];
+
+        const rowBytes = this.width * bytesPerPixel;
+
+        for (let y = 0; y < this.height; y++) {
+            const rowStart = y * rowBytes;
+            const rowEnd = rowStart + rowBytes;
+            const row = channelData.slice(rowStart, rowEnd);
+
+            const compressedRow = this._packBitsEncode(row);
+            rowByteCounts[y] = compressedRow.length;
+            compressedRows.push(compressedRow);
+        }
+
+        const compressedData = Buffer.concat(compressedRows);
+        // Total size: 2 (compression type) + height*2 (row counts) + compressed data
+        const totalSize = 2 + (this.height * 2) + compressedData.length;
+
+        return {
+            rowByteCounts,
+            compressedData,
+            totalSize
+        };
+    }
+
+    /**
+     * Pre-compute compressed channel data for all layers
+     * This is needed because layer records must contain channel sizes before the data is written
+     */
+    _prepareLayerChannelData() {
+        const pixelCount = this.width * this.height;
+        const bytesPerPixel = this.bitsPerChannel === 16 ? 2 : 1;
+        const useRLE = this.compression === 'rle';
+
+        for (const layer of this.layers) {
+            const isPixelLayer = layer.type === 'pixel';
+            layer._channelData = [];
+
+            if (this.bitsPerChannel === 16) {
+                if (isPixelLayer) {
+                    // Build planar channel buffers for pixel layer
+                    const transparency = Buffer.alloc(pixelCount * 2);
+                    const L_channel = Buffer.alloc(pixelCount * 2);
+                    const a_channel = Buffer.alloc(pixelCount * 2);
+                    const b_channel = Buffer.alloc(pixelCount * 2);
+
+                    for (let i = 0; i < pixelCount; i++) {
+                        transparency.writeUInt16BE(65535, i * 2);
+                        L_channel.writeUInt16BE(Math.round((layer.pixels[i * 3] / 255) * 65535), i * 2);
+                        a_channel.writeUInt16BE(Math.round((layer.pixels[i * 3 + 1] / 255) * 65535), i * 2);
+                        b_channel.writeUInt16BE(Math.round((layer.pixels[i * 3 + 2] / 255) * 65535), i * 2);
+                    }
+
+                    if (useRLE) {
+                        layer._channelData.push(this._compressChannelRLE(transparency, 2));
+                        layer._channelData.push(this._compressChannelRLE(L_channel, 2));
+                        layer._channelData.push(this._compressChannelRLE(a_channel, 2));
+                        layer._channelData.push(this._compressChannelRLE(b_channel, 2));
+                    } else {
+                        // Uncompressed: size = 2 (compression) + data length
+                        layer._channelData.push({ totalSize: 2 + transparency.length, raw: transparency });
+                        layer._channelData.push({ totalSize: 2 + L_channel.length, raw: L_channel });
+                        layer._channelData.push({ totalSize: 2 + a_channel.length, raw: a_channel });
+                        layer._channelData.push({ totalSize: 2 + b_channel.length, raw: b_channel });
+                    }
+                } else {
+                    // 16-bit fill layer: transparency/L/a/b have no pixel data (size 2 each)
+                    layer._channelData.push({ totalSize: 2, empty: true });
+                    layer._channelData.push({ totalSize: 2, empty: true });
+                    layer._channelData.push({ totalSize: 2, empty: true });
+                    layer._channelData.push({ totalSize: 2, empty: true });
+
+                    // Mask channel
+                    if (useRLE) {
+                        layer._channelData.push(this._compressChannelRLE(layer.mask, 2));
+                    } else {
+                        layer._channelData.push({ totalSize: 2 + layer.mask.length, raw: layer.mask });
+                    }
+                }
+            } else {
+                // 8-bit mode
+                const transparency = Buffer.alloc(pixelCount, 255);
+                const L_channel = Buffer.alloc(pixelCount, Math.round((layer.color.L / 100) * 255));
+                const a_channel = Buffer.alloc(pixelCount, Math.round(layer.color.a + 128));
+                const b_channel = Buffer.alloc(pixelCount, Math.round(layer.color.b + 128));
+
+                if (useRLE) {
+                    layer._channelData.push(this._compressChannelRLE(transparency, 1));
+                    layer._channelData.push(this._compressChannelRLE(L_channel, 1));
+                    layer._channelData.push(this._compressChannelRLE(a_channel, 1));
+                    layer._channelData.push(this._compressChannelRLE(b_channel, 1));
+                    layer._channelData.push(this._compressChannelRLE(layer.mask, 1));
+                } else {
+                    layer._channelData.push({ totalSize: 2 + transparency.length, raw: transparency });
+                    layer._channelData.push({ totalSize: 2 + L_channel.length, raw: L_channel });
+                    layer._channelData.push({ totalSize: 2 + a_channel.length, raw: a_channel });
+                    layer._channelData.push({ totalSize: 2 + b_channel.length, raw: b_channel });
+                    layer._channelData.push({ totalSize: 2 + layer.mask.length, raw: layer.mask });
+                }
+            }
         }
     }
 
@@ -349,6 +534,9 @@ class PSDWriter {
         writer.writeString('8BIM');
         writer.writeString('Lr16');
 
+        // Pre-compute all channel data (needed for sizes in layer records)
+        this._prepareLayerChannelData();
+
         // Write Lr16 data to separate buffer to calculate length
         const lr16Writer = new BinaryWriter();
 
@@ -410,6 +598,9 @@ class PSDWriter {
         const startPos = writer.tell();
         const updateLayerInfoLength = writer.reserveUint32();
 
+        // Pre-compute all channel data (needed for sizes in layer records)
+        this._prepareLayerChannelData();
+
         // Layer count (negative indicates transparency data)
         writer.writeInt16(-this.layers.length);
 
@@ -455,53 +646,32 @@ class PSDWriter {
         const channelCount = isPixelLayer ? 4 : 5;
         writer.writeUint16(channelCount);
 
-        // Channel data sizes
-        let transparencySize, labChannelSize, maskSize;
-        const pixelCount = this.width * this.height;
-
-        if (this.bitsPerChannel === 16) {
-            if (isPixelLayer) {
-                // 16-bit pixel layer: all channels have actual pixel data
-                transparencySize = 2 + (pixelCount * 2);  // Compression + 16-bit pixels
-                labChannelSize = 2 + (pixelCount * 2);    // Compression + 16-bit pixels
-            } else {
-                // 16-bit fill layer: L/a/b have no pixel data, just compression header
-                transparencySize = 2;  // Just compression header
-                labChannelSize = 2;    // Just compression header
-                // Mask: compression header (2 bytes) + raw uncompressed mask data
-                maskSize = 2 + layer.mask.length;
-            }
-        } else {
-            // 8-bit: all channels have pixel data
-            transparencySize = 2 + pixelCount;
-            labChannelSize = 2 + pixelCount;
-            maskSize = 2 + pixelCount;
-        }
+        // Get pre-computed channel sizes from _prepareLayerChannelData
+        const channelData = layer._channelData;
 
         // Channel information
         // Format: Channel ID (2 bytes) + Length (4 bytes)
-        // NOTE: 8-byte Uint64 lengths only apply to PSB format, not regular 16-bit PSDs
 
         // Transparency mask (ID = -1)
         writer.writeInt16(-1);
-        writer.writeUint32(transparencySize);
+        writer.writeUint32(channelData[0].totalSize);
 
         // L channel (ID = 0)
         writer.writeInt16(0);
-        writer.writeUint32(labChannelSize);
+        writer.writeUint32(channelData[1].totalSize);
 
         // a channel (ID = 1)
         writer.writeInt16(1);
-        writer.writeUint32(labChannelSize);
+        writer.writeUint32(channelData[2].totalSize);
 
         // b channel (ID = 2)
         writer.writeInt16(2);
-        writer.writeUint32(labChannelSize);
+        writer.writeUint32(channelData[3].totalSize);
 
         // User mask (ID = -2) - only for fill layers
         if (!isPixelLayer) {
             writer.writeInt16(-2);
-            writer.writeUint32(maskSize);
+            writer.writeUint32(channelData[4].totalSize);
         }
 
         // Blend mode signature
@@ -783,99 +953,35 @@ class PSDWriter {
     }
 
     /**
-     * Write channel image data for a layer
+     * Write pre-computed channel data
+     */
+    _writePrecomputedChannel(writer, channelInfo) {
+        if (channelInfo.empty) {
+            // Empty channel (just compression header)
+            writer.writeUint16(0);
+        } else if (channelInfo.rowByteCounts) {
+            // RLE compressed
+            writer.writeUint16(1);  // RLE compression
+            for (let y = 0; y < this.height; y++) {
+                writer.writeUint16(channelInfo.rowByteCounts[y]);
+            }
+            writer.writeBytes(channelInfo.compressedData);
+        } else {
+            // Raw uncompressed
+            writer.writeUint16(0);
+            writer.writeBytes(channelInfo.raw);
+        }
+    }
+
+    /**
+     * Write channel image data for a layer (using pre-computed data)
      */
     _writeLayerChannelData(writer, layer) {
-        const { color, mask, type, pixels } = layer;
+        const channelData = layer._channelData;
 
-        // Compression type: 0 = raw (uncompressed)
-        const noCompression = 0;
-
-        if (this.bitsPerChannel === 16) {
-            if (type === 'pixel') {
-                // 16-bit pixel layer: write actual Lab pixel data
-                const pixelCount = this.width * this.height;
-
-                // Transparency channel (ID=-1) - all fully opaque
-                writer.writeUint16(noCompression);
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint16(65535);  // Fully opaque
-                }
-
-                // L channel - actual pixel data (convert byte encoding to 16-bit)
-                writer.writeUint16(noCompression);
-                for (let i = 0; i < pixelCount; i++) {
-                    const L_byte = pixels[i * 3];  // 0-255
-                    const L_16 = Math.round((L_byte / 255) * 65535);
-                    writer.writeUint16(L_16);
-                }
-
-                // a channel - actual pixel data
-                writer.writeUint16(noCompression);
-                for (let i = 0; i < pixelCount; i++) {
-                    const a_byte = pixels[i * 3 + 1];  // 0-255 (128 is neutral)
-                    const a_16 = Math.round((a_byte / 255) * 65535);
-                    writer.writeUint16(a_16);
-                }
-
-                // b channel - actual pixel data
-                writer.writeUint16(noCompression);
-                for (let i = 0; i < pixelCount; i++) {
-                    const b_byte = pixels[i * 3 + 2];  // 0-255 (128 is neutral)
-                    const b_16 = Math.round((b_byte / 255) * 65535);
-                    writer.writeUint16(b_16);
-                }
-            } else {
-                // 16-bit fill layers: L/a/b channels have NO pixel data
-                // Transparency channel (ID=-1) - just compression header
-                writer.writeUint16(noCompression);
-
-                // L channel - just compression header
-                writer.writeUint16(noCompression);
-
-                // a channel - just compression header
-                writer.writeUint16(noCompression);
-
-                // b channel - just compression header
-                writer.writeUint16(noCompression);
-
-                // User mask channel (ID=-2) - actual mask data (16-bit for 16-bit files!)
-                // Write raw uncompressed mask data
-                writer.writeUint16(noCompression);
-                writer.writeBytes(mask);
-            }
-        } else {
-            // 8-bit fill layers: write solid pixel data
-            // Transparency channel (ID=-1) - all 255 (fully opaque)
-            writer.writeUint16(noCompression);
-            for (let i = 0; i < this.width * this.height; i++) {
-                writer.writeUint8(255);
-            }
-
-            // L channel - solid fill with L value
-            writer.writeUint16(noCompression);
-            const L_byte = Math.round((color.L / 100) * 255);
-            for (let i = 0; i < this.width * this.height; i++) {
-                writer.writeUint8(L_byte);
-            }
-
-            // a channel - solid fill with a value
-            writer.writeUint16(noCompression);
-            const a_byte = Math.round(color.a + 128);
-            for (let i = 0; i < this.width * this.height; i++) {
-                writer.writeUint8(a_byte);
-            }
-
-            // b channel - solid fill with b value
-            writer.writeUint16(noCompression);
-            const b_byte = Math.round(color.b + 128);
-            for (let i = 0; i < this.width * this.height; i++) {
-                writer.writeUint8(b_byte);
-            }
-
-            // User mask channel (ID=-2) - actual mask data
-            writer.writeUint16(noCompression);
-            writer.writeBytes(mask);
+        // Write all pre-computed channels
+        for (const channelInfo of channelData) {
+            this._writePrecomputedChannel(writer, channelInfo);
         }
     }
 
@@ -886,83 +992,139 @@ class PSDWriter {
      * Must contain actual flattened image data, not neutral values.
      */
     _writeImageData(writer) {
-        // Compression: 0 = raw (uncompressed)
-        writer.writeUint16(0);
-
         const pixelCount = this.width * this.height;
         const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
 
         // Find the first pixel layer to use as composite source
         const pixelLayer = this.layers.find(layer => layer.type === 'pixel');
 
-        if (this.bitsPerChannel === 16) {
-            if (pixelLayer && pixelLayer.pixels) {
-                // 16-bit with pixel data: write actual Lab composite
-                // Convert 8-bit byte encoding to 16-bit (multiply by 257)
+        const useRLE = this.compression === 'rle';
 
-                // L channel (planar)
-                for (let i = 0; i < pixelCount; i++) {
-                    const L_byte = pixelLayer.pixels[i * 3];
-                    writer.writeUint16(L_byte * 257);
+        if (useRLE) {
+            // RLE compression (type 1)
+            writer.writeUint16(1);
+
+            // Build channel data arrays
+            const channels = [];
+            const bytesPerPixel = this.bitsPerChannel === 16 ? 2 : 1;
+
+            if (this.bitsPerChannel === 16) {
+                if (pixelLayer && pixelLayer.pixels) {
+                    // L channel
+                    const L_channel = Buffer.alloc(pixelCount * 2);
+                    for (let i = 0; i < pixelCount; i++) {
+                        const val = pixelLayer.pixels[i * 3] * 257;
+                        L_channel.writeUInt16BE(val, i * 2);
+                    }
+                    channels.push(L_channel);
+
+                    // a channel
+                    const a_channel = Buffer.alloc(pixelCount * 2);
+                    for (let i = 0; i < pixelCount; i++) {
+                        const val = pixelLayer.pixels[i * 3 + 1] * 257;
+                        a_channel.writeUInt16BE(val, i * 2);
+                    }
+                    channels.push(a_channel);
+
+                    // b channel
+                    const b_channel = Buffer.alloc(pixelCount * 2);
+                    for (let i = 0; i < pixelCount; i++) {
+                        const val = pixelLayer.pixels[i * 3 + 2] * 257;
+                        b_channel.writeUInt16BE(val, i * 2);
+                    }
+                    channels.push(b_channel);
+                } else {
+                    // Neutral white
+                    const L_channel = Buffer.alloc(pixelCount * 2);
+                    const ab_channel = Buffer.alloc(pixelCount * 2);
+                    for (let i = 0; i < pixelCount; i++) {
+                        L_channel.writeUInt16BE(65535, i * 2);
+                        ab_channel.writeUInt16BE(32768, i * 2);
+                    }
+                    channels.push(L_channel);
+                    channels.push(ab_channel);  // a
+                    channels.push(Buffer.from(ab_channel));  // b (copy)
                 }
 
-                // a channel (planar)
-                for (let i = 0; i < pixelCount; i++) {
-                    const a_byte = pixelLayer.pixels[i * 3 + 1];
-                    writer.writeUint16(a_byte * 257);
-                }
-
-                // b channel (planar)
-                for (let i = 0; i < pixelCount; i++) {
-                    const b_byte = pixelLayer.pixels[i * 3 + 2];
-                    writer.writeUint16(b_byte * 257);
+                // Additional alpha channels
+                for (let ch = 3; ch < channelCount; ch++) {
+                    const alpha = Buffer.alloc(pixelCount * 2);
+                    channels.push(alpha);
                 }
             } else {
-                // 16-bit without pixel data: write neutral white
-                // L=white is 0xFFFF, a/b neutral is 0x8000 (32768)
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint16(65535);  // L (white)
-                }
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint16(32768);  // a (neutral)
-                }
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint16(32768);  // b (neutral)
+                // 8-bit mode
+                if (pixelLayer && pixelLayer.pixels) {
+                    const L_channel = Buffer.alloc(pixelCount);
+                    const a_channel = Buffer.alloc(pixelCount);
+                    const b_channel = Buffer.alloc(pixelCount);
+                    for (let i = 0; i < pixelCount; i++) {
+                        L_channel[i] = pixelLayer.pixels[i * 3];
+                        a_channel[i] = pixelLayer.pixels[i * 3 + 1];
+                        b_channel[i] = pixelLayer.pixels[i * 3 + 2];
+                    }
+                    channels.push(L_channel, a_channel, b_channel);
+                } else {
+                    const neutral = Buffer.alloc(pixelCount, 128);
+                    channels.push(Buffer.from(neutral), Buffer.from(neutral), Buffer.from(neutral));
                 }
             }
 
-            // Additional alpha/spot channels (required by header channel count)
-            for (let ch = 3; ch < channelCount; ch++) {
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint16(0);
+            // Compress each channel and collect row byte counts
+            const allRowByteCounts = [];
+            const allCompressedData = [];
+
+            for (const channelData of channels) {
+                const { rowByteCounts, compressedData } = this._compressChannelRLE(channelData, bytesPerPixel);
+                allRowByteCounts.push(rowByteCounts);
+                allCompressedData.push(compressedData);
+            }
+
+            // Write all row byte counts first (for all channels)
+            for (const rowByteCounts of allRowByteCounts) {
+                for (let y = 0; y < this.height; y++) {
+                    writer.writeUint16(rowByteCounts[y]);
                 }
+            }
+
+            // Write all compressed data
+            for (const compressedData of allCompressedData) {
+                writer.writeBytes(compressedData);
             }
         } else {
-            // 8-bit mode
-            if (pixelLayer && pixelLayer.pixels) {
-                // 8-bit with pixel data: write actual Lab composite (planar)
-                // L channel
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint8(pixelLayer.pixels[i * 3]);
+            // Uncompressed (type 0)
+            writer.writeUint16(0);
+
+            if (this.bitsPerChannel === 16) {
+                if (pixelLayer && pixelLayer.pixels) {
+                    // L channel (planar)
+                    for (let i = 0; i < pixelCount; i++) {
+                        writer.writeUint16(pixelLayer.pixels[i * 3] * 257);
+                    }
+                    // a channel (planar)
+                    for (let i = 0; i < pixelCount; i++) {
+                        writer.writeUint16(pixelLayer.pixels[i * 3 + 1] * 257);
+                    }
+                    // b channel (planar)
+                    for (let i = 0; i < pixelCount; i++) {
+                        writer.writeUint16(pixelLayer.pixels[i * 3 + 2] * 257);
+                    }
+                } else {
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint16(65535);
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint16(32768);
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint16(32768);
                 }
-                // a channel
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint8(pixelLayer.pixels[i * 3 + 1]);
-                }
-                // b channel
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint8(pixelLayer.pixels[i * 3 + 2]);
+                for (let ch = 3; ch < channelCount; ch++) {
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint16(0);
                 }
             } else {
-                // 8-bit without pixel data: write neutral gray
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint8(128);  // L (mid-gray)
-                }
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint8(128);  // a (neutral)
-                }
-                for (let i = 0; i < pixelCount; i++) {
-                    writer.writeUint8(128);  // b (neutral)
+                if (pixelLayer && pixelLayer.pixels) {
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelLayer.pixels[i * 3]);
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelLayer.pixels[i * 3 + 1]);
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelLayer.pixels[i * 3 + 2]);
+                } else {
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(128);
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(128);
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(128);
                 }
             }
         }

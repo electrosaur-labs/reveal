@@ -356,14 +356,93 @@ class PSDReader {
         for (const channel of layer.channels) {
             const compression = this.readUint16();
             const dataLength = channel.dataLength - 2;  // Minus compression bytes
-            const data = this.readBytes(dataLength);
 
-            console.log(`  Channel ID=${channel.channelID}: compression=${compression}, data=${dataLength} bytes`);
+            // Determine dimensions based on channel type
+            // User mask channel (ID=-2) uses mask bounds, not layer bounds
+            let channelHeight, channelWidth;
+            if (channel.channelID === -2 && layer.mask && layer.mask.length > 0) {
+                channelHeight = (layer.mask.bottom - layer.mask.top) || 0;
+                channelWidth = (layer.mask.right - layer.mask.left) || 0;
+            } else {
+                channelHeight = layer.height || 0;
+                channelWidth = layer.width || 0;
+            }
 
-            channelData.push({ compression, data });
+            let data;
+            let decompressedData = null;
+
+            if (compression === 0) {
+                // Raw uncompressed
+                data = this.readBytes(dataLength);
+                decompressedData = data;
+                console.log(`  Channel ID=${channel.channelID}: compression=RAW, data=${dataLength} bytes`);
+            } else if (compression === 1) {
+                // RLE compressed
+                // First, read row byte counts (2 bytes per row)
+                const rowByteCounts = [];
+
+                for (let y = 0; y < channelHeight; y++) {
+                    rowByteCounts.push(this.readUint16());
+                }
+
+                // Calculate total compressed data size
+                const compressedSize = rowByteCounts.reduce((a, b) => a + b, 0);
+                const compressedData = this.readBytes(compressedSize);
+
+                // Decompress using PackBits
+                decompressedData = this.decompressRLE(compressedData, rowByteCounts, channelWidth);
+
+                data = compressedData;
+                console.log(`  Channel ID=${channel.channelID}: compression=RLE, rows=${channelHeight}, compressed=${compressedSize} bytes, decompressed=${decompressedData.length} bytes`);
+            } else {
+                // Unknown compression - just read raw bytes
+                data = this.readBytes(dataLength);
+                console.log(`  Channel ID=${channel.channelID}: compression=${compression} (unknown), data=${dataLength} bytes`);
+            }
+
+            channelData.push({ compression, data, decompressedData });
         }
 
         return channelData;
+    }
+
+    /**
+     * Decompress RLE (PackBits) data
+     *
+     * @param {Buffer} compressedData - The compressed row data
+     * @param {number[]} rowByteCounts - Byte count for each row
+     * @param {number} rowWidth - Width of each row in pixels (for 16-bit: width * 2 bytes)
+     * @returns {Buffer} Decompressed data
+     */
+    decompressRLE(compressedData, rowByteCounts, rowWidth) {
+        const output = [];
+        let inputOffset = 0;
+
+        for (const rowByteCount of rowByteCounts) {
+            const rowEnd = inputOffset + rowByteCount;
+
+            while (inputOffset < rowEnd) {
+                const n = compressedData.readInt8(inputOffset++);
+
+                if (n >= 0) {
+                    // Literal run: copy next (n + 1) bytes
+                    const count = n + 1;
+                    for (let i = 0; i < count && inputOffset < rowEnd; i++) {
+                        output.push(compressedData[inputOffset++]);
+                    }
+                } else if (n > -128) {
+                    // Replicate run: repeat next byte (-n + 1) times
+                    const count = -n + 1;
+                    const value = compressedData[inputOffset++];
+                    for (let i = 0; i < count; i++) {
+                        output.push(value);
+                    }
+                }
+                // n === -128 is a NOP
+            }
+        }
+
+        return Buffer.from(output);
     }
 
     // ===== Low-level read methods =====
