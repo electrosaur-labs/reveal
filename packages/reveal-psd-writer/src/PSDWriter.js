@@ -164,11 +164,26 @@ class PSDWriter {
                     const a_channel = Buffer.alloc(pixelCount * 2);
                     const b_channel = Buffer.alloc(pixelCount * 2);
 
-                    for (let i = 0; i < pixelCount; i++) {
-                        transparency.writeUInt16BE(65535, i * 2);
-                        L_channel.writeUInt16BE(Math.round((layer.pixels[i * 3] / 255) * 65535), i * 2);
-                        a_channel.writeUInt16BE(Math.round((layer.pixels[i * 3 + 1] / 255) * 65535), i * 2);
-                        b_channel.writeUInt16BE(Math.round((layer.pixels[i * 3 + 2] / 255) * 65535), i * 2);
+                    if (layer.pixels16bit) {
+                        // Native 16-bit format: pixels are already in 16-bit big-endian (L, a, b interleaved)
+                        for (let i = 0; i < pixelCount; i++) {
+                            transparency.writeUInt16BE(65535, i * 2);
+                            // Copy 16-bit values directly (6 bytes per pixel: L(2) + a(2) + b(2))
+                            L_channel[i * 2] = layer.pixels[i * 6];
+                            L_channel[i * 2 + 1] = layer.pixels[i * 6 + 1];
+                            a_channel[i * 2] = layer.pixels[i * 6 + 2];
+                            a_channel[i * 2 + 1] = layer.pixels[i * 6 + 3];
+                            b_channel[i * 2] = layer.pixels[i * 6 + 4];
+                            b_channel[i * 2 + 1] = layer.pixels[i * 6 + 5];
+                        }
+                    } else {
+                        // 8-bit encoding: scale to 16-bit
+                        for (let i = 0; i < pixelCount; i++) {
+                            transparency.writeUInt16BE(65535, i * 2);
+                            L_channel.writeUInt16BE(Math.round((layer.pixels[i * 3] / 255) * 65535), i * 2);
+                            a_channel.writeUInt16BE(Math.round((layer.pixels[i * 3 + 1] / 255) * 65535), i * 2);
+                            b_channel.writeUInt16BE(Math.round((layer.pixels[i * 3 + 2] / 255) * 65535), i * 2);
+                        }
                     }
 
                     if (useRLE) {
@@ -291,11 +306,20 @@ class PSDWriter {
         }
 
         const pixelCount = this.width * this.height;
-        const expectedSize = pixelCount * 3;  // L, a, b
+        const expectedSize8 = pixelCount * 3;  // L, a, b (8-bit encoding)
+        const expectedSize16 = pixelCount * 6; // L, a, b (native 16-bit: 2 bytes each)
 
-        if (options.pixels.length !== expectedSize) {
+        // Detect pixel format: 8-bit encoding (3 bytes) or native 16-bit (6 bytes)
+        let pixels16bit = null;
+        if (options.pixels.length === expectedSize16 && this.bitsPerChannel === 16) {
+            // Native 16-bit format: store directly
+            pixels16bit = Buffer.from(options.pixels);
+        } else if (options.pixels.length === expectedSize8) {
+            // 8-bit encoding: will be scaled to 16-bit during write if needed
+        } else {
             throw new Error(
-                `Pixel data must be ${expectedSize} bytes (${this.width}×${this.height}×3), ` +
+                `Pixel data must be ${expectedSize8} bytes (${this.width}×${this.height}×3 8-bit) ` +
+                `or ${expectedSize16} bytes (${this.width}×${this.height}×6 native 16-bit), ` +
                 `got ${options.pixels.length} bytes`
             );
         }
@@ -304,7 +328,8 @@ class PSDWriter {
             id: this.nextLayerID++,
             name: options.name,
             type: 'pixel',
-            pixels: Buffer.from(options.pixels),
+            pixels: pixels16bit || Buffer.from(options.pixels),
+            pixels16bit: pixels16bit !== null,  // Flag indicating native 16-bit format
             visible: options.visible !== undefined ? options.visible : true
         });
     }
@@ -1012,26 +1037,32 @@ class PSDWriter {
                 if (pixelLayer && pixelLayer.pixels) {
                     // L channel
                     const L_channel = Buffer.alloc(pixelCount * 2);
-                    for (let i = 0; i < pixelCount; i++) {
-                        const val = pixelLayer.pixels[i * 3] * 257;
-                        L_channel.writeUInt16BE(val, i * 2);
-                    }
-                    channels.push(L_channel);
-
                     // a channel
                     const a_channel = Buffer.alloc(pixelCount * 2);
-                    for (let i = 0; i < pixelCount; i++) {
-                        const val = pixelLayer.pixels[i * 3 + 1] * 257;
-                        a_channel.writeUInt16BE(val, i * 2);
-                    }
-                    channels.push(a_channel);
-
                     // b channel
                     const b_channel = Buffer.alloc(pixelCount * 2);
-                    for (let i = 0; i < pixelCount; i++) {
-                        const val = pixelLayer.pixels[i * 3 + 2] * 257;
-                        b_channel.writeUInt16BE(val, i * 2);
+
+                    if (pixelLayer.pixels16bit) {
+                        // Native 16-bit: copy directly (6 bytes per pixel)
+                        for (let i = 0; i < pixelCount; i++) {
+                            L_channel[i * 2] = pixelLayer.pixels[i * 6];
+                            L_channel[i * 2 + 1] = pixelLayer.pixels[i * 6 + 1];
+                            a_channel[i * 2] = pixelLayer.pixels[i * 6 + 2];
+                            a_channel[i * 2 + 1] = pixelLayer.pixels[i * 6 + 3];
+                            b_channel[i * 2] = pixelLayer.pixels[i * 6 + 4];
+                            b_channel[i * 2 + 1] = pixelLayer.pixels[i * 6 + 5];
+                        }
+                    } else {
+                        // 8-bit encoding: scale to 16-bit
+                        for (let i = 0; i < pixelCount; i++) {
+                            L_channel.writeUInt16BE(pixelLayer.pixels[i * 3] * 257, i * 2);
+                            a_channel.writeUInt16BE(pixelLayer.pixels[i * 3 + 1] * 257, i * 2);
+                            b_channel.writeUInt16BE(pixelLayer.pixels[i * 3 + 2] * 257, i * 2);
+                        }
                     }
+
+                    channels.push(L_channel);
+                    channels.push(a_channel);
                     channels.push(b_channel);
                 } else {
                     // Neutral white
@@ -1096,17 +1127,34 @@ class PSDWriter {
 
             if (this.bitsPerChannel === 16) {
                 if (pixelLayer && pixelLayer.pixels) {
-                    // L channel (planar)
-                    for (let i = 0; i < pixelCount; i++) {
-                        writer.writeUint16(pixelLayer.pixels[i * 3] * 257);
-                    }
-                    // a channel (planar)
-                    for (let i = 0; i < pixelCount; i++) {
-                        writer.writeUint16(pixelLayer.pixels[i * 3 + 1] * 257);
-                    }
-                    // b channel (planar)
-                    for (let i = 0; i < pixelCount; i++) {
-                        writer.writeUint16(pixelLayer.pixels[i * 3 + 2] * 257);
+                    if (pixelLayer.pixels16bit) {
+                        // Native 16-bit: write directly (6 bytes per pixel)
+                        // L channel (planar)
+                        for (let i = 0; i < pixelCount; i++) {
+                            writer.writeUint8(pixelLayer.pixels[i * 6]);
+                            writer.writeUint8(pixelLayer.pixels[i * 6 + 1]);
+                        }
+                        // a channel (planar)
+                        for (let i = 0; i < pixelCount; i++) {
+                            writer.writeUint8(pixelLayer.pixels[i * 6 + 2]);
+                            writer.writeUint8(pixelLayer.pixels[i * 6 + 3]);
+                        }
+                        // b channel (planar)
+                        for (let i = 0; i < pixelCount; i++) {
+                            writer.writeUint8(pixelLayer.pixels[i * 6 + 4]);
+                            writer.writeUint8(pixelLayer.pixels[i * 6 + 5]);
+                        }
+                    } else {
+                        // 8-bit encoding: scale to 16-bit
+                        for (let i = 0; i < pixelCount; i++) {
+                            writer.writeUint16(pixelLayer.pixels[i * 3] * 257);
+                        }
+                        for (let i = 0; i < pixelCount; i++) {
+                            writer.writeUint16(pixelLayer.pixels[i * 3 + 1] * 257);
+                        }
+                        for (let i = 0; i < pixelCount; i++) {
+                            writer.writeUint16(pixelLayer.pixels[i * 3 + 2] * 257);
+                        }
                     }
                 } else {
                     for (let i = 0; i < pixelCount; i++) writer.writeUint16(65535);
