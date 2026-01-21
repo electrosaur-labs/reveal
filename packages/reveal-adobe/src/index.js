@@ -448,7 +448,7 @@ function buildRemapTable(hexColors, deletedIndices) {
             let minDistance = Infinity;
 
             for (let j = 0; j < survivorLabColors.length; j++) {
-                const distance = PosterizationEngine._calculateLabDistance(
+                const distance = PosterizationEngine._labDistance(
                     lab,
                     survivorLabColors[j]
                 );
@@ -661,10 +661,11 @@ function renderPreview() {
     logger.log(`Rendering preview (solo mode: ${activeSoloIndex !== null}, deleted: ${deletedIndices.size})`);
     logger.log(`  Canvas: ${width}×${height}, display=${canvas.style.display}, offsetHeight=${canvas.offsetHeight}, palette.length=${palette.length}, assignments.length=${assignments.length}`);
 
-    // Track deleted colors to show them as black in preview
-    const showDeletedAsBlack = deletedIndices.size > 0;
-    if (showDeletedAsBlack) {
-        logger.log(`  Showing ${deletedIndices.size} deleted colors as black in preview`);
+    // Build remap table for deleted colors (maps to nearest surviving color)
+    let remapTable = null;
+    if (deletedIndices.size > 0) {
+        remapTable = buildRemapTable(palette, deletedIndices);
+        logger.log(`  Remapping ${deletedIndices.size} deleted colors to nearest survivors`);
     }
 
     // Force complete canvas clear by resetting dimensions
@@ -676,11 +677,18 @@ function renderPreview() {
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
 
-    // When in solo mode, fill background with semi-transparent dark gray
-    // This prevents white background from showing through transparent areas
+    // When in solo mode, fill background with checkered pattern
+    // This makes both dark AND light colors visible against the background
     if (activeSoloIndex !== null) {
-        ctx.fillStyle = 'rgba(40, 40, 40, 1)';
-        ctx.fillRect(0, 0, width, height);
+        // Draw checkered background (like transparency indicator)
+        const checkerSize = 8;
+        for (let cy = 0; cy < height; cy += checkerSize) {
+            for (let cx = 0; cx < width; cx += checkerSize) {
+                const isLight = ((cx / checkerSize) + (cy / checkerSize)) % 2 === 0;
+                ctx.fillStyle = isLight ? '#808080' : '#606060'; // Mid-gray checker
+                ctx.fillRect(cx, cy, checkerSize, checkerSize);
+            }
+        }
     }
 
     // Render pixels with run-length encoding for performance
@@ -712,8 +720,9 @@ function renderPreview() {
             }
 
             // This pixel matches - render it
-            // Show deleted colors as black
-            let hexColor = isDeleted ? '#000000' : palette[colorIndex];
+            // Remap deleted colors to nearest surviving color
+            const effectiveColorIndex = (isDeleted && remapTable) ? remapTable[colorIndex] : colorIndex;
+            let hexColor = palette[effectiveColorIndex];
 
             // DEFENSIVE: Handle undefined palette entries
             if (!hexColor || hexColor === 'undefined') {

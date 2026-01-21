@@ -1,11 +1,11 @@
 /**
  * SP-100 Dataset Processor
  *
- * JPG → Lab PSD + Separated PSD Processor
+ * Lab PSD → Separated PSD Processor
  *
- * Input:  data/SP100/input/{source}/*.jpg (source RGB images)
- * Intermediate: data/SP100/input/{source}/psd/*.psd (16-bit Lab composite images)
- * Output: data/SP100/output/{source}/psd/*.psd (separated multi-layer PSDs)
+ * Input:  data/SP100/input/{source}/psd/*.psd (16-bit Lab composite images)
+ * Output: data/SP100/output/{source}/*.psd (separated multi-layer PSDs)
+ *         data/SP100/output/{source}/*.json (metrics sidecar files)
  *
  * Usage: node src/processSP100.js [source]
  *   source: 'loc', 'wikiart', or 'all' (default: 'all')
@@ -13,9 +13,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
 const Reveal = require('@reveal/core');
 const { PSDWriter } = require('@reveal/psd-writer');
+const { readPsd } = require('@reveal/psd-reader');
 const MetricsCalculator = require('./MetricsCalculator');
 const DynamicConfigurator = require('./DynamicConfigurator');
 const LabConverter = require('@reveal/core/lib/utils/LabConverter');
@@ -39,9 +39,9 @@ function calculateImageDNA(labPixels, width, height) {
 }
 
 /**
- * Process a single image through separation engine
+ * Process a single PSD image through separation engine
  */
-async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag) {
+async function processImage(inputPath, outputDir, sourceTag) {
     const ext = path.extname(inputPath);
     const basename = path.basename(inputPath, ext);
     console.log(chalk.cyan(`\n[${basename}] Processing...`));
@@ -50,74 +50,31 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
     let ioTime = 0;
 
     try {
-        // 1. Read image with sharp
+        // 1. Read Lab PSD with reveal-psd-reader
         const ioStart = Date.now();
-        const image = sharp(inputPath);
-        const metadata = await image.metadata();
-        const { width, height } = metadata;
-
-        // Get raw RGB pixels
-        const rawBuffer = await image
-            .removeAlpha()
-            .raw()
-            .toBuffer();
-
-        const pixels = new Uint8ClampedArray(rawBuffer);
+        const inputPsdBuffer = fs.readFileSync(inputPath);
+        const psd = readPsd(inputPsdBuffer);
+        const { width, height, data: labPixels } = psd;
         ioTime += Date.now() - ioStart;
-        console.log(`  Size: ${width}×${height}`);
 
-        // 2. Convert RGB to Lab
-        console.log(`  Converting RGB to Lab...`);
+        console.log(`  Size: ${width}×${height} (${psd.depth}-bit Lab)`);
+
         const pixelCount = width * height;
-        const labPixels = new Uint8ClampedArray(pixelCount * 3);
 
-        for (let i = 0; i < pixelCount; i++) {
-            const r = pixels[i * 3];
-            const g = pixels[i * 3 + 1];
-            const b = pixels[i * 3 + 2];
-
-            const lab = Reveal.rgbToLab({ r, g, b });
-
-            // Store in BYTE ENCODING format
-            labPixels[i * 3] = (lab.L / 100) * 255;
-            labPixels[i * 3 + 1] = lab.a + 128;
-            labPixels[i * 3 + 2] = lab.b + 128;
-        }
-
-        // 3. Write intermediate Lab PSD
-        console.log(`  Writing intermediate Lab PSD...`);
-        const intermediateWriter = new PSDWriter({
-            width,
-            height,
-            colorMode: 'lab',
-            bitsPerChannel: 16
-        });
-
-        intermediateWriter.addPixelLayer({
-            name: 'Lab Composite',
-            pixels: labPixels,
-            visible: true
-        });
-
-        const intermediatePsdBuffer = intermediateWriter.write();
-        const intermediatePsdPath = path.join(intermediatePsdDir, `${basename}.psd`);
-        fs.writeFileSync(intermediatePsdPath, intermediatePsdBuffer);
-        console.log(chalk.gray(`  ✓ Intermediate: ${intermediatePsdPath}`));
-
-        // 4. Calculate image DNA
+        // 2. Calculate image DNA
         console.log(`  Calculating image DNA...`);
         const dna = calculateImageDNA(labPixels, width, height);
         dna.filename = basename;
 
-        console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
+        console.log(`  DNA: L=${dna.l.toFixed(1)}, C=${dna.c.toFixed(1)}, K=${dna.k.toFixed(1)}, StdDev=${dna.l_std_dev?.toFixed(1) || '?'}, maxC=${dna.maxC.toFixed(1)}`);
 
-        // 5. Generate configuration using DynamicConfigurator
+        // 3. Generate configuration using DynamicConfigurator v1.7
         const config = DynamicConfigurator.generate(dna);
 
-        console.log(chalk.green(`  ✓ Configuration: "${config.name}"`));
+        console.log(chalk.green(`  ✓ Archetype: ${config.meta?.archetype || 'unknown'}`));
         console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
-        // Convert config to params format
+        // 4. Convert config to params format
         const params = {
             targetColorsSlider: config.targetColors,
             blackBias: config.blackBias,
@@ -144,7 +101,7 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
             maskProfile: 'Gray Gamma 2.2'
         };
 
-        // 6. Posterize
+        // 5. Posterize
         console.log(`  Posterizing to ${params.targetColorsSlider} colors...`);
         const posterizeResult = await Reveal.posterizeImage(
             labPixels,
@@ -158,7 +115,7 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
 
         console.log(`  ✓ Generated ${posterizeResult.paletteLab.length} colors`);
 
-        // 7. Separate into layers
+        // 6. Separate into layers
         console.log(`  Separating layers...`);
         const separateResult = await Reveal.separateImage(
             labPixels,
@@ -167,7 +124,7 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
             { ditherType: params.ditherType }
         );
 
-        // 8. Generate masks
+        // 7. Generate masks
         console.log(`  Generating masks...`);
         const masks = [];
         for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
@@ -179,7 +136,7 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
             masks.push(mask);
         }
 
-        // 9. Reconstruct virtual composite for metrics
+        // 8. Reconstruct virtual composite for metrics
         console.log(`  Reconstructing virtual composite...`);
         const processedLab = new Uint8ClampedArray(pixelCount * 3);
 
@@ -192,7 +149,7 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
             processedLab[i * 3 + 2] = color.b + 128;
         }
 
-        // 10. Calculate palette coverage
+        // 9. Calculate palette coverage
         const coverageCounts = new Uint32Array(posterizeResult.paletteLab.length);
         for (let i = 0; i < pixelCount; i++) {
             coverageCounts[separateResult.colorIndices[i]]++;
@@ -212,7 +169,7 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
             };
         });
 
-        // 11. Calculate metrics
+        // 10. Calculate metrics
         console.log(`  Computing validation metrics...`);
         const layers = masks.map((mask, i) => ({
             name: paletteWithCoverage[i].name,
@@ -228,7 +185,7 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
             height
         );
 
-        // 12. Write output 16-bit PSD
+        // 11. Write output 16-bit PSD
         console.log(`  Writing 16-bit PSD...`);
         const ioStartWrite = Date.now();
         const writer = new PSDWriter({
@@ -280,7 +237,7 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
 
         console.log(chalk.green(`  ✓ Saved: ${outputPath} (${(psdBuffer.length / 1024).toFixed(2)} KB)`));
 
-        // 13. Write JSON sidecar
+        // 12. Write JSON sidecar
         const totalTime = Date.now() - timingStart;
         const computeTime = totalTime - ioTime;
 
@@ -318,7 +275,7 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
             success: true,
             filename: basename,
             source: sourceTag,
-            configType: 'dynamic',
+            archetype: config.meta?.archetype || 'unknown',
             configId: config.id,
             colors: posterizeResult.paletteLab.length,
             size: psdBuffer.length,
@@ -341,43 +298,39 @@ async function processImage(inputPath, intermediatePsdDir, outputDir, sourceTag)
 /**
  * Process a single source directory
  *
- * New structure:
- *   input/{source}/jpg/*.jpg   - source images
- *   input/{source}/psd/*.psd   - intermediate Lab PSDs
- *   output/{source}/psd/*.psd  - separated output PSDs
+ * Structure:
+ *   input/{source}/psd/*.psd   - 16-bit Lab composite PSDs (input)
+ *   output/{source}/*.psd      - separated output PSDs
+ *   output/{source}/*.json     - metrics sidecar files
  */
 async function processSource(sourceDir, sourceName, baseDir) {
-    const inputDir = path.join(sourceDir, 'jpg');
-    const intermediatePsdDir = path.join(sourceDir, 'psd');
+    const inputDir = path.join(sourceDir, 'psd');
     const outputDir = path.join(baseDir, 'output', sourceName, 'psd');
 
     // Ensure directories exist
     if (!fs.existsSync(inputDir)) {
-        fs.mkdirSync(inputDir, { recursive: true });
-    }
-    if (!fs.existsSync(intermediatePsdDir)) {
-        fs.mkdirSync(intermediatePsdDir, { recursive: true });
+        console.log(chalk.yellow(`Input directory not found: ${inputDir}`));
+        return [];
     }
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // Get all image files from jpg subdirectory
+    // Get all PSD files from psd subdirectory
     const files = fs.readdirSync(inputDir)
-        .filter(f => /\.(jpg|jpeg|png)$/i.test(f))
+        .filter(f => /\.psd$/i.test(f))
         .sort();
 
     if (files.length === 0) {
-        console.log(chalk.yellow(`No images found in ${inputDir}`));
+        console.log(chalk.yellow(`No PSD files found in ${inputDir}`));
         return [];
     }
 
     console.log(chalk.bold(`\n📁 Processing ${sourceName.toUpperCase()}`));
     console.log(chalk.bold(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`));
-    console.log(`Input:        ${inputDir}`);
-    console.log(`Intermediate: ${intermediatePsdDir}`);
-    console.log(`Output:       ${outputDir}`);
-    console.log(`Files:        ${files.length} images\n`);
+    console.log(`Input:  ${inputDir}`);
+    console.log(`Output: ${outputDir}`);
+    console.log(`Files:  ${files.length} PSDs\n`);
 
     const results = [];
 
@@ -386,7 +339,7 @@ async function processSource(sourceDir, sourceName, baseDir) {
         const inputPath = path.join(inputDir, file);
 
         console.log(chalk.bold(`\n[${i + 1}/${files.length}] ${file}`));
-        const result = await processImage(inputPath, intermediatePsdDir, outputDir, sourceName);
+        const result = await processImage(inputPath, outputDir, sourceName);
         results.push(result);
     }
 

@@ -1,79 +1,144 @@
 /**
- * DynamicConfigurator.js (v1.5 - Dither Fix)
- * Switched Dither Logic from Global Contrast (K) to Local Variance (StdDev).
+ * DynamicConfigurator v1.7
+ * Driven by Archetype Classification (Tonal Variation vs Chroma)
  *
- * CALIBRATION UPDATE (2026-01-20):
- * - v1.3: Saliency Rescue fired on vintage posters (maxC 71.2 > 50)
- * - v1.4: Raised threshold to 80, lowered rescue budget to 10
- * - v1.5: Fixed dither logic - uses l_std_dev instead of k to detect vectors
+ * CHANGELOG:
+ * - v1.3: Chroma Driver for color budgeting
+ * - v1.4: Saliency Rescue threshold raised to maxC > 80
+ * - v1.5: Dither logic based on l_std_dev instead of k
+ * - v1.7: Archetype classification with per-archetype strategies
  *
- * The Astronaut (maxC 85.9) gets rescued. The 1848 Poster (maxC 71.2) does not.
+ * ARCHETYPES:
+ * - Vector/Flat:    Low variation (l_std_dev < 15). Logos, icons, text.
+ * - Vintage/Muted:  Low variation + moderate chroma. Lithographs, WPA posters.
+ * - Noir/Mono:      Low chroma + high contrast. B&W photos, woodcuts.
+ * - Neon/Vibrant:   Extreme chroma (c > 60). Pop art, neon signs.
+ * - Photographic:   High variation + moderate chroma. Natural photos.
  */
 class DynamicConfigurator {
 
     static generate(dna) {
-        // dna = { l: avgL, c: avgC, k: contrast, maxC: maxChroma, l_std_dev: stdDev, ... }
+        // 1. CLASSIFY ARCHETYPE
+        const archetype = this.getArchetype(dna);
 
-        // 1. BASELINE: The Stingy Standard
+        // 2. DEFINE STRATEGY MAP
+        const strategy = this.getStrategy(archetype, dna);
+
+        console.log(`🧬 DNA: StdDev=${dna.l_std_dev?.toFixed(1) || '?'} C=${dna.c?.toFixed(1) || '?'} -> Archetype: ${archetype}`);
+
+        // 3. COLOR COUNT LOGIC (The "Chroma Driver")
+        // Independent of archetype, driven by color complexity
         let idealColors = 8;
-
-        // 2. EARNING UPGRADES (Chroma Driver)
         if (dna.c > 20) idealColors = 10;
         if (dna.c > 50) idealColors = 12;
 
-        // 3. SALIENCY RESCUE (The Surgical Fix)
-        // OLD: if (dna.c < 15 && dna.maxC > 50) -> Fired on vintage posters (71.2)
-        // NEW: Strict Threshold + Economic Response
-        // - maxC > 80: Only triggers for pure/neon pigments (Astronaut is 85.9)
-        // - Target 10: We don't need 12 colors to save 1 spot color.
-
+        // Saliency Rescue: Hidden color spike in muted image
         if (dna.c < 12 && dna.maxC > 80) {
-            console.log(`🚑 Saliency Rescue: ${dna.filename} (High Value Spike)`);
-            idealColors = 10; // Cap at 10 (Efficiency Win)
+            console.log(`🚑 Saliency Rescue: ${dna.filename || 'unknown'} (High Value Spike)`);
+            idealColors = 10;
         }
 
-        // 4. COMMERCIAL CLAMP
-        const CEILING = 12;
-        let finalColors = Math.min(idealColors, CEILING);
-        finalColors = Math.max(4, finalColors);
-
-        // 5. DITHER STRATEGY (v1.5 - Variance Driver)
-        // OLD BUGGY LOGIC:
-        // if (dna.k > 80) dither = 'Atkinson';  (True for 99% of images)
-        // if (dna.k > 28) dither = 'BlueNoise'; (True for 100% of images -> Overwrote above)
-        //
-        // NEW LOGIC: Use Standard Deviation (l_std_dev) to detect "Busyness".
-
-        let dither = 'blue-noise'; // Default for Photos (lowercase to match SeparationEngine)
-        let bias = 2.0;
-
-        // Fallback for images without l_std_dev (backwards compatibility)
-        const stdDev = dna.l_std_dev !== undefined ? dna.l_std_dev : 50;
-
-        // Condition A: The "Vector" Candidate
-        // High Contrast (Sharp range) but Low Variance (Large flat areas).
-        // This targets Logos, Comics, and Typography.
-        if (dna.k > 60 && stdDev < 25) {
-            dither = 'atkinson'; // Keep edges crisp (lowercase to match SeparationEngine)
-        }
-
-        // Condition B: The "Texture" Override (Marrakech Rule)
-        // If the image is extremely busy/gritty, we MUST use BlueNoise
-        // and crank the bias to prevent speckling.
-        if (stdDev > 40) {
-            dither = 'blue-noise';
-            bias = 5.0; // High stability bias
-        }
+        const finalColors = Math.max(4, Math.min(idealColors, 12));
 
         return {
-            id: `dynamic_${finalColors}c_${dither}`,
+            id: `auto_${archetype.toLowerCase().replace('/', '_')}`,
             name: "Dynamic Bespoke",
             targetColors: finalColors,
-            blackBias: bias,
+            blackBias: strategy.bias,
             saturationBoost: (dna.c < 15) ? 1.15 : 1.0,
-            ditherType: dither,
-            rangeClamp: [dna.minL, dna.maxL]
+            ditherType: strategy.dither,
+            rangeClamp: [dna.minL, dna.maxL],
+            meta: { archetype }
         };
+    }
+
+    /**
+     * THE ARCHETYPE CLASSIFIER
+     * Based on Tonal Variation (StdDev) and Chroma Intensity
+     */
+    static getArchetype(dna) {
+        const l_std_dev = dna.l_std_dev !== undefined ? dna.l_std_dev : 50;
+        const c = dna.c || 0;
+        const k = dna.k || 0;
+
+        // 1. VECTOR / FLAT
+        // Extremely low variation. Flat fields of color.
+        // Captures Logos, Text, Icons.
+        if (l_std_dev < 15) {
+            return 'Vector/Flat';
+        }
+
+        // 2. VINTAGE / MUTED
+        // Discrete Ink Layers (Low Variation) + Muted Palette (Mod Chroma).
+        // Captures WPA Posters, Lithographs.
+        if (l_std_dev < 25 && c < 45) {
+            return 'Vintage/Muted';
+        }
+
+        // 3. NOIR / MONO
+        // High Contrast, Low Chroma.
+        // Captures Black & White photography or Woodcuts.
+        if (c < 10 && k > 60) {
+            return 'Noir/Mono';
+        }
+
+        // 4. NEON / VIBRANT
+        // High Variation (Complex) + Extreme Chroma.
+        // Captures Pop Art, Neon Signs, Saturated Photos.
+        if (c > 60) {
+            return 'Neon/Vibrant';
+        }
+
+        // 5. PHOTOGRAPHIC (The Catch-All)
+        // High Variation + Moderate Chroma.
+        // Natural lighting, continuous tones.
+        return 'Photographic';
+    }
+
+    /**
+     * STRATEGY MAPPER
+     * Assigns the correct Dither and Bias to each Archetype
+     */
+    static getStrategy(archetype, dna) {
+        const l_std_dev = dna.l_std_dev !== undefined ? dna.l_std_dev : 50;
+
+        switch (archetype) {
+            case 'Vector/Flat':
+                return {
+                    dither: 'atkinson', // Crisp edges
+                    bias: 1.0           // Precision (Don't bias blacks heavily)
+                };
+
+            case 'Vintage/Muted':
+                return {
+                    dither: 'atkinson', // Retain the "Cut Paper" look
+                    bias: 3.0           // Smooth out paper grain in solids
+                };
+
+            case 'Noir/Mono':
+                // Default to BlueNoise for smooth shadow gradients
+                return {
+                    dither: 'blue-noise',
+                    bias: 5.0           // Protect deep blacks at all costs
+                };
+
+            case 'Neon/Vibrant':
+                return {
+                    dither: 'blue-noise', // Smooth gradients needed for neon glows
+                    bias: 2.0
+                };
+
+            case 'Photographic':
+            default:
+                // Check for "Texture Rescue" (Heavy Grain)
+                if (l_std_dev > 45) {
+                    return { dither: 'blue-noise', bias: 5.0 };
+                }
+                return {
+                    dither: 'blue-noise', // Standard Photo setting
+                    bias: 2.0
+                };
+        }
     }
 }
 

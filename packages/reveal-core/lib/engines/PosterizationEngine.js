@@ -91,6 +91,16 @@ const CentroidStrategies = {
 
 class PosterizationEngine {
     /**
+     * MINIMUM VIABILITY THRESHOLDS
+     *
+     * Prevents "dust" (tiny stray color regions) from becoming separate screens.
+     * Colors below these coverage thresholds are absorbed into neighbors or skipped.
+     */
+    static MIN_PRESERVED_COVERAGE = 0.001;  // 0.1% for preserved colors (white/black)
+    static MIN_HUE_COVERAGE = 0.0025;       // 0.25% for hue gap sectors
+    static PRESERVED_UNIFY_THRESHOLD = 12.0; // ΔE to unify preserved colors with existing palette colors
+
+    /**
      * CENTRALIZED TUNING PARAMETERS
      *
      * Balanced preset for complex images with skin tones, hair textures,
@@ -1938,6 +1948,13 @@ class PosterizationEngine {
         // Configurable thresholds (lowered from 15/20 to 12/15 for better detection)
         const CHROMA_THRESHOLD = options.chromaThreshold ?? 12;
         const DISTINCTNESS_THRESHOLD = options.distinctnessThreshold ?? 15;
+
+        // VIABILITY THRESHOLD: 0.25% minimum coverage
+        // Don't add a diversity color if it only exists as speckles/noise.
+        // A hue that covers <0.25% of the image is not worth burning a screen for.
+        const MIN_HUE_COVERAGE = options.minHueCoverage ?? PosterizationEngine.MIN_HUE_COVERAGE;
+        const totalPixels = labPixels.length / 3;
+
         const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
                             'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
 
@@ -2025,20 +2042,40 @@ class PosterizationEngine {
         }
 
         // Return only the vibrant, distinct missing hues (sorted by chroma)
-        const forcedColors = gaps
-            .filter(gapIdx => binSamples[gapIdx] !== null)
-            .map(gapIdx => {
-                const sample = binSamples[gapIdx];
-                logger.log(`  ✓ Force-including ${sectorNames[gapIdx]}: L=${sample.L.toFixed(1)}, a=${sample.a.toFixed(1)}, b=${sample.b.toFixed(1)}, C=${sample.chroma.toFixed(1)} (ΔE ≥ ${DISTINCTNESS_THRESHOLD})`);
-                return {L: sample.L, a: sample.a, b: sample.b};
-            })
-            .sort((a, b) => {
-                const chromaA = Math.sqrt(a.a * a.a + a.b * a.b);
-                const chromaB = Math.sqrt(b.a * b.a + b.b * b.b);
-                return chromaB - chromaA; // Most saturated first
-            });
+        // VIABILITY CHECK: Only include if the sector has sufficient coverage
+        const forcedColors = [];
+        let skippedForViability = 0;
 
-        if (forcedColors.length === 0) {
+        for (const gapIdx of gaps) {
+            if (binSamples[gapIdx] === null) continue;
+
+            const sample = binSamples[gapIdx];
+            const diag = diagMap.get(gapIdx);
+
+            // Calculate coverage based on totalScanned pixels in this sector
+            const coverage = diag.totalScanned / totalPixels;
+
+            if (coverage < MIN_HUE_COVERAGE) {
+                // This "gap" is just noise - not enough pixels to warrant a screen
+                logger.log(`  🗑️ Skipping ${sectorNames[gapIdx]} - below viability threshold (${diag.totalScanned} pixels, ${(coverage * 100).toFixed(3)}% < ${(MIN_HUE_COVERAGE * 100).toFixed(2)}%)`);
+                skippedForViability++;
+                continue;
+            }
+
+            logger.log(`  ✓ Force-including ${sectorNames[gapIdx]}: L=${sample.L.toFixed(1)}, a=${sample.a.toFixed(1)}, b=${sample.b.toFixed(1)}, C=${sample.chroma.toFixed(1)} (ΔE ≥ ${DISTINCTNESS_THRESHOLD}, coverage: ${(coverage * 100).toFixed(2)}%)`);
+            forcedColors.push({L: sample.L, a: sample.a, b: sample.b});
+        }
+
+        // Sort by chroma (most saturated first)
+        forcedColors.sort((a, b) => {
+            const chromaA = Math.sqrt(a.a * a.a + a.b * a.b);
+            const chromaB = Math.sqrt(b.a * b.a + b.b * b.b);
+            return chromaB - chromaA;
+        });
+
+        if (forcedColors.length === 0 && skippedForViability > 0) {
+            logger.log(`  ⚠️ All ${skippedForViability} gap candidate(s) below viability threshold - not worth burning screens for dust`);
+        } else if (forcedColors.length === 0) {
             logger.log(`  ⚠️ No distinct colors found - all candidates too similar to existing palette`);
         }
 
@@ -3051,19 +3088,68 @@ class PosterizationEngine {
             }
         }
 
-        // Step 3.5: Add preserved colors to palette
-        // IMPORTANT: Always add preserved colors if enabled, even if no pixels match
-        // This forces white/black into palette for spot color workflow
+        // Step 3.5: Add preserved colors to palette (with Minimum Viability Threshold)
+        // SPECKLE FILTER: Only add white/black if they represent significant coverage.
+        // A 0.04% coverage layer is "dust" - it will wash out on a 230 mesh screen.
+        // For a 1MP image, 0.1% = 1000 pixels. Anything less is invisible/unprintable.
+        const MIN_PRESERVED_COVERAGE = PosterizationEngine.MIN_PRESERVED_COVERAGE;
+        const totalPixels = labPixels.length / 3;
+
         const preservedColors = [];
+
+        // Track which preserved colors actually made it (for later use)
+        let actuallyPreservedWhite = false;
+        let actuallyPreservedBlack = false;
+
         if (preserveWhite) {
-            preservedColors.push({ L: 100, a: 0, b: 0 });
             const pixelCount = preservedPixelMap.has('white') ? preservedPixelMap.get('white').size : 0;
-            logger.log(`  + Added white to palette (${pixelCount} pixels)`);
+            const coverage = pixelCount / totalPixels;
+
+            if (coverage >= MIN_PRESERVED_COVERAGE) {
+                const absoluteWhite = { L: 100, a: 0, b: 0 };
+                const UNIFY_THRESHOLD = PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
+
+                // Check if palette already has a highlight color close to white
+                const existingMatch = curatedPaletteLab.find(color =>
+                    PosterizationEngine._labDistance(color, absoluteWhite) < UNIFY_THRESHOLD
+                );
+
+                if (existingMatch) {
+                    const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteWhite);
+                    logger.log(`  🔗 White unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)})`);
+                } else {
+                    preservedColors.push(absoluteWhite);
+                    actuallyPreservedWhite = true;
+                    logger.log(`  + Added white to palette (${pixelCount} pixels, ${(coverage * 100).toFixed(2)}%)`);
+                }
+            } else {
+                logger.log(`  🗑️ Skipped white - below viability threshold (${pixelCount} pixels, ${(coverage * 100).toFixed(3)}% < ${(MIN_PRESERVED_COVERAGE * 100).toFixed(1)}%)`);
+            }
         }
         if (preserveBlack) {
-            preservedColors.push({ L: 0, a: 0, b: 0 });
             const pixelCount = preservedPixelMap.has('black') ? preservedPixelMap.get('black').size : 0;
-            logger.log(`  + Added black to palette (${pixelCount} pixels)`);
+            const coverage = pixelCount / totalPixels;
+
+            if (coverage >= MIN_PRESERVED_COVERAGE) {
+                const absoluteBlack = { L: 0, a: 0, b: 0 };
+                const UNIFY_THRESHOLD = PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
+
+                // Check if palette already has a deep shadow color close to black
+                const existingMatch = curatedPaletteLab.find(color =>
+                    PosterizationEngine._labDistance(color, absoluteBlack) < UNIFY_THRESHOLD
+                );
+
+                if (existingMatch) {
+                    const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteBlack);
+                    logger.log(`  🔗 Black unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)})`);
+                } else {
+                    preservedColors.push(absoluteBlack);
+                    actuallyPreservedBlack = true;
+                    logger.log(`  + Added black to palette (${pixelCount} pixels, ${(coverage * 100).toFixed(2)}%)`);
+                }
+            } else {
+                logger.log(`  🗑️ Skipped black - below viability threshold (${pixelCount} pixels, ${(coverage * 100).toFixed(3)}% < ${(MIN_PRESERVED_COVERAGE * 100).toFixed(1)}%)`);
+            }
         }
 
         // Step 3.6: Add substrate color to palette (if detected)
@@ -3120,10 +3206,11 @@ class PosterizationEngine {
         // CRITICAL: Use Uint16Array to support palettes with >255 colors (quantized + preserved + substrate)
         let assignments = new Uint16Array(pixels.length / (isLabInput ? 3 : 4));
 
-        // Calculate palette indices for preserved colors (based on checkbox state, not pixel detection)
+        // Calculate palette indices for preserved colors (based on actual inclusion, not checkbox state)
+        // Use actuallyPreservedWhite/Black which account for the viability threshold
         let preservedColorIndex = curatedPaletteLab.length;
-        const whiteIndex = preserveWhite ? preservedColorIndex++ : -1;
-        const blackIndex = preserveBlack ? preservedColorIndex++ : -1;
+        const whiteIndex = actuallyPreservedWhite ? preservedColorIndex++ : -1;
+        const blackIndex = actuallyPreservedBlack ? preservedColorIndex++ : -1;
 
         // PERFORMANCE OPTIMIZATION: Preview mode uses stride sampling
         // This reduces distance calculations by 75% (4× stride = 1/4 pixels computed)
@@ -3148,12 +3235,13 @@ class PosterizationEngine {
             }
 
             // Check if this pixel is preserved (O(1) lookup with Set)
+            // Only assign to preserved index if the color actually made it past the viability threshold
             let isPreserved = false;
 
-            if (preservedPixelMap.has('white') && preservedPixelMap.get('white').has(i)) {
+            if (actuallyPreservedWhite && preservedPixelMap.has('white') && preservedPixelMap.get('white').has(i)) {
                 assignments[i] = whiteIndex;
                 isPreserved = true;
-            } else if (preservedPixelMap.has('black') && preservedPixelMap.get('black').has(i)) {
+            } else if (actuallyPreservedBlack && preservedPixelMap.has('black') && preservedPixelMap.get('black').has(i)) {
                 assignments[i] = blackIndex;
                 isPreserved = true;
             }
@@ -3220,9 +3308,10 @@ class PosterizationEngine {
 
         // Apply density floor to remove ghost colors (<0.5% coverage)
         // IMPORTANT: Never remove preserved colors (white/black) or substrate
+        // Use actuallyPreserved flags - if a color was skipped by viability threshold, don't protect it
         const protectedIndices = new Set();
-        if (preserveWhite) protectedIndices.add(whiteIndex);
-        if (preserveBlack) protectedIndices.add(blackIndex);
+        if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
+        if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
         if (substrateLab) protectedIndices.add(finalPaletteLab.length - 1);  // Substrate is always last
 
         const densityResult = this._applyDensityFloor(

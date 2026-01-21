@@ -64,8 +64,8 @@ async function analyze() {
         'Unknown': []
     };
 
-    console.log(`Filename                     | Archetype       | C (Chroma) | K (Contrast) | L (Avg)`);
-    console.log(`─────────────────────────────┼─────────────────┼────────────┼──────────────┼────────`);
+    console.log(`Filename                     | Archetype       | C (Chroma) | K (Contrast) | L_StdDev`);
+    console.log(`─────────────────────────────┼─────────────────┼────────────┼──────────────┼─────────`);
 
     for (const file of files) {
         try {
@@ -75,7 +75,7 @@ async function analyze() {
 
             stats[type].push({ file, dna });
             console.log(
-                `${pad(file, 28)} | ${pad(type, 15)} | ${pad(dna.c.toFixed(1), 10)} | ${pad(dna.k.toFixed(1), 12)} | ${dna.l.toFixed(1)}`
+                `${pad(file, 28)} | ${pad(type, 15)} | ${pad(dna.c.toFixed(1), 10)} | ${pad(dna.k.toFixed(1), 12)} | ${dna.l_std_dev.toFixed(1)}`
             );
         } catch (e) {
             console.error(`❌ ${file}: ${e.message}`);
@@ -209,27 +209,46 @@ async function calculateDNA(filePath) {
 
 /**
  * Classify image into SP-50 archetype based on DNA
+ *
+ * MUST MATCH: DynamicConfigurator.getArchetype() in reveal-core v1.7
+ * This is a diagnostic mirror - keeps dataset analysis in sync with processing logic.
  */
 function classify(dna) {
-    // 1. MONOCHROME / NOIR
-    // Near-zero chroma = grayscale
-    if (dna.c < 5) return 'Noir/Mono';
+    const l_std_dev = dna.l_std_dev !== undefined ? dna.l_std_dev : 50;
+    const c = dna.c || 0;
+    const k = dna.k || 0;
+
+    // 1. VECTOR / FLAT
+    // Extremely low variation. Flat fields of color.
+    // Captures Logos, Text, Icons.
+    if (l_std_dev < 15) {
+        return 'Vector/Flat';
+    }
 
     // 2. VINTAGE / MUTED
-    // Low Chroma AND Low Contrast (Washed out look)
-    if (dna.c < 15 && dna.k < 40) return 'Vintage/Muted';
+    // Discrete Ink Layers (Low Variation) + Muted Palette (Mod Chroma).
+    // Captures WPA Posters, Lithographs.
+    if (l_std_dev < 25 && c < 45) {
+        return 'Vintage/Muted';
+    }
 
-    // 3. NEON / VIBRANT
-    // High Chroma, regardless of contrast
-    if (dna.c > 45) return 'Neon/Vibrant';
+    // 3. NOIR / MONO
+    // High Contrast, Low Chroma.
+    // Captures Black & White photography or Woodcuts.
+    if (c < 10 && k > 60) {
+        return 'Noir/Mono';
+    }
 
-    // 4. VECTOR / FLAT
-    // Low variance in lightness = flat colors, distinct regions
-    // Vectors have very distinct colors but often uniform regions
-    if (dna.l_std_dev < 15) return 'Vector/Flat';
+    // 4. NEON / VIBRANT
+    // High Variation (Complex) + Extreme Chroma.
+    // Captures Pop Art, Neon Signs, Saturated Photos.
+    if (c > 60) {
+        return 'Neon/Vibrant';
+    }
 
-    // 5. PHOTOGRAPHIC (The Catch-all)
-    // Everything else: balanced L, C, K
+    // 5. PHOTOGRAPHIC (The Catch-All)
+    // High Variation + Moderate Chroma.
+    // Natural lighting, continuous tones.
     return 'Photographic';
 }
 
