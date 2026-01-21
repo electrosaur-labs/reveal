@@ -15,6 +15,7 @@
     "convert-ppm-to-tiff": "node src/convertPPMToLabTiff.js",
     "process-cq100": "node src/processCQ100.js",
     "analyze-cq100": "node src/CQ100_MetaAnalyzer.js",
+    "analyze-sp100": "node src/SP100_MetaAnalyzer.js",
     "revalidate": "node src/Revalidate.js",
     "revalidate-quality": "node src/RevalidateQuality.js",
     "analyze-dataset": "node src/DatasetArchitect.js",

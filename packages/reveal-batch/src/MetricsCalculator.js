@@ -141,7 +141,13 @@ class MetricsCalculator {
             }
         });
 
-        const integrityScore = this._calculateIntegrity(totalLayerBreaches, width, height);
+        const densityIntegrity = this._calculateIntegrity(totalLayerBreaches, width, height);
+
+        // ==================================================================
+        // 5. TRUE INTEGRITY - Coverage + Valid Paper
+        // ==================================================================
+
+        const trueIntegrity = this.calculateTrueIntegrity(layers, originalLab, width, height);
 
         // ==================================================================
         // RETURN COMPLETE METRICS OBJECT
@@ -165,7 +171,9 @@ class MetricsCalculator {
                 densityFloorBreaches: totalLayerBreaches,
                 breachVolume: totalBreachVolume,
                 weakestPlate: worstLayerName,
-                integrityScore: parseFloat(integrityScore)
+                integrityScore: trueIntegrity.score,
+                integrityDetails: trueIntegrity.details,
+                densityIntegrity: parseFloat(densityIntegrity)
             }
         };
     }
@@ -235,6 +243,68 @@ class MetricsCalculator {
         const range = FAIL_LIMIT - GOOD_LIMIT;
         const progress = (noiseRatio - GOOD_LIMIT) / range;
         return (60 - (progress * 60)).toFixed(1);  // 60 → 0
+    }
+
+    /**
+     * Calculate True Integrity for Screen Printing (Knockout)
+     *
+     * In knockout separations, pixels are either:
+     * 1. Covered by ink (valid)
+     * 2. Left as paper/substrate (valid if paper-colored, i.e., L > 90)
+     * 3. Void (uncovered and NOT paper-colored = failure)
+     *
+     * This accounts for intentionally blank paper areas as valid coverage.
+     *
+     * @param {Array} layers - Array of {mask: Uint8Array} objects
+     * @param {Uint8ClampedArray} originalLab - Original Lab pixels (byte encoding)
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @returns {Object} - { score, details: { ink, paper, void } }
+     */
+    static calculateTrueIntegrity(layers, originalLab, width, height) {
+        const totalPixels = width * height;
+
+        // 1. Mark all pixels covered by ANY ink layer
+        const coveredPixels = new Uint8Array(totalPixels);
+        layers.forEach(layer => {
+            for (let i = 0; i < totalPixels; i++) {
+                if (layer.mask[i] > 0) coveredPixels[i] = 1;
+            }
+        });
+
+        // 2. Count ink, valid paper, and void pixels
+        let inkCount = 0;
+        let validPaperCount = 0;
+        let voidCount = 0;
+
+        // L > 230 in byte encoding ≈ L* > 90 in perceptual space
+        const PAPER_THRESHOLD = 230;
+
+        for (let i = 0; i < totalPixels; i++) {
+            if (coveredPixels[i] === 1) {
+                inkCount++;
+            } else {
+                // Check original pixel lightness
+                const L = originalLab[i * 3];
+                if (L > PAPER_THRESHOLD) {
+                    validPaperCount++;
+                } else {
+                    voidCount++;
+                }
+            }
+        }
+
+        // Score: (ink + validPaper) / total
+        const score = ((inkCount + validPaperCount) / totalPixels) * 100;
+
+        return {
+            score: parseFloat(score.toFixed(1)),
+            details: {
+                ink: parseFloat(((inkCount / totalPixels) * 100).toFixed(1)),
+                paper: parseFloat(((validPaperCount / totalPixels) * 100).toFixed(1)),
+                void: parseFloat(((voidCount / totalPixels) * 100).toFixed(1))
+            }
+        };
     }
 }
 

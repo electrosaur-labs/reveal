@@ -1,181 +1,306 @@
 /**
  * SP100_MetaAnalyzer.js
- * Aggregates SP-100 separation metrics into a global health report.
- * Analyzes both LOC and WikiArt sources.
+ * Aggregates individual separation metrics into a global health report for SP100 dataset.
+ *
+ * SP100 structure: data/SP100/output/{loc,wikiart}/*.json
+ *
+ * METRICS:
+ * - integrityScore: True Integrity (ink + valid paper coverage)
+ * - densityIntegrity: Density floor breach tolerance (small isolated pixels)
+ *
+ * CALIBRATION (from CQ100):
+ * - Integrity Pass: 60 (Physical print safety limit)
+ * - Revelation Pass: 20 (Isolate true outliers)
+ * - Stack Pass: 5 (Max ink overlap)
  */
 const fs = require('fs');
 const path = require('path');
 
 // CONFIGURATION
-const BASE_DIR = path.join(__dirname, '../data/SP100/output');
-const SOURCES = ['loc', 'wikiart'];
+const SP100_OUTPUT = path.join(__dirname, '../data/SP100/output');
+const OUTPUT_REPORT = path.join(SP100_OUTPUT, 'sp100_meta_analysis.json');
+const OUTPUT_CSV = path.join(SP100_OUTPUT, 'sp100_summary.csv');
+const SUBDIRS = ['loc', 'wikiart']; // SP100 has subdirectories
 
 // --- CALIBRATED THRESHOLDS ---
-const THRESHOLD_INTEGRITY = 60;
-const THRESHOLD_REVELATION = 20;
-const THRESHOLD_STACK = 5;
+const THRESHOLD_INTEGRITY = 60;   // Must be physically printable
+const THRESHOLD_REVELATION = 20;  // Captures only true failures (lights, charts)
+const THRESHOLD_STACK = 5;        // Max ink overlap
 
 class SP100MetaAnalyzer {
     static run() {
-        console.log(`\n🎨 SP-100 Meta-Analysis`);
-        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+        console.log(`🔍 Scanning SP100 dataset...`);
 
-        const allResults = [];
-        const bySource = {};
-
-        for (const source of SOURCES) {
-            const psdDir = path.join(BASE_DIR, source, 'psd');
-            if (!fs.existsSync(psdDir)) {
-                console.log(`⚠️ Source directory not found: ${psdDir}`);
-                continue;
-            }
-
-            const files = fs.readdirSync(psdDir).filter(f => f.endsWith('.json') && f !== 'batch-report.json');
-            console.log(`📁 ${source.toUpperCase()}: ${files.length} images`);
-
-            bySource[source] = {
-                count: 0,
-                totalDeltaE: 0,
-                totalRevScore: 0,
-                totalIntegrity: 0,
-                totalColors: 0,
-                colorDist: {},
-                failures: []
-            };
-
-            for (const file of files) {
-                try {
-                    const data = JSON.parse(fs.readFileSync(path.join(psdDir, file), 'utf8'));
-                    const metrics = data.metrics;
-                    const config = data.configuration;
-                    const dna = data.dna;
-
-                    if (!metrics || !metrics.global_fidelity) continue;
-
-                    const revScore = metrics.feature_preservation?.revelationScore || 0;
-                    const integrity = metrics.physical_feasibility?.integrityScore || 100;
-                    const deltaE = metrics.global_fidelity?.avgDeltaE || 0;
-                    const colors = config?.targetColors || data.palette?.length || 0;
-
-                    bySource[source].count++;
-                    bySource[source].totalDeltaE += deltaE;
-                    bySource[source].totalRevScore += revScore;
-                    bySource[source].totalIntegrity += integrity;
-                    bySource[source].totalColors += colors;
-
-                    // Track color distribution
-                    bySource[source].colorDist[colors] = (bySource[source].colorDist[colors] || 0) + 1;
-
-                    // Check for failures
-                    const failed = revScore < THRESHOLD_REVELATION || integrity < THRESHOLD_INTEGRITY;
-                    if (failed) {
-                        bySource[source].failures.push({
-                            file: file,
-                            revScore: revScore.toFixed(1),
-                            integrity: integrity.toFixed(1),
-                            deltaE: deltaE.toFixed(2)
-                        });
-                    }
-
-                    allResults.push({
-                        source,
-                        file,
-                        revScore,
-                        integrity,
-                        deltaE,
-                        colors,
-                        dna: dna ? { l: dna.l, c: dna.c, k: dna.k } : null
-                    });
-                } catch (err) {
-                    console.log(`  ⚠️ Skipped ${file}: ${err.message}`);
-                }
-            }
-        }
-
-        // Print results
-        console.log(`\n${'━'.repeat(60)}`);
-        console.log(`SOURCE BREAKDOWN`);
-        console.log(`${'━'.repeat(60)}`);
-
-        let totalCount = 0;
-        let totalPass = 0;
-
-        for (const source of SOURCES) {
-            const s = bySource[source];
-            if (!s || s.count === 0) continue;
-
-            totalCount += s.count;
-            const passCount = s.count - s.failures.length;
-            totalPass += passCount;
-
-            console.log(`\n📊 ${source.toUpperCase()}`);
-            console.log(`  Images:      ${s.count}`);
-            console.log(`  Avg DeltaE:  ${(s.totalDeltaE / s.count).toFixed(2)}`);
-            console.log(`  Avg RevScore: ${(s.totalRevScore / s.count).toFixed(1)}`);
-            console.log(`  Avg Integrity: ${(s.totalIntegrity / s.count).toFixed(1)}`);
-            console.log(`  Avg Colors:  ${(s.totalColors / s.count).toFixed(1)}`);
-            console.log(`  Pass Rate:   ${passCount}/${s.count} (${((passCount / s.count) * 100).toFixed(1)}%)`);
-
-            // Color distribution
-            console.log(`  Color Distribution:`);
-            const sortedColors = Object.keys(s.colorDist).map(Number).sort((a, b) => a - b);
-            for (const c of sortedColors) {
-                const pct = ((s.colorDist[c] / s.count) * 100).toFixed(1);
-                console.log(`    ${c} colors: ${s.colorDist[c]} (${pct}%)`);
-            }
-
-            if (s.failures.length > 0) {
-                console.log(`  Failures (${s.failures.length}):`);
-                s.failures.slice(0, 5).forEach(f => {
-                    console.log(`    - ${f.file}: RevScore=${f.revScore}, ΔE=${f.deltaE}`);
+        // Collect JSON files from subdirectories
+        // Note: JSONs are now directly in output/{source}/ (not output/{source}/psd/)
+        const allFiles = [];
+        SUBDIRS.forEach(subdir => {
+            const sourceDir = path.join(SP100_OUTPUT, subdir);
+            if (fs.existsSync(sourceDir)) {
+                const files = fs.readdirSync(sourceDir).filter(f => f.endsWith('.json'));
+                files.forEach(f => {
+                    allFiles.push({ file: f, fullPath: path.join(sourceDir, f), source: subdir });
                 });
-                if (s.failures.length > 5) {
-                    console.log(`    ... and ${s.failures.length - 5} more`);
-                }
+                console.log(`  Found ${files.length} JSONs in ${subdir}/`);
             }
+        });
+
+        if (allFiles.length === 0) {
+            console.error("❌ No JSON files found.");
+            return;
         }
 
-        // Global summary
-        console.log(`\n${'━'.repeat(60)}`);
-        console.log(`GLOBAL SUMMARY`);
-        console.log(`${'━'.repeat(60)}`);
-        console.log(`Total Images:  ${totalCount}`);
-        console.log(`Total Passing: ${totalPass}/${totalCount} (${((totalPass / totalCount) * 100).toFixed(1)}%)`);
-
-        // Compare to CQ100 targets
-        console.log(`\n${'━'.repeat(60)}`);
-        console.log(`SP-100 vs CQ100 TARGETS`);
-        console.log(`${'━'.repeat(60)}`);
-
-        const allColors = allResults.map(r => r.colors);
-        const avgColors = allColors.reduce((a, b) => a + b, 0) / allColors.length;
-        const at12Colors = allColors.filter(c => c >= 12).length;
-        const at12Pct = (at12Colors / allColors.length) * 100;
-
-        console.log(`  Metric          | CQ100  | SP-100 | Target`);
-        console.log(`  ----------------|--------|--------|--------`);
-        console.log(`  Avg Colors      | 10.2   | ${avgColors.toFixed(1).padStart(5)}  | 6-8`);
-        console.log(`  12+ Color %     | 41%    | ${at12Pct.toFixed(0).padStart(3)}%   | <20%`);
-        console.log(`  Pass Rate       | 82%    | ${((totalPass / totalCount) * 100).toFixed(0).padStart(3)}%   | >90%`);
-
-        // Save report
-        const reportPath = path.join(BASE_DIR, 'sp100_meta_analysis.json');
-        fs.writeFileSync(reportPath, JSON.stringify({
-            timestamp: new Date().toISOString(),
-            summary: {
-                totalImages: totalCount,
-                totalPassing: totalPass,
-                passRate: ((totalPass / totalCount) * 100).toFixed(1) + '%',
-                avgColors: avgColors.toFixed(1),
-                at12ColorsPct: at12Pct.toFixed(1) + '%'
+        const stats = {
+            totalImages: 0,
+            global: {
+                avgDeltaE: 0,
+                avgRevelationScore: 0,
+                avgProcessingTime: 0,
+                avgIntegrity: 0
             },
-            bySource,
-            results: allResults
-        }, null, 2));
+            bySource: {},     // loc vs wikiart
+            byPreset: {},     // Will auto-populate
+            byColorCount: {}, // Distribution by screen count
+            outliers: {
+                highestDeltaE: { val: 0, file: '' },
+                lowestScore: { val: 100, file: '' },
+                worstIntegrity: { val: 100, file: '' },
+                slowestProcess: { val: 0, file: '' }
+            },
+            failures: []
+        };
 
-        console.log(`\n✓ Report saved: ${reportPath}\n`);
+        const csvRows = ['Filename,Source,Preset,Colors,AvgDeltaE,MaxDeltaE,RevScore,Integrity,Breaches,ProcTime'];
+
+        allFiles.forEach(({ file, fullPath, source }) => {
+            try {
+                const content = fs.readFileSync(fullPath, 'utf8');
+                const data = JSON.parse(content);
+
+                stats.totalImages++;
+                this.accumulateGlobal(stats, data);
+                this.accumulateSource(stats, data, source);
+                this.accumulatePreset(stats, data);
+                this.accumulateColorCount(stats, data);
+                this.checkOutliers(stats, data, file);
+                this.checkFailure(stats, data, file, source);
+
+                // Extract color count from layers
+                const colorCount = data.output_summary?.layers?.length || 'unknown';
+
+                // Add to CSV buffer
+                csvRows.push(`${data.meta.filename},${source},${data.input_parameters.presetId},${colorCount},${data.metrics.global_fidelity.avgDeltaE},${data.metrics.global_fidelity.maxDeltaE},${data.metrics.feature_preservation.revelationScore},${data.metrics.physical_feasibility.integrityScore},${data.metrics.physical_feasibility.densityFloorBreaches},${data.timing.totalMs}`);
+
+            } catch (err) {
+                console.warn(`⚠️ Skipped corrupt file ${file}: ${err.message}`);
+            }
+        });
+
+        this.finalizeStats(stats);
+
+        // Write outputs
+        fs.writeFileSync(OUTPUT_REPORT, JSON.stringify(stats, null, 4));
+        fs.writeFileSync(OUTPUT_CSV, csvRows.join('\n'));
+
+        console.log(`\n✅ Analysis Complete. Scanned ${stats.totalImages} images.`);
+        console.log(`👉 Report: ${OUTPUT_REPORT}`);
+        console.log(`👉 Spreadsheet: ${OUTPUT_CSV}`);
+
+        // Print summary to console
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`GLOBAL AVERAGES`);
+        console.log(`${'='.repeat(60)}`);
+        console.log(`  Avg DeltaE:         ${stats.global.avgDeltaE}`);
+        console.log(`  Avg Revelation:     ${stats.global.avgRevelationScore}`);
+        console.log(`  Avg Integrity:      ${stats.global.avgIntegrity}`);
+        console.log(`  Avg Process Time:   ${stats.global.avgProcessingTime}ms`);
+
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`BY SOURCE`);
+        console.log(`${'='.repeat(60)}`);
+        Object.entries(stats.bySource).forEach(([source, data]) => {
+            console.log(`  ${source}:`);
+            console.log(`    Count:       ${data.count} images`);
+            console.log(`    Avg DeltaE:  ${data.avgDeltaE}`);
+            console.log(`    Avg Score:   ${data.avgScore}`);
+            console.log(`    Avg Integrity: ${data.avgIntegrity}`);
+        });
+
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`COLOR COUNT DISTRIBUTION`);
+        console.log(`${'='.repeat(60)}`);
+        Object.entries(stats.byColorCount)
+            .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+            .forEach(([count, num]) => {
+                const pct = ((num / stats.totalImages) * 100).toFixed(1);
+                console.log(`  ${count} colors: ${num} images (${pct}%)`);
+            });
+
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`PRESET DISTRIBUTION`);
+        console.log(`${'='.repeat(60)}`);
+        Object.entries(stats.byPreset)
+            .sort((a, b) => b[1].count - a[1].count)
+            .forEach(([preset, data]) => {
+                console.log(`  ${preset}:`);
+                console.log(`    Count:       ${data.count} images`);
+                console.log(`    Avg DeltaE:  ${data.avgDeltaE}`);
+                console.log(`    Avg Score:   ${data.avgScore}`);
+            });
+
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`OUTLIERS`);
+        console.log(`${'='.repeat(60)}`);
+        console.log(`  Highest DeltaE:     ${stats.outliers.highestDeltaE.val.toFixed(2)} (${stats.outliers.highestDeltaE.file})`);
+        console.log(`  Lowest Score:       ${stats.outliers.lowestScore.val.toFixed(1)} (${stats.outliers.lowestScore.file})`);
+        console.log(`  Worst Integrity:    ${stats.outliers.worstIntegrity.val} (${stats.outliers.worstIntegrity.file})`);
+        console.log(`  Slowest Process:    ${stats.outliers.slowestProcess.val}ms (${stats.outliers.slowestProcess.file})`);
+
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`THRESHOLDS (Calibrated)`);
+        console.log(`${'='.repeat(60)}`);
+        console.log(`  Integrity:    > ${THRESHOLD_INTEGRITY} (Physical print safety)`);
+        console.log(`  Revelation:   > ${THRESHOLD_REVELATION} (Visual quality)`);
+        console.log(`  Max Stack:    ≤ ${THRESHOLD_STACK} (Ink overlap limit)`);
+
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`FAILURES (${stats.failures.length} images)`);
+        console.log(`${'='.repeat(60)}`);
+        if (stats.failures.length > 0) {
+            stats.failures.sort((a, b) => a.score - b.score);
+            stats.failures.forEach(f => {
+                console.log(`  ⚠️ [${f.source}] ${f.file}: ${f.reason}`);
+            });
+        } else {
+            console.log(`  ✅ No failures detected!`);
+        }
+
+        // Summary line
+        const passCount = stats.totalImages - stats.failures.length;
+        const passRate = ((passCount / stats.totalImages) * 100).toFixed(1);
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`SUMMARY: ${passCount}/${stats.totalImages} images passing (${passRate}%)`);
+        console.log(`${'='.repeat(60)}`);
+        console.log();
+    }
+
+    // --- AGGREGATION LOGIC ---
+
+    static accumulateGlobal(stats, data) {
+        stats.global.avgDeltaE += data.metrics.global_fidelity.avgDeltaE;
+        stats.global.avgRevelationScore += data.metrics.feature_preservation.revelationScore;
+        stats.global.avgProcessingTime += data.timing.totalMs;
+        stats.global.avgIntegrity += parseFloat(data.metrics.physical_feasibility.integrityScore);
+    }
+
+    static accumulateSource(stats, data, source) {
+        if (!stats.bySource[source]) {
+            stats.bySource[source] = {
+                count: 0,
+                avgDeltaE: 0,
+                avgScore: 0,
+                avgIntegrity: 0
+            };
+        }
+        const s = stats.bySource[source];
+        s.count++;
+        s.avgDeltaE += data.metrics.global_fidelity.avgDeltaE;
+        s.avgScore += data.metrics.feature_preservation.revelationScore;
+        s.avgIntegrity += parseFloat(data.metrics.physical_feasibility.integrityScore);
+    }
+
+    static accumulatePreset(stats, data) {
+        const preset = data.input_parameters.presetId;
+        if (!stats.byPreset[preset]) {
+            stats.byPreset[preset] = {
+                count: 0,
+                avgDeltaE: 0,
+                avgScore: 0,
+                breaches: 0
+            };
+        }
+        const p = stats.byPreset[preset];
+        p.count++;
+        p.avgDeltaE += data.metrics.global_fidelity.avgDeltaE;
+        p.avgScore += data.metrics.feature_preservation.revelationScore;
+        p.breaches += data.metrics.physical_feasibility.densityFloorBreaches;
+    }
+
+    static accumulateColorCount(stats, data) {
+        const colorCount = data.output_summary?.layers?.length || 0;
+        if (!stats.byColorCount[colorCount]) {
+            stats.byColorCount[colorCount] = 0;
+        }
+        stats.byColorCount[colorCount]++;
+    }
+
+    static checkOutliers(stats, data, filename) {
+        const m = data.metrics;
+
+        if (m.global_fidelity.maxDeltaE > stats.outliers.highestDeltaE.val) {
+            stats.outliers.highestDeltaE = { val: m.global_fidelity.maxDeltaE, file: filename };
+        }
+        if (m.feature_preservation.revelationScore < stats.outliers.lowestScore.val) {
+            stats.outliers.lowestScore = { val: m.feature_preservation.revelationScore, file: filename };
+        }
+        if (parseFloat(m.physical_feasibility.integrityScore) < stats.outliers.worstIntegrity.val) {
+            stats.outliers.worstIntegrity = { val: parseFloat(m.physical_feasibility.integrityScore), file: filename };
+        }
+        if (data.timing.totalMs > stats.outliers.slowestProcess.val) {
+            stats.outliers.slowestProcess = { val: data.timing.totalMs, file: filename };
+        }
+    }
+
+    static checkFailure(stats, data, filename, source) {
+        const integrity = parseFloat(data.metrics.physical_feasibility.integrityScore);
+        const score = data.metrics.feature_preservation.revelationScore;
+        const stack = data.metrics.physical_feasibility.maxInkStack;
+
+        const reasons = [];
+        if (integrity < THRESHOLD_INTEGRITY) reasons.push(`Integrity ${integrity.toFixed(1)}`);
+        if (score < THRESHOLD_REVELATION) reasons.push(`RevScore ${score.toFixed(1)}`);
+        if (stack > THRESHOLD_STACK) reasons.push(`Stack ${stack}`);
+
+        if (reasons.length > 0) {
+            stats.failures.push({
+                file: filename,
+                source,
+                reason: reasons.join(', '),
+                integrity,
+                score,
+                stack
+            });
+        }
+    }
+
+    static finalizeStats(stats) {
+        // Calculate Global Averages
+        stats.global.avgDeltaE = (stats.global.avgDeltaE / stats.totalImages).toFixed(2);
+        stats.global.avgRevelationScore = (stats.global.avgRevelationScore / stats.totalImages).toFixed(1);
+        stats.global.avgProcessingTime = Math.round(stats.global.avgProcessingTime / stats.totalImages);
+        stats.global.avgIntegrity = (stats.global.avgIntegrity / stats.totalImages).toFixed(1);
+
+        // Calculate Per-Source Averages
+        for (const key in stats.bySource) {
+            const s = stats.bySource[key];
+            s.avgDeltaE = (s.avgDeltaE / s.count).toFixed(2);
+            s.avgScore = (s.avgScore / s.count).toFixed(1);
+            s.avgIntegrity = (s.avgIntegrity / s.count).toFixed(1);
+        }
+
+        // Calculate Per-Preset Averages
+        for (const key in stats.byPreset) {
+            const p = stats.byPreset[key];
+            p.avgDeltaE = (p.avgDeltaE / p.count).toFixed(2);
+            p.avgScore = (p.avgScore / p.count).toFixed(1);
+            p.avgBreaches = Math.round(p.breaches / p.count);
+        }
     }
 }
 
-// Run
-SP100MetaAnalyzer.run();
+// Run if called directly
+if (require.main === module) {
+    SP100MetaAnalyzer.run();
+}
+
+module.exports = SP100MetaAnalyzer;
