@@ -24,14 +24,38 @@ const CentroidStrategies = {
      * BLACK PROTECTION: Adds massive boost for very dark pixels (L<10) to ensure
      * the centroid snaps to Black rather than averaging it into Grey.
      * Critical for halftone-heavy images like JethroAsMonroe.tif.
+     *
+     * 8-BIT PARITY FIXES:
+     * - BROWN-DAMPENER: Penalizes low-chroma warm pixels (sectors 0,1) to prevent
+     *   8-bit quantization noise from creating "Muddy Brown" centroids.
+     * - ADAPTIVE NEUTRALITY: Wider neutral zone (chroma < 5.0) for 8-bit sources
+     *   to catch grays with slight warm drift.
      */
     SALIENCY: (bucket, weights) => {
         if (!bucket || bucket.length === 0) return { L: 50, a: 0, b: 0 };
 
         const blackBias = weights.blackBias || 5.0;  // Configurable black boost multiplier
+        const isEightBit = (weights.bitDepth || 8) <= 8;
+
+        // Helper: Get hue sector (0-11) from Lab a/b coordinates
+        // Sectors 0 (Red) and 1 (Orange) are the "warm/brown" sectors
+        const getHueSector = (a, b) => {
+            const hueAngle = Math.atan2(b, a) * (180 / Math.PI);
+            const normalizedHue = (hueAngle + 360) % 360;
+            return Math.floor(normalizedHue / 30);
+        };
 
         const scored = bucket.map(p => {
             const chroma = Math.sqrt(p.a * p.a + p.b * p.b);
+            const sector = getHueSector(p.a, p.b);
+
+            // BROWN-DAMPENER: If in warm sectors (0=Red, 1=Orange) but chroma is low (< 8),
+            // it's likely 8-bit quantization noise drifting neutral grays toward brown.
+            // Penalize the chroma weight to prevent these from stealing centroid attention.
+            // Only active for 8-bit sources.
+            const chromaWeight = (isEightBit && chroma < 8 && (sector === 0 || sector === 1))
+                ? weights.cWeight * 0.5  // Halve chroma weight for suspected brown noise
+                : weights.cWeight;
 
             // BLACK PROTECTION: If the pixel is very dark, give it a massive score
             // to ensure the centroid snaps to Black rather than Grey.
@@ -41,7 +65,7 @@ const CentroidStrategies = {
 
             return {
                 p,
-                score: (p.L * weights.lWeight) + (chroma * weights.cWeight) + blackBoost
+                score: (p.L * weights.lWeight) + (chroma * chromaWeight) + blackBoost
             };
         }).sort((a, b) => b.score - a.score);
 
@@ -56,11 +80,13 @@ const CentroidStrategies = {
 
         let finalLab = { L: sumL / sampleSize, a: sumA / sampleSize, b: sumB / sampleSize };
 
-        // NEUTRALITY GATE: If the resulting color is very low saturation,
+        // ADAPTIVE NEUTRALITY GATE: If the resulting color is very low saturation,
         // force it to be a perfect neutral (a=0, b=0).
-        // This prevents near-neutral colors from having slight color casts.
+        // 8-bit sources use a wider threshold (5.0) to catch grays with warm drift.
+        // 16-bit sources use the standard threshold (3.0).
+        const neutralityThreshold = isEightBit ? 5.0 : 3.0;
         const finalChroma = Math.sqrt(finalLab.a**2 + finalLab.b**2);
-        if (finalChroma < 3.0) {
+        if (finalChroma < neutralityThreshold) {
             finalLab.a = 0;
             finalLab.b = 0;
         }
@@ -199,7 +225,8 @@ class PosterizationEngine {
             centroid: {
                 lWeight: options.lWeight !== undefined ? options.lWeight : this.TUNING.centroid.lWeight,
                 cWeight: options.cWeight !== undefined ? options.cWeight : this.TUNING.centroid.cWeight,
-                blackBias: options.blackBias !== undefined ? options.blackBias : this.TUNING.centroid.blackBias
+                blackBias: options.blackBias !== undefined ? options.blackBias : this.TUNING.centroid.blackBias,
+                bitDepth: options.bitDepth || 8  // Source bit depth for 8-bit parity fixes
             }
         };
 
@@ -2631,6 +2658,19 @@ class PosterizationEngine {
             logger.log(`✓ Using native Lab pixels (converting byte encoding to perceptual ranges)`);
             labPixels = new Float32Array(pixels.length);
 
+            // 8-BIT PARITY FIX: Compensate for quantization error in 8-bit sources
+            // 8-bit Lab has coarser steps (256 vs 65536), causing shadow pixels that should
+            // be L=5.8 to round up to L=6.3 during ingestion. This evades the Shadow Gate
+            // and creates "Muddy Brown" artifacts. Use a higher threshold for 8-bit sources.
+            const sourceBitDepth = options.bitDepth || 8;
+            const isEightBitSource = sourceBitDepth <= 8;
+            const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
+            const highlightThreshold = isEightBitSource ? 97.5 : 98.0;
+
+            if (isEightBitSource) {
+                logger.log(`  8-bit source detected: Using expanded gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThreshold})`);
+            }
+
             // Track min/max for diagnostics (BEFORE and AFTER conversion)
             let minLByte = 255, maxLByte = 0;
             let minAByte = 255, maxAByte = 0;
@@ -2654,18 +2694,20 @@ class PosterizationEngine {
                 labPixels[i + 2] = pixels[i + 2] - 128;        // b: 0-255 → -128 to +127
 
                 // THE SHADOW GATE (Final Calibration)
-                // L < 6.0 is effectively black on a t-shirt.
+                // L < threshold is effectively black on a t-shirt.
                 // We force these to True Black (0,0,0) to prevent the engine
                 // from wasting a screen on "Dark Noise" (e.g., L=4.81).
-                if (labPixels[i] < 6.0) {
+                // 8-bit sources use L<7.5 to catch quantization-rounded shadow "scum".
+                if (labPixels[i] < shadowThreshold) {
                     labPixels[i] = 0;
                     labPixels[i + 1] = 0;
                     labPixels[i + 2] = 0;
                 }
                 // THE HIGHLIGHT GATE (Kill Scum Dots)
-                // L > 98.0 is effectively paper/white.
+                // L > threshold is effectively paper/white.
                 // We force these to Pure White (100,0,0) so they become "Transparent/Background".
-                else if (labPixels[i] > 98.0) {
+                // 8-bit sources use L>97.5 to catch quantization-rounded highlight "scum".
+                else if (labPixels[i] > highlightThreshold) {
                     labPixels[i] = 100;
                     labPixels[i + 1] = 0;
                     labPixels[i + 2] = 0;
@@ -2689,6 +2731,13 @@ class PosterizationEngine {
             logger.log("Converting RGB → Lab...");
             labPixels = new Float32Array((pixels.length / 4) * 3);
 
+            // 8-BIT PARITY FIX: Same thresholds apply to RGB sources
+            // (RGB sources are typically always 8-bit anyway)
+            const sourceBitDepth = options.bitDepth || 8;
+            const isEightBitSource = sourceBitDepth <= 8;
+            const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
+            const highlightThreshold = isEightBitSource ? 97.5 : 98.0;
+
             for (let i = 0, j = 0; i < pixels.length; i += 4, j += 3) {
                 const alpha = pixels[i + 3];
 
@@ -2705,18 +2754,20 @@ class PosterizationEngine {
                 labPixels[j + 2] = lab.b;
 
                 // THE SHADOW GATE (Final Calibration)
-                // L < 6.0 is effectively black on a t-shirt.
+                // L < threshold is effectively black on a t-shirt.
                 // We force these to True Black (0,0,0) to prevent the engine
                 // from wasting a screen on "Dark Noise" (e.g., L=4.81).
-                if (labPixels[j] < 6.0) {
+                // 8-bit sources use L<7.5 to catch quantization-rounded shadow "scum".
+                if (labPixels[j] < shadowThreshold) {
                     labPixels[j] = 0;
                     labPixels[j + 1] = 0;
                     labPixels[j + 2] = 0;
                 }
                 // THE HIGHLIGHT GATE (Kill Scum Dots)
-                // L > 98.0 is effectively paper/white.
+                // L > threshold is effectively paper/white.
                 // We force these to Pure White (100,0,0) so they become "Transparent/Background".
-                else if (labPixels[j] > 98.0) {
+                // 8-bit sources use L>97.5 to catch quantization-rounded highlight "scum".
+                else if (labPixels[j] > highlightThreshold) {
                     labPixels[j] = 100;
                     labPixels[j + 1] = 0;
                     labPixels[j + 2] = 0;
@@ -3227,72 +3278,67 @@ class PosterizationEngine {
             logger.log(`Assigning pixels to palette...`);
         }
 
-        // STRIDE-AWARE 2D ASSIGNMENT
-        // Process in blocks to ensure the preview is "chunky" and stable
-        // rather than garbled by 1D array math
-        for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
-            for (let x = 0; x < width; x += ASSIGNMENT_STRIDE) {
-                // Calculate the anchor pixel index
-                const anchorI = y * width + x;
+        // STRIDE-AWARE 2D ASSIGNMENT (Optimized for UXP performance)
+        // PRE-FETCH sets outside the loop to avoid "Property Bleed"
+        const whiteSet = preservedPixelMap.get('white');
+        const blackSet = preservedPixelMap.get('black');
+        const paletteLength = finalPaletteLab.length;
 
-                // --- STEP A: CALCULATE ANCHOR COLOR ---
+        for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
+            const rowOffset = y * width; // Pre-calculate row start
+
+            for (let x = 0; x < width; x += ASSIGNMENT_STRIDE) {
+                const anchorI = rowOffset + x;
                 let anchorAssignment = 0;
 
+                // --- STEP A: CALCULATE ANCHOR COLOR ---
                 if (transparentPixels.has(anchorI)) {
                     anchorAssignment = 255; // Special value for transparent
                 } else {
                     let isPreserved = false;
 
-                    // Check preserved white/black
-                    if (actuallyPreservedWhite && preservedPixelMap.has('white') && preservedPixelMap.get('white').has(anchorI)) {
+                    // Direct Set check (avoid Map lookup inside loop)
+                    if (actuallyPreservedWhite && whiteSet && whiteSet.has(anchorI)) {
                         anchorAssignment = whiteIndex;
                         isPreserved = true;
-                    } else if (actuallyPreservedBlack && preservedPixelMap.has('black') && preservedPixelMap.get('black').has(anchorI)) {
+                    } else if (actuallyPreservedBlack && blackSet && blackSet.has(anchorI)) {
                         anchorAssignment = blackIndex;
                         isPreserved = true;
                     }
 
                     if (!isPreserved) {
-                        // Regular quantized pixel: find nearest color
                         const idx = anchorI * 3;
-                        const pixelLab = {
-                            L: labPixels[idx],
-                            a: labPixels[idx + 1],
-                            b: labPixels[idx + 2]
-                        };
+                        // Use local variables instead of creating object {L,a,b}
+                        const pL = labPixels[idx];
+                        const pA = labPixels[idx + 1];
+                        const pB = labPixels[idx + 2];
 
-                        // Find nearest palette color in CIELAB space (Hard Snap)
                         let minDistance = Infinity;
 
-                        if (grayscaleOnly) {
-                            // Grayscale mode: Only compare L channel
-                            for (let j = 0; j < finalPaletteLab.length; j++) {
-                                const deltaL = pixelLab.L - finalPaletteLab[j].L;
-                                const distance = deltaL * deltaL;
-                                if (distance < minDistance) {
-                                    minDistance = distance;
-                                    anchorAssignment = j;
-                                }
-                            }
-                        } else {
-                            // Color mode: Use full Lab distance
-                            for (let j = 0; j < finalPaletteLab.length; j++) {
-                                const distance = this.calculateCIELABDistance(pixelLab, finalPaletteLab[j]);
-                                if (distance < minDistance) {
-                                    minDistance = distance;
-                                    anchorAssignment = j;
-                                }
+                        // Inline distance calculation (avoid function call overhead)
+                        for (let j = 0; j < paletteLength; j++) {
+                            const target = finalPaletteLab[j];
+                            const dL = pL - target.L;
+                            const dA = pA - target.a;
+                            const dB = pB - target.b;
+
+                            // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
+                            const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+
+                            if (dist < minDistance) {
+                                minDistance = dist;
+                                anchorAssignment = j;
                             }
                         }
                     }
                 }
 
                 // --- STEP B: STAMP THE BLOCK ---
-                // Fill all pixels within the current [Stride × Stride] block
-                for (let blockY = 0; blockY < ASSIGNMENT_STRIDE && (y + blockY) < height; blockY++) {
-                    for (let blockX = 0; blockX < ASSIGNMENT_STRIDE && (x + blockX) < width; blockX++) {
-                        const pixelIndex = (y + blockY) * width + (x + blockX);
-                        assignments[pixelIndex] = anchorAssignment;
+                // Stamp blocks row-by-row to maintain memory locality
+                for (let bY = 0; bY < ASSIGNMENT_STRIDE && (y + bY) < height; bY++) {
+                    const fillRow = (y + bY) * width;
+                    for (let bX = 0; bX < ASSIGNMENT_STRIDE && (x + bX) < width; bX++) {
+                        assignments[fillRow + (x + bX)] = anchorAssignment;
                     }
                 }
             }
@@ -3537,6 +3583,60 @@ class PosterizationEngine {
             engineType: 'reveal',
             snapThreshold
         });
+    }
+
+    /**
+     * Re-assign pixels to palette with a new stride (for preview quality changes).
+     *
+     * This is a lightweight method that only re-runs the pixel assignment loop
+     * without regenerating the palette. Use this when changing preview quality
+     * (Standard/Fine/Finest) after initial posterization.
+     *
+     * @param {Uint8ClampedArray} labPixels - Lab pixel data (3 bytes per pixel: L, a, b)
+     * @param {Array<{L: number, a: number, b: number}>} paletteLab - Palette colors in Lab
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @param {number} stride - Assignment stride (4=Standard, 2=Fine, 1=Finest)
+     * @returns {Uint16Array} - Pixel-to-palette assignments
+     */
+    static reassignWithStride(labPixels, paletteLab, width, height, stride = 1) {
+        const assignments = new Uint16Array(width * height);
+        const paletteLen = paletteLab.length;
+
+        for (let y = 0; y < height; y += stride) {
+            const rowOffset = y * width;
+
+            for (let x = 0; x < width; x += stride) {
+                const anchorI = rowOffset + x;
+                const idx = anchorI * 3;
+
+                // Convert byte encoding to perceptual Lab ranges
+                const pL = (labPixels[idx] / 255) * 100;
+                const pA = labPixels[idx + 1] - 128;
+                const pB = labPixels[idx + 2] - 128;
+
+                // Find nearest palette color (squared Euclidean, L weighted 1.5×)
+                let minDist = Infinity, anchorAssignment = 0;
+                for (let j = 0; j < paletteLen; j++) {
+                    const target = paletteLab[j];
+                    const dL = pL - target.L;
+                    const dA = pA - target.a;
+                    const dB = pB - target.b;
+                    const dist = 1.5 * dL * dL + dA * dA + dB * dB;
+                    if (dist < minDist) { minDist = dist; anchorAssignment = j; }
+                }
+
+                // Stamp the stride×stride block
+                for (let bY = 0; bY < stride && (y + bY) < height; bY++) {
+                    const fillRow = (y + bY) * width;
+                    for (let bX = 0; bX < stride && (x + bX) < width; bX++) {
+                        assignments[fillRow + (x + bX)] = anchorAssignment;
+                    }
+                }
+            }
+        }
+
+        return assignments;
     }
 }
 
