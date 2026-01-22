@@ -91,6 +91,13 @@
             min-height: 0;
         }
 
+        /* Palette panel scrollable container */
+        .palette-dialog #editablePaletteContainer {
+            flex: 1 1 0;
+            overflow-y: auto;
+            min-height: 0;  /* Critical for flex child scrolling */
+        }
+
         /* Palette dialog buttons stay at bottom */
         .palette-dialog .reveal-buttons {
             position: relative;
@@ -1505,8 +1512,8 @@
                             flex: 1;
                             min-height: 400px;
                             display: flex;
-                            align-items: center;
-                            justify-content: center;
+                            align-items: flex-start;
+                            justify-content: flex-start;
                             padding: 8px;">
                             <!-- Image for preview (uses JPEG encoding for CSS scaling support) -->
                             <img id="previewImg" style="
@@ -1515,6 +1522,7 @@
                                 min-width: 800px;
                                 min-height: 400px;
                                 object-fit: contain;
+                                object-position: top left;
                                 image-rendering: pixelated;
                                 image-rendering: crisp-edges;
                                 cursor: crosshair;
@@ -1544,8 +1552,8 @@
                     </div>
 
                     <!-- Palette Content (right side) -->
-                    <div style="flex: 0 0 450px; min-width: 400px; display: flex; flex-direction: column; min-height: 0;">
-                        <div class="info-box" style="background: #e3f2fd; border-left: 4px solid #1473e6; margin-bottom: 16px;">
+                    <div style="flex: 0 0 450px; min-width: 350px; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="info-box" style="background: #e3f2fd; border-left: 4px solid #1473e6; margin-bottom: 16px; flex-shrink: 0;">
                             <strong>🎨 Edit Your Palette Colors</strong><br>
                             <ul style="margin: 8px 0 0 0; padding-left: 20px; line-height: 1.8;">
                                 <li>Click swatch to highlight in preview</li>
@@ -1558,9 +1566,10 @@
 
                         <!-- Palette swatches container - now scrollable -->
                         <div id="editablePaletteContainer" class="editable-palette" style="
-                            flex: 1;
+                            flex: 1 1 0;
                             overflow-y: auto;
-                            min-height: 200px;
+                            overflow-x: hidden;
+                            min-height: 0;
                             padding-right: 8px;">
                             <!-- Color swatches will be added here dynamically -->
                         </div>
