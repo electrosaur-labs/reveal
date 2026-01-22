@@ -231,10 +231,11 @@ describe('SeparationEngine - Dithering', () => {
     });
 
     describe('Blue Noise Dithering', () => {
-        test('should fall back to nearest-neighbor (not implemented)', async () => {
+        test('should apply blue noise dithering with two-nearest threshold', async () => {
+            // Test that blue noise produces valid palette indices
             const rawBytes = new Uint8ClampedArray([
-                25, 128, 128,   // L=10 → Black
-                230, 128, 128   // L=90 → White
+                25, 128, 128,   // L=10 → close to black
+                230, 128, 128   // L=90 → close to white
             ]);
 
             const result = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -246,9 +247,33 @@ describe('SeparationEngine - Dithering', () => {
                 { ditherType: 'blue-noise' }
             );
 
-            // Should fall back gracefully to nearest-neighbor
-            expect(result[0]).toBe(0); // Black
-            expect(result[1]).toBe(1); // White
+            // Blue noise uses two-nearest with threshold comparison
+            // Both results can vary based on the blue noise threshold at each position
+            // This is expected - blue noise intentionally adds stochastic variation
+            expect(result.length).toBe(2);
+            expect([0, 1]).toContain(result[0]);
+            expect([0, 1]).toContain(result[1]);
+        });
+
+        test('should accept LPI-aware scale parameter', async () => {
+            const rawBytes = new Uint8ClampedArray([
+                25, 128, 128,
+                230, 128, 128
+            ]);
+
+            // Test that meshCount option is accepted and creates Macro-Cells
+            const result = await SeparationEngine.mapPixelsToPaletteAsync(
+                rawBytes,
+                testPalette,
+                null,
+                2,
+                1,
+                { ditherType: 'blue-noise', meshCount: 230, dpi: 300 }
+            );
+
+            // Should produce valid palette indices
+            expect([0, 1]).toContain(result[0]);
+            expect([0, 1]).toContain(result[1]);
         });
     });
 
@@ -295,6 +320,33 @@ describe('SeparationEngine - Dithering', () => {
             expect(result.length).toBe(1);
             expect(result[0]).toBeGreaterThanOrEqual(0);
             expect(result[0]).toBeLessThan(2);
+        });
+
+        test('should accept LPI-aware scale parameter (Rule of 7)', async () => {
+            // 4x4 gradient image
+            const rawBytes = new Uint8ClampedArray(4 * 4 * 3);
+            for (let i = 0; i < 16; i++) {
+                const L = Math.floor((i / 15) * 255);
+                rawBytes[i * 3] = L;
+                rawBytes[i * 3 + 1] = 128;
+                rawBytes[i * 3 + 2] = 128;
+            }
+
+            // Test with 230 mesh (maxLPI = 32.8, scale = ~9 pixels)
+            const result = await SeparationEngine.mapPixelsToPaletteAsync(
+                rawBytes,
+                testPalette,
+                null,
+                4,
+                4,
+                { ditherType: 'bayer', meshCount: 230, dpi: 300 }
+            );
+
+            expect(result.length).toBe(16);
+            // All should map to valid indices
+            for (let i = 0; i < result.length; i++) {
+                expect([0, 1]).toContain(result[i]);
+            }
         });
     });
 
