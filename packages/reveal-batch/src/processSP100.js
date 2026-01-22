@@ -75,10 +75,17 @@ async function processImage(inputPath, outputDir, sourceTag) {
         console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
         // 4. Convert config to params format
+        // Mesh settings: 0 = pixel-level (batch default), non-zero = mesh TPI
+        // PPI would come from input file metadata if available
+        const meshTPI = 0;  // Pixel-level dithering for batch (finest detail)
+        const ppi = 300;    // Default assumption for high-res museum images
+
         const params = {
             targetColorsSlider: config.targetColors,
             blackBias: config.blackBias,
             ditherType: config.ditherType,
+            mesh: meshTPI,
+            ppi: ppi,
             engineType: 'reveal',
             centroidStrategy: 'SALIENCY',
             lWeight: 1.0,
@@ -121,7 +128,11 @@ async function processImage(inputPath, outputDir, sourceTag) {
             labPixels,
             posterizeResult.paletteLab,
             width, height,
-            { ditherType: params.ditherType }
+            {
+                ditherType: params.ditherType,
+                mesh: params.mesh,
+                ppi: params.ppi
+            }
         );
 
         // 7. Generate masks

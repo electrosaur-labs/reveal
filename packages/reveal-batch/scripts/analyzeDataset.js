@@ -496,6 +496,7 @@ class DatasetAnalyzer {
             avgDeltaE: {
                 min: Math.min(...avgDeltaE).toFixed(1),
                 max: Math.max(...avgDeltaE).toFixed(1),
+                range: (Math.max(...avgDeltaE) - Math.min(...avgDeltaE)).toFixed(1),
                 mean: (avgDeltaE.reduce((a, b) => a + b, 0) / avgDeltaE.length).toFixed(1),
                 median: median(avgDeltaE).toFixed(1),
                 p90: percentile(avgDeltaE, 90).toFixed(1)
@@ -503,6 +504,7 @@ class DatasetAnalyzer {
             maxDeltaE: {
                 min: Math.min(...maxDeltaE).toFixed(1),
                 max: Math.max(...maxDeltaE).toFixed(1),
+                range: (Math.max(...maxDeltaE) - Math.min(...maxDeltaE)).toFixed(1),
                 mean: (maxDeltaE.reduce((a, b) => a + b, 0) / maxDeltaE.length).toFixed(1),
                 median: median(maxDeltaE).toFixed(1)
             },
@@ -758,9 +760,9 @@ class DatasetAnalyzer {
         console.log(`${hr}`);
         console.log(`FIDELITY METRICS`);
         console.log(`${hr}`);
-        console.log(`Average ΔE: min=${s.fidelity.avgDeltaE.min}, max=${s.fidelity.avgDeltaE.max}, mean=${s.fidelity.avgDeltaE.mean}, P90=${s.fidelity.avgDeltaE.p90}`);
-        console.log(`Max ΔE:     min=${s.fidelity.maxDeltaE.min}, max=${s.fidelity.maxDeltaE.max}, mean=${s.fidelity.maxDeltaE.mean}`);
-        console.log(`RevScore:   min=${s.fidelity.revelationScore.min}, max=${s.fidelity.revelationScore.max}, mean=${s.fidelity.revelationScore.mean}`);
+        console.log(`Average ΔE: min=${s.fidelity.avgDeltaE.min}, max=${s.fidelity.avgDeltaE.max}, range=${s.fidelity.avgDeltaE.range}, mean=${s.fidelity.avgDeltaE.mean}, median=${s.fidelity.avgDeltaE.median}, P90=${s.fidelity.avgDeltaE.p90}`);
+        console.log(`Max ΔE:     min=${s.fidelity.maxDeltaE.min}, max=${s.fidelity.maxDeltaE.max}, range=${s.fidelity.maxDeltaE.range}, mean=${s.fidelity.maxDeltaE.mean}, median=${s.fidelity.maxDeltaE.median}`);
+        console.log(`RevScore:   min=${s.fidelity.revelationScore.min}, max=${s.fidelity.revelationScore.max}, mean=${s.fidelity.revelationScore.mean}, median=${s.fidelity.revelationScore.median}`);
         if (s.fidelity.saliencyLoss) {
             console.log(`SaliencyLoss: min=${s.fidelity.saliencyLoss.min}, max=${s.fidelity.saliencyLoss.max}, mean=${s.fidelity.saliencyLoss.mean}`);
         }

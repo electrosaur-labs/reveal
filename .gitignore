@@ -32,3 +32,8 @@ temp/
 # Environment
 .env
 .env.local
+
+# Batch processing data (too large for GitHub - 44GB+)
+# Data can be regenerated from public domain sources using conversion scripts
+packages/reveal-batch/data/CQ100_v4/
+packages/reveal-batch/data/SP100/

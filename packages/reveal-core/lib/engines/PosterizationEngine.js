@@ -839,18 +839,14 @@ class PosterizationEngine {
         const labBucket = bucket.map(color => {
             const lab = this._rgbToLab(color.r, color.g, color.b);
             return {
-                r: color.r,
-                g: color.g,
-                b: color.b,
+                rgb: { r: color.r, g: color.g, b: color.b },
                 count: color.count,
-                L: lab.L,
-                a: lab.a,
-                b: lab.b
+                lab: { L: lab.L, a: lab.a, b: lab.b }
             };
         });
 
         // Sort by Lab channel value
-        const sorted = labBucket.sort((a, b) => a[channel] - b[channel]);
+        const sorted = labBucket.sort((a, b) => a.lab[channel] - b.lab[channel]);
 
         // Split at median (weighted by pixel count)
         const totalPixels = sorted.reduce((sum, color) => sum + color.count, 0);
@@ -871,8 +867,8 @@ class PosterizationEngine {
 
         // Return in original RGB format (strip Lab values)
         return [
-            sorted.slice(0, medianIndex).map(c => ({ r: c.r, g: c.g, b: c.b, count: c.count })),
-            sorted.slice(medianIndex).map(c => ({ r: c.r, g: c.g, b: c.b, count: c.count }))
+            sorted.slice(0, medianIndex).map(c => ({ r: c.rgb.r, g: c.rgb.g, b: c.rgb.b, count: c.count })),
+            sorted.slice(medianIndex).map(c => ({ r: c.rgb.r, g: c.rgb.g, b: c.rgb.b, count: c.count }))
         ];
     }
 
