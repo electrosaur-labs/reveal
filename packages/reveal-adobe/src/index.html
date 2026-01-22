@@ -1081,15 +1081,15 @@
                                 <span class="hint">(background detection)</span>
                             </label>
                             <select id="substrateMode" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
-                                <option value="auto" selected>Auto-Detect (Recommended)</option>
-                                <option value="white">Force White Paper</option>
-                                <option value="black">Force Black Shirt</option>
-                                <option value="none">Disable (Full-Bleed Art)</option>
+                                <option value="white" selected>White Paper</option>
+                                <option value="black">Black Shirt</option>
+                                <option value="auto">Auto-Detect</option>
+                                <option value="none">None (Full-Bleed Art)</option>
                             </select>
                             <div class="helper-text">
-                                Automatically detects and excludes background color from palette generation, saving palette slots for actual artwork.
+                                Excludes substrate color from palette, saving slots for artwork colors.
                                 <strong>Auto-Detect</strong> samples image corners to identify substrate.
-                                <strong>Disable</strong> for full-bleed designs with no background.
+                                <strong>None</strong> for full-bleed designs with no background.
                             </div>
                         </div>
 

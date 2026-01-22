@@ -1432,21 +1432,31 @@ function showPaletteEditor(selectedPalette) {
                     logger.log(`  Layer: ${layer.name} | L=${layer.labColor.L.toFixed(2)} a=${layer.labColor.a.toFixed(2)} b=${layer.labColor.b.toFixed(2)} | Coverage: ${coveragePercent.toFixed(1)}%`);
 
                     // Check for pure white (L=100, a=0, b=0)
-                    // Tolerance: L within 0.5, a/b within 2 (allows for slight tinting)
+                    // Tolerance: L > 99 (near white), a/b within 2 (allows for slight tinting)
                     // Requires > 5% coverage to avoid treating highlights as substrate
-                    const isWhite = Math.abs(layer.labColor.L - 100) < 0.5 &&
-                                   Math.abs(layer.labColor.a - 0) < 2 &&
-                                   Math.abs(layer.labColor.b - 0) < 2 &&
-                                   coveragePercent >= SUBSTRATE_MIN_COVERAGE;
+                    const whiteL = layer.labColor.L > 99;
+                    const whiteA = Math.abs(layer.labColor.a - 0) < 2;
+                    const whiteB = Math.abs(layer.labColor.b - 0) < 2;
+                    const whiteCoverage = coveragePercent >= SUBSTRATE_MIN_COVERAGE;
+                    const isWhite = whiteL && whiteA && whiteB && whiteCoverage;
+
+                    if (layer.labColor.L > 95) {
+                        logger.log(`    White check: L>${99}? ${whiteL} (L=${layer.labColor.L.toFixed(2)}) | a<2? ${whiteA} (a=${layer.labColor.a.toFixed(2)}) | b<2? ${whiteB} (b=${layer.labColor.b.toFixed(2)}) | coverage>=${SUBSTRATE_MIN_COVERAGE}%? ${whiteCoverage} (${coveragePercent.toFixed(1)}%)`);
+                    }
 
                     // Check for pure black (L=0, a=0, b=0)
                     // More lenient tolerance: L < 5 (very dark), a/b within 5 (slight color cast ok)
                     // This catches near-black backgrounds that aren't perfectly L=0
                     // Requires > 5% coverage to be considered substrate
-                    const isBlack = layer.labColor.L < 5 &&
-                                   Math.abs(layer.labColor.a - 0) < 5 &&
-                                   Math.abs(layer.labColor.b - 0) < 5 &&
-                                   coveragePercent >= SUBSTRATE_MIN_COVERAGE;
+                    const blackL = layer.labColor.L < 5;
+                    const blackA = Math.abs(layer.labColor.a - 0) < 5;
+                    const blackB = Math.abs(layer.labColor.b - 0) < 5;
+                    const blackCoverage = coveragePercent >= SUBSTRATE_MIN_COVERAGE;
+                    const isBlack = blackL && blackA && blackB && blackCoverage;
+
+                    if (layer.labColor.L < 10) {
+                        logger.log(`    Black check: L<${5}? ${blackL} (L=${layer.labColor.L.toFixed(2)}) | a<5? ${blackA} (a=${layer.labColor.a.toFixed(2)}) | b<5? ${blackB} (b=${layer.labColor.b.toFixed(2)}) | coverage>=${SUBSTRATE_MIN_COVERAGE}%? ${blackCoverage} (${coveragePercent.toFixed(1)}%)`);
+                    }
 
                     // Check for detected substrate from posterization
                     const matchesDetectedSubstrate = selectedPreview.substrateLab &&
@@ -1469,9 +1479,59 @@ function showPaletteEditor(selectedPalette) {
                     }
                 }
 
-                // Determine substrate with priority: White > Black > Detected
-                // White paper is most common, black paper less common
-                if (whiteLayer) {
+                // Check if auto-detected substrate indicates white or black paper
+                const autoDetectedWhite = selectedPreview.substrateLab && selectedPreview.substrateLab.L > 95;
+                const autoDetectedBlack = selectedPreview.substrateLab && selectedPreview.substrateLab.L < 5;
+
+                if (autoDetectedWhite) {
+                    logger.log(`  Auto-detected substrate is WHITE (L=${selectedPreview.substrateLab.L.toFixed(1)})`);
+                } else if (autoDetectedBlack) {
+                    logger.log(`  Auto-detected substrate is BLACK (L=${selectedPreview.substrateLab.L.toFixed(1)})`);
+                }
+
+                // Determine substrate with priority:
+                // 1. If auto-detected is WHITE → use white layer, OR brightest layer if no pure white
+                // 2. If auto-detected is BLACK → use black layer
+                // 3. Fallback: White Layer > Black Layer > Detected Substrate
+                if (autoDetectedWhite) {
+                    // White paper detected - use white layer if available, otherwise use brightest layer
+                    if (whiteLayer) {
+                        substrateLayer = whiteLayer;
+                        logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [WHITE PAPER - exact match]`);
+                    } else {
+                        // Find the brightest layer (highest L) to use as white substrate proxy
+                        const allLayers = [...inkLayers];
+                        if (blackLayer) allLayers.push(blackLayer);
+                        if (detectedSubstrateLayer) allLayers.push(detectedSubstrateLayer);
+
+                        let brightestLayer = null;
+                        let brightestL = -1;
+                        for (const layer of allLayers) {
+                            if (layer.labColor.L > brightestL) {
+                                brightestL = layer.labColor.L;
+                                brightestLayer = layer;
+                            }
+                        }
+
+                        if (brightestLayer && brightestL > 85) {
+                            // Remove from inkLayers if present
+                            const idx = inkLayers.indexOf(brightestLayer);
+                            if (idx >= 0) inkLayers.splice(idx, 1);
+
+                            substrateLayer = brightestLayer;
+                            logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [WHITE PAPER - brightest layer proxy]`);
+                        } else {
+                            logger.log(`  ⚠ White substrate detected but no suitable bright layer found (brightest L=${brightestL?.toFixed(1) || 'N/A'})`);
+                        }
+                    }
+                    // Black becomes an ink layer if white is substrate
+                    if (blackLayer && substrateLayer !== blackLayer) {
+                        if (!inkLayers.includes(blackLayer)) {
+                            inkLayers.push(blackLayer);
+                            logger.log(`  Demoted black to ink layer: ${blackLayer.name}`);
+                        }
+                    }
+                } else if (whiteLayer) {
                     substrateLayer = whiteLayer;
                     logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [WHITE PAPER]`);
                     // Black becomes an ink layer if white is substrate
@@ -1480,18 +1540,24 @@ function showPaletteEditor(selectedPalette) {
                         logger.log(`  Demoted black to ink layer: ${blackLayer.name}`);
                     }
                     // Detected substrate also becomes an ink layer if white takes priority
-                    // NOTE: detectedSubstrateLayer might be null if it was skipped by SeparationEngine (<0.1% coverage)
                     if (detectedSubstrateLayer) {
                         inkLayers.push(detectedSubstrateLayer);
                         logger.log(`  Demoted detected substrate to ink layer: ${detectedSubstrateLayer.name}`);
                     } else if (selectedPreview.substrateLab) {
                         logger.log(`  ⚠ Detected substrate from posterization was skipped (likely <0.1% coverage) - not creating layer`);
                     }
+                } else if (autoDetectedBlack && blackLayer) {
+                    // Black paper explicitly detected
+                    substrateLayer = blackLayer;
+                    logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [BLACK PAPER - auto-detected]`);
+                    if (detectedSubstrateLayer && detectedSubstrateLayer !== blackLayer) {
+                        inkLayers.push(detectedSubstrateLayer);
+                        logger.log(`  Demoted detected substrate to ink layer: ${detectedSubstrateLayer.name}`);
+                    }
                 } else if (blackLayer) {
                     substrateLayer = blackLayer;
                     logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [BLACK PAPER]`);
                     // Detected substrate becomes an ink layer if black takes priority
-                    // NOTE: detectedSubstrateLayer might be null if it was skipped by SeparationEngine (<0.1% coverage)
                     if (detectedSubstrateLayer) {
                         inkLayers.push(detectedSubstrateLayer);
                         logger.log(`  Demoted detected substrate to ink layer: ${detectedSubstrateLayer.name}`);
@@ -1961,7 +2027,7 @@ function getFormValues() {
         engineType: document.getElementById("engineType")?.value ?? "reveal",  // Engine selection
         centroidStrategy: document.getElementById("centroidStrategy")?.value ?? "SALIENCY",  // Centroid strategy (SALIENCY or VOLUMETRIC)
         colorMode: document.getElementById("colorMode")?.value ?? "color",  // Color or B/W mode
-        substrateMode: document.getElementById("substrateMode")?.value ?? "auto",  // Substrate awareness
+        substrateMode: document.getElementById("substrateMode")?.value ?? "white",  // Substrate awareness
         substrateTolerance: parseFloat(document.getElementById("substrateTolerance")?.value ?? 3.5),  // ΔE threshold
         vibrancyMode: document.getElementById("vibrancyMode")?.value ?? "moderate",  // Vibrancy algorithm
         vibrancyBoost: parseFloat(document.getElementById("vibrancyBoost")?.value ?? 1.6),  // Fixed vibrancy multiplier (split.vibrancyBoost)
@@ -2861,7 +2927,7 @@ async function showDialog() {
                     const defaults = {
                         engineType: 'reveal',
                         centroidStrategy: 'SALIENCY',
-                        substrateMode: 'auto',
+                        substrateMode: 'white',
                         substrateTolerance: 3.5,
                         vibrancyMode: 'aggressive',
                         vibrancyBoost: 1.6,
@@ -3014,7 +3080,7 @@ async function showDialog() {
                             centroidStrategy: 'SALIENCY',
                             lWeight: 1.0,
                             cWeight: 1.0,
-                            substrateMode: 'auto',
+                            substrateMode: 'white',
                             substrateTolerance: 2.0,
                             vibrancyMode: 'moderate',
                             highlightThreshold: 85,
