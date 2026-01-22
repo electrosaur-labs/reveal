@@ -997,6 +997,48 @@ function showPaletteEditor(selectedPalette) {
 
     logger.log("✓ Palette dialog opened (1200×800, resizable)");
 
+    // UXP workaround: CSS flexbox doesn't properly fill dialog space on resize
+    // Use ResizeObserver to manually set panel heights based on dialog size
+    function updatePanelLayout() {
+        const dialog = document.getElementById('paletteDialog');
+        const content = dialog.querySelector('.reveal-content');
+        const formSection = dialog.querySelector('.form-section');
+        const mainFlex = formSection?.firstElementChild; // The flex row container
+
+        if (!dialog || !content || !formSection || !mainFlex) return;
+
+        // Get dialog dimensions (controlled by UXP showModal)
+        const dialogRect = dialog.getBoundingClientRect();
+        const titleEl = dialog.querySelector('.reveal-title');
+        const buttonsEl = dialog.querySelector('.reveal-buttons');
+
+        const titleHeight = titleEl ? titleEl.offsetHeight : 0;
+        const buttonsHeight = buttonsEl ? buttonsEl.offsetHeight : 0;
+        const padding = 48; // Content padding (24px top + bottom)
+
+        // Calculate available height for content
+        const availableHeight = dialogRect.height - titleHeight - buttonsHeight - padding;
+
+        // Set explicit heights (UXP ignores flex: 1 for height)
+        content.style.height = `${availableHeight}px`;
+        formSection.style.height = `${availableHeight - 24}px`; // minus form-section margin
+        mainFlex.style.height = `${availableHeight - 24}px`;
+
+        logger.log(`📐 Panel layout updated: dialog=${Math.round(dialogRect.width)}×${Math.round(dialogRect.height)}, content height=${Math.round(availableHeight)}px`);
+    }
+
+    // Initial layout
+    setTimeout(updatePanelLayout, 100);
+
+    // Update on resize using ResizeObserver
+    if (typeof ResizeObserver !== 'undefined') {
+        const resizeObserver = new ResizeObserver(() => {
+            updatePanelLayout();
+        });
+        resizeObserver.observe(paletteDialog);
+        logger.log("✓ ResizeObserver attached for panel layout");
+    }
+
     // Render palette swatches (extracted to function for re-rendering after color changes)
     function renderPaletteSwatches() {
         const container = document.getElementById('editablePaletteContainer');
