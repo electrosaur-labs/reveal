@@ -25,16 +25,35 @@ class SeparationEngine {
      * - Supports Blue Noise ordered dithering (requires width/height)
      * - Defaults to nearest-neighbor (fast, posterized look)
      *
+     * LPI-AWARE DITHERING (Rule of 7):
+     * - When meshCount is provided, dithering patterns are scaled to form "Macro-Cells"
+     * - Prevents "Sieve Effect" where dots fall through mesh openings
+     * - Formula: maxLPI = meshCount / 7, scale = Math.round(dpi / maxLPI)
+     *
      * @param {Uint8ClampedArray} rawBytes - Raw Lab bytes (0-255 encoding: L, a+128, b+128)
      * @param {Array} labPalette - Array of {L, a, b} objects (perceptual ranges)
      * @param {Function} onProgress - Progress callback (0-100)
      * @param {number} width - Image width (required for dithering)
      * @param {number} height - Image height (required for dithering)
-     * @param {Object} options - Options object {ditherType: 'none'|'floyd-steinberg'|'blue-noise'|'bayer'|'atkinson'|'stucki'}
+     * @param {Object} options - Options object:
+     *   - ditherType: 'none'|'floyd-steinberg'|'blue-noise'|'bayer'|'atkinson'|'stucki'
+     *   - meshCount: Screen mesh TPI (e.g., 230, 305) - enables LPI-aware Macro-Cell clustering
+     *   - dpi: Image DPI (default: 300) - used with meshCount for scale calculation
      * @returns {Promise<Uint8Array>} - Array of palette indices per pixel
      */
     static async mapPixelsToPaletteAsync(rawBytes, labPalette, onProgress, width = null, height = null, options = {}) {
         const ditherType = options.ditherType || 'none';
+        const meshCount = options.meshCount || null;
+        const dpi = options.dpi || 300;
+
+        // Calculate LPI-aware scale factor (Rule of 7)
+        // If no meshCount provided, scale = 1 (no clustering)
+        let scale = 1;
+        if (meshCount) {
+            const maxLPI = meshCount / 7;
+            scale = Math.max(1, Math.round(dpi / maxLPI));
+            logger.log(`LPI-Aware Dithering: Mesh=${meshCount} TPI, MaxLPI=${maxLPI.toFixed(1)}, Scale=${scale}px (Macro-Cell size)`);
+        }
 
         // If no width/height or ditherType is 'none', use fast nearest-neighbor
         if (!width || !height || ditherType === 'none') {
@@ -45,9 +64,9 @@ class SeparationEngine {
         if (ditherType === 'floyd-steinberg') {
             return this._mapPixelsFloydSteinberg(rawBytes, labPalette, width, height, onProgress);
         } else if (ditherType === 'blue-noise') {
-            return this._mapPixelsBlueNoise(rawBytes, labPalette, width, height, onProgress);
+            return this._mapPixelsBlueNoise(rawBytes, labPalette, width, height, onProgress, scale);
         } else if (ditherType === 'bayer') {
-            return this._mapPixelsBayer(rawBytes, labPalette, width, height, onProgress);
+            return this._mapPixelsBayer(rawBytes, labPalette, width, height, onProgress, scale);
         } else if (ditherType === 'atkinson') {
             return this._mapPixelsAtkinson(rawBytes, labPalette, width, height, onProgress);
         } else if (ditherType === 'stucki') {
@@ -365,23 +384,31 @@ class SeparationEngine {
     }
 
     /**
-     * Blue Noise Ordered Dithering
+     * Blue Noise Ordered Dithering (LPI-Aware / Clustered)
      * Uses pre-computed 64x64 threshold map for dispersed dot patterns.
      * Better than Floyd-Steinberg for screen printing (prevents "worming").
+     *
+     * LPI-AWARE MODE (Rule of 7):
+     * When scale > 1, blue noise is sampled at Macro-Cell coordinates.
+     * This "clusters" the stochastic dots into groups that won't fall
+     * through screen mesh openings (prevents "Sieve Effect").
+     * Ideal for fine art oil paintings (SP100 set) printed on screen mesh.
      *
      * Algorithm:
      * - Finds TWO nearest palette colors per pixel
      * - Uses distance ratio compared to blue noise threshold
      * - Creates stochastic, dispersed dot patterns
+     * - With scale > 1: Clusters dots into Macro-Cells
      *
      * @param {Uint8ClampedArray} rawBytes - Lab bytes (0-255 encoding)
      * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab ranges
      * @param {number} width - Image width
      * @param {number} height - Image height
      * @param {Function} onProgress - Progress callback
+     * @param {number} scale - Macro-Cell size in pixels (1 = no clustering, >1 = LPI-aware)
      * @returns {Promise<Uint8Array>} - Palette indices
      */
-    static async _mapPixelsBlueNoise(rawBytes, labPalette, width, height, onProgress) {
+    static async _mapPixelsBlueNoise(rawBytes, labPalette, width, height, onProgress, scale = 1) {
         const pixelCount = rawBytes.length / 3;
         const colorIndices = new Uint8Array(pixelCount);
 
@@ -402,7 +429,7 @@ class SeparationEngine {
         const maskSize = 64;
         const CHUNK_SIZE = 65536; // 64k pixels per UI yield
 
-        logger.log(`Blue Noise dithering: ${width}x${height} (${pixelCount} pixels)`);
+        logger.log(`Blue Noise dithering: ${width}x${height} (${pixelCount} pixels, scale=${scale})`);
 
         for (let i = 0; i < pixelCount; i++) {
             const pxIdx = i * 3;
@@ -423,8 +450,14 @@ class SeparationEngine {
             const totalDist = d1 + d2;
             const ratio = totalDist === 0 ? 0 : d1 / totalDist;
 
-            // Lookup threshold from Blue Noise LUT (tiled across image)
-            const threshold = blueNoise[(y % maskSize) * maskSize + (x % maskSize)] / 255;
+            // LPI-AWARE: Sample Blue Noise mask at Macro-Cell coordinates
+            // When scale > 1, multiple pixels share the same threshold value
+            // This "clusters" the stochastic dots into stable groups on screen mesh
+            const cellX = Math.floor(x / scale);
+            const cellY = Math.floor(y / scale);
+
+            // Lookup threshold from Blue Noise LUT (tiled across Macro-Cells)
+            const threshold = blueNoise[(cellY % maskSize) * maskSize + (cellX % maskSize)] / 255;
 
             // Decide which palette index to assign
             // If ratio > threshold, use second-closest color
@@ -439,27 +472,34 @@ class SeparationEngine {
         }
 
         if (onProgress) onProgress(100);
-        logger.log(`✓ Blue Noise dithering complete`);
+        logger.log(`✓ Blue Noise dithering complete (Macro-Cell scale: ${scale}px)`);
         return colorIndices;
     }
 
     /**
-     * Bayer 8x8 Ordered Dithering
+     * Bayer 8x8 Ordered Dithering (LPI-Aware)
      * Uses classic Bayer matrix for retro crosshatch pattern
+     *
+     * LPI-AWARE MODE (Rule of 7):
+     * When scale > 1, the Bayer matrix is sampled at Macro-Cell coordinates
+     * instead of per-pixel. This clusters dots into groups that won't fall
+     * through screen mesh openings (prevents "Sieve Effect").
      *
      * Algorithm:
      * - Finds TWO nearest palette colors per pixel
      * - Uses 8x8 Bayer matrix threshold for decision
      * - Creates regular, predictable crosshatch pattern
+     * - With scale > 1: Creates Macro-Cells of uniform threshold
      *
      * @param {Uint8ClampedArray} rawBytes - Lab bytes (0-255 encoding)
      * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab ranges
      * @param {number} width - Image width
      * @param {number} height - Image height
      * @param {Function} onProgress - Progress callback
+     * @param {number} scale - Macro-Cell size in pixels (1 = no clustering, >1 = LPI-aware)
      * @returns {Promise<Uint8Array>} - Palette indices
      */
-    static async _mapPixelsBayer(rawBytes, labPalette, width, height, onProgress) {
+    static async _mapPixelsBayer(rawBytes, labPalette, width, height, onProgress, scale = 1) {
         const pixelCount = rawBytes.length / 3;
         const colorIndices = new Uint8Array(pixelCount);
 
@@ -489,7 +529,7 @@ class SeparationEngine {
 
         const CHUNK_SIZE = 65536; // 64k pixels per UI yield
 
-        logger.log(`Bayer 8x8 dithering: ${width}x${height} (${pixelCount} pixels)`);
+        logger.log(`Bayer 8x8 dithering: ${width}x${height} (${pixelCount} pixels, scale=${scale})`);
 
         for (let i = 0; i < pixelCount; i++) {
             const pxIdx = i * 3;
@@ -509,9 +549,15 @@ class SeparationEngine {
             const totalDist = d1 + d2;
             const ratio = totalDist === 0 ? 0 : d1 / totalDist;
 
-            // Lookup threshold from Bayer matrix (tiled across image)
+            // LPI-AWARE: Sample Bayer matrix at Macro-Cell coordinates
+            // When scale > 1, multiple pixels share the same threshold value
+            // This creates "Macro-Cells" that form stable dot clusters on screen mesh
+            const cellX = Math.floor(x / scale);
+            const cellY = Math.floor(y / scale);
+
+            // Lookup threshold from Bayer matrix (tiled across Macro-Cells)
             // Normalize from 0-63 to 0-1 range
-            const threshold = (bayer[y % 8][x % 8] + 0.5) / 64;
+            const threshold = (bayer[cellY % 8][cellX % 8] + 0.5) / 64;
 
             // Decide which palette index to assign
             colorIndices[i] = (ratio > threshold) ? i2 : i1;
@@ -524,7 +570,7 @@ class SeparationEngine {
         }
 
         if (onProgress) onProgress(100);
-        logger.log(`✓ Bayer 8x8 dithering complete`);
+        logger.log(`✓ Bayer 8x8 dithering complete (Macro-Cell scale: ${scale}px)`);
         return colorIndices;
     }
 
