@@ -11,6 +11,10 @@ const { core, action, imaging, app } = require("photoshop");
 // Import @reveal/core engines
 const Reveal = require("@reveal/core");
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
+
+// Pure JS JPEG encoder for preview scaling workaround
+// (UXP doesn't support canvas.toDataURL, so we encode JPEG manually)
+const jpeg = require("jpeg-js");
 const SeparationEngine = Reveal.engines.SeparationEngine;
 const ImageHeuristicAnalyzer = Reveal.engines.ImageHeuristicAnalyzer;
 const ParameterGenerator = require("@reveal/core/lib/analysis/ParameterGenerator");
@@ -558,51 +562,23 @@ function rgbToHex(r, g, b) {
 }
 
 /**
- * Initialize preview canvas
- * @param {number} width - Canvas width (data dimensions)
- * @param {number} height - Canvas height (data dimensions)
+ * Initialize preview state for JPEG-encoded img display
+ * @param {number} width - Image width (data dimensions)
+ * @param {number} height - Image height (data dimensions)
  * @param {Array<string>} palette - Array of hex color strings
  * @param {Uint8Array} assignments - Pixel-to-color assignments
  * @returns {object|null} - Preview state object or null if failed
  */
 function initializePreviewCanvas(width, height, palette, assignments) {
-    let canvas = document.getElementById("previewCanvas");
-    if (!canvas) {
-        logger.error("Preview canvas not found in DOM");
+    const img = document.getElementById("previewImg");
+    if (!img) {
+        logger.error("Preview img element not found in DOM");
         return null;
     }
 
-    // AGGRESSIVE CLEANUP: Completely destroy and recreate canvas element
-    // This fixes stale rendering context issues on second+ runs
-    logger.log('Destroying old canvas element and creating fresh one...');
-    const parent = canvas.parentNode;
-    const newCanvas = document.createElement('canvas');
-    newCanvas.id = 'previewCanvas';
-    newCanvas.style.imageRendering = 'pixelated';
-    newCanvas.style.cursor = 'crosshair';
-    newCanvas.style.display = 'block';
-    parent.replaceChild(newCanvas, canvas);
-    canvas = newCanvas;
-    logger.log('✓ Canvas element recreated');
+    logger.log(`Initializing preview: ${width}×${height} pixels`);
 
-    // Set canvas size to match data dimensions
-    canvas.width = width;
-    canvas.height = height;
-
-    // CRITICAL: UXP requires CSS width/height for layout, not just canvas width/height properties
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    void canvas.offsetHeight; // Force reflow
-
-    logger.log(`Canvas dimensions set: ${width}×${height}, style.width=${canvas.style.width}, offsetHeight=${canvas.offsetHeight}`);
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-        logger.error("Failed to get 2D context from canvas");
-        return null;
-    }
-
-    // Store preview state globally (don't store ctx - get fresh each time)
+    // Store preview state globally
     logger.log(`[DEBUG] Creating window.previewState with ${assignments.length} assignments and ${palette.length} colors`);
     window.previewState = {
         width: width,
@@ -613,23 +589,30 @@ function initializePreviewCanvas(width, height, palette, assignments) {
         deletedIndices: new Set()  // Track soft-deleted color indices
     };
 
-    // Add click handler to canvas - clicking canvas shows all colors
-    canvas.addEventListener('click', () => {
+    // Add click handler to preview image - clicking shows all colors
+    // Remove any existing handler first to prevent duplicates
+    const newImg = img.cloneNode(true);
+    img.parentNode.replaceChild(newImg, img);
+
+    newImg.addEventListener('click', () => {
         const state = window.previewState;
         if (state && state.activeSoloIndex !== null) {
-            logger.log('Canvas clicked - returning to full preview');
+            logger.log('Preview image clicked - returning to full preview');
             state.activeSoloIndex = null;
             renderPreview();
         }
     });
 
-    logger.log(`✓ Preview canvas initialized: ${width}×${height}, visible: ${canvas.offsetHeight > 0}`);
+    logger.log(`✓ Preview initialized: ${width}×${height}`);
     return window.previewState;
 }
 
 /**
- * Render preview canvas with current state
- * Uses run-length encoding for performance
+ * Render preview to an img element using JPEG encoding.
+ * UXP doesn't support canvas CSS scaling or toDataURL, so we:
+ * 1. Build RGBA pixel data directly
+ * 2. Encode to JPEG using pure-JS jpeg-js library
+ * 3. Display in <img> which CSS CAN scale properly
  */
 function renderPreview() {
     const state = window.previewState;
@@ -638,16 +621,9 @@ function renderPreview() {
         return;
     }
 
-    // Get fresh canvas and context each render (fixes stale state issues)
-    const canvas = document.getElementById('previewCanvas');
-    if (!canvas) {
-        logger.error('Preview canvas not found');
-        return;
-    }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-        logger.error('Failed to get canvas context');
+    const img = document.getElementById('previewImg');
+    if (!img) {
+        logger.error('Preview img element not found');
         return;
     }
 
@@ -659,7 +635,7 @@ function renderPreview() {
     const height = state.height;
 
     logger.log(`Rendering preview (solo mode: ${activeSoloIndex !== null}, deleted: ${deletedIndices.size})`);
-    logger.log(`  Canvas: ${width}×${height}, display=${canvas.style.display}, offsetHeight=${canvas.offsetHeight}, palette.length=${palette.length}, assignments.length=${assignments.length}`);
+    logger.log(`  Image: ${width}×${height}`);
 
     // Build remap table for deleted colors (maps to nearest surviving color)
     let remapTable = null;
@@ -668,96 +644,84 @@ function renderPreview() {
         logger.log(`  Remapping ${deletedIndices.size} deleted colors to nearest survivors`);
     }
 
-    // Force complete canvas clear by resetting dimensions
-    // This ensures a clean repaint (fixes "hit or miss" rendering issues)
-    canvas.width = width;
-    canvas.height = height;
+    // Build RGBA pixel array
+    const pixelData = new Uint8Array(width * height * 4);
 
-    // Also reset CSS dimensions to match (required for UXP)
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-
-    // When in solo mode, fill background with checkered pattern
-    // This makes both dark AND light colors visible against the background
-    if (activeSoloIndex !== null) {
-        // Draw checkered background (like transparency indicator)
-        const checkerSize = 8;
-        for (let cy = 0; cy < height; cy += checkerSize) {
-            for (let cx = 0; cx < width; cx += checkerSize) {
-                const isLight = ((cx / checkerSize) + (cy / checkerSize)) % 2 === 0;
-                ctx.fillStyle = isLight ? '#808080' : '#606060'; // Mid-gray checker
-                ctx.fillRect(cx, cy, checkerSize, checkerSize);
-            }
-        }
-    }
-
-    // Render pixels with run-length encoding for performance
     for (let y = 0; y < height; y++) {
-        let x = 0;
-        while (x < width) {
+        for (let x = 0; x < width; x++) {
             const idx = y * width + x;
             const colorIndex = assignments[idx];
+            const pixelOffset = idx * 4;
 
             // Check if this color is deleted
             const isDeleted = deletedIndices.has(colorIndex);
 
-            // In solo mode: show selected color normally, skip others (transparent)
+            // In solo mode: show selected color normally, others get checkered background
             const isMatching = (activeSoloIndex === null || colorIndex === activeSoloIndex);
 
+            let r, g, b;
+
             if (!isMatching) {
-                // In solo mode and this pixel doesn't match - skip it (leave transparent)
-                // Find run length of non-matching pixels to skip
-                let runLength = 1;
-                while (x + runLength < width) {
-                    const nextIdx = y * width + (x + runLength);
-                    const nextColorIndex = assignments[nextIdx];
-                    const nextIsMatching = (activeSoloIndex === null || nextColorIndex === activeSoloIndex);
-                    if (nextIsMatching) break;
-                    runLength++;
+                // Solo mode: non-matching pixels get checkered background
+                const checkerSize = 8;
+                const isLight = (Math.floor(x / checkerSize) + Math.floor(y / checkerSize)) % 2 === 0;
+                r = g = b = isLight ? 128 : 96; // Mid-gray checker
+            } else {
+                // Remap deleted colors to nearest surviving color
+                const effectiveColorIndex = (isDeleted && remapTable) ? remapTable[colorIndex] : colorIndex;
+                let hexColor = palette[effectiveColorIndex];
+
+                // DEFENSIVE: Handle undefined palette entries
+                if (!hexColor || hexColor === 'undefined') {
+                    hexColor = '#FF00FF'; // Magenta to highlight the issue
                 }
-                x += runLength;
-                continue;
+
+                // Convert hex to RGB
+                r = parseInt(hexColor.substring(1, 3), 16);
+                g = parseInt(hexColor.substring(3, 5), 16);
+                b = parseInt(hexColor.substring(5, 7), 16);
             }
 
-            // This pixel matches - render it
-            // Remap deleted colors to nearest surviving color
-            const effectiveColorIndex = (isDeleted && remapTable) ? remapTable[colorIndex] : colorIndex;
-            let hexColor = palette[effectiveColorIndex];
-
-            // DEFENSIVE: Handle undefined palette entries
-            if (!hexColor || hexColor === 'undefined') {
-                logger.warn(`  ⚠ Undefined color at index ${colorIndex} (palette length: ${palette.length})`);
-                hexColor = '#FF00FF'; // Magenta to highlight the issue
-            }
-
-            // Find run length of same color and deletion state (within matching pixels)
-            let runLength = 1;
-            while (x + runLength < width) {
-                const nextIdx = y * width + (x + runLength);
-                const nextColorIndex = assignments[nextIdx];
-                const nextIsDeleted = deletedIndices.has(nextColorIndex);
-                const nextIsMatching = (activeSoloIndex === null || nextColorIndex === activeSoloIndex);
-
-                // Break if pixel doesn't match OR color changes OR deletion state changes
-                if (!nextIsMatching || nextColorIndex !== colorIndex || nextIsDeleted !== isDeleted) break;
-
-                runLength++;
-            }
-
-            // Convert hex to RGB
-            const r = parseInt(hexColor.substring(1, 3), 16);
-            const g = parseInt(hexColor.substring(3, 5), 16);
-            const b = parseInt(hexColor.substring(5, 7), 16);
-
-            // Draw horizontal run
-            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-            ctx.fillRect(x, y, runLength, 1);
-
-            x += runLength;
+            pixelData[pixelOffset] = r;
+            pixelData[pixelOffset + 1] = g;
+            pixelData[pixelOffset + 2] = b;
+            pixelData[pixelOffset + 3] = 255; // Alpha (ignored by JPEG but required)
         }
     }
 
-    logger.log(`✓ Preview rendered`);
+    // Encode to JPEG using pure-JS encoder
+    // Use quality 100 for posterized images (already flat colors, compression artifacts would be visible)
+    const jpegData = jpeg.encode({
+        data: pixelData,
+        width: width,
+        height: height
+    }, 100);
+
+    // Convert to base64 data URL
+    // Note: jpeg.encode returns { data: Buffer, width, height }
+    const base64 = bufferToBase64(jpegData.data);
+    const dataUrl = `data:image/jpeg;base64,${base64}`;
+
+    // Set image source
+    img.src = dataUrl;
+
+    // Store dimensions for click coordinate mapping
+    img.dataset.naturalWidth = width;
+    img.dataset.naturalHeight = height;
+
+    logger.log(`✓ Preview rendered ${width}×${height} as JPEG (${Math.round(jpegData.data.length / 1024)}KB)`);
+}
+
+/**
+ * Convert Uint8Array/Buffer to base64 string
+ */
+function bufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
 }
 
 /**
@@ -1025,12 +989,13 @@ function showPaletteEditor(selectedPalette) {
         mainFlex.style.height = `${availableHeight - 24}px`;
 
         logger.log(`📐 Panel layout updated: dialog=${Math.round(dialogRect.width)}×${Math.round(dialogRect.height)}, content height=${Math.round(availableHeight)}px`);
+        // Note: No re-rendering needed - CSS handles scaling on the img element
     }
 
     // Initial layout
     setTimeout(updatePanelLayout, 100);
 
-    // Update on resize using ResizeObserver
+    // Update on resize using ResizeObserver (CSS handles image scaling automatically)
     if (typeof ResizeObserver !== 'undefined') {
         const resizeObserver = new ResizeObserver(() => {
             updatePanelLayout();
@@ -2749,18 +2714,18 @@ async function showDialog() {
                     logger.log(`Showing palette editor with ${result.palette.length} colors`);
                     showPaletteEditor(selectedPreview);
 
-                    // CRITICAL: Wait for UXP layout to complete before rendering canvas
+                    // CRITICAL: Wait for UXP layout to complete before rendering preview
                     // UXP needs time to calculate element dimensions after DOM changes
                     logger.log('✓ Posterization complete - waiting for layout...');
                     setTimeout(() => {
-                        // Check if canvas is ready (in paletteDialog)
-                        const canvas = document.getElementById('previewCanvas');
-                        if (canvas) {
-                            logger.log(`[After delay] Canvas offsetHeight BEFORE init: ${canvas.offsetHeight}`);
+                        // Check if img is ready (in paletteDialog)
+                        const img = document.getElementById('previewImg');
+                        if (img) {
+                            logger.log(`[After delay] Img offsetHeight BEFORE init: ${img.offsetHeight}`);
                         }
 
-                        // Initialize canvas preview AFTER palette dialog layout is complete
-                        logger.log('Initializing canvas preview...');
+                        // Initialize preview AFTER palette dialog layout is complete
+                        logger.log('Initializing preview...');
                         initializePreviewCanvas(
                             pixelData.width,
                             pixelData.height,
@@ -2768,16 +2733,9 @@ async function showDialog() {
                             result.assignments
                         );
 
-                        // Render initial preview (now that canvas is visible and sized)
+                        // Render initial preview
                         renderPreview();
-                        logger.log('✓ Canvas preview rendered');
-
-                        // CRITICAL: After canvas recreation, UXP needs additional time for layout
-                        // Render again after 100ms to ensure initial preview is visible
-                        setTimeout(() => {
-                            renderPreview();
-                            logger.log('✓ Second render pass to ensure visibility');
-                        }, 100);
+                        logger.log('✓ Preview rendered');
                     }, 300); // 300ms delay for UXP layout
 
                 } catch (error) {
