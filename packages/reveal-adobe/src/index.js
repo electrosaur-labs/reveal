@@ -3027,19 +3027,18 @@ async function showDialog() {
                 });
             }
 
-            // Analyze and Set button handler
-            // Analyze DNA button handler (DNA-based dynamic configuration)
+            // Analyse Image button handler (image analysis for dynamic configuration)
             const btnAnalyzeAndSet = document.getElementById("btnAnalyzeAndSet");
             if (btnAnalyzeAndSet) {
                 btnAnalyzeAndSet.addEventListener("click", async () => {
                     logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    logger.log("🧬 ANALYZE DNA - Starting analysis...");
+                    logger.log("ANALYSE IMAGE - Starting analysis...");
                     logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
                     // Disable button and show loading state
                     const originalText = btnAnalyzeAndSet.textContent;
                     btnAnalyzeAndSet.disabled = true;
-                    btnAnalyzeAndSet.textContent = "⏳ Analyzing...";
+                    btnAnalyzeAndSet.textContent = "Analysing...";
                     btnAnalyzeAndSet.style.opacity = "0.6";
 
                     try {
@@ -3110,7 +3109,7 @@ async function showDialog() {
                         applyAnalyzedSettings(uiSettings);
 
                         // Show simple alert to user
-                        const alertMsg = `DNA Analysis Complete\n\nConfig: ${config.name}\nColors: ${config.targetColors}, Black Bias: ${config.blackBias.toFixed(1)}, Dither: ${config.ditherType}\n\nAll parameters have been set.\nClick "Posterize" to generate separations.`;
+                        const alertMsg = `Image Analysis Complete\n\nProfile: ${config.name}\nColors: ${config.targetColors}\nDither: ${config.ditherType}\n\nParameters have been configured.\nClick "Posterize" to generate separations.`;
 
                         // Log full details to console
                         logger.log(`\nDNA ANALYSIS COMPLETE`);
@@ -3125,13 +3124,13 @@ async function showDialog() {
                         alert(alertMsg);
 
                         logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                        logger.log("✓ ANALYZE DNA - Complete");
+                        logger.log("✓ ANALYSE IMAGE - Complete");
                         logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
                     } catch (error) {
-                        logger.error("❌ DNA Analysis failed:", error);
+                        logger.error("Image analysis failed:", error);
                         alert(
-                            `DNA Analysis failed:\n\n${error.message}\n\n` +
+                            `Image analysis failed:\n\n${error.message}\n\n` +
                             `Please ensure a document is open and try again.`
                         );
                     } finally {
@@ -3141,7 +3140,7 @@ async function showDialog() {
                         btnAnalyzeAndSet.style.opacity = "1";
                     }
                 });
-                logger.log("✓ Analyze DNA button handler attached");
+                logger.log("✓ Analyse Image button handler attached");
             }
 
             // Preset selector change handler
