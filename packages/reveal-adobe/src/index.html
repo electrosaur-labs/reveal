@@ -55,14 +55,52 @@
             box-sizing: border-box;
         }
 
-        /* Palette dialog - larger and resizable */
+        /* Palette dialog - full viewport layout for UXP resize support */
         dialog.palette-dialog {
-            width: 1200px !important;
-            height: 800px !important;
-            max-width: none !important;
-            max-height: none !important;
-            min-width: 800px !important;
-            min-height: 600px !important;
+            /* UXP pattern: fill dialog bounds controlled by showModal() */
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            max-width: none;
+            max-height: none;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            margin: 0;
+            box-sizing: border-box;
+        }
+
+        /* Palette dialog content fills available space */
+        .palette-dialog .reveal-content {
+            position: relative;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;  /* Critical for nested flex scrolling */
+            overflow: hidden;
+        }
+
+        .palette-dialog .form-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        /* Palette dialog buttons stay at bottom */
+        .palette-dialog .reveal-buttons {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        /* Palette dialog title stays at top */
+        .palette-dialog .reveal-title {
+            flex-shrink: 0;
+            padding: 16px 24px 0 24px;
         }
 
         .reveal-content {
@@ -477,6 +515,7 @@
             gap: 16px;
             flex-wrap: wrap;
             margin-top: 16px;
+            align-content: flex-start;  /* Keep swatches at natural size, don't stretch */
         }
 
         .editable-swatch-container {
@@ -492,6 +531,8 @@
             transition: all 0.2s;
             flex: 0 0 auto;        /* Don't grow or shrink */
             width: 120px;          /* Accommodate 90px input + padding + border */
+            height: auto;          /* Natural height based on content */
+            align-self: flex-start; /* Don't stretch vertically */
         }
 
         .editable-swatch-container:hover {
@@ -1354,6 +1395,34 @@
                                 <br><strong>Stucki:</strong> High-fidelity error diffusion. Best for smooth photographic transitions and skin tones.
                             </div>
                         </div>
+
+                        <!-- Screen Mesh Size (for mesh-aware dithering) -->
+                        <div class="form-group" id="meshGroup" style="margin-top: 16px;">
+                            <label for="meshSize">
+                                <strong>Screen Mesh (TPI)</strong>
+                                <span class="hint">(mesh-aware halftone control)</span>
+                            </label>
+                            <select id="meshSize" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                                <option value="0">Pixel-Level (finest detail)</option>
+                                <option value="110">110 TPI (15 LPI) - Athletic wear</option>
+                                <option value="156">156 TPI (22 LPI) - General use</option>
+                                <option value="200">200 TPI (28 LPI) - Standard</option>
+                                <option value="230" selected>230 TPI (32 LPI) - Poster ink max</option>
+                                <option value="280">280 TPI (40 LPI) - Fine detail</option>
+                                <option value="305">305 TPI (43 LPI) - Process/CMYK</option>
+                                <option value="355">355 TPI (50 LPI) - High detail</option>
+                                <option value="custom">Custom TPI...</option>
+                            </select>
+                            <div id="customMeshInput" style="display: none; margin-top: 8px;">
+                                <input type="number" id="customMeshValue" placeholder="Enter mesh TPI (25-500)" min="25" max="500" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                            </div>
+                            <div class="info-box" style="margin-top: 12px;">
+                                <strong>Rule of 7:</strong> Max halftone LPI = Mesh TPI / 7.
+                                <br><strong>Pixel-Level:</strong> Finest detail, no mesh constraint (default).
+                                <br><strong>Mesh-Aware:</strong> Clustered dots ensure minimum printable size on your screen mesh.
+                                <br>Higher mesh = finer detail but harder to print. Lower mesh = easier to print, coarser halftones.
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1408,7 +1477,7 @@
     </dialog>
 
     <!-- Palette Customization Dialog (separate from main dialog) -->
-    <dialog id="paletteDialog" class="palette-dialog" style="width: 1200px; height: 800px; min-width: 800px; min-height: 600px; padding: 0; background: #ffffff; position: relative; box-sizing: border-box;">
+    <dialog id="paletteDialog" class="palette-dialog" style="background: #ffffff;">
         <!-- Title Bar -->
         <div class="reveal-title">Reveal - Customize Palette & Separate</div>
 
@@ -1416,10 +1485,10 @@
         <div class="reveal-content">
             <div class="form-section">
                 <!-- Preview + Palette Content (Flexbox Layout) -->
-                <div style="display: flex; gap: 16px; align-items: flex-start;">
+                <div style="display: flex; gap: 16px; align-items: stretch; flex: 1; min-height: 0;">
 
                     <!-- Preview Panel (left side) -->
-                    <div style="flex: 1 1 400px; min-width: 300px; display: flex; flex-direction: column;">
+                    <div style="flex: 1 1 auto; min-width: 400px; display: flex; flex-direction: column; min-height: 0;">
                         <div style="
                             position: relative;
                             background-image:
@@ -1433,13 +1502,15 @@
                             border: 1px solid #ddd;
                             border-radius: 4px;
                             overflow: auto;
-                            max-height: 600px;
-                            min-height: 200px;
+                            flex: 1;
+                            min-height: 400px;
                             display: flex;
                             align-items: flex-start;
                             justify-content: center;
                             padding: 8px;">
                             <canvas id="previewCanvas" style="
+                                min-width: 800px;
+                                min-height: 800px;
                                 image-rendering: pixelated;
                                 image-rendering: crisp-edges;
                                 cursor: crosshair;
@@ -1457,10 +1528,19 @@
                                 Click swatch to highlight
                             </div>
                         </div>
+                        <!-- Preview Resolution -->
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+                            <label for="previewStride" style="font-size: 11px; color: #666;">Preview Quality:</label>
+                            <select id="previewStride" style="padding: 4px 8px; font-size: 11px; border: 1px solid #ccc; border-radius: 3px;">
+                                <option value="4" selected>Standard (fast)</option>
+                                <option value="2">Fine (slow)</option>
+                                <option value="1">Finest (slower)</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Palette Content (right side) -->
-                    <div style="flex: 0 0 450px; min-width: 400px;">
+                    <div style="flex: 0 0 450px; min-width: 400px; display: flex; flex-direction: column; min-height: 0;">
                         <div class="info-box" style="background: #e3f2fd; border-left: 4px solid #1473e6; margin-bottom: 16px;">
                             <strong>🎨 Edit Your Palette Colors</strong><br>
                             <ul style="margin: 8px 0 0 0; padding-left: 20px; line-height: 1.8;">
@@ -1474,8 +1554,9 @@
 
                         <!-- Palette swatches container - now scrollable -->
                         <div id="editablePaletteContainer" class="editable-palette" style="
-                            max-height: 300px;
+                            flex: 1;
                             overflow-y: auto;
+                            min-height: 200px;
                             padding-right: 8px;">
                             <!-- Color swatches will be added here dynamically -->
                         </div>
