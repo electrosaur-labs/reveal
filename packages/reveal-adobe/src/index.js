@@ -2594,6 +2594,7 @@ async function showDialog() {
                             enableHueGapAnalysis: params.enableHueGapAnalysis,  // USER-CONTROLLED: Force hue diversity (default: ON, may exceed target count)
                             snapThreshold: 8.0,                      // Perceptual snap threshold (ΔE < 8 = noise)
                             format: pixelData.format,                // Pass Lab format flag for optimization
+                            bitDepth: pixelData.bitDepth,            // Source bit depth (8 or 16) for Shadow Gate calibration
                             grayscaleOnly,                           // User-selected mode: grayscale (L-only) or color (full Lab)
                             preserveWhite: params.preserveWhite,
                             preserveBlack: params.preserveBlack,
@@ -2944,38 +2945,10 @@ async function showDialog() {
                     // Use setTimeout with enough delay for UXP to repaint cursor
                     setTimeout(() => {
                         try {
-                            const assignments = new Uint16Array(width * height);
-
-                            // STRIDE-AWARE 2D ASSIGNMENT
-                            // Process in blocks to ensure the preview is "chunky" and stable
-                            for (let y = 0; y < height; y += stride) {
-                                for (let x = 0; x < width; x += stride) {
-                                    const anchorI = y * width + x;
-                                    const idx = anchorI * 3;
-
-                                    // Convert byte encoding to perceptual Lab ranges
-                                    // L: 0-255 → 0-100, a/b: 0-255 → -128 to +127
-                                    const L = (pixels[idx] / 255) * 100;
-                                    const a = pixels[idx + 1] - 128;
-                                    const b = pixels[idx + 2] - 128;
-
-                                    // Find nearest palette color (squared Euclidean distance)
-                                    let minDist = Infinity, anchorAssignment = 0;
-                                    for (let j = 0; j < paletteLab.length; j++) {
-                                        const pL = paletteLab[j].L, pa = paletteLab[j].a, pb = paletteLab[j].b;
-                                        const dist = (L - pL) * (L - pL) + (a - pa) * (a - pa) + (b - pb) * (b - pb);
-                                        if (dist < minDist) { minDist = dist; anchorAssignment = j; }
-                                    }
-
-                                    // STAMP THE BLOCK: Fill all pixels in [stride × stride] block
-                                    for (let blockY = 0; blockY < stride && (y + blockY) < height; blockY++) {
-                                        for (let blockX = 0; blockX < stride && (x + blockX) < width; blockX++) {
-                                            const pixelIndex = (y + blockY) * width + (x + blockX);
-                                            assignments[pixelIndex] = anchorAssignment;
-                                        }
-                                    }
-                                }
-                            }
+                            // Delegate to PosterizationEngine
+                            const assignments = PosterizationEngine.reassignWithStride(
+                                pixels, paletteLab, width, height, stride
+                            );
 
                             window.previewState.assignments = assignments;
                             renderPreview();
