@@ -34,6 +34,10 @@ module.exports = (env, argv) => {
                 '__BUILD_ID__': JSON.stringify(buildId),
                 '__BUILD_TIME__': JSON.stringify(buildTime),
                 '__TEST_MODE__': isTest  // Boolean, not JSON string
+            }),
+            // Provide Buffer polyfill for libraries that need it (like jpeg-js)
+            new webpack.ProvidePlugin({
+                Buffer: ['buffer', 'Buffer']
             })
         ],
         resolve: {
@@ -45,6 +49,10 @@ module.exports = (env, argv) => {
                 '@utils': path.resolve(__dirname, 'src/utils'),
                 '@palettes': path.resolve(__dirname, 'src/palettes'),
                 '@data': path.resolve(__dirname, 'src/data')
+            },
+            fallback: {
+                // Provide buffer polyfill for browser-like environments (UXP)
+                buffer: require.resolve('buffer/')
             }
         },
         externals: {
