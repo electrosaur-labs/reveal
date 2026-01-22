@@ -1323,6 +1323,28 @@ function showPaletteEditor(selectedPalette) {
                 const ditherType = ditherTypeEl ? ditherTypeEl.value : 'none';
                 logger.log(`Dithering: ${ditherType}`);
 
+                // Get mesh setting from UI (for mesh-aware dithering)
+                const meshSizeEl = document.getElementById('meshSize');
+                let meshValue = meshSizeEl ? parseInt(meshSizeEl.value, 10) : 0;
+
+                // Handle custom mesh input
+                if (meshSizeEl && meshSizeEl.value === 'custom') {
+                    const customMeshEl = document.getElementById('customMeshValue');
+                    meshValue = customMeshEl ? parseInt(customMeshEl.value, 10) : 0;
+                }
+
+                // Get document PPI for mesh-aware dithering calculations
+                const preDocInfo = PhotoshopAPI.getDocumentInfo();
+                const documentPPI = preDocInfo ? preDocInfo.resolution : 72;
+
+                if (meshValue > 0) {
+                    const maxLPI = Math.floor(meshValue / 7);
+                    const cellSize = Math.ceil(documentPPI / maxLPI);
+                    logger.log(`Mesh-aware: ${meshValue} TPI @ ${documentPPI} PPI → ${maxLPI} LPI max, ${cellSize}px cell size`);
+                } else {
+                    logger.log(`Mesh: Pixel-level (no constraint)`);
+                }
+
                 // Use original colors for assignment, edited colors for rendering
                 // This ensures pixels stay assigned to the same features even if ink colors change
                 // Use filtered palettes if colors were soft-deleted
@@ -1337,7 +1359,9 @@ function showPaletteEditor(selectedPalette) {
                         onProgress: (percent) => {
                             logger.log(`Preview separation progress: ${percent}%`);
                         },
-                        ditherType: ditherType
+                        ditherType: ditherType,
+                        mesh: meshValue,
+                        ppi: documentPPI
                     }
                 );
 
@@ -1365,7 +1389,9 @@ function showPaletteEditor(selectedPalette) {
                         onProgress: (percent) => {
                             logger.log(`Full-res separation progress: ${percent}%`);
                         },
-                        ditherType: ditherType
+                        ditherType: ditherType,
+                        mesh: meshValue,
+                        ppi: docInfo.resolution  // Use full-res document PPI
                     }
                 );
 
@@ -1940,9 +1966,28 @@ function getFormValues() {
         cWeight: parseFloat(document.getElementById("cWeight")?.value ?? 1.0),  // Saliency C-weight (centroid.cWeight)
         blackBias: parseFloat(document.getElementById("blackBias")?.value ?? 5.0),  // Black bias (centroid.blackBias)
         enablePaletteReduction: document.getElementById("enablePaletteReduction")?.checked ?? true,  // Enable/disable palette reduction
-        paletteReduction: parseFloat(document.getElementById("paletteReduction")?.value ?? 10.0)  // Color merging threshold (prune.threshold)
+        paletteReduction: parseFloat(document.getElementById("paletteReduction")?.value ?? 10.0),  // Color merging threshold (prune.threshold)
+        // Mesh-aware dithering settings
+        mesh: getMeshValue(),  // Screen mesh TPI (0 = pixel-level)
+        ppi: PhotoshopAPI.getDocumentInfo()?.resolution || 72  // Document PPI for mesh calculations
         // CIELAB is always used - no toggle
     };
+}
+
+/**
+ * Get mesh value from UI, handling custom input
+ * @returns {number} Mesh TPI (0 = pixel-level)
+ */
+function getMeshValue() {
+    const meshSelect = document.getElementById("meshSize");
+    if (!meshSelect) return 0;
+
+    if (meshSelect.value === "custom") {
+        const customInput = document.getElementById("customMeshValue");
+        return customInput ? parseInt(customInput.value, 10) || 0 : 0;
+    }
+
+    return parseInt(meshSelect.value, 10) || 0;
 }
 
 /**
@@ -2188,6 +2233,21 @@ async function showDialog() {
                     title.classList.toggle('collapsed');
                 });
             });
+
+            // Set up mesh dropdown (show/hide custom input)
+            const meshSizeSelect = document.getElementById('meshSize');
+            const customMeshInput = document.getElementById('customMeshInput');
+            if (meshSizeSelect && customMeshInput) {
+                meshSizeSelect.addEventListener('change', () => {
+                    if (meshSizeSelect.value === 'custom') {
+                        customMeshInput.style.display = 'block';
+                        const customMeshValue = document.getElementById('customMeshValue');
+                        if (customMeshValue) customMeshValue.focus();
+                    } else {
+                        customMeshInput.style.display = 'none';
+                    }
+                });
+            }
 
             // Set up preview item selection
             const previewItems = document.querySelectorAll('.preview-item[data-color-count]');
@@ -2547,7 +2607,8 @@ async function showDialog() {
                             paletteReduction: params.paletteReduction,  // Color merging threshold (prune.threshold)
                             tuning: tuning,                          // NEW: Centralized tuning configuration
                             // ignoreTransparent is handled during RGB→Lab conversion (alpha channel check)
-                            isPreview: true                           // Enable 4× stride optimization for preview speed
+                            isPreview: true,                          // Enable stride optimization for preview speed
+                            previewStride: parseInt(document.getElementById('previewStride')?.value || '4', 10)  // User-selected stride (4=Standard, 2=Fine, 1=Finest)
                         }
                     );
 
@@ -2862,6 +2923,69 @@ async function showDialog() {
                     logger.log("✓ All parameters reset to defaults");
                 });
                 logger.log("✓ Reset to Defaults button attached");
+            }
+
+            // Preview Quality dropdown - reassign pixels with new stride
+            const previewStrideSelect = document.getElementById('previewStride');
+            if (previewStrideSelect) {
+                previewStrideSelect.addEventListener('change', () => {
+                    if (!posterizationData || !window.previewState) return;
+
+                    const stride = parseInt(previewStrideSelect.value, 10);
+                    const pixels = posterizationData.originalPixels;
+                    const paletteLab = posterizationData.selectedPreview.paletteLab;
+                    const width = posterizationData.originalWidth;
+                    const height = posterizationData.originalHeight;
+
+                    const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
+                    logger.log(`Preview stride change: ${labels[stride] || stride} (stride=${stride}), ${width}x${height}, palette=${paletteLab.length}`);
+                    document.body.style.cursor = 'wait';
+
+                    // Use setTimeout with enough delay for UXP to repaint cursor
+                    setTimeout(() => {
+                        try {
+                            const assignments = new Uint16Array(width * height);
+
+                            // STRIDE-AWARE 2D ASSIGNMENT
+                            // Process in blocks to ensure the preview is "chunky" and stable
+                            for (let y = 0; y < height; y += stride) {
+                                for (let x = 0; x < width; x += stride) {
+                                    const anchorI = y * width + x;
+                                    const idx = anchorI * 3;
+
+                                    // Convert byte encoding to perceptual Lab ranges
+                                    // L: 0-255 → 0-100, a/b: 0-255 → -128 to +127
+                                    const L = (pixels[idx] / 255) * 100;
+                                    const a = pixels[idx + 1] - 128;
+                                    const b = pixels[idx + 2] - 128;
+
+                                    // Find nearest palette color (squared Euclidean distance)
+                                    let minDist = Infinity, anchorAssignment = 0;
+                                    for (let j = 0; j < paletteLab.length; j++) {
+                                        const pL = paletteLab[j].L, pa = paletteLab[j].a, pb = paletteLab[j].b;
+                                        const dist = (L - pL) * (L - pL) + (a - pa) * (a - pa) + (b - pb) * (b - pb);
+                                        if (dist < minDist) { minDist = dist; anchorAssignment = j; }
+                                    }
+
+                                    // STAMP THE BLOCK: Fill all pixels in [stride × stride] block
+                                    for (let blockY = 0; blockY < stride && (y + blockY) < height; blockY++) {
+                                        for (let blockX = 0; blockX < stride && (x + blockX) < width; blockX++) {
+                                            const pixelIndex = (y + blockY) * width + (x + blockX);
+                                            assignments[pixelIndex] = anchorAssignment;
+                                        }
+                                    }
+                                }
+                            }
+
+                            window.previewState.assignments = assignments;
+                            renderPreview();
+                            logger.log(`✓ Preview updated: stride=${stride}`);
+                        } catch (err) {
+                            logger.error('Stride change error:', err);
+                        }
+                        document.body.style.cursor = '';
+                    }, 50);
+                });
             }
 
             // Analyze and Set button handler

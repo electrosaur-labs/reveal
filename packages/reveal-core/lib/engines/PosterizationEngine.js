@@ -3213,87 +3213,87 @@ class PosterizationEngine {
         const blackIndex = actuallyPreservedBlack ? preservedColorIndex++ : -1;
 
         // PERFORMANCE OPTIMIZATION: Preview mode uses stride sampling
-        // This reduces distance calculations by 75% (4× stride = 1/4 pixels computed)
-        // For 800×800 preview: 640k → 160k distance calculations
+        // This reduces distance calculations (4× stride = 1/16 pixels computed)
+        // For 800×600 preview: 480k → 30k distance calculations (at stride=4)
+        // User-selectable: Standard=4 (fast), Fine=2 (slow), Finest=1 (slower)
         const isPreview = options.isPreview === true;
         const useStride = isPreview && options.optimizePreview !== false;
-        const ASSIGNMENT_STRIDE = useStride ? 4 : 1;
+        const ASSIGNMENT_STRIDE = useStride ? (options.previewStride || 4) : 1;
 
         if (useStride) {
+            const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
             logger.log(`Assigning pixels to palette (preview mode with ${ASSIGNMENT_STRIDE}× stride)...`);
         } else {
             logger.log(`Assigning pixels to palette...`);
         }
 
-        // CRITICAL: REUSE labPixels instead of re-converting (eliminates second conversion)
-        // Pass 1: Process sampled pixels (every ASSIGNMENT_STRIDE-th pixel)
-        for (let i = 0; i < assignments.length; i += ASSIGNMENT_STRIDE) {
-            // Skip transparent pixels - they don't get assigned to any palette color
-            if (transparentPixels.has(i)) {
-                assignments[i] = 255; // Special value for transparent (won't be used in layer creation)
-                continue;
-            }
+        // STRIDE-AWARE 2D ASSIGNMENT
+        // Process in blocks to ensure the preview is "chunky" and stable
+        // rather than garbled by 1D array math
+        for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
+            for (let x = 0; x < width; x += ASSIGNMENT_STRIDE) {
+                // Calculate the anchor pixel index
+                const anchorI = y * width + x;
 
-            // Check if this pixel is preserved (O(1) lookup with Set)
-            // Only assign to preserved index if the color actually made it past the viability threshold
-            let isPreserved = false;
+                // --- STEP A: CALCULATE ANCHOR COLOR ---
+                let anchorAssignment = 0;
 
-            if (actuallyPreservedWhite && preservedPixelMap.has('white') && preservedPixelMap.get('white').has(i)) {
-                assignments[i] = whiteIndex;
-                isPreserved = true;
-            } else if (actuallyPreservedBlack && preservedPixelMap.has('black') && preservedPixelMap.get('black').has(i)) {
-                assignments[i] = blackIndex;
-                isPreserved = true;
-            }
-
-            if (!isPreserved) {
-                // Regular quantized pixel: find nearest color
-                const idx = i * 3;
-                const pixelLab = {
-                    L: labPixels[idx],
-                    a: labPixels[idx + 1],
-                    b: labPixels[idx + 2]
-                };
-
-                // Find nearest palette color in CIELAB space (Hard Snap)
-                let minDistance = Infinity;
-                let closestIndex = 0;
-
-                if (grayscaleOnly) {
-                    // Grayscale mode: Only compare L channel
-                    for (let j = 0; j < finalPaletteLab.length; j++) {
-                        const deltaL = pixelLab.L - finalPaletteLab[j].L;
-                        const distance = deltaL * deltaL; // Squared distance (no sqrt needed)
-
-                        if (distance < minDistance) {
-                            minDistance = distance;
-                            closestIndex = j;
-                        }
-                    }
+                if (transparentPixels.has(anchorI)) {
+                    anchorAssignment = 255; // Special value for transparent
                 } else {
-                    // Color mode: Use full Lab distance
-                    for (let j = 0; j < finalPaletteLab.length; j++) {
-                        const distance = this.calculateCIELABDistance(pixelLab, finalPaletteLab[j]);
-                        if (distance < minDistance) {
-                            minDistance = distance;
-                            closestIndex = j;
+                    let isPreserved = false;
+
+                    // Check preserved white/black
+                    if (actuallyPreservedWhite && preservedPixelMap.has('white') && preservedPixelMap.get('white').has(anchorI)) {
+                        anchorAssignment = whiteIndex;
+                        isPreserved = true;
+                    } else if (actuallyPreservedBlack && preservedPixelMap.has('black') && preservedPixelMap.get('black').has(anchorI)) {
+                        anchorAssignment = blackIndex;
+                        isPreserved = true;
+                    }
+
+                    if (!isPreserved) {
+                        // Regular quantized pixel: find nearest color
+                        const idx = anchorI * 3;
+                        const pixelLab = {
+                            L: labPixels[idx],
+                            a: labPixels[idx + 1],
+                            b: labPixels[idx + 2]
+                        };
+
+                        // Find nearest palette color in CIELAB space (Hard Snap)
+                        let minDistance = Infinity;
+
+                        if (grayscaleOnly) {
+                            // Grayscale mode: Only compare L channel
+                            for (let j = 0; j < finalPaletteLab.length; j++) {
+                                const deltaL = pixelLab.L - finalPaletteLab[j].L;
+                                const distance = deltaL * deltaL;
+                                if (distance < minDistance) {
+                                    minDistance = distance;
+                                    anchorAssignment = j;
+                                }
+                            }
+                        } else {
+                            // Color mode: Use full Lab distance
+                            for (let j = 0; j < finalPaletteLab.length; j++) {
+                                const distance = this.calculateCIELABDistance(pixelLab, finalPaletteLab[j]);
+                                if (distance < minDistance) {
+                                    minDistance = distance;
+                                    anchorAssignment = j;
+                                }
+                            }
                         }
                     }
                 }
 
-                // Hard assignment: this pixel is 100% this color (no blending)
-                assignments[i] = closestIndex;
-            }
-        }
-
-        // Pass 2: Interpolate skipped pixels (if stride was used)
-        if (useStride && ASSIGNMENT_STRIDE > 1) {
-            for (let i = 0; i < assignments.length; i++) {
-                if (i % ASSIGNMENT_STRIDE !== 0) {
-                    // Interpolate from nearest sampled pixel
-                    // Use simple nearest-neighbor: copy from previous sampled pixel
-                    const nearestSampled = Math.floor(i / ASSIGNMENT_STRIDE) * ASSIGNMENT_STRIDE;
-                    assignments[i] = assignments[nearestSampled];
+                // --- STEP B: STAMP THE BLOCK ---
+                // Fill all pixels within the current [Stride × Stride] block
+                for (let blockY = 0; blockY < ASSIGNMENT_STRIDE && (y + blockY) < height; blockY++) {
+                    for (let blockX = 0; blockX < ASSIGNMENT_STRIDE && (x + blockX) < width; blockX++) {
+                        const pixelIndex = (y + blockY) * width + (x + blockX);
+                        assignments[pixelIndex] = anchorAssignment;
+                    }
                 }
             }
         }
