@@ -401,7 +401,8 @@ class PhotoshopAPI {
             width: doc.width,
             height: doc.height,
             colorMode: doc.mode,
-            bitDepth: doc.bitsPerChannel
+            bitDepth: doc.bitsPerChannel,
+            resolution: doc.resolution || 72  // PPI (pixels per inch), defaults to 72
         };
     }
 

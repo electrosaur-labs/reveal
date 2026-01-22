@@ -223,7 +223,8 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
             width,
             height,
             colorMode: 'lab',
-            bitsPerChannel: 16
+            bitsPerChannel: 16,
+            compression: 'rle'  // Enable RLE compression
         });
 
         // Add original image as invisible pixel layer (bottom layer)
