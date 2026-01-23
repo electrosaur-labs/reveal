@@ -11,36 +11,37 @@
 
 import { describe, test, expect } from 'vitest';
 
-// Import PosterizationEngine
+// Import PosterizationEngine and test helpers
 const PosterizationEngine = require('../../lib/engines/PosterizationEngine');
+const { perceptualLabTo16bit, create16bitLabImage } = require('../helpers/lab-conversion');
 
 describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
-    describe('Preserved Color Viability (0.1% threshold)', () => {
+    // Helper to convert perceptual Lab to 16-bit encoding
+    // 16-bit encoding: L: 0-100 → 0-32768, a/b: -128 to +127 → 0-32768 (neutral=16384)
+    const labTo16bit = (L, a, b) => ({
+        L: Math.round((L / 100) * 32768),
+        a: Math.round((a / 128) * 16384 + 16384),
+        b: Math.round((b / 128) * 16384 + 16384)
+    });
 
-        // Helper to create byte-encoded Lab value
-        // Byte encoding: L: 0-100 → 0-255, a/b: -128 to +127 → 0-255
-        const labToByte = (L, a, b) => ({
-            L: (L / 100) * 255,       // L: 0-100 → 0-255
-            a: a + 128,               // a: -128..127 → 0-255
-            b: b + 128                // b: -128..127 → 0-255
-        });
+    describe('Preserved Color Viability (0.1% threshold)', () => {
 
         test('should include white when coverage >= 0.1%', () => {
             // Create Lab pixels: 10000 pixels, 20 white (0.2% - above threshold)
             const totalPixels = 10000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
-            // Mid-gray in byte encoding: L=50 (127), a=0 (128), b=0 (128)
-            const gray = labToByte(50, 0, 0);
+            // Mid-gray in 16-bit encoding
+            const gray = labTo16bit(50, 0, 0);
             for (let i = 0; i < totalPixels * 3; i += 3) {
                 labPixels[i] = gray.L;
                 labPixels[i + 1] = gray.a;
                 labPixels[i + 2] = gray.b;
             }
 
-            // White pixels: L=98 (250), a=0, b=0
-            const white = labToByte(98, 0, 0);
+            // White pixels: L=98
+            const white = labTo16bit(98, 0, 0);
             for (let i = 0; i < 20; i++) {
                 const idx = i * 3;
                 labPixels[idx] = white.L;
@@ -50,6 +51,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 100, 100, 5, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: true,
                 preserveBlack: false,
                 enableHueGapAnalysis: false,
@@ -64,9 +66,9 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
         test('should SKIP white when coverage < 0.1%', () => {
             // Create Lab pixels: 10000 pixels, only 5 white (0.05% - below threshold)
             const totalPixels = 10000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
-            const gray = labToByte(50, 0, 0);
+            const gray = labTo16bit(50, 0, 0);
             for (let i = 0; i < totalPixels * 3; i += 3) {
                 labPixels[i] = gray.L;
                 labPixels[i + 1] = gray.a;
@@ -74,7 +76,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             }
 
             // Only 5 white pixels (0.05% - dust)
-            const white = labToByte(98, 0, 0);
+            const white = labTo16bit(98, 0, 0);
             for (let i = 0; i < 5; i++) {
                 const idx = i * 3;
                 labPixels[idx] = white.L;
@@ -84,6 +86,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 100, 100, 5, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: true,
                 preserveBlack: false,
                 enableHueGapAnalysis: false,
@@ -98,9 +101,9 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
         test('should include black when coverage >= 0.1%', () => {
             // Create Lab pixels: 10000 pixels, 15 black (0.15% - above threshold)
             const totalPixels = 10000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
-            const gray = labToByte(50, 0, 0);
+            const gray = labTo16bit(50, 0, 0);
             for (let i = 0; i < totalPixels * 3; i += 3) {
                 labPixels[i] = gray.L;
                 labPixels[i + 1] = gray.a;
@@ -108,7 +111,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             }
 
             // 15 black pixels (0.15%): L=3
-            const black = labToByte(3, 0, 0);
+            const black = labTo16bit(3, 0, 0);
             for (let i = 0; i < 15; i++) {
                 const idx = i * 3;
                 labPixels[idx] = black.L;
@@ -118,6 +121,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 100, 100, 5, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: false,
                 preserveBlack: true,
                 enableHueGapAnalysis: false,
@@ -132,9 +136,9 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
         test('should SKIP black when coverage < 0.1%', () => {
             // Create Lab pixels: 10000 pixels, only 3 black (0.03% - way below threshold)
             const totalPixels = 10000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
-            const gray = labToByte(50, 0, 0);
+            const gray = labTo16bit(50, 0, 0);
             for (let i = 0; i < totalPixels * 3; i += 3) {
                 labPixels[i] = gray.L;
                 labPixels[i + 1] = gray.a;
@@ -142,7 +146,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             }
 
             // Only 3 black pixels (0.03% - dust)
-            const black = labToByte(3, 0, 0);
+            const black = labTo16bit(3, 0, 0);
             for (let i = 0; i < 3; i++) {
                 const idx = i * 3;
                 labPixels[idx] = black.L;
@@ -152,6 +156,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 100, 100, 5, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: false,
                 preserveBlack: true,
                 enableHueGapAnalysis: false,
@@ -166,9 +171,9 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
         test('should handle boundary case: exactly 0.1% coverage', () => {
             // Create Lab pixels: 10000 pixels, exactly 10 white (0.1%)
             const totalPixels = 10000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
-            const gray = labToByte(50, 0, 0);
+            const gray = labTo16bit(50, 0, 0);
             for (let i = 0; i < totalPixels * 3; i += 3) {
                 labPixels[i] = gray.L;
                 labPixels[i + 1] = gray.a;
@@ -176,7 +181,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             }
 
             // Exactly 10 white pixels (0.1%)
-            const white = labToByte(98, 0, 0);
+            const white = labTo16bit(98, 0, 0);
             for (let i = 0; i < 10; i++) {
                 const idx = i * 3;
                 labPixels[idx] = white.L;
@@ -186,6 +191,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 100, 100, 5, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: true,
                 preserveBlack: false,
                 enableHueGapAnalysis: false,
@@ -200,20 +206,13 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
     describe('Hue Gap Viability (0.25% threshold)', () => {
 
-        // Helper for byte encoding
-        const labToByte = (L, a, b) => ({
-            L: (L / 100) * 255,
-            a: a + 128,
-            b: b + 128
-        });
-
         test('should include hue gap color when sector coverage >= 0.25%', () => {
             // Create image with dominant yellow and a significant red sector (5%)
             const totalPixels = 10000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
             // 95% Yellow (L=70, a=-10, b=60)
-            const yellow = labToByte(70, -10, 60);
+            const yellow = labTo16bit(70, -10, 60);
             for (let i = 0; i < 9500 * 3; i += 3) {
                 labPixels[i] = yellow.L;
                 labPixels[i + 1] = yellow.a;
@@ -221,7 +220,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             }
 
             // 5% distinct Red (L=50, a=60, b=30) - well above 0.25% threshold
-            const red = labToByte(50, 60, 30);
+            const red = labTo16bit(50, 60, 30);
             for (let i = 9500 * 3; i < totalPixels * 3; i += 3) {
                 labPixels[i] = red.L;
                 labPixels[i + 1] = red.a;
@@ -230,6 +229,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 100, 100, 5, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: false,
                 preserveBlack: false,
                 enableHueGapAnalysis: true,
@@ -247,10 +247,10 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
         test('should SKIP hue gap color when sector coverage < 0.25%', () => {
             // Create image with dominant yellow and tiny red sector (0.1% - below threshold)
             const totalPixels = 10000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
             // 99.9% Yellow (L=70, a=-10, b=60)
-            const yellow = labToByte(70, -10, 60);
+            const yellow = labTo16bit(70, -10, 60);
             for (let i = 0; i < 9990 * 3; i += 3) {
                 labPixels[i] = yellow.L;
                 labPixels[i + 1] = yellow.a;
@@ -258,7 +258,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             }
 
             // Only 0.1% Red (10 pixels - dust) - below 0.25% threshold
-            const red = labToByte(50, 60, 30);
+            const red = labTo16bit(50, 60, 30);
             for (let i = 9990 * 3; i < totalPixels * 3; i += 3) {
                 labPixels[i] = red.L;
                 labPixels[i + 1] = red.a;
@@ -267,6 +267,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 100, 100, 5, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: false,
                 preserveBlack: false,
                 enableHueGapAnalysis: true,
@@ -284,12 +285,6 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
     describe('Combined Behavior', () => {
 
-        const labToByte = (L, a, b) => ({
-            L: (L / 100) * 255,
-            a: a + 128,
-            b: b + 128
-        });
-
         test('should apply both thresholds independently', () => {
             // Image with:
             // - 95% mid-gray
@@ -297,12 +292,12 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             // - 0.05% black (below 0.1% - should skip)
             // - 4.9% light gray
             const totalPixels = 10000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
-            const gray = labToByte(50, 0, 0);
-            const white = labToByte(98, 0, 0);
-            const black = labToByte(3, 0, 0);
-            const lightGray = labToByte(70, 0, 0);
+            const gray = labTo16bit(50, 0, 0);
+            const white = labTo16bit(98, 0, 0);
+            const black = labTo16bit(3, 0, 0);
+            const lightGray = labTo16bit(70, 0, 0);
 
             // 95% mid-gray
             for (let i = 0; i < 9500 * 3; i += 3) {
@@ -334,6 +329,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 100, 100, 10, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: true,
                 preserveBlack: true,
                 enableHueGapAnalysis: true,
@@ -352,14 +348,14 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             // When preserved color is skipped due to viability threshold,
             // it shouldn't be protected from density floor either
             const totalPixels = 10000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
-            const white = labToByte(98, 0, 0);
+            const white = labTo16bit(98, 0, 0);
 
-            // Fill with varied grays (L from 40-80 in byte encoding)
+            // Fill with varied grays (L from 40-80)
             for (let i = 0; i < totalPixels * 3; i += 3) {
                 const L = 40 + ((i / 3) % 40);  // L from 40-80
-                const gray = labToByte(L, 0, 0);
+                const gray = labTo16bit(L, 0, 0);
                 labPixels[i] = gray.L;
                 labPixels[i + 1] = gray.a;
                 labPixels[i + 2] = gray.b;
@@ -375,6 +371,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 100, 100, 5, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: true,
                 preserveBlack: false,
                 enableHueGapAnalysis: false,
@@ -395,20 +392,13 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
          * - Better to let speckles map to nearest viable color
          */
 
-        // Helper for byte encoding
-        const labToByte = (L, a, b) => ({
-            L: (L / 100) * 255,
-            a: a + 128,
-            b: b + 128
-        });
-
         test('should prevent 0.04% white from becoming a screen (LOC poster scenario)', () => {
             // Simulates the loc_works_98516923 case that had 0.04% white
             const totalPixels = 1000000; // 1MP image
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
             // Fill with colored content (warm brownish: L=55, a=20, b=35)
-            const warm = labToByte(55, 20, 35);
+            const warm = labTo16bit(55, 20, 35);
             for (let i = 0; i < totalPixels * 3; i += 3) {
                 labPixels[i] = warm.L;
                 labPixels[i + 1] = warm.a;
@@ -416,7 +406,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             }
 
             // 0.04% white = 400 pixels (dust on a scan)
-            const white = labToByte(98, 0, 0);
+            const white = labTo16bit(98, 0, 0);
             for (let i = 0; i < 400; i++) {
                 const idx = i * 3;
                 labPixels[idx] = white.L;
@@ -426,6 +416,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 1000, 1000, 10, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: true,
                 preserveBlack: true,
                 enableHueGapAnalysis: false,
@@ -440,10 +431,10 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
         test('should prevent 0.2% hue-gap blue from becoming a screen in warm image', () => {
             // Warm image with tiny blue speckles (sensor noise, artifact)
             const totalPixels = 100000;
-            const labPixels = new Float32Array(totalPixels * 3);
+            const labPixels = new Uint16Array(totalPixels * 3);
 
             // 99.8% warm colors (orange/yellow: L=65, a=25, b=50)
-            const warm = labToByte(65, 25, 50);
+            const warm = labTo16bit(65, 25, 50);
             for (let i = 0; i < 99800 * 3; i += 3) {
                 labPixels[i] = warm.L;
                 labPixels[i + 1] = warm.a;
@@ -451,7 +442,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
             }
 
             // 0.2% blue speckles - below 0.25% hue gap threshold (L=40, a=10, b=-50)
-            const blue = labToByte(40, 10, -50);
+            const blue = labTo16bit(40, 10, -50);
             for (let i = 99800 * 3; i < totalPixels * 3; i += 3) {
                 labPixels[i] = blue.L;
                 labPixels[i + 1] = blue.a;
@@ -460,6 +451,7 @@ describe('Minimum Viability Threshold (Speckle Filtering)', () => {
 
             const result = PosterizationEngine.posterize(labPixels, 316, 316, 8, {
                 format: 'lab',
+                bitDepth: 16,
                 preserveWhite: false,
                 preserveBlack: false,
                 enableHueGapAnalysis: true,
