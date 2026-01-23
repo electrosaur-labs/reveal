@@ -26,16 +26,16 @@ describe('Hue-Aware Priority Multiplier (v0.2.0)', () => {
             expect(sector).toBeLessThanOrEqual(1);
         });
 
-        test('should map yellow (a=30, b=50) to sector 2 or 3', () => {
+        test('should map yellow (a=30, b=50) to sector 1 (30-60°)', () => {
+            // atan2(50, 30) = 59° → sector 1
             const sector = PosterizationEngine._getHueSector(30, 50);
-            expect(sector).toBeGreaterThanOrEqual(2);
-            expect(sector).toBeLessThanOrEqual(3);
+            expect(sector).toBe(1);
         });
 
-        test('should map green (a=-40, b=20) to sector 3 or 4', () => {
+        test('should map green (a=-40, b=20) to sector 5 (150-180°)', () => {
+            // atan2(20, -40) = 153° → sector 5
             const sector = PosterizationEngine._getHueSector(-40, 20);
-            expect(sector).toBeGreaterThanOrEqual(3);
-            expect(sector).toBeLessThanOrEqual(4);
+            expect(sector).toBe(5);
         });
 
         test('should map cyan (a=-50, b=-10) to sector 5 or 6', () => {
@@ -179,8 +179,13 @@ describe('Hue-Aware Priority Multiplier (v0.2.0)', () => {
         });
 
         test('should apply 5× multiplier to uncovered significant sector', () => {
+            // Box with multiple colors to have non-zero variance
+            // a=40, b=10 → atan2(10, 40) = 14° → sector 0 (Red)
             const box = {
-                colors: [{ L: 50, a: 40, b: 10, count: 100 }]
+                colors: [
+                    { L: 50, a: 40, b: 10, count: 50 },
+                    { L: 60, a: 45, b: 15, count: 50 }
+                ]
             };
             const sectorEnergy = new Float32Array(12);
             sectorEnergy[0] = 10.0; // Red has 10% energy (>5% threshold)
@@ -191,6 +196,8 @@ describe('Hue-Aware Priority Multiplier (v0.2.0)', () => {
             );
 
             const metadata = PosterizationEngine._calculateBoxMetadata(box, false);
+            // With variance > 0, priority should be boosted
+            expect(metadata.variance).toBeGreaterThan(0);
             expect(priority).toBeGreaterThan(metadata.variance * 4.0); // ~5× multiplier
         });
 
@@ -239,8 +246,13 @@ describe('Hue-Aware Priority Multiplier (v0.2.0)', () => {
         });
 
         test('should use custom hueMultiplier parameter', () => {
+            // Box with multiple colors to have non-zero variance
+            // a=40, b=10 → sector 0 (Red)
             const box = {
-                colors: [{ L: 50, a: 40, b: 10, count: 100 }]
+                colors: [
+                    { L: 50, a: 40, b: 10, count: 50 },
+                    { L: 60, a: 45, b: 15, count: 50 }
+                ]
             };
             const sectorEnergy = new Float32Array(12);
             sectorEnergy[0] = 10.0;

@@ -283,5 +283,10 @@ module.exports.engines = {
     SeparationEngine,
     PreviewEngine,
     DocumentValidator,
-    ImageHeuristicAnalyzer
+    ImageHeuristicAnalyzer,
+
+    // Modular components (v2.0)
+    ColorSpace: require('./lib/engines/ColorSpace'),
+    HueAnalysis: require('./lib/engines/HueAnalysis'),
+    CentroidStrategies: require('./lib/engines/CentroidStrategies').CentroidStrategies
 };

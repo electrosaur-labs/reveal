@@ -10,13 +10,25 @@ import { describe, test, expect } from 'vitest';
 const PosterizationEngine = require('../../lib/engines/PosterizationEngine');
 
 /**
- * Helper: Create test image data in Lab format (Photoshop byte encoding)
- * L: 0-255 (represents 0-100)
- * a: 0-255 (represents -128 to 127)
- * b: 0-255 (represents -128 to 127)
+ * Helper: Convert perceptual Lab to 16-bit encoding
+ * 16-bit encoding: L: 0-100 → 0-32768, a/b: -128 to +127 → 0-32768 (neutral=16384)
+ */
+function labTo16bit(L, a, b) {
+    return {
+        L: Math.round((L / 100) * 32768),
+        a: Math.round((a / 128) * 16384 + 16384),
+        b: Math.round((b / 128) * 16384 + 16384)
+    };
+}
+
+/**
+ * Helper: Create test image data in Lab format (16-bit encoding)
+ * L: 0-32768 (represents 0-100)
+ * a: 0-32768 (represents -128 to 127, neutral=16384)
+ * b: 0-32768 (represents -128 to 127, neutral=16384)
  */
 function createLabImage(width, height, generator) {
-    const pixels = new Uint8ClampedArray(width * height * 3);
+    const pixels = new Uint16Array(width * height * 3);
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
             const idx = (y * width + x) * 3;
@@ -34,16 +46,21 @@ function createLabImage(width, height, generator) {
  */
 function createGrayscaleGradient(width, height) {
     return createLabImage(width, height, (x, y, w, h) => {
-        const L = Math.floor((x / (w - 1)) * 255);
-        return { L, a: 128, b: 128 };
+        const L = (x / (w - 1)) * 100;  // 0 to 100 perceptual
+        const lab16 = labTo16bit(L, 0, 0);
+        return lab16;
     });
 }
 
 /**
- * Helper: Create solid color image
+ * Helper: Create solid color image (in perceptual Lab ranges)
+ * @param {number} L - Lightness 0-100
+ * @param {number} a - a channel -128 to +127
+ * @param {number} b - b channel -128 to +127
  */
 function createSolidColor(width, height, L, a, b) {
-    return createLabImage(width, height, () => ({ L, a, b }));
+    const lab16 = labTo16bit(L, a, b);
+    return createLabImage(width, height, () => lab16);
 }
 
 /**
@@ -51,12 +68,12 @@ function createSolidColor(width, height, L, a, b) {
  */
 function createSaturatedGradient(width, height) {
     return createLabImage(width, height, (x, y, w, h) => {
-        // Red to Blue gradient in Lab space
+        // Red to Blue gradient in Lab space (perceptual values)
         const t = x / (w - 1);
-        const L = 128;  // Mid lightness
-        const a = Math.floor(128 + (127 * (1 - t * 2)));  // Red to neutral
-        const b = Math.floor(128 + (127 * (t * 2 - 1)));  // Neutral to blue
-        return { L, a, b };
+        const L = 50;  // Mid lightness
+        const a = 127 * (1 - t * 2);  // Red (+127) to neutral to green (-127)
+        const b = 127 * (t * 2 - 1);  // Blue (-127) to neutral to yellow (+127)
+        return labTo16bit(L, a, b);
     });
 }
 
@@ -75,6 +92,7 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
                 format: 'lab'
             };
 
+            options.bitDepth = 16;
             const result = PosterizationEngine.posterize(labPixels, width, height, targetColors, options);
 
             // Verify basic structure
@@ -111,6 +129,7 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
 
             // Test with different target color counts
             for (const targetColors of [4, 8, 12]) {
+                options.bitDepth = 16;
                 const result = PosterizationEngine.posterize(
                     labPixels, width, height,
                     targetColors,
@@ -134,6 +153,7 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
                 format: 'lab'
             };
 
+            options.bitDepth = 16;
             const result = PosterizationEngine.posterize(labPixels, width, height, targetColors, options);
 
             // Verify all palette colors have valid Lab values
@@ -158,7 +178,8 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
             const result = PosterizationEngine.posterize(labPixels, width, height, 6, {
                 engineType: 'reveal',
                 centroidStrategy: 'SALIENCY',
-                format: 'lab'
+                format: 'lab',
+                bitDepth: 16
             });
 
             expect(result.palette.length).toBeGreaterThan(0);
@@ -171,7 +192,8 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
             const result = PosterizationEngine.posterize(labPixels, width, height, 6, {
                 engineType: 'balanced',
                 centroidStrategy: 'VOLUMETRIC',
-                format: 'lab'
+                format: 'lab',
+                bitDepth: 16
             });
 
             expect(result.palette.length).toBeGreaterThan(0);
@@ -290,12 +312,13 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
         test('should handle single-color image', () => {
             const width = 50;
             const height = 50;
-            const labPixels = createSolidColor(width, height, 128, 128, 128);  // Mid-gray
+            const labPixels = createSolidColor(width, height, 50, 0, 0);  // Mid-gray (L=50, a=0, b=0 perceptual)
 
             const result = PosterizationEngine.posterize(labPixels, width, height, 6, {
                 engineType: 'reveal',
                 centroidStrategy: 'SALIENCY',
-                format: 'lab'
+                format: 'lab',
+                bitDepth: 16
             });
 
             // Single color image should produce 1 color palette
@@ -311,12 +334,13 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
         test('should handle pure black image', () => {
             const width = 30;
             const height = 30;
-            const labPixels = createSolidColor(width, height, 0, 128, 128);  // Pure black
+            const labPixels = createSolidColor(width, height, 0, 0, 0);  // Pure black (L=0 perceptual)
 
             const result = PosterizationEngine.posterize(labPixels, width, height, 4, {
                 engineType: 'reveal',
                 centroidStrategy: 'SALIENCY',
                 format: 'lab',
+                bitDepth: 16,
                 substrateMode: 'off'  // Disable substrate for this test
             });
 
@@ -330,12 +354,13 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
         test('should handle pure white image', () => {
             const width = 30;
             const height = 30;
-            const labPixels = createSolidColor(width, height, 255, 128, 128);  // Pure white
+            const labPixels = createSolidColor(width, height, 100, 0, 0);  // Pure white (L=100 perceptual)
 
             const result = PosterizationEngine.posterize(labPixels, width, height, 4, {
                 engineType: 'reveal',
                 centroidStrategy: 'SALIENCY',
                 format: 'lab',
+                bitDepth: 16,
                 substrateMode: 'off'  // Disable substrate for this test
             });
 
@@ -354,7 +379,8 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
             const result = PosterizationEngine.posterize(labPixels, width, height, 6, {
                 engineType: 'reveal',
                 centroidStrategy: 'SALIENCY',
-                format: 'lab'
+                format: 'lab',
+                bitDepth: 16
             });
 
             expect(result.palette.length).toBeGreaterThan(0);
@@ -375,7 +401,8 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
             const result = PosterizationEngine.posterize(labPixels, width, height, 6, {
                 engineType: 'reveal',
                 centroidStrategy: 'SALIENCY',
-                format: 'lab'
+                format: 'lab',
+                bitDepth: 16
             });
 
             expect(result.palette.length).toBeGreaterThan(0);
@@ -413,22 +440,25 @@ describe('PosterizationEngine - posterize() Entry Point', () => {
             // Create image with distinct black and white halves
             const width = 20;
             const height = 20;
-            const labPixels = new Uint8ClampedArray(width * height * 3);
+            const labPixels = new Uint16Array(width * height * 3);
 
             for (let y = 0; y < height; y++) {
                 for (let x = 0; x < width; x++) {
                     const idx = (y * width + x) * 3;
-                    // Left half: black (L=0), right half: white (L=255)
-                    labPixels[idx] = x < width / 2 ? 0 : 255;
-                    labPixels[idx + 1] = 128;
-                    labPixels[idx + 2] = 128;
+                    // Left half: black (L=0), right half: white (L=100)
+                    const L = x < width / 2 ? 0 : 100;
+                    const lab16 = labTo16bit(L, 0, 0);
+                    labPixels[idx] = lab16.L;
+                    labPixels[idx + 1] = lab16.a;
+                    labPixels[idx + 2] = lab16.b;
                 }
             }
 
             const result = PosterizationEngine.posterize(labPixels, width, height, 4, {
                 engineType: 'reveal',
                 centroidStrategy: 'SALIENCY',
-                format: 'lab'
+                format: 'lab',
+                bitDepth: 16
             });
 
             // Should have at least 2 colors (black-ish and white-ish)
