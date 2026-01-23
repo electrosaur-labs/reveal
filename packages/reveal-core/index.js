@@ -288,5 +288,6 @@ module.exports.engines = {
     // Modular components (v2.0)
     ColorSpace: require('./lib/engines/ColorSpace'),
     HueAnalysis: require('./lib/engines/HueAnalysis'),
-    CentroidStrategies: require('./lib/engines/CentroidStrategies').CentroidStrategies
+    CentroidStrategies: require('./lib/engines/CentroidStrategies').CentroidStrategies,
+    DitheringStrategies: require('./lib/engines/DitheringStrategies').DitheringStrategies
 };
