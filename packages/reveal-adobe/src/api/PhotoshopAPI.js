@@ -264,32 +264,93 @@ class PhotoshopAPI {
             localStorage.setItem('reveal_checkpoint', 'getDocumentPixels_success');
         }
 
-        // Normalize 16-bit Lab to standard 8-bit ranges for posterization engine
-        if (componentSize === 16) {
-            logger.log('Normalizing 16-bit Lab to 8-bit ranges...');
-            const normalized = new Uint8ClampedArray(rgbaData.length);
-            for (let i = 0; i < rgbaData.length; i += 3) {
-                // L: 0-32768 → 0-255 (linear scale)
-                normalized[i] = Math.round((rgbaData[i] / 32768) * 255);
-                // a: 0-32768 (neutral=16384) → 0-255 (neutral=128)
-                normalized[i + 1] = Math.round((rgbaData[i + 1] / 32768) * 255);
-                // b: 0-32768 (neutral=16384) → 0-255 (neutral=128)
-                normalized[i + 2] = Math.round((rgbaData[i + 2] / 32768) * 255);
-            }
-            logger.log(`Normalized ${normalized.length / 3} pixels from 16-bit to 8-bit ranges`);
-            rgbaData = normalized;
+        // ALWAYS return 16-bit Lab data for engine processing
+        // Engines only accept 16-bit internally; callers handle conversions
+        // Track original bit depth for output decisions (downgrade 8-bit source → 8-bit output)
+        let pixels16;
+        if (componentSize === 8) {
+            logger.log(`Converting 8-bit Lab → 16-bit Lab for engine processing...`);
+            pixels16 = this.lab8to16(rgbaData);
+            logger.log(`✓ Converted ${rgbaData.length} bytes → ${pixels16.length} 16-bit values`);
+        } else {
+            pixels16 = rgbaData;  // Already 16-bit
+            logger.log(`Using native 16-bit Lab data (${pixels16.length} elements)`);
         }
 
+        logger.log(`Returning 16-bit Lab data (original source: ${componentSize}-bit)`);
+
         return {
-            pixels: rgbaData,  // Lab values (Uint8ClampedArray, normalized to 8-bit ranges)
+            pixels: pixels16,           // Lab values - ALWAYS 16-bit encoding (0-32768)
             width: actualWidth,
             height: actualHeight,
             format: 'lab',
-            bitDepth: componentSize,  // 8 or 16 (original bit depth)
+            bitDepth: componentSize,    // ORIGINAL bit depth (8 or 16) - for output decisions
             originalWidth: doc.width,
             originalHeight: doc.height,
             scale: Math.min(actualWidth / doc.width, actualHeight / doc.height)
         };
+    }
+
+    /**
+     * Convert 8-bit Lab pixel data to 16-bit Lab encoding
+     *
+     * Photoshop Lab encoding:
+     * - 8-bit:  L=0-255, a/b=0-255 (neutral=128)
+     * - 16-bit: L=0-32768, a/b=0-32768 (neutral=16384)
+     *
+     * The conversion ensures consistent perceptual values:
+     * - L: scale by 32768/255 (linear scale)
+     * - a/b: convert to signed, scale, convert back to unsigned
+     *
+     * @param {Uint8Array|Uint8ClampedArray} lab8 - 8-bit Lab pixel data (L,a,b,L,a,b,...)
+     * @returns {Uint16Array} - 16-bit Lab pixel data
+     */
+    static lab8to16(lab8) {
+        const lab16 = new Uint16Array(lab8.length);
+        const lScale = 32768 / 255;
+        const abScale = 16384 / 128;  // Scale factor for a/b channels
+
+        for (let i = 0; i < lab8.length; i += 3) {
+            // L channel: direct scale (0-255 → 0-32768)
+            lab16[i] = Math.round(lab8[i] * lScale);
+
+            // a channel: convert to signed (-128 to +127), scale, convert to unsigned (0-32768)
+            // 8-bit: 0=−128, 128=0, 255=+127
+            // 16-bit: 0=−128, 16384=0, 32768=+128
+            lab16[i + 1] = Math.round((lab8[i + 1] - 128) * abScale + 16384);
+
+            // b channel: same as a channel
+            lab16[i + 2] = Math.round((lab8[i + 2] - 128) * abScale + 16384);
+        }
+
+        return lab16;
+    }
+
+    /**
+     * Convert 16-bit Lab pixel data to 8-bit Lab encoding
+     *
+     * Inverse of lab8to16(). Used when outputting to 8-bit documents.
+     *
+     * @param {Uint16Array} lab16 - 16-bit Lab pixel data
+     * @returns {Uint8Array} - 8-bit Lab pixel data
+     */
+    static lab16to8(lab16) {
+        const lab8 = new Uint8Array(lab16.length);
+        const lScale = 255 / 32768;
+        const abScale = 128 / 16384;  // Scale factor for a/b channels
+
+        for (let i = 0; i < lab16.length; i += 3) {
+            // L channel: direct scale (0-32768 → 0-255)
+            lab8[i] = Math.round(Math.min(255, lab16[i] * lScale));
+
+            // a channel: convert to signed, scale, convert to unsigned (0-255)
+            lab8[i + 1] = Math.round(Math.max(0, Math.min(255, (lab16[i + 1] - 16384) * abScale + 128)));
+
+            // b channel: same as a channel
+            lab8[i + 2] = Math.round(Math.max(0, Math.min(255, (lab16[i + 2] - 16384) * abScale + 128)));
+        }
+
+        return lab8;
     }
 
     /**

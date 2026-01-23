@@ -1364,7 +1364,10 @@ function showPaletteEditor(selectedPalette) {
                     paletteLab,         // Lab palette (NO RGB→Lab conversion, filtered)
                     {
                         onProgress: (percent) => {
-                            logger.log(`Preview separation progress: ${percent}%`);
+                            // Throttle logging to 25% intervals
+                            if (percent % 25 === 0) {
+                                logger.log(`Preview separation progress: ${percent}%`);
+                            }
                         },
                         ditherType: ditherType,
                         mesh: meshValue,
@@ -1394,7 +1397,10 @@ function showPaletteEditor(selectedPalette) {
                     paletteLab,         // Lab palette (NO RGB→Lab conversion, filtered)
                     {
                         onProgress: (percent) => {
-                            logger.log(`Full-res separation progress: ${percent}%`);
+                            // Throttle logging to 25% intervals
+                            if (percent % 25 === 0) {
+                                logger.log(`Full-res separation progress: ${percent}%`);
+                            }
                         },
                         ditherType: ditherType,
                         mesh: meshValue,
@@ -2765,9 +2771,10 @@ async function showDialog() {
 
                     posterizationData = {
                         params,
-                        originalPixels: pixelData.pixels,  // Lab format (3 bytes/pixel)
+                        originalPixels: pixelData.pixels,  // Lab format (3 bytes/pixel for 8-bit, 3 words/pixel for 16-bit)
                         originalWidth: pixelData.width,
                         originalHeight: pixelData.height,
+                        bitDepth: pixelData.bitDepth,  // Source bit depth (8 or 16)
                         docInfo,
                         selectedPreview
                     };
@@ -3012,13 +3019,14 @@ async function showDialog() {
                     setTimeout(() => {
                         try {
                             // Delegate to PosterizationEngine
+                            const bitDepth = posterizationData.bitDepth || 8;
                             const assignments = PosterizationEngine.reassignWithStride(
-                                pixels, paletteLab, width, height, stride
+                                pixels, paletteLab, width, height, stride, bitDepth
                             );
 
                             window.previewState.assignments = assignments;
                             renderPreview();
-                            logger.log(`✓ Preview updated: stride=${stride}`);
+                            logger.log(`✓ Preview updated: stride=${stride}, bitDepth=${bitDepth}`);
                         } catch (err) {
                             logger.error('Stride change error:', err);
                         }

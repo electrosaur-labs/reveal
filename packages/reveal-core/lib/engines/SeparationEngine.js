@@ -30,7 +30,7 @@ class SeparationEngine {
      * - Prevents "Sieve Effect" where dots fall through mesh openings
      * - Formula: maxLPI = meshCount / 7, scale = Math.round(dpi / maxLPI)
      *
-     * @param {Uint8ClampedArray} rawBytes - Raw Lab bytes (0-255 encoding: L, a+128, b+128)
+     * @param {Uint16Array} rawBytes - Raw Lab bytes (16-bit encoding: L 0-32768, a/b 0-32768 neutral=16384)
      * @param {Array} labPalette - Array of {L, a, b} objects (perceptual ranges)
      * @param {Function} onProgress - Progress callback (0-100)
      * @param {number} width - Image width (required for dithering)
@@ -82,7 +82,7 @@ class SeparationEngine {
      * Nearest-neighbor mapping (no dithering)
      * Fast hard-snap to closest palette color in Lab space
      *
-     * @param {Uint8ClampedArray} rawBytes - Raw Lab bytes (0-255 encoding)
+     * @param {Uint16Array} rawBytes - 16-bit Lab data (L: 0-32768, a/b: 0-32768 neutral=16384)
      * @param {Array} labPalette - Array of {L, a, b} objects (perceptual ranges)
      * @param {Function} onProgress - Progress callback (0-100)
      * @returns {Promise<Uint8Array>} - Array of palette indices per pixel
@@ -117,10 +117,10 @@ class SeparationEngine {
             for (let p = i; p < chunkEnd; p++) {
                 const pIdx = p * 3;
 
-                // Map 0-255 bytes to perceptual Lab
-                const L = (rawBytes[pIdx] / 255) * 100;        // L: 0-255 → 0-100
-                const a = rawBytes[pIdx + 1] - 128;             // a: 0-255 → -128 to +127
-                const b = rawBytes[pIdx + 2] - 128;             // b: 0-255 → -128 to +127
+                // Map 16-bit Lab to perceptual Lab
+                const L = (rawBytes[pIdx] / 32768) * 100;        // L: 0-32768 → 0-100
+                const a = (rawBytes[pIdx + 1] - 16384) * (128 / 16384);  // a: 0-32768 → -128 to +127
+                const b = (rawBytes[pIdx + 2] - 16384) * (128 / 16384);  // b: 0-32768 → -128 to +127
 
                 // Spatial Locality: Check last winner first
                 // PERCEPTUAL L-SCALING: Weight L more heavily for dark colors (shadow preservation)
@@ -172,7 +172,7 @@ class SeparationEngine {
      * Floyd-Steinberg Error Diffusion in CIELAB space
      * Propagates quantization error to neighboring pixels for smooth gradients
      *
-     * @param {Uint8ClampedArray} rawBytes - Lab bytes (0-255 encoding)
+     * @param {Uint16Array} rawBytes - 16-bit Lab data (L: 0-32768, a/b: 0-32768 neutral=16384)
      * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab ranges
      * @param {number} width - Image width (required for error diffusion)
      * @param {number} height - Image height (required for error diffusion)
@@ -203,10 +203,10 @@ class SeparationEngine {
             const y = Math.floor(i / width);
             const x = i % width;
 
-            // 1. Get original Lab + accumulated error from neighbors
-            let L = (rawBytes[pxIdx] / 255) * 100 + errorBuf[pxIdx];
-            let a = (rawBytes[pxIdx + 1] - 128) + errorBuf[pxIdx + 1];
-            let b = (rawBytes[pxIdx + 2] - 128) + errorBuf[pxIdx + 2];
+            // 1. Get original 16-bit Lab + accumulated error from neighbors
+            let L = (rawBytes[pxIdx] / 32768) * 100 + errorBuf[pxIdx];
+            let a = (rawBytes[pxIdx + 1] - 16384) * (128 / 16384) + errorBuf[pxIdx + 1];
+            let b = (rawBytes[pxIdx + 2] - 16384) * (128 / 16384) + errorBuf[pxIdx + 2];
 
             // Clamp to valid Lab ranges
             L = Math.max(0, Math.min(100, L));
@@ -400,7 +400,7 @@ class SeparationEngine {
      * - Creates stochastic, dispersed dot patterns
      * - With scale > 1: Clusters dots into Macro-Cells
      *
-     * @param {Uint8ClampedArray} rawBytes - Lab bytes (0-255 encoding)
+     * @param {Uint16Array} rawBytes - 16-bit Lab data (L: 0-32768, a/b: 0-32768 neutral=16384)
      * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab ranges
      * @param {number} width - Image width
      * @param {number} height - Image height
@@ -436,10 +436,10 @@ class SeparationEngine {
             const x = i % width;
             const y = Math.floor(i / width);
 
-            // Unpack Lab from 0-255 encoding
-            const L = (rawBytes[pxIdx] / 255) * 100;
-            const a = rawBytes[pxIdx + 1] - 128;
-            const b = rawBytes[pxIdx + 2] - 128;
+            // Unpack 16-bit Lab to perceptual ranges
+            const L = (rawBytes[pxIdx] / 32768) * 100;
+            const a = (rawBytes[pxIdx + 1] - 16384) * (128 / 16384);
+            const b = (rawBytes[pxIdx + 2] - 16384) * (128 / 16384);
 
             // Find the TWO closest palette colors using SQUARED distances (faster)
             const { i1, i2, d1, d2 } = this._getTwoNearest(L, a, b, labPalette);
@@ -491,7 +491,7 @@ class SeparationEngine {
      * - Creates regular, predictable crosshatch pattern
      * - With scale > 1: Creates Macro-Cells of uniform threshold
      *
-     * @param {Uint8ClampedArray} rawBytes - Lab bytes (0-255 encoding)
+     * @param {Uint16Array} rawBytes - 16-bit Lab data (L: 0-32768, a/b: 0-32768 neutral=16384)
      * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab ranges
      * @param {number} width - Image width
      * @param {number} height - Image height
@@ -536,10 +536,10 @@ class SeparationEngine {
             const x = i % width;
             const y = Math.floor(i / width);
 
-            // Unpack Lab from 0-255 encoding
-            const L = (rawBytes[pxIdx] / 255) * 100;
-            const a = rawBytes[pxIdx + 1] - 128;
-            const b = rawBytes[pxIdx + 2] - 128;
+            // Unpack 16-bit Lab to perceptual ranges
+            const L = (rawBytes[pxIdx] / 32768) * 100;
+            const a = (rawBytes[pxIdx + 1] - 16384) * (128 / 16384);
+            const b = (rawBytes[pxIdx + 2] - 16384) * (128 / 16384);
 
             // Find the TWO closest palette colors using SQUARED distances (faster)
             const { i1, i2, d1, d2 } = this._getTwoNearest(L, a, b, labPalette);
@@ -585,7 +585,7 @@ class SeparationEngine {
      *          1/8
      * Total: 6/8 = 75% (25% discarded intentionally for high contrast)
      *
-     * @param {Uint8ClampedArray} rawBytes - Lab bytes (0-255 encoding)
+     * @param {Uint16Array} rawBytes - 16-bit Lab data (L: 0-32768, a/b: 0-32768 neutral=16384)
      * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab ranges
      * @param {number} width - Image width
      * @param {number} height - Image height
@@ -615,10 +615,10 @@ class SeparationEngine {
             const y = Math.floor(i / width);
             const x = i % width;
 
-            // 1. Get original Lab + accumulated error from neighbors
-            let L = (rawBytes[pxIdx] / 255) * 100 + errorBuf[pxIdx];
-            let a = (rawBytes[pxIdx + 1] - 128) + errorBuf[pxIdx + 1];
-            let b = (rawBytes[pxIdx + 2] - 128) + errorBuf[pxIdx + 2];
+            // 1. Get original 16-bit Lab + accumulated error from neighbors
+            let L = (rawBytes[pxIdx] / 32768) * 100 + errorBuf[pxIdx];
+            let a = (rawBytes[pxIdx + 1] - 16384) * (128 / 16384) + errorBuf[pxIdx + 1];
+            let b = (rawBytes[pxIdx + 2] - 16384) * (128 / 16384) + errorBuf[pxIdx + 2];
 
             // Clamp to valid Lab ranges
             L = Math.max(0, Math.min(100, L));
@@ -703,7 +703,7 @@ class SeparationEngine {
      *        1  2  4  2  1
      * Total: 42 (all error distributed, no discarding)
      *
-     * @param {Uint8ClampedArray} rawBytes - Lab bytes (0-255 encoding)
+     * @param {Uint16Array} rawBytes - 16-bit Lab data (L: 0-32768, a/b: 0-32768 neutral=16384)
      * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab ranges
      * @param {number} width - Image width
      * @param {number} height - Image height
@@ -733,10 +733,10 @@ class SeparationEngine {
             const y = Math.floor(i / width);
             const x = i % width;
 
-            // 1. Get original Lab + accumulated error from neighbors
-            let L = (rawBytes[pxIdx] / 255) * 100 + errorBuf[pxIdx];
-            let a = (rawBytes[pxIdx + 1] - 128) + errorBuf[pxIdx + 1];
-            let b = (rawBytes[pxIdx + 2] - 128) + errorBuf[pxIdx + 2];
+            // 1. Get original 16-bit Lab + accumulated error from neighbors
+            let L = (rawBytes[pxIdx] / 32768) * 100 + errorBuf[pxIdx];
+            let a = (rawBytes[pxIdx + 1] - 16384) * (128 / 16384) + errorBuf[pxIdx + 1];
+            let b = (rawBytes[pxIdx + 2] - 16384) * (128 / 16384) + errorBuf[pxIdx + 2];
 
             // Clamp to valid Lab ranges
             L = Math.max(0, Math.min(100, L));
@@ -822,7 +822,7 @@ class SeparationEngine {
      * CRITICAL FIX: This uses normalized perceptual ranges (L:0-100, a/b:-128 to 127)
      * and performs distance checks without converting to RGB.
      *
-     * @param {Uint8ClampedArray} rawBytes - Raw 3-channel Lab bytes from imaging.getPixels()
+     * @param {Uint16Array} rawBytes - 16-bit Lab data from imaging.getPixels() (3 channels)
      * @param {Array} labPalette - Array of {L, a, b} objects from PosterizationEngine
      * @param {number} width - Image width (optional, for future dithering support)
      * @param {number} height - Image height (optional, for future dithering support)
@@ -862,12 +862,12 @@ class SeparationEngine {
         for (let i = 0; i < pixelCount; i++) {
             const pIdx = i * 3;
 
-            // 1. MAP BYTES TO PERCEPTUAL LAB (The "Center" Fix)
-            // L: 0-255 -> 0-100
-            // a/b: 0-255 -> -128 to +127
-            const L = (rawBytes[pIdx] / 255) * 100;
-            const a = rawBytes[pIdx + 1] - 128;
-            const b = rawBytes[pIdx + 2] - 128;
+            // 1. MAP 16-BIT LAB TO PERCEPTUAL LAB
+            // L: 0-32768 -> 0-100
+            // a/b: 0-32768 (neutral=16384) -> -128 to +127
+            const L = (rawBytes[pIdx] / 32768) * 100;
+            const a = (rawBytes[pIdx + 1] - 16384) * (128 / 16384);
+            const b = (rawBytes[pIdx + 2] - 16384) * (128 / 16384);
 
             // OPTIMIZATION 3a: Check exact match cache first
             const key = `${L.toFixed(1)},${a.toFixed(1)},${b.toFixed(1)}`;
@@ -986,7 +986,7 @@ class SeparationEngine {
      *
      * ASYNC OPTIMIZATION: Uses batched processing to keep UI responsive.
      *
-     * @param {Uint8ClampedArray} rawBytes - Raw Lab pixel data (3 bytes/pixel: L, a, b)
+     * @param {Uint16Array} rawBytes - 16-bit Lab pixel data (3 values/pixel: L, a, b)
      * @param {number} width - Image width
      * @param {number} height - Image height
      * @param {Array<string>} hexColors - Custom palette as hex strings (for UI display)
