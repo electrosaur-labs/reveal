@@ -1182,17 +1182,23 @@ class PosterizationEngine {
      * @returns {{L: number, a: number, b: number}} Lab color in perceptual ranges
      *          (L: 0-100, a: -128 to +127, b: -128 to +127)
      */
-    static autoDetectSubstrate(labBytes, width, height) {
+    static autoDetectSubstrate(labBytes, width, height, bitDepth = 16) {
         const SAMPLE_SIZE = 10; // 10×10 blocks per corner
         let sumL = 0, sumA = 0, sumB = 0, count = 0;
+
+        // Engine ONLY accepts 16-bit Lab input (callers convert 8-bit → 16-bit before calling)
+        // bitDepth parameter is kept for logging but data is always 16-bit
+        const maxValue = 32768;
+        const neutralAB = 16384;
+        const abScale = 128 / 16384;
 
         // Helper: Sample single pixel and accumulate
         const sample = (x, y) => {
             const i = (y * width + x) * 3;
-            // Convert byte encoding (0-255) to perceptual ranges
-            sumL += (labBytes[i] / 255) * 100;        // L: 0-255 → 0-100
-            sumA += labBytes[i + 1] - 128;             // a: 0-255 → -128 to +127
-            sumB += labBytes[i + 2] - 128;             // b: 0-255 → -128 to +127
+            // Convert 16-bit Lab to perceptual ranges
+            sumL += (labBytes[i] / maxValue) * 100;
+            sumA += (labBytes[i + 1] - neutralAB) * abScale;
+            sumB += (labBytes[i + 2] - neutralAB) * abScale;
             count++;
         };
 
@@ -2649,45 +2655,60 @@ class PosterizationEngine {
         let transparentPixels = new Set(); // Pixel indices that are transparent
 
         if (isLabInput) {
-            // Pixels are ALREADY in Lab format - but byte-encoded (0-255)
+            // Pixels MUST be in 16-bit Lab format (callers convert 8-bit → 16-bit before calling)
+            // 16-bit: L, a, b encoded as 0-32768 (neutral a/b = 16384)
             // Lab format has NO alpha channel - all pixels are opaque (3 channels: L, a, b)
-            logger.log(`✓ Using native Lab pixels (converting byte encoding to perceptual ranges)`);
+            //
+            // IMPORTANT: bitDepth tracks the ORIGINAL source bit depth (for decisions like
+            // shadow/highlight gates), but the actual pixel data is ALWAYS 16-bit encoding.
+            const sourceBitDepth = options.bitDepth || 16;  // Default to 16 (engine expects 16-bit)
+            const isEightBitSource = sourceBitDepth <= 8;
+
+            logger.log(`✓ Using 16-bit Lab pixels (original source: ${sourceBitDepth}-bit → Float32 perceptual ranges)`);
             labPixels = new Float32Array(pixels.length);
 
             // 8-BIT PARITY FIX: Compensate for quantization error in 8-bit sources
-            // 8-bit Lab has coarser steps (256 vs 65536), causing shadow pixels that should
-            // be L=5.8 to round up to L=6.3 during ingestion. This evades the Shadow Gate
-            // and creates "Muddy Brown" artifacts. Use a higher threshold for 8-bit sources.
-            const sourceBitDepth = options.bitDepth || 8;
-            const isEightBitSource = sourceBitDepth <= 8;
+            // Even though data is now 16-bit, if the SOURCE was 8-bit it has coarser steps,
+            // causing shadow pixels that should be L=5.8 to round up to L=6.3.
+            // Use wider thresholds for 8-bit sources to catch this quantization noise.
             const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
             const highlightThreshold = isEightBitSource ? 97.5 : 98.0;
 
             if (isEightBitSource) {
-                logger.log(`  8-bit source detected: Using expanded gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThreshold})`);
+                logger.log(`  8-bit source: Using expanded gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThreshold})`);
+            } else {
+                logger.log(`  16-bit source: Using standard gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThreshold})`);
             }
 
+            // 16-bit Lab constants (engine ONLY accepts 16-bit)
+            // L: 0-32768 → 0-100
+            // a/b: 0-32768 (neutral=16384) → -128 to +127
+            const maxValue = 32768;
+            const neutralAB = 16384;
+            const abScale = 128 / 16384;  // Scale 16-bit a/b to -128..+127
+
             // Track min/max for diagnostics (BEFORE and AFTER conversion)
-            let minLByte = 255, maxLByte = 0;
-            let minAByte = 255, maxAByte = 0;
-            let minBByte = 255, maxBByte = 0;
+            let minLRaw = Infinity, maxLRaw = -Infinity;
+            let minARaw = Infinity, maxARaw = -Infinity;
+            let minBRaw = Infinity, maxBRaw = -Infinity;
             let minL = Infinity, maxL = -Infinity;
             let minA = Infinity, maxA = -Infinity;
             let minB = Infinity, maxB = -Infinity;
 
             for (let i = 0; i < pixels.length; i += 3) {
-                // Track ORIGINAL byte values from Photoshop
-                minLByte = Math.min(minLByte, pixels[i]);
-                maxLByte = Math.max(maxLByte, pixels[i]);
-                minAByte = Math.min(minAByte, pixels[i + 1]);
-                maxAByte = Math.max(maxAByte, pixels[i + 1]);
-                minBByte = Math.min(minBByte, pixels[i + 2]);
-                maxBByte = Math.max(maxBByte, pixels[i + 2]);
+                // Track ORIGINAL raw values (16-bit encoding)
+                minLRaw = Math.min(minLRaw, pixels[i]);
+                maxLRaw = Math.max(maxLRaw, pixels[i]);
+                minARaw = Math.min(minARaw, pixels[i + 1]);
+                maxARaw = Math.max(maxARaw, pixels[i + 1]);
+                minBRaw = Math.min(minBRaw, pixels[i + 2]);
+                maxBRaw = Math.max(maxBRaw, pixels[i + 2]);
 
-                // Convert byte encoding to perceptual ranges
-                labPixels[i] = (pixels[i] / 255) * 100;        // L: 0-255 → 0-100
-                labPixels[i + 1] = pixels[i + 1] - 128;        // a: 0-255 → -128 to +127
-                labPixels[i + 2] = pixels[i + 2] - 128;        // b: 0-255 → -128 to +127
+                // Convert 16-bit Lab to perceptual Lab ranges
+                // L: 0-100, a: -128 to +127, b: -128 to +127
+                labPixels[i] = (pixels[i] / maxValue) * 100;
+                labPixels[i + 1] = (pixels[i + 1] - neutralAB) * abScale;
+                labPixels[i + 2] = (pixels[i + 2] - neutralAB) * abScale;
 
                 // THE SHADOW GATE (Final Calibration)
                 // L < threshold is effectively black on a t-shirt.
@@ -2718,8 +2739,8 @@ class PosterizationEngine {
                 maxB = Math.max(maxB, labPixels[i + 2]);
             }
 
-            logger.log(`✓ Converted ${pixels.length / 3} Lab pixels from byte encoding to perceptual ranges`);
-            logger.log(`  BYTE values from Photoshop: L[${minLByte}, ${maxLByte}], a[${minAByte}, ${maxAByte}], b[${minBByte}, ${maxBByte}]`);
+            logger.log(`✓ Converted ${pixels.length / 3} Lab pixels from 16-bit encoding to perceptual ranges (source was ${sourceBitDepth}-bit)`);
+            logger.log(`  RAW 16-bit values: L[${minLRaw}, ${maxLRaw}], a[${minARaw}, ${maxARaw}], b[${minBRaw}, ${maxBRaw}]`);
             logger.log(`  PERCEPTUAL ranges after conversion: L[${minL.toFixed(2)}, ${maxL.toFixed(2)}], a[${minA.toFixed(2)}, ${maxA.toFixed(2)}], b[${minB.toFixed(2)}, ${maxB.toFixed(2)}]`);
         } else {
             // Legacy path: Convert RGB to Lab, checking alpha channel
@@ -2897,7 +2918,7 @@ class PosterizationEngine {
         if (isLabInput && !substrateDisabled) {
             // Auto-detect by default, or when explicitly set to 'auto'
             if (!options.substrateMode || options.substrateMode === 'auto') {
-                substrateLab = this.autoDetectSubstrate(pixels, width, height);
+                substrateLab = this.autoDetectSubstrate(pixels, width, height, options.bitDepth || 8);
             } else if (options.substrateMode === 'white') {
                 // Force white paper substrate
                 substrateLab = { L: 100, a: 0, b: 0 };
@@ -3432,15 +3453,22 @@ class PosterizationEngine {
         const preserveBlack = options.preserveBlack !== undefined ? options.preserveBlack : true;
 
         // Convert Lab to RGB if needed
+        // NOTE: Classic engine uses RGB median cut internally, but Lab→RGB conversion
+        // is done here for legacy compatibility. Engine still expects 16-bit Lab input.
         let rgbPixels;
         if (isLabInput) {
-            logger.log('Converting Lab pixels to RGB for Classic engine...');
+            logger.log('Converting 16-bit Lab pixels to RGB for Classic engine...');
             rgbPixels = new Uint8ClampedArray((pixels.length / 3) * 4);
 
+            // Engine ONLY accepts 16-bit Lab input
+            const maxValue = 32768;
+            const neutralAB = 16384;
+            const abScale = 128 / 16384;
+
             for (let i = 0, j = 0; i < pixels.length; i += 3, j += 4) {
-                const L = (pixels[i] / 255) * 100;
-                const a = (pixels[i + 1] / 255) * 255 - 128;
-                const b = (pixels[i + 2] / 255) * 255 - 128;
+                const L = (pixels[i] / maxValue) * 100;
+                const a = (pixels[i + 1] - neutralAB) * abScale;
+                const b = (pixels[i + 2] - neutralAB) * abScale;
                 const rgb = this.labToRgb({ L, a, b });
                 rgbPixels[j] = rgb.r;
                 rgbPixels[j + 1] = rgb.g;
@@ -3588,16 +3616,22 @@ class PosterizationEngine {
      * without regenerating the palette. Use this when changing preview quality
      * (Standard/Fine/Finest) after initial posterization.
      *
-     * @param {Uint8ClampedArray} labPixels - Lab pixel data (3 bytes per pixel: L, a, b)
-     * @param {Array<{L: number, a: number, b: number}>} paletteLab - Palette colors in Lab
+     * @param {Uint8ClampedArray|Uint16Array} labPixels - Lab pixel data (3 values per pixel: L, a, b)
+     * @param {Array<{L: number, a: number, b: number}>} paletteLab - Palette colors in Lab (perceptual ranges)
      * @param {number} width - Image width
      * @param {number} height - Image height
      * @param {number} stride - Assignment stride (4=Standard, 2=Fine, 1=Finest)
+     * @param {number} bitDepth - Original source bit depth (for logging only; data is always 16-bit)
      * @returns {Uint16Array} - Pixel-to-palette assignments
      */
-    static reassignWithStride(labPixels, paletteLab, width, height, stride = 1) {
+    static reassignWithStride(labPixels, paletteLab, width, height, stride = 1, bitDepth = 16) {
         const assignments = new Uint16Array(width * height);
         const paletteLen = paletteLab.length;
+
+        // Engine ONLY accepts 16-bit Lab input (callers convert 8-bit → 16-bit before calling)
+        const maxValue = 32768;
+        const neutralAB = 16384;
+        const abScale = 128 / 16384;
 
         for (let y = 0; y < height; y += stride) {
             const rowOffset = y * width;
@@ -3606,10 +3640,10 @@ class PosterizationEngine {
                 const anchorI = rowOffset + x;
                 const idx = anchorI * 3;
 
-                // Convert byte encoding to perceptual Lab ranges
-                const pL = (labPixels[idx] / 255) * 100;
-                const pA = labPixels[idx + 1] - 128;
-                const pB = labPixels[idx + 2] - 128;
+                // Convert 16-bit Lab to perceptual Lab ranges
+                const pL = (labPixels[idx] / maxValue) * 100;
+                const pA = (labPixels[idx + 1] - neutralAB) * abScale;
+                const pB = (labPixels[idx + 2] - neutralAB) * abScale;
 
                 // Find nearest palette color (squared Euclidean, L weighted 1.5×)
                 let minDist = Infinity, anchorAssignment = 0;
