@@ -19,7 +19,7 @@ const path = require('path');
 
 // --- CALIBRATED THRESHOLDS ---
 const THRESHOLD_INTEGRITY = 60;   // Must be physically printable
-const THRESHOLD_REVELATION = 20;  // Captures only true failures
+const THRESHOLD_REVELATION = 18;  // Captures only true failures
 const THRESHOLD_STACK = 5;        // Max ink overlap
 
 class BatchAnalyzer {
