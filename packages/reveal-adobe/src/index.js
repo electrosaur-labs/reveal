@@ -49,6 +49,42 @@ function initPlugin() {
 let posterizationData = null;
 
 /**
+ * Last image DNA analysis result (used for "Smart Reveal" auto mode)
+ * Stores { maxC, l_std_dev, c, k, minL, maxL, archetype } from analysis
+ */
+let lastImageDNA = null;
+
+/**
+ * Resolve "auto" distance metric to actual metric using DNA-based rule
+ * Rule: (peakChroma > 80 OR isPhotographic) → 'cie94', else 'cie76'
+ *
+ * @param {string} metricSetting - 'auto', 'cie76', or 'cie94'
+ * @param {Object} dna - Image DNA with maxC and archetype (optional)
+ * @returns {string} - Resolved metric: 'cie76' or 'cie94'
+ */
+function resolveDistanceMetric(metricSetting, dna = null) {
+    // If not auto, return as-is
+    if (metricSetting !== 'auto') {
+        return metricSetting;
+    }
+
+    // Use provided DNA or fall back to last analyzed DNA
+    const useDNA = dna || lastImageDNA;
+
+    if (useDNA) {
+        const peakChroma = useDNA.maxC || 0;
+        const isPhotographic = useDNA.archetype === 'Photographic';
+        const resolved = (peakChroma > 80 || isPhotographic) ? 'cie94' : 'cie76';
+        logger.log(`Smart Reveal: peakC=${peakChroma.toFixed(1)}, archetype=${useDNA.archetype || 'unknown'} → ${resolved === 'cie94' ? 'Photo/Tonal' : 'Poster/Graphic'}`);
+        return resolved;
+    }
+
+    // No DNA available - default to cie94 (safer for unknown images)
+    logger.log('Smart Reveal: No DNA analysis available, defaulting to Photo/Tonal (CIE94)');
+    return 'cie94';
+}
+
+/**
  * Show custom error dialog (more readable than alert)
  */
 function showError(title, message, errorList = null) {
@@ -1330,6 +1366,13 @@ function showPaletteEditor(selectedPalette) {
                 const ditherType = ditherTypeEl ? ditherTypeEl.value : 'none';
                 logger.log(`Dithering: ${ditherType}`);
 
+                // Get distance metric setting from UI and resolve "auto" if needed
+                const distanceMetricEl = document.getElementById('distanceMetric');
+                const distanceMetricSetting = distanceMetricEl ? distanceMetricEl.value : 'auto';
+                const distanceMetric = resolveDistanceMetric(distanceMetricSetting, lastImageDNA);
+                const metricLabel = distanceMetric === 'cie94' ? 'Photo/Tonal (CIE94)' : 'Poster/Graphic (CIE76)';
+                logger.log(`Color matching: ${distanceMetricSetting === 'auto' ? 'Smart Reveal → ' : ''}${metricLabel}`);
+
                 // Get mesh setting from UI (for mesh-aware dithering)
                 const meshSizeEl = document.getElementById('meshSize');
                 let meshValue = meshSizeEl ? parseInt(meshSizeEl.value, 10) : 0;
@@ -1371,7 +1414,8 @@ function showPaletteEditor(selectedPalette) {
                         },
                         ditherType: ditherType,
                         mesh: meshValue,
-                        ppi: documentPPI
+                        ppi: documentPPI,
+                        distanceMetric: distanceMetric
                     }
                 );
 
@@ -1404,7 +1448,8 @@ function showPaletteEditor(selectedPalette) {
                         },
                         ditherType: ditherType,
                         mesh: meshValue,
-                        ppi: docInfo.resolution  // Use full-res document PPI
+                        ppi: docInfo.resolution,  // Use full-res document PPI
+                        distanceMetric: distanceMetric
                     }
                 );
 
@@ -2046,10 +2091,13 @@ function getFormValues() {
         blackBias: parseFloat(document.getElementById("blackBias")?.value ?? 5.0),  // Black bias (centroid.blackBias)
         enablePaletteReduction: document.getElementById("enablePaletteReduction")?.checked ?? true,  // Enable/disable palette reduction
         paletteReduction: parseFloat(document.getElementById("paletteReduction")?.value ?? 10.0),  // Color merging threshold (prune.threshold)
+        // Dithering settings
+        ditherType: document.getElementById("ditherType")?.value ?? "none",  // Dithering algorithm
         // Mesh-aware dithering settings
         mesh: getMeshValue(),  // Screen mesh TPI (0 = pixel-level)
-        ppi: PhotoshopAPI.getDocumentInfo()?.resolution || 72  // Document PPI for mesh calculations
-        // CIELAB is always used - no toggle
+        ppi: PhotoshopAPI.getDocumentInfo()?.resolution || 72,  // Document PPI for mesh calculations
+        // Distance metric for color matching
+        distanceMetric: document.getElementById("distanceMetric")?.value ?? "cie94"  // 'cie76' (Graphic) or 'cie94' (Photographic)
     };
 }
 
@@ -3074,6 +3122,13 @@ async function showDialog() {
                         const config = ParameterGenerator.generate(dna);
                         logger.log("✓ Generated dynamic config:", config);
 
+                        // Store DNA globally for "Smart Reveal" auto mode resolution
+                        lastImageDNA = {
+                            ...dna,
+                            archetype: config.meta?.archetype || null
+                        };
+                        logger.log(`✓ Stored DNA for Smart Reveal: peakC=${dna.maxC?.toFixed(1)}, archetype=${lastImageDNA.archetype}`);
+
                         // Map ALL parameters to UI elements (matching batch process configuration)
                         const uiSettings = {
                             // DNA-driven parameters
@@ -3081,6 +3136,7 @@ async function showDialog() {
                             blackBias: config.blackBias,
                             ditherType: config.ditherType,
                             vibrancyBoost: config.saturationBoost,
+                            distanceMetric: 'auto',  // Keep on auto - will resolve at separation time
 
                             // Standard configuration parameters (batch defaults)
                             engineType: 'reveal',
@@ -3119,14 +3175,20 @@ async function showDialog() {
                         // Show simple alert to user
                         const alertMsg = `Image Analysis Complete\n\nProfile: ${config.name}\nColors: ${config.targetColors}\nDither: ${config.ditherType}\n\nParameters have been configured.\nClick "Posterize" to generate separations.`;
 
+                        // Compute what Smart Reveal would use
+                        const smartMetric = resolveDistanceMetric('auto', lastImageDNA);
+                        const smartMetricLabel = smartMetric === 'cie94' ? 'Photo/Tonal' : 'Poster/Graphic';
+
                         // Log full details to console
                         logger.log(`\nDNA ANALYSIS COMPLETE`);
                         logger.log(`Image DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
+                        logger.log(`Archetype: ${config.meta?.archetype || 'unknown'}`);
                         logger.log(`Config: ${config.name}`);
                         logger.log(`  Target Colors: ${config.targetColors}`);
                         logger.log(`  Black Bias: ${config.blackBias.toFixed(1)}`);
                         logger.log(`  Vibrancy Boost: ${config.saturationBoost.toFixed(2)}`);
                         logger.log(`  Dither Type: ${config.ditherType}`);
+                        logger.log(`  Smart Reveal → ${smartMetricLabel} (${smartMetric})`);
                         logger.log(`Analysis Time: ${dnaTime.toFixed(2)}ms`);
 
                         alert(alertMsg);
