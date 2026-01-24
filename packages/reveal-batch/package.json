@@ -10,6 +10,7 @@
     "start": "node src/cli.js",
     "test": "echo \"No tests yet\" && exit 0",
     "reveal": "node src/reveal-batch.js",
+    "reveal-preprocess": "node src/reveal-batch-preprocess.js",
     "analyze": "node src/analyze-batch.js",
     "convert-cq100": "node scripts/convertCQ100ToPsd.js",
     "profile-cq100": "node src/CQ100_Profiler.js",
