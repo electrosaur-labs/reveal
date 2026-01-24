@@ -7,7 +7,10 @@
  * - Perceptual Lab: L (0-100), a (-128 to 127), b (-128 to 127)
  *
  * Also provides color metric calculations (chroma, hue, DeltaE)
+ * DeltaE calculations delegate to centralized lib/color/LabDistance.js
  */
+
+const LabDistance = require('../color/LabDistance');
 
 class LabConverter {
     /**
@@ -130,16 +133,14 @@ class LabConverter {
      * - 11 < ΔE < 49: Colors are more similar than opposite
      * - ΔE > 50: Colors are opposite
      *
+     * Delegates to centralized LabDistance module.
+     *
      * @param {Object} lab1 - First color { L, a, b }
      * @param {Object} lab2 - Second color { L, a, b }
      * @returns {number} - Delta E value
      */
     static calculateDeltaE(lab1, lab2) {
-        const dL = lab2.L - lab1.L;
-        const da = lab2.a - lab1.a;
-        const db = lab2.b - lab1.b;
-
-        return Math.sqrt(dL * dL + da * da + db * db);
+        return LabDistance.cie76(lab1, lab2);
     }
 
     /**

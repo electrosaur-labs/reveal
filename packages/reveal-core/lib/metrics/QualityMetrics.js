@@ -8,6 +8,7 @@
  */
 
 const DensityScanner = require('./DensityScanner');
+const { cie76SquaredInline } = require('../color/LabDistance');
 
 class MetricsCalculator {
     /**
@@ -43,11 +44,9 @@ class MetricsCalculator {
             const a2 = processedLab[idx + 1] - 128;
             const b2 = processedLab[idx + 2] - 128;
 
-            // CIE76 DeltaE formula
-            const dL = L1 - L2;
-            const da = a1 - a2;
-            const db = b1 - b2;
-            const dE = Math.sqrt(dL * dL + da * da + db * db);
+            // CIE76 DeltaE formula (using centralized LabDistance)
+            const distSq = cie76SquaredInline(L1, a1, b1, L2, a2, b2);
+            const dE = Math.sqrt(distSq);
 
             totalDeltaE += dE;
             deltaEMap[i] = dE;
