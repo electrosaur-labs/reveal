@@ -9,6 +9,8 @@
   "scripts": {
     "start": "node src/cli.js",
     "test": "echo \"No tests yet\" && exit 0",
+    "reveal": "node src/reveal-batch.js",
+    "analyze": "node src/analyze-batch.js",
     "convert-cq100": "node scripts/convertCQ100ToPsd.js",
     "profile-cq100": "node src/CQ100_Profiler.js",
     "generate-passports": "node src/CQ100_PassportGenerator.js",
@@ -27,6 +29,7 @@
   },
   "dependencies": {
     "@reveal/core": "1.0.0",
+    "@reveal/psd-reader": "1.0.0",
     "@reveal/psd-writer": "1.2.0",
     "ag-psd": "^29.1.0",
     "chalk": "^4.1.2",
