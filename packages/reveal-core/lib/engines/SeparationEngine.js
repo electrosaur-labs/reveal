@@ -451,7 +451,9 @@ class SeparationEngine {
         // Generate the pixel-to-color mapping (Async with progress)
         const onProgress = options.onProgress || null;
         const ditherType = options.ditherType || 'none';
-        logger.log(`Dithering type: ${ditherType}`);
+        const distanceMetric = options.distanceMetric || 'cie76';
+        const cie94Params = options.cie94Params;
+        logger.log(`Dithering type: ${ditherType}, Distance metric: ${distanceMetric}`);
 
         const colorIndices = await this.mapPixelsToPaletteAsync(
             rawBytes,
@@ -459,7 +461,7 @@ class SeparationEngine {
             onProgress,
             width,
             height,
-            { ditherType }
+            { ditherType, distanceMetric, cie94Params }
         );
 
         const layers = [];

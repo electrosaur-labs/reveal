@@ -1067,6 +1067,24 @@
                                 <strong>0</strong> = disabled, <strong>5.0</strong> = balanced (default), <strong>10</strong> = maximum protection.
                             </div>
                         </div>
+
+                        <!-- Distance Metric -->
+                        <div class="form-group">
+                            <label for="distanceMetric">
+                                <strong>Color Matching Mode</strong>
+                                <span class="hint">(separation accuracy)</span>
+                            </label>
+                            <select id="distanceMetric" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                                <option value="auto" selected>Smart Reveal (Auto)</option>
+                                <option value="cie76">Poster / Graphic</option>
+                                <option value="cie94">Photo / Tonal</option>
+                            </select>
+                            <div class="helper-text">
+                                <strong>Smart Reveal:</strong> Automatically selects based on image analysis (recommended).
+                                <br><strong>Poster / Graphic:</strong> High-contrast separation for flat colors, logos, vector art.
+                                <br><strong>Photo / Tonal:</strong> Smooth gradients for photographs, skin tones, natural imagery.
+                            </div>
+                        </div>
                     </div>
                 </div>
 
