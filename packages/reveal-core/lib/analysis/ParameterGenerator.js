@@ -1,5 +1,5 @@
 /**
- * DynamicConfigurator v1.7
+ * DynamicConfigurator v1.9
  * Driven by Archetype Classification (Tonal Variation vs Chroma)
  *
  * CHANGELOG:
@@ -7,6 +7,12 @@
  * - v1.4: Saliency Rescue threshold raised to maxC > 80
  * - v1.5: Dither logic based on l_std_dev instead of k
  * - v1.7: Archetype classification with per-archetype strategies
+ * - v1.8: Added distanceMetric selection (CIE76 vs CIE94) based on chroma
+ * - v1.9: Simplified distanceMetric selection using peakChroma threshold
+ *
+ * DISTANCE METRIC SELECTION:
+ * - peakChroma > 80 OR isPhotographic → CIE94 (perceptual, better for saturated colors)
+ * - Otherwise → CIE76 (graphic, faster, sufficient for flat/muted colors)
  *
  * ARCHETYPES:
  * - Vector/Flat:    Low variation (l_std_dev < 15). Logos, icons, text.
@@ -20,20 +26,27 @@ class DynamicConfigurator {
     static generate(dna) {
         // 1. CLASSIFY ARCHETYPE
         const archetype = this.getArchetype(dna);
+        const isPhotographic = archetype === 'Photographic';
 
-        // 2. DEFINE STRATEGY MAP
+        // 2. DEFINE STRATEGY MAP (dither, bias)
         const strategy = this.getStrategy(archetype, dna);
 
-        console.log(`🧬 DNA: StdDev=${dna.l_std_dev?.toFixed(1) || '?'} C=${dna.c?.toFixed(1) || '?'} -> Archetype: ${archetype}`);
+        // 3. DISTANCE METRIC SELECTION
+        // peakChroma (maxC) > 80 OR isPhotographic → CIE94 (perceptual)
+        // Otherwise → CIE76 (graphic, faster)
+        const peakChroma = dna.maxC || 0;
+        const distanceMetric = (peakChroma > 80 || isPhotographic) ? 'cie94' : 'cie76';
 
-        // 3. COLOR COUNT LOGIC (The "Chroma Driver")
+        console.log(`🧬 DNA: StdDev=${dna.l_std_dev?.toFixed(1) || '?'} C=${dna.c?.toFixed(1) || '?'} peakC=${peakChroma.toFixed(1)} -> Archetype: ${archetype}, Metric: ${distanceMetric}`);
+
+        // 4. COLOR COUNT LOGIC (The "Chroma Driver")
         // Independent of archetype, driven by color complexity
         let idealColors = 8;
         if (dna.c > 20) idealColors = 10;
         if (dna.c > 50) idealColors = 12;
 
         // Saliency Rescue: Hidden color spike in muted image
-        if (dna.c < 12 && dna.maxC > 80) {
+        if (dna.c < 12 && peakChroma > 80) {
             console.log(`🚑 Saliency Rescue: ${dna.filename || 'unknown'} (High Value Spike)`);
             idealColors = 10;
         }
@@ -47,8 +60,9 @@ class DynamicConfigurator {
             blackBias: strategy.bias,
             saturationBoost: (dna.c < 15) ? 1.15 : 1.0,
             ditherType: strategy.dither,
+            distanceMetric: distanceMetric,
             rangeClamp: [dna.minL, dna.maxL],
-            meta: { archetype }
+            meta: { archetype, peakChroma }
         };
     }
 
@@ -98,6 +112,9 @@ class DynamicConfigurator {
     /**
      * STRATEGY MAPPER
      * Assigns the correct Dither and Bias to each Archetype
+     *
+     * Note: Distance metric is now determined at generate() level using:
+     *   peakChroma > 80 OR isPhotographic → CIE94, else CIE76
      */
     static getStrategy(archetype, dna) {
         const l_std_dev = dna.l_std_dev !== undefined ? dna.l_std_dev : 50;
@@ -105,26 +122,25 @@ class DynamicConfigurator {
         switch (archetype) {
             case 'Vector/Flat':
                 return {
-                    dither: 'atkinson', // Crisp edges
-                    bias: 1.0           // Precision (Don't bias blacks heavily)
+                    dither: 'atkinson',      // Crisp edges
+                    bias: 1.0                // Precision (Don't bias blacks heavily)
                 };
 
             case 'Vintage/Muted':
                 return {
-                    dither: 'atkinson', // Retain the "Cut Paper" look
-                    bias: 3.0           // Smooth out paper grain in solids
+                    dither: 'atkinson',      // Retain the "Cut Paper" look
+                    bias: 3.0                // Smooth out paper grain in solids
                 };
 
             case 'Noir/Mono':
-                // Default to BlueNoise for smooth shadow gradients
                 return {
-                    dither: 'blue-noise',
-                    bias: 5.0           // Protect deep blacks at all costs
+                    dither: 'blue-noise',    // Smooth shadow gradients
+                    bias: 5.0                // Protect deep blacks at all costs
                 };
 
             case 'Neon/Vibrant':
                 return {
-                    dither: 'blue-noise', // Smooth gradients needed for neon glows
+                    dither: 'blue-noise',    // Smooth gradients needed for neon glows
                     bias: 2.0
                 };
 
@@ -135,7 +151,7 @@ class DynamicConfigurator {
                     return { dither: 'blue-noise', bias: 5.0 };
                 }
                 return {
-                    dither: 'blue-noise', // Standard Photo setting
+                    dither: 'blue-noise',    // Standard Photo setting
                     bias: 2.0
                 };
         }
