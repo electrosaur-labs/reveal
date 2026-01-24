@@ -8,7 +8,8 @@
 /**
  * Read a Lab PSD file and extract the first pixel layer's image data
  * @param {Buffer} buffer - PSD file buffer
- * @returns {Object} - { width, height, colorMode, depth, channels, data: Uint8Array }
+ * @returns {Object} - { width, height, colorMode, depth, channels, data }
+ *   - data: Uint8Array for 8-bit, Uint16Array for 16-bit (interleaved L,a,b)
  */
 function readPsd(buffer) {
     let offset = 0;
@@ -116,24 +117,25 @@ function readPsd(buffer) {
     }
 
     // Convert planar Lab data to interleaved format
-    const data = new Uint8Array(pixelCount * 3);
-
     if (depth === 8) {
+        const data = new Uint8Array(pixelCount * 3);
         for (let i = 0; i < pixelCount; i++) {
             data[i * 3 + 0] = channelData[0][i];
             data[i * 3 + 1] = channelData[1][i];
             data[i * 3 + 2] = channelData[2][i];
         }
+        return { width, height, colorMode, depth, channels: 3, data };
     } else {
-        // 16-bit: take high byte only
+        // 16-bit: return full 16-bit values as Uint16Array
+        const data = new Uint16Array(pixelCount * 3);
         for (let i = 0; i < pixelCount; i++) {
-            data[i * 3 + 0] = channelData[0][i * 2];
-            data[i * 3 + 1] = channelData[1][i * 2];
-            data[i * 3 + 2] = channelData[2][i * 2];
+            // Read big-endian 16-bit values
+            data[i * 3 + 0] = (channelData[0][i * 2] << 8) | channelData[0][i * 2 + 1];
+            data[i * 3 + 1] = (channelData[1][i * 2] << 8) | channelData[1][i * 2 + 1];
+            data[i * 3 + 2] = (channelData[2][i * 2] << 8) | channelData[2][i * 2 + 1];
         }
+        return { width, height, colorMode, depth, channels: 3, data };
     }
-
-    return { width, height, colorMode, depth, channels: 3, data };
 }
 
 /**
