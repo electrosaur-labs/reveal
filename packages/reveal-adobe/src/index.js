@@ -57,13 +57,14 @@ let lastImageDNA = null;
 /**
  * Resolve "auto" distance metric to actual metric using DNA-based rule
  * Rule: (peakChroma > 80 OR isPhotographic) → 'cie94', else 'cie76'
+ * Note: CIE2000 is never auto-selected; it's a manual "Museum Grade" choice
  *
- * @param {string} metricSetting - 'auto', 'cie76', or 'cie94'
+ * @param {string} metricSetting - 'auto', 'cie76', 'cie94', or 'cie2000'
  * @param {Object} dna - Image DNA with maxC and archetype (optional)
- * @returns {string} - Resolved metric: 'cie76' or 'cie94'
+ * @returns {string} - Resolved metric: 'cie76', 'cie94', or 'cie2000'
  */
 function resolveDistanceMetric(metricSetting, dna = null) {
-    // If not auto, return as-is
+    // If not auto, return as-is (including cie2000 which is manual-only)
     if (metricSetting !== 'auto') {
         return metricSetting;
     }
@@ -1370,7 +1371,12 @@ function showPaletteEditor(selectedPalette) {
                 const distanceMetricEl = document.getElementById('distanceMetric');
                 const distanceMetricSetting = distanceMetricEl ? distanceMetricEl.value : 'auto';
                 const distanceMetric = resolveDistanceMetric(distanceMetricSetting, lastImageDNA);
-                const metricLabel = distanceMetric === 'cie94' ? 'Photo/Tonal (CIE94)' : 'Poster/Graphic (CIE76)';
+                const metricLabels = {
+                    'cie76': 'Poster/Graphic (CIE76)',
+                    'cie94': 'Photographic (CIE94)',
+                    'cie2000': 'Museum Grade (CIE2000)'
+                };
+                const metricLabel = metricLabels[distanceMetric] || distanceMetric;
                 logger.log(`Color matching: ${distanceMetricSetting === 'auto' ? 'Smart Reveal → ' : ''}${metricLabel}`);
 
                 // Get mesh setting from UI (for mesh-aware dithering)
@@ -3177,7 +3183,8 @@ async function showDialog() {
 
                         // Compute what Smart Reveal would use
                         const smartMetric = resolveDistanceMetric('auto', lastImageDNA);
-                        const smartMetricLabel = smartMetric === 'cie94' ? 'Photo/Tonal' : 'Poster/Graphic';
+                        const smartMetricLabels = { 'cie76': 'Poster/Graphic', 'cie94': 'Photographic', 'cie2000': 'Museum Grade' };
+                        const smartMetricLabel = smartMetricLabels[smartMetric] || smartMetric;
 
                         // Log full details to console
                         logger.log(`\nDNA ANALYSIS COMPLETE`);

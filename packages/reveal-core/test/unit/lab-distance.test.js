@@ -1,7 +1,7 @@
 /**
  * Unit tests for LabDistance module
  *
- * Tests both CIE76 and CIE94 distance calculations with known values
+ * Tests CIE76, CIE94, and CIE2000 distance calculations with known values
  * and edge cases.
  */
 
@@ -15,6 +15,9 @@ const {
     cie76WeightedSquaredInline,
     cie94,
     cie94SquaredInline,
+    cie2000,
+    cie2000Inline,
+    cie2000SquaredInline,
     createDistanceCalculator,
     preparePaletteChroma,
     normalizeDistanceConfig
@@ -215,6 +218,76 @@ describe('LabDistance', () => {
         });
     });
 
+    describe('CIE2000', () => {
+        it('returns 0 for identical colors', () => {
+            expect(cie2000(white, white)).toBe(0);
+            expect(cie2000(red, red)).toBe(0);
+        });
+
+        it('calculates distance for black-white', () => {
+            const dist = cie2000(black, white);
+            // CIE2000 distance for black-white is approximately 100
+            expect(dist).toBeGreaterThan(90);
+            expect(dist).toBeLessThan(110);
+        });
+
+        it('handles blue-purple region better than CIE94', () => {
+            // CIE2000 was specifically designed to improve blue-purple perception
+            const blue1 = { L: 30, a: 20, b: -80 };
+            const blue2 = { L: 30, a: 30, b: -80 };
+
+            const dist76 = cie76(blue1, blue2);
+            const dist94 = cie94(blue1, blue2);
+            const dist2000 = cie2000(blue1, blue2);
+
+            // All should be positive and reasonable
+            expect(dist76).toBeGreaterThan(0);
+            expect(dist94).toBeGreaterThan(0);
+            expect(dist2000).toBeGreaterThan(0);
+
+            // CIE2000 should produce different (more perceptually accurate) results
+            expect(dist2000).not.toBeCloseTo(dist76, 0);
+        });
+
+        it('is symmetric', () => {
+            // Unlike CIE94, CIE2000 is symmetric
+            const dist1 = cie2000(red, blue);
+            const dist2 = cie2000(blue, red);
+            expect(dist1).toBeCloseTo(dist2, 10);
+        });
+
+        it('returns squared distance when requested', () => {
+            const distSq = cie2000(red, blue, true);
+            const dist = cie2000(red, blue, false);
+            expect(Math.sqrt(distSq)).toBeCloseTo(dist, 10);
+        });
+    });
+
+    describe('CIE2000 Inline', () => {
+        it('matches object-based function', () => {
+            const lab1 = red;
+            const lab2 = blue;
+
+            const objectDist = cie2000(lab1, lab2);
+            const inlineDist = cie2000Inline(
+                lab1.L, lab1.a, lab1.b,
+                lab2.L, lab2.a, lab2.b
+            );
+
+            expect(inlineDist).toBeCloseTo(objectDist, 10);
+        });
+
+        it('squared inline returns correct value', () => {
+            const lab1 = red;
+            const lab2 = green;
+
+            const dist = cie2000Inline(lab1.L, lab1.a, lab1.b, lab2.L, lab2.a, lab2.b);
+            const distSq = cie2000SquaredInline(lab1.L, lab1.a, lab1.b, lab2.L, lab2.a, lab2.b);
+
+            expect(distSq).toBeCloseTo(dist * dist, 10);
+        });
+    });
+
     describe('createDistanceCalculator', () => {
         it('creates CIE76 calculator by default', () => {
             const calc = createDistanceCalculator();
@@ -228,6 +301,13 @@ describe('LabDistance', () => {
             const result = calc(red, blue);
 
             expect(result).toBeCloseTo(cie94(red, blue), 10);
+        });
+
+        it('creates CIE2000 calculator when specified', () => {
+            const calc = createDistanceCalculator({ metric: DistanceMetric.CIE2000 });
+            const result = calc(red, blue);
+
+            expect(result).toBeCloseTo(cie2000(red, blue), 10);
         });
 
         it('returns squared distance when configured', () => {
@@ -291,7 +371,9 @@ describe('LabDistance', () => {
             const config = normalizeDistanceConfig({});
 
             expect(config.metric).toBe(DistanceMetric.CIE76);
+            expect(config.isCIE76).toBe(true);
             expect(config.isCIE94).toBe(false);
+            expect(config.isCIE2000).toBe(false);
         });
 
         it('normalizes CIE94 config', () => {
@@ -301,9 +383,22 @@ describe('LabDistance', () => {
             });
 
             expect(config.metric).toBe(DistanceMetric.CIE94);
+            expect(config.isCIE76).toBe(false);
             expect(config.isCIE94).toBe(true);
+            expect(config.isCIE2000).toBe(false);
             expect(config.cie94Params.k1).toBe(0.1);
             expect(config.cie94Params.k2).toBe(DEFAULT_CIE94_PARAMS.k2);
+        });
+
+        it('normalizes CIE2000 config', () => {
+            const config = normalizeDistanceConfig({
+                distanceMetric: 'cie2000'
+            });
+
+            expect(config.metric).toBe(DistanceMetric.CIE2000);
+            expect(config.isCIE76).toBe(false);
+            expect(config.isCIE94).toBe(false);
+            expect(config.isCIE2000).toBe(true);
         });
 
         it('provides default CIE94 params', () => {
@@ -320,21 +415,27 @@ describe('LabDistance', () => {
 
             expect(() => cie76(extreme1, extreme2)).not.toThrow();
             expect(() => cie94(extreme1, extreme2)).not.toThrow();
+            expect(() => cie2000(extreme1, extreme2)).not.toThrow();
 
             const dist76 = cie76(extreme1, extreme2);
             const dist94 = cie94(extreme1, extreme2);
+            const dist2000 = cie2000(extreme1, extreme2);
 
             expect(dist76).toBeGreaterThan(0);
             expect(dist94).toBeGreaterThan(0);
+            expect(dist2000).toBeGreaterThan(0);
         });
 
         it('handles negative chroma components', () => {
             const color1 = { L: 50, a: -50, b: -50 };
             const color2 = { L: 50, a: 50, b: 50 };
 
-            const dist = cie94(color1, color2);
-            expect(dist).toBeGreaterThan(0);
-            expect(isNaN(dist)).toBe(false);
+            const dist94 = cie94(color1, color2);
+            const dist2000 = cie2000(color1, color2);
+            expect(dist94).toBeGreaterThan(0);
+            expect(dist2000).toBeGreaterThan(0);
+            expect(isNaN(dist94)).toBe(false);
+            expect(isNaN(dist2000)).toBe(false);
         });
 
         it('handles very small differences', () => {
@@ -343,12 +444,24 @@ describe('LabDistance', () => {
 
             const dist76 = cie76(color1, color2);
             const dist94 = cie94(color1, color2);
+            const dist2000 = cie2000(color1, color2);
 
             // Very small but not zero
             expect(dist76).toBeLessThan(0.01);
             expect(dist94).toBeLessThan(0.01);
+            expect(dist2000).toBeLessThan(0.01);
             expect(isNaN(dist76)).toBe(false);
             expect(isNaN(dist94)).toBe(false);
+            expect(isNaN(dist2000)).toBe(false);
+        });
+
+        it('CIE2000 handles achromatic colors (zero chroma)', () => {
+            const gray1 = { L: 30, a: 0, b: 0 };
+            const gray2 = { L: 70, a: 0, b: 0 };
+
+            const dist = cie2000(gray1, gray2);
+            expect(dist).toBeGreaterThan(0);
+            expect(isNaN(dist)).toBe(false);
         });
     });
 

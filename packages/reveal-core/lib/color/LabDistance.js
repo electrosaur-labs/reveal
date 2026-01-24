@@ -17,7 +17,8 @@
  */
 const DistanceMetric = {
     CIE76: 'cie76',
-    CIE94: 'cie94'
+    CIE94: 'cie94',
+    CIE2000: 'cie2000'
 };
 
 /**
@@ -225,6 +226,161 @@ function cie94SquaredInline(L1, a1, b1, L2, a2, b2, C1 = 0, k1 = 0.045, k2 = 0.0
 }
 
 // ============================================================================
+// CIE2000 Distance Functions
+// ============================================================================
+
+/**
+ * CIE2000 (ΔE*00) - State-of-the-art perceptual distance metric
+ *
+ * The most accurate color difference formula, addressing:
+ * - Perceptual non-uniformity across the entire Lab gamut
+ * - Blue-purple region inaccuracies in earlier formulas
+ * - Neutral color handling improvements
+ *
+ * Best for:
+ * - Complex 16-bit files with subtle gradients
+ * - Museum-grade art reproduction
+ * - Blue/violet tones that confuse CIE94
+ *
+ * Note: ~3-4x slower than CIE94 due to additional calculations.
+ *
+ * @param {Object} lab1 - First color { L, a, b }
+ * @param {Object} lab2 - Second color { L, a, b }
+ * @param {boolean} [squared=false] - Return squared distance (approximation)
+ * @returns {number} - ΔE*00 distance
+ */
+function cie2000(lab1, lab2, squared = false) {
+    const dist = cie2000Inline(lab1.L, lab1.a, lab1.b, lab2.L, lab2.a, lab2.b);
+    return squared ? dist * dist : dist;
+}
+
+/**
+ * CIE2000 inline variant for hot loops
+ *
+ * Full implementation of CIEDE2000 formula per CIE Technical Report.
+ * Uses kL=kC=kH=1 (reference conditions).
+ *
+ * @param {number} L1 - First color lightness
+ * @param {number} a1 - First color a component
+ * @param {number} b1 - First color b component
+ * @param {number} L2 - Second color lightness
+ * @param {number} a2 - Second color a component
+ * @param {number} b2 - Second color b component
+ * @returns {number} - ΔE*00 distance
+ */
+function cie2000Inline(L1, a1, b1, L2, a2, b2) {
+    const RAD2DEG = 180 / Math.PI;
+    const DEG2RAD = Math.PI / 180;
+
+    // Step 1: Calculate C'i and h'i
+    const avgL = (L1 + L2) / 2;
+    const C1 = Math.sqrt(a1 * a1 + b1 * b1);
+    const C2 = Math.sqrt(a2 * a2 + b2 * b2);
+    const avgC = (C1 + C2) / 2;
+
+    // G factor for a' adjustment
+    const avgC7 = Math.pow(avgC, 7);
+    const G = 0.5 * (1 - Math.sqrt(avgC7 / (avgC7 + 6103515625))); // 25^7 = 6103515625
+
+    // Adjusted a' values
+    const a1p = a1 * (1 + G);
+    const a2p = a2 * (1 + G);
+
+    // C' values
+    const C1p = Math.sqrt(a1p * a1p + b1 * b1);
+    const C2p = Math.sqrt(a2p * a2p + b2 * b2);
+    const avgCp = (C1p + C2p) / 2;
+
+    // h' values (in degrees, 0-360)
+    let h1p = Math.atan2(b1, a1p) * RAD2DEG;
+    if (h1p < 0) h1p += 360;
+    let h2p = Math.atan2(b2, a2p) * RAD2DEG;
+    if (h2p < 0) h2p += 360;
+
+    // Step 2: Calculate Δh', ΔL', ΔC', and ΔH'
+    const dLp = L2 - L1;
+    const dCp = C2p - C1p;
+
+    // Δh' calculation (handling hue wraparound)
+    let dhp;
+    const hpDiff = h2p - h1p;
+    if (C1p * C2p === 0) {
+        dhp = 0;
+    } else if (Math.abs(hpDiff) <= 180) {
+        dhp = hpDiff;
+    } else if (hpDiff > 180) {
+        dhp = hpDiff - 360;
+    } else {
+        dhp = hpDiff + 360;
+    }
+
+    // ΔH' (perceptual hue difference)
+    const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(dhp / 2 * DEG2RAD);
+
+    // Step 3: Calculate average hue h̄'
+    let avgHp;
+    if (C1p * C2p === 0) {
+        avgHp = h1p + h2p;
+    } else if (Math.abs(hpDiff) <= 180) {
+        avgHp = (h1p + h2p) / 2;
+    } else if (h1p + h2p < 360) {
+        avgHp = (h1p + h2p + 360) / 2;
+    } else {
+        avgHp = (h1p + h2p - 360) / 2;
+    }
+
+    // Step 4: Calculate weighting functions
+    const T = 1
+        - 0.17 * Math.cos((avgHp - 30) * DEG2RAD)
+        + 0.24 * Math.cos(2 * avgHp * DEG2RAD)
+        + 0.32 * Math.cos((3 * avgHp + 6) * DEG2RAD)
+        - 0.20 * Math.cos((4 * avgHp - 63) * DEG2RAD);
+
+    const avgL50 = avgL - 50;
+    const SL = 1 + (0.015 * avgL50 * avgL50) / Math.sqrt(20 + avgL50 * avgL50);
+    const SC = 1 + 0.045 * avgCp;
+    const SH = 1 + 0.015 * avgCp * T;
+
+    // Step 5: Calculate rotation term RT
+    const avgCp7 = Math.pow(avgCp, 7);
+    const RC = 2 * Math.sqrt(avgCp7 / (avgCp7 + 6103515625));
+    const dTheta = 30 * Math.exp(-Math.pow((avgHp - 275) / 25, 2));
+    const RT = -RC * Math.sin(2 * dTheta * DEG2RAD);
+
+    // Step 6: Calculate total difference (kL=kC=kH=1 for reference conditions)
+    const dLpSL = dLp / SL;
+    const dCpSC = dCp / SC;
+    const dHpSH = dHp / SH;
+
+    return Math.sqrt(
+        dLpSL * dLpSL +
+        dCpSC * dCpSC +
+        dHpSH * dHpSH +
+        RT * dCpSC * dHpSH
+    );
+}
+
+/**
+ * CIE2000 squared distance (approximation) - inline variant
+ *
+ * Returns the squared ΔE*00 for use in comparisons.
+ * Note: Since CIE2000 includes a rotation term (RT), squaring is
+ * an approximation, but valid for nearest-neighbor comparisons.
+ *
+ * @param {number} L1 - First color lightness
+ * @param {number} a1 - First color a component
+ * @param {number} b1 - First color b component
+ * @param {number} L2 - Second color lightness
+ * @param {number} a2 - Second color a component
+ * @param {number} b2 - Second color b component
+ * @returns {number} - Squared ΔE*00 distance (approximation)
+ */
+function cie2000SquaredInline(L1, a1, b1, L2, a2, b2) {
+    const dist = cie2000Inline(L1, a1, b1, L2, a2, b2);
+    return dist * dist;
+}
+
+// ============================================================================
 // Factory & Configuration
 // ============================================================================
 
@@ -235,7 +391,7 @@ function cie94SquaredInline(L1, a1, b1, L2, a2, b2, C1 = 0, k1 = 0.045, k2 = 0.0
  * and parameters. Useful for passing to algorithms that need a distance function.
  *
  * @param {Object} config - Configuration options
- * @param {string} [config.metric='cie76'] - Distance metric ('cie76' or 'cie94')
+ * @param {string} [config.metric='cie76'] - Distance metric ('cie76', 'cie94', or 'cie2000')
  * @param {boolean} [config.squared=false] - Return squared distance
  * @param {boolean} [config.weighted=false] - Use L-weighting (CIE76 only)
  * @param {number} [config.shadowThreshold=40] - L threshold for weighting
@@ -256,6 +412,10 @@ function createDistanceCalculator(config = {}) {
         shadowWeight = 2.0,
         cie94Params = DEFAULT_CIE94_PARAMS
     } = config;
+
+    if (metric === DistanceMetric.CIE2000) {
+        return (lab1, lab2) => cie2000(lab1, lab2, squared);
+    }
 
     if (metric === DistanceMetric.CIE94) {
         return (lab1, lab2) => cie94(lab1, lab2, squared, cie94Params);
@@ -292,7 +452,7 @@ function preparePaletteChroma(labPalette) {
  * Normalizes various option formats into a consistent config object.
  *
  * @param {Object} options - Raw options from user/API
- * @param {string} [options.distanceMetric] - 'cie76' or 'cie94'
+ * @param {string} [options.distanceMetric] - 'cie76', 'cie94', or 'cie2000'
  * @param {Object} [options.cie94Params] - CIE94 parameters
  * @returns {Object} - Normalized distance configuration
  */
@@ -303,7 +463,9 @@ function normalizeDistanceConfig(options = {}) {
     return {
         metric,
         cie94Params,
-        isCIE94: metric === DistanceMetric.CIE94
+        isCIE76: metric === DistanceMetric.CIE76,
+        isCIE94: metric === DistanceMetric.CIE94,
+        isCIE2000: metric === DistanceMetric.CIE2000
     };
 }
 
@@ -325,6 +487,11 @@ module.exports = {
     // CIE94 functions
     cie94,
     cie94SquaredInline,
+
+    // CIE2000 functions
+    cie2000,
+    cie2000Inline,
+    cie2000SquaredInline,
 
     // Factory & helpers
     createDistanceCalculator,
