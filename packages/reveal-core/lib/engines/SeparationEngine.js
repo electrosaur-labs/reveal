@@ -11,9 +11,11 @@
  * - Distance calculations centralized in LabDistance.js
  * - SeparationEngine handles routing and core separation logic
  *
- * CONFIGURABLE DISTANCE (v2.1):
- * - Supports CIE76 (default) and CIE94 distance metrics
- * - Pass distanceMetric: 'cie94' in options for improved color perception
+ * CONFIGURABLE DISTANCE (v2.2):
+ * - Supports CIE76, CIE94, and CIE2000 distance metrics
+ * - CIE76: Fast, good for posters/graphics
+ * - CIE94: Perceptual, good for photographs
+ * - CIE2000: Museum grade, best for 16-bit files and blue/violet tones
  */
 
 const logger = require("../utils/logger");
@@ -22,6 +24,7 @@ const {
     DistanceMetric,
     cie76WeightedSquaredInline,
     cie94SquaredInline,
+    cie2000SquaredInline,
     preparePaletteChroma,
     normalizeDistanceConfig
 } = require("../color/LabDistance");
@@ -110,12 +113,12 @@ class SeparationEngine {
      * @param {Object} distanceConfig - Distance metric configuration from normalizeDistanceConfig()
      * @returns {Promise<Uint8Array>} - Array of palette indices per pixel
      */
-    static async _mapPixelsNearestNeighbor(rawBytes, labPalette, onProgress, distanceConfig = { metric: DistanceMetric.CIE76, isCIE94: false }) {
+    static async _mapPixelsNearestNeighbor(rawBytes, labPalette, onProgress, distanceConfig = { metric: DistanceMetric.CIE76, isCIE94: false, isCIE2000: false }) {
         const pixelCount = rawBytes.length / 3;
         const colorIndices = new Uint8Array(pixelCount);
         const CHUNK_SIZE = 65536; // 64k pixels per UI yield (optimized for throughput)
 
-        const metricLabel = distanceConfig.isCIE94 ? 'CIE94' : 'CIE76 (L-weighted)';
+        const metricLabel = distanceConfig.isCIE2000 ? 'CIE2000' : (distanceConfig.isCIE94 ? 'CIE94' : 'CIE76 (L-weighted)');
         logger.log(`Mapping ${pixelCount} pixels using ${metricLabel} (async batching: ${Math.ceil(pixelCount / CHUNK_SIZE)} chunks)...`);
 
         // OPTIMIZATION 1: Flatten palette to typed arrays to avoid object overhead
@@ -157,7 +160,13 @@ class SeparationEngine {
 
                 // Spatial Locality: Check last winner first
                 let minDistanceSq;
-                if (distanceConfig.isCIE94) {
+                if (distanceConfig.isCIE2000) {
+                    // CIE2000 squared distance (most accurate, slowest)
+                    minDistanceSq = cie2000SquaredInline(
+                        L, a, b,
+                        palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex]
+                    );
+                } else if (distanceConfig.isCIE94) {
                     // CIE94 squared distance (pre-computed palette chroma)
                     minDistanceSq = cie94SquaredInline(
                         L, a, b,
@@ -181,7 +190,12 @@ class SeparationEngine {
                     // Search all palette colors
                     for (let c = 0; c < paletteSize; c++) {
                         let distSq;
-                        if (distanceConfig.isCIE94) {
+                        if (distanceConfig.isCIE2000) {
+                            distSq = cie2000SquaredInline(
+                                L, a, b,
+                                palL[c], palA[c], palB[c]
+                            );
+                        } else if (distanceConfig.isCIE94) {
                             distSq = cie94SquaredInline(
                                 L, a, b,
                                 palL[c], palA[c], palB[c],
