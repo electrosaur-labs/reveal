@@ -9,9 +9,11 @@
  * - Ordered Dithering: Blue Noise, Bayer 8x8 (both LPI-aware)
  *
  * Extracted from SeparationEngine for modularity.
+ * Distance calculations use centralized LabDistance module.
  */
 
 const logger = require("../utils/logger");
+const { cie76SquaredInline } = require("../color/LabDistance");
 
 /**
  * Cached Blue Noise LUT (64x64)
@@ -77,7 +79,8 @@ const BAYER_MATRIX = [
 
 /**
  * Finds the nearest palette color to a given Lab pixel
- * Uses squared distances for performance (avoids sqrt)
+ * Uses squared CIE76 distances for performance (avoids sqrt)
+ * Delegates to centralized LabDistance module.
  *
  * @param {number} L - Lightness (0-100)
  * @param {number} a - Green-red axis (-128 to 127)
@@ -91,7 +94,7 @@ function getNearest(L, a, b, labPalette) {
 
     for (let j = 0; j < labPalette.length; j++) {
         const p = labPalette[j];
-        const distSq = (L - p.L)**2 + (a - p.a)**2 + (b - p.b)**2;
+        const distSq = cie76SquaredInline(L, a, b, p.L, p.a, p.b);
 
         if (distSq < minDistSq) {
             minDistSq = distSq;
@@ -104,7 +107,8 @@ function getNearest(L, a, b, labPalette) {
 
 /**
  * Finds the two nearest palette colors to a given Lab pixel
- * Uses squared distances for performance (avoids sqrt)
+ * Uses squared CIE76 distances for performance (avoids sqrt)
+ * Delegates to centralized LabDistance module.
  *
  * @param {number} L - Lightness (0-100)
  * @param {number} a - Green-red axis (-128 to 127)
@@ -118,8 +122,8 @@ function getTwoNearest(L, a, b, labPalette) {
 
     for (let j = 0; j < labPalette.length; j++) {
         const p = labPalette[j];
-        // Squared distance (faster - no sqrt needed)
-        const distSq = (L - p.L)**2 + (a - p.a)**2 + (b - p.b)**2;
+        // Squared CIE76 distance (faster - no sqrt needed)
+        const distSq = cie76SquaredInline(L, a, b, p.L, p.a, p.b);
 
         if (distSq < d1) {
             // New closest color

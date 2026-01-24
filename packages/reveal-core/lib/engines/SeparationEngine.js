@@ -8,11 +8,23 @@
  *
  * MODULAR ARCHITECTURE (v2.0):
  * - Dithering algorithms extracted to DitheringStrategies.js
+ * - Distance calculations centralized in LabDistance.js
  * - SeparationEngine handles routing and core separation logic
+ *
+ * CONFIGURABLE DISTANCE (v2.1):
+ * - Supports CIE76 (default) and CIE94 distance metrics
+ * - Pass distanceMetric: 'cie94' in options for improved color perception
  */
 
 const logger = require("../utils/logger");
 const DitheringStrategies = require("./DitheringStrategies");
+const {
+    DistanceMetric,
+    cie76WeightedSquaredInline,
+    cie94SquaredInline,
+    preparePaletteChroma,
+    normalizeDistanceConfig
+} = require("../color/LabDistance");
 
 class SeparationEngine {
     /**
@@ -35,6 +47,10 @@ class SeparationEngine {
      * - Prevents "Sieve Effect" where dots fall through mesh openings
      * - Formula: maxLPI = meshCount / 7, scale = Math.round(dpi / maxLPI)
      *
+     * CONFIGURABLE DISTANCE METRIC (v2.1):
+     * - distanceMetric: 'cie76' (default) or 'cie94'
+     * - CIE94 provides better perceptual accuracy for saturated colors (~2x slower)
+     *
      * @param {Uint16Array} rawBytes - Raw Lab bytes (16-bit encoding: L 0-32768, a/b 0-32768 neutral=16384)
      * @param {Array} labPalette - Array of {L, a, b} objects (perceptual ranges)
      * @param {Function} onProgress - Progress callback (0-100)
@@ -44,12 +60,15 @@ class SeparationEngine {
      *   - ditherType: 'none'|'floyd-steinberg'|'blue-noise'|'bayer'|'atkinson'|'stucki'
      *   - meshCount: Screen mesh TPI (e.g., 230, 305) - enables LPI-aware Macro-Cell clustering
      *   - dpi: Image DPI (default: 300) - used with meshCount for scale calculation
+     *   - distanceMetric: 'cie76' (default) or 'cie94'
+     *   - cie94Params: { kL, k1, k2 } - CIE94 parameters (optional)
      * @returns {Promise<Uint8Array>} - Array of palette indices per pixel
      */
     static async mapPixelsToPaletteAsync(rawBytes, labPalette, onProgress, width = null, height = null, options = {}) {
         const ditherType = options.ditherType || 'none';
         const meshCount = options.meshCount || null;
         const dpi = options.dpi || 300;
+        const distanceConfig = normalizeDistanceConfig(options);
 
         // Calculate LPI-aware scale factor (Rule of 7)
         // If no meshCount provided, scale = 1 (no clustering)
@@ -62,7 +81,7 @@ class SeparationEngine {
 
         // If no width/height or ditherType is 'none', use fast nearest-neighbor
         if (!width || !height || ditherType === 'none') {
-            return this._mapPixelsNearestNeighbor(rawBytes, labPalette, onProgress);
+            return this._mapPixelsNearestNeighbor(rawBytes, labPalette, onProgress, distanceConfig);
         }
 
         // Route to appropriate dithering strategy
@@ -88,14 +107,16 @@ class SeparationEngine {
      * @param {Uint16Array} rawBytes - 16-bit Lab data (L: 0-32768, a/b: 0-32768 neutral=16384)
      * @param {Array} labPalette - Array of {L, a, b} objects (perceptual ranges)
      * @param {Function} onProgress - Progress callback (0-100)
+     * @param {Object} distanceConfig - Distance metric configuration from normalizeDistanceConfig()
      * @returns {Promise<Uint8Array>} - Array of palette indices per pixel
      */
-    static async _mapPixelsNearestNeighbor(rawBytes, labPalette, onProgress) {
+    static async _mapPixelsNearestNeighbor(rawBytes, labPalette, onProgress, distanceConfig = { metric: DistanceMetric.CIE76, isCIE94: false }) {
         const pixelCount = rawBytes.length / 3;
         const colorIndices = new Uint8Array(pixelCount);
         const CHUNK_SIZE = 65536; // 64k pixels per UI yield (optimized for throughput)
 
-        logger.log(`Mapping ${pixelCount} pixels (async batching: ${Math.ceil(pixelCount / CHUNK_SIZE)} chunks)...`);
+        const metricLabel = distanceConfig.isCIE94 ? 'CIE94' : 'CIE76 (L-weighted)';
+        logger.log(`Mapping ${pixelCount} pixels using ${metricLabel} (async batching: ${Math.ceil(pixelCount / CHUNK_SIZE)} chunks)...`);
 
         // OPTIMIZATION 1: Flatten palette to typed arrays to avoid object overhead
         const paletteSize = labPalette.length;
@@ -107,6 +128,15 @@ class SeparationEngine {
             palL[j] = labPalette[j].L;
             palA[j] = labPalette[j].a;
             palB[j] = labPalette[j].b;
+        }
+
+        // Pre-compute chroma for CIE94 (avoids sqrt in inner loop)
+        let palChroma = null;
+        let k1 = 0.045, k2 = 0.015;
+        if (distanceConfig.isCIE94) {
+            palChroma = preparePaletteChroma(labPalette);
+            k1 = distanceConfig.cie94Params.k1;
+            k2 = distanceConfig.cie94Params.k2;
         }
 
         const SNAP_THRESHOLD_SQ = 4.0; // Perceptual snap (ΔE 2.0 squared)
@@ -126,26 +156,47 @@ class SeparationEngine {
                 const b = (rawBytes[pIdx + 2] - 16384) * (128 / 16384);  // b: 0-32768 → -128 to +127
 
                 // Spatial Locality: Check last winner first
-                // PERCEPTUAL L-SCALING: Weight L more heavily for dark colors (shadow preservation)
-                const dL_l = L - palL[lastBestIndex];
-                const da_l = a - palA[lastBestIndex];
-                const db_l = b - palB[lastBestIndex];
-                const avgL_l = (L + palL[lastBestIndex]) / 2;
-                const lWeight_l = avgL_l < 40 ? 2.0 : 1.0;
-                let minDistanceSq = (dL_l * lWeight_l) ** 2 + (da_l * da_l) + (db_l * db_l);
+                let minDistanceSq;
+                if (distanceConfig.isCIE94) {
+                    // CIE94 squared distance (pre-computed palette chroma)
+                    minDistanceSq = cie94SquaredInline(
+                        L, a, b,
+                        palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex],
+                        palChroma[lastBestIndex], k1, k2
+                    );
+                } else {
+                    // CIE76 with L-weighting for dark color preservation
+                    const avgL_l = (L + palL[lastBestIndex]) / 2;
+                    const lWeight_l = avgL_l < 40 ? 2.0 : 1.0;
+                    minDistanceSq = cie76WeightedSquaredInline(
+                        L, a, b,
+                        palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex],
+                        lWeight_l
+                    );
+                }
 
                 if (minDistanceSq > SNAP_THRESHOLD_SQ) {
                     let nearestIndex = lastBestIndex;
 
                     // Search all palette colors
                     for (let c = 0; c < paletteSize; c++) {
-                        const dL = L - palL[c];
-                        const da = a - palA[c];
-                        const db = b - palB[c];
-                        // Apply L-weighting for dark colors
-                        const avgL_c = (L + palL[c]) / 2;
-                        const lWeight_c = avgL_c < 40 ? 2.0 : 1.0;
-                        const distSq = (dL * lWeight_c) ** 2 + (da * da) + (db * db);
+                        let distSq;
+                        if (distanceConfig.isCIE94) {
+                            distSq = cie94SquaredInline(
+                                L, a, b,
+                                palL[c], palA[c], palB[c],
+                                palChroma[c], k1, k2
+                            );
+                        } else {
+                            // Apply L-weighting for dark colors
+                            const avgL_c = (L + palL[c]) / 2;
+                            const lWeight_c = avgL_c < 40 ? 2.0 : 1.0;
+                            distSq = cie76WeightedSquaredInline(
+                                L, a, b,
+                                palL[c], palA[c], palB[c],
+                                lWeight_c
+                            );
+                        }
 
                         if (distSq < minDistanceSq) {
                             minDistanceSq = distSq;
@@ -167,7 +218,7 @@ class SeparationEngine {
             await new Promise(resolve => setTimeout(resolve, 0));
         }
 
-        logger.log(`✓ Mapped ${pixelCount} pixels to palette (async batching)`);
+        logger.log(`✓ Mapped ${pixelCount} pixels to palette (${metricLabel})`);
         return colorIndices;
     }
 
@@ -177,16 +228,23 @@ class SeparationEngine {
      * CRITICAL FIX: This uses normalized perceptual ranges (L:0-100, a/b:-128 to 127)
      * and performs distance checks without converting to RGB.
      *
+     * CONFIGURABLE DISTANCE METRIC (v2.1):
+     * - distanceMetric: 'cie76' (default) or 'cie94'
+     * - CIE94 provides better perceptual accuracy for saturated colors
+     *
      * @param {Uint16Array} rawBytes - 16-bit Lab data from imaging.getPixels() (3 channels)
      * @param {Array} labPalette - Array of {L, a, b} objects from PosterizationEngine
      * @param {number} width - Image width (optional, for future dithering support)
      * @param {number} height - Image height (optional, for future dithering support)
-     * @param {Object} options - Options object (optional, for future dithering support)
+     * @param {Object} options - Options object:
+     *   - distanceMetric: 'cie76' (default) or 'cie94'
+     *   - cie94Params: { kL, k1, k2 } - CIE94 parameters (optional)
      * @returns {Uint8Array} - Array of palette indices per pixel
      */
     static mapPixelsToPalette(rawBytes, labPalette, width = null, height = null, options = {}) {
         const pixelCount = rawBytes.length / 3;
         const colorIndices = new Uint8Array(pixelCount);
+        const distanceConfig = normalizeDistanceConfig(options);
 
         // ARTIST-CENTRIC MODEL: Early Exit Optimization
         // If a pixel is "close enough" to a palette color (Lab distance < 2.0),
@@ -195,7 +253,8 @@ class SeparationEngine {
         const SNAP_THRESHOLD = 2.0;
         const SNAP_THRESHOLD_SQ = SNAP_THRESHOLD * SNAP_THRESHOLD;
 
-        logger.log(`Mapping ${pixelCount} pixels using Squared Euclidean Lab distance (early exit < ${SNAP_THRESHOLD})...`);
+        const metricLabel = distanceConfig.isCIE94 ? 'CIE94' : 'CIE76 (L-weighted)';
+        logger.log(`Mapping ${pixelCount} pixels using ${metricLabel} (early exit < ${SNAP_THRESHOLD})...`);
 
         // OPTIMIZATION 3: Exact Match Cache
         // Pre-compute hash map for O(1) exact color lookup
@@ -204,6 +263,15 @@ class SeparationEngine {
         for (let j = 0; j < labPalette.length; j++) {
             const key = `${labPalette[j].L.toFixed(1)},${labPalette[j].a.toFixed(1)},${labPalette[j].b.toFixed(1)}`;
             paletteMap.set(key, j);
+        }
+
+        // Pre-compute chroma for CIE94
+        let palChroma = null;
+        let k1 = 0.045, k2 = 0.015;
+        if (distanceConfig.isCIE94) {
+            palChroma = preparePaletteChroma(labPalette);
+            k1 = distanceConfig.cie94Params.k1;
+            k2 = distanceConfig.cie94Params.k2;
         }
 
         let earlyExitCount = 0;
@@ -236,13 +304,24 @@ class SeparationEngine {
 
             // OPTIMIZATION 4a: Check previous winner first (spatial locality)
             const lastColor = labPalette[lastBestIndex];
-            const dL_last = L - lastColor.L;
-            const da_last = a - lastColor.a;
-            const db_last = b - lastColor.b;
-            // Apply L-weighting for dark colors
-            const avgL_last = (L + lastColor.L) / 2;
-            const lWeight_last = avgL_last < 40 ? 2.0 : 1.0;
-            let minDistanceSq = (dL_last * lWeight_last) ** 2 + (da_last * da_last) + (db_last * db_last);
+            let minDistanceSq;
+
+            if (distanceConfig.isCIE94) {
+                minDistanceSq = cie94SquaredInline(
+                    L, a, b,
+                    lastColor.L, lastColor.a, lastColor.b,
+                    palChroma[lastBestIndex], k1, k2
+                );
+            } else {
+                const avgL_last = (L + lastColor.L) / 2;
+                const lWeight_last = avgL_last < 40 ? 2.0 : 1.0;
+                minDistanceSq = cie76WeightedSquaredInline(
+                    L, a, b,
+                    lastColor.L, lastColor.a, lastColor.b,
+                    lWeight_last
+                );
+            }
+
             let nearestIndex = lastBestIndex;
 
             // If last color is close enough, use it immediately
@@ -258,24 +337,32 @@ class SeparationEngine {
                 if (j === lastBestIndex) continue; // Already checked via spatial locality
 
                 const target = labPalette[j];
+                let distSq;
 
-                const dL = L - target.L;
+                if (distanceConfig.isCIE94) {
+                    distSq = cie94SquaredInline(
+                        L, a, b,
+                        target.L, target.a, target.b,
+                        palChroma[j], k1, k2
+                    );
+                } else {
+                    const dL = L - target.L;
 
-                // OPTIMIZATION 1: Early exit on L channel alone
-                // If L difference squared is already >= current minimum, skip this color
-                const dLsq = dL * dL;
-                if (dLsq >= minDistanceSq) {
-                    continue; // Can't be closer, skip rest of calculation
+                    // OPTIMIZATION 1: Early exit on L channel alone (CIE76 only)
+                    const dLsq = dL * dL;
+                    if (dLsq >= minDistanceSq) {
+                        continue; // Can't be closer, skip rest of calculation
+                    }
+
+                    // Apply perceptual L-scaling to preserve shadow detail
+                    const avgL_j = (L + target.L) / 2;
+                    const lWeight_j = avgL_j < 40 ? 2.0 : 1.0;
+                    distSq = cie76WeightedSquaredInline(
+                        L, a, b,
+                        target.L, target.a, target.b,
+                        lWeight_j
+                    );
                 }
-
-                const da = a - target.a;
-                const db = b - target.b;
-
-                // Squared Euclidean distance with L-weighting for dark colors
-                // Apply perceptual L-scaling to preserve shadow detail
-                const avgL_j = (L + target.L) / 2;
-                const lWeight_j = avgL_j < 40 ? 2.0 : 1.0;
-                const distSq = (dL * lWeight_j) ** 2 + (da * da) + (db * db);
 
                 if (distSq < minDistanceSq) {
                     minDistanceSq = distSq;
@@ -296,7 +383,7 @@ class SeparationEngine {
         const earlyExitPct = ((earlyExitCount / pixelCount) * 100).toFixed(1);
         const exactMatchPct = ((exactMatchCount / pixelCount) * 100).toFixed(1);
         const spatialHitPct = ((spatialHitCount / pixelCount) * 100).toFixed(1);
-        logger.log(`✓ Mapped all pixels to palette (${earlyExitCount} early exits = ${earlyExitPct}%, ${exactMatchCount} exact = ${exactMatchPct}%, ${spatialHitCount} spatial = ${spatialHitPct}%)`);
+        logger.log(`✓ Mapped all pixels to palette using ${metricLabel} (${earlyExitCount} early exits = ${earlyExitPct}%, ${exactMatchCount} exact = ${exactMatchPct}%, ${spatialHitCount} spatial = ${spatialHitPct}%)`);
         return colorIndices;
     }
 

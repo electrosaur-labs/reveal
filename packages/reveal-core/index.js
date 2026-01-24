@@ -15,6 +15,7 @@ const SeparationEngine = require('./lib/engines/SeparationEngine');
 const PreviewEngine = require('./lib/engines/PreviewEngine');
 const DocumentValidator = require('./lib/validation/DocumentValidator');
 const ImageHeuristicAnalyzer = require('./lib/analysis/ImageHeuristicAnalyzer');
+const LabDistance = require('./lib/color/LabDistance');
 const logger = require('./lib/utils/logger');
 
 /**
@@ -85,20 +86,23 @@ async function posterizeImage(labPixels, width, height, colorCount, parameters =
 /**
  * Tool 3: Map Pixels to Palette (Separation)
  *
- * Maps each pixel to nearest palette color using perceptual Lab distance (CIEDE76).
+ * Maps each pixel to nearest palette color using perceptual Lab distance.
  * Returns color indices array for mask generation. Optimized with spatial caching.
  *
  * BREAKING CHANGE (v1.1.0): Added width, height parameters for dithering support.
  * Old callers will fall back to nearest-neighbor (no dithering).
+ *
+ * NEW (v2.1.0): Configurable distance metric (CIE76 or CIE94).
  *
  * @param {Uint8ClampedArray} labPixels - Lab pixel data (3 bytes per pixel)
  * @param {Array<{L, a, b}>} palette - Color palette from posterizeImage()
  * @param {number} width - Image width (required for dithering)
  * @param {number} height - Image height (required for dithering)
  * @param {Object} [parameters] - Separation parameters
- * @param {string} [parameters.ditherType='none'] - 'none', 'floyd-steinberg', or 'blue-noise'
- * @param {number} [parameters.lWeight=1.5] - Lightness weight for distance
- * @param {number} [parameters.cWeight=0.5] - Chroma weight for distance
+ * @param {string} [parameters.ditherType='none'] - 'none', 'floyd-steinberg', 'blue-noise', 'bayer', 'atkinson', 'stucki'
+ * @param {string} [parameters.distanceMetric='cie76'] - 'cie76' or 'cie94'
+ * @param {Object} [parameters.cie94Params] - CIE94 parameters { kL, k1, k2 }
+ * @param {number} [parameters.lWeight=1.5] - Lightness weight for distance (CIE76 only)
  * @param {number} [parameters.snapThreshold=2.0] - Early exit threshold (ΔE)
  * @param {Function} [onProgress] - Progress callback (percent: 0-100)
  * @returns {Promise<Object>} Separation result
@@ -107,19 +111,23 @@ async function posterizeImage(labPixels, width, height, colorCount, parameters =
  *
  * @example
  * const separation = await separateImage(labPixels, result.labPalette, 800, 600, {
- *   ditherType: 'floyd-steinberg'
+ *   ditherType: 'floyd-steinberg',
+ *   distanceMetric: 'cie94'  // Optional: improved perceptual accuracy
  * });
  * console.log(`Mapped ${separation.metadata.totalPixels} pixels`);
  */
 async function separateImage(labPixels, palette, width, height, parameters = {}, onProgress = null) {
     const ditherType = parameters.ditherType || 'none';
+    const distanceMetric = parameters.distanceMetric || 'cie76';
+    const cie94Params = parameters.cie94Params;
+
     const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
         labPixels,
         palette,
         onProgress,
         width,
         height,
-        { ditherType }
+        { ditherType, distanceMetric, cie94Params }
     );
 
     return {
@@ -127,7 +135,8 @@ async function separateImage(labPixels, palette, width, height, parameters = {},
         metadata: {
             totalPixels: colorIndices.length,
             paletteSize: palette.length,
-            ditherType: ditherType
+            ditherType: ditherType,
+            distanceMetric: distanceMetric
         }
     };
 }
@@ -289,5 +298,11 @@ module.exports.engines = {
     ColorSpace: require('./lib/engines/ColorSpace'),
     HueAnalysis: require('./lib/engines/HueAnalysis'),
     CentroidStrategies: require('./lib/engines/CentroidStrategies').CentroidStrategies,
-    DitheringStrategies: require('./lib/engines/DitheringStrategies').DitheringStrategies
+    DitheringStrategies: require('./lib/engines/DitheringStrategies').DitheringStrategies,
+
+    // Lab color distance calculations (v2.1)
+    LabDistance: LabDistance
 };
+
+// Export LabDistance at top level for convenient access
+module.exports.LabDistance = LabDistance;

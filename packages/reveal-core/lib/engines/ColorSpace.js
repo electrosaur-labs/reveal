@@ -7,7 +7,13 @@
  * - CIE76 ΔE distance calculations
  *
  * Extracted from PosterizationEngine for modularity.
+ *
+ * NOTE: Distance functions are now delegated to lib/color/LabDistance.js
+ * The functions here are preserved for backwards compatibility but marked
+ * as deprecated. New code should import from LabDistance directly.
  */
+
+const LabDistance = require('../color/LabDistance');
 
 /**
  * sRGB gamma correction (inverse): sRGB → Linear RGB
@@ -229,6 +235,8 @@ function _rgbToLab(r, g, b) {
  *
  * Scale: 0-2 = imperceptible, 5-10 = noticeable, 10+ = clearly different
  *
+ * @deprecated For Lab inputs, use LabDistance.cie76() from lib/color/LabDistance.js instead.
+ *
  * @param {{r,g,b}} color1 - First color
  * @param {{r,g,b}} color2 - Second color
  * @returns {number} - Delta E (ΔE) distance
@@ -237,25 +245,22 @@ function colorDistance(color1, color2) {
     const lab1 = _rgbToLab(color1.r, color1.g, color1.b);
     const lab2 = _rgbToLab(color2.r, color2.g, color2.b);
 
-    const dL = lab1.L - lab2.L;
-    const da = lab1.a - lab2.a;
-    const db = lab1.b - lab2.b;
-
-    return Math.sqrt(dL * dL + da * da + db * db);
+    // Delegate to centralized LabDistance module
+    return LabDistance.cie76(lab1, lab2);
 }
 
 /**
  * Calculate perceptual distance (ΔE) between two Lab colors
+ *
+ * @deprecated Use LabDistance.cie76() from lib/color/LabDistance.js instead.
  *
  * @param {{L: number, a: number, b: number}} lab1 - First Lab color
  * @param {{L: number, a: number, b: number}} lab2 - Second Lab color
  * @returns {number} - Perceptual distance (ΔE)
  */
 function labDistance(lab1, lab2) {
-    const dL = lab1.L - lab2.L;
-    const da = lab1.a - lab2.a;
-    const db = lab1.b - lab2.b;
-    return Math.sqrt((dL * dL) + (da * da) + (db * db));
+    // Delegate to centralized LabDistance module
+    return LabDistance.cie76(lab1, lab2);
 }
 
 /**
@@ -265,22 +270,15 @@ function labDistance(lab1, lab2) {
  * than in light areas. This prevents dark greens and shadows from being
  * washed out into a single flat black/dark-grey layer.
  *
+ * @deprecated Use LabDistance.cie76Weighted() from lib/color/LabDistance.js instead.
+ *
  * @param {{L: number, a: number, b: number}} lab1 - First Lab color
  * @param {{L: number, a: number, b: number}} lab2 - Second Lab color
  * @returns {number} - Weighted perceptual distance
  */
 function weightedLabDistance(lab1, lab2) {
-    const dL = lab1.L - lab2.L;
-    const da = lab1.a - lab2.a;
-    const db = lab1.b - lab2.b;
-
-    // Increase the weight of L for darker colors to preserve shadow detail
-    // When L < 40 (dark shadows), double the lightness weight
-    // This makes the engine treat "dark green" and "black" as more distinct
-    const avgL = (lab1.L + lab2.L) / 2;
-    const lWeight = avgL < 40 ? 2.0 : 1.0;
-
-    return Math.sqrt((dL * lWeight) ** 2 + da ** 2 + db ** 2);
+    // Delegate to centralized LabDistance module
+    return LabDistance.cie76Weighted(lab1, lab2);
 }
 
 /**
