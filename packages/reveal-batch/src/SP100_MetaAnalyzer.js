@@ -2,7 +2,7 @@
  * SP100_MetaAnalyzer.js
  * Aggregates individual separation metrics into a global health report for SP100 dataset.
  *
- * SP100 structure: data/SP100/output/{loc,wikiart}/*.json
+ * SP100 structure: data/SP100/output/{met,rijks}/psd/8bit/*.json
  *
  * METRICS:
  * - integrityScore: True Integrity (ink + valid paper coverage)
@@ -20,7 +20,7 @@ const path = require('path');
 const SP100_OUTPUT = path.join(__dirname, '../data/SP100/output');
 const OUTPUT_REPORT = path.join(SP100_OUTPUT, 'sp100_meta_analysis.json');
 const OUTPUT_CSV = path.join(SP100_OUTPUT, 'sp100_summary.csv');
-const SUBDIRS = ['loc', 'wikiart']; // SP100 has subdirectories
+const SUBDIRS = ['met', 'rijks']; // SP100 sources: Metropolitan Museum, Rijksmuseum
 
 // --- CALIBRATED THRESHOLDS ---
 const THRESHOLD_INTEGRITY = 60;   // Must be physically printable
@@ -32,16 +32,16 @@ class SP100MetaAnalyzer {
         console.log(`🔍 Scanning SP100 dataset...`);
 
         // Collect JSON files from subdirectories
-        // Note: JSONs are now directly in output/{source}/ (not output/{source}/psd/)
+        // SP100 structure: output/{met,rijks}/psd/8bit/*.json
         const allFiles = [];
         SUBDIRS.forEach(subdir => {
-            const sourceDir = path.join(SP100_OUTPUT, subdir);
+            const sourceDir = path.join(SP100_OUTPUT, subdir, 'psd', '8bit');
             if (fs.existsSync(sourceDir)) {
-                const files = fs.readdirSync(sourceDir).filter(f => f.endsWith('.json'));
+                const files = fs.readdirSync(sourceDir).filter(f => f.endsWith('.json') && f !== 'batch-report.json');
                 files.forEach(f => {
                     allFiles.push({ file: f, fullPath: path.join(sourceDir, f), source: subdir });
                 });
-                console.log(`  Found ${files.length} JSONs in ${subdir}/`);
+                console.log(`  Found ${files.length} JSONs in ${subdir}/psd/8bit/`);
             }
         });
 
@@ -85,11 +85,12 @@ class SP100MetaAnalyzer {
                 this.checkOutliers(stats, data, file);
                 this.checkFailure(stats, data, file, source);
 
-                // Extract color count from layers
-                const colorCount = data.output_summary?.layers?.length || 'unknown';
+                // Extract color count from palette
+                const colorCount = data.palette?.length || 'unknown';
+                const presetId = data.configuration?.id || 'unknown';
 
                 // Add to CSV buffer
-                csvRows.push(`${data.meta.filename},${source},${data.input_parameters.presetId},${colorCount},${data.metrics.global_fidelity.avgDeltaE},${data.metrics.global_fidelity.maxDeltaE},${data.metrics.feature_preservation.revelationScore},${data.metrics.physical_feasibility.integrityScore},${data.metrics.physical_feasibility.densityFloorBreaches},${data.timing.totalMs}`);
+                csvRows.push(`${data.meta.filename},${source},${presetId},${colorCount},${data.metrics.global_fidelity.avgDeltaE},${data.metrics.global_fidelity.maxDeltaE},${data.metrics.feature_preservation.revelationScore},${data.metrics.physical_feasibility.integrityScore},${data.metrics.physical_feasibility.densityFloorBreaches},${data.timing.totalMs}`);
 
             } catch (err) {
                 console.warn(`⚠️ Skipped corrupt file ${file}: ${err.message}`);
@@ -210,7 +211,7 @@ class SP100MetaAnalyzer {
     }
 
     static accumulatePreset(stats, data) {
-        const preset = data.input_parameters.presetId;
+        const preset = data.configuration?.id || 'unknown';
         if (!stats.byPreset[preset]) {
             stats.byPreset[preset] = {
                 count: 0,
@@ -227,7 +228,7 @@ class SP100MetaAnalyzer {
     }
 
     static accumulateColorCount(stats, data) {
-        const colorCount = data.output_summary?.layers?.length || 0;
+        const colorCount = data.palette?.length || 0;
         if (!stats.byColorCount[colorCount]) {
             stats.byColorCount[colorCount] = 0;
         }
