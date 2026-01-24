@@ -85,13 +85,60 @@ This package implements a minimal subset of the Adobe PSD specification:
 - [Adobe PSD Specification](https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/)
 - [PSD Format on FileFormat.info](https://www.fileformat.info/format/psd/egff.htm)
 
+## macOS QuickLook Compatibility
+
+For QuickLook previews to work with Lab PSDs, three things are required:
+
+### 1. Header: Declare exactly 3 channels (L, a, b)
+Do NOT add extra alpha channels for layers. Layer masks are stored separately in Section 4.
+```javascript
+// CORRECT: Always 3 channels for Lab
+writer.writeUint16(3);
+
+// WRONG: Adding alpha channels breaks QuickLook
+channelCount = 3 + layers.length;  // Don't do this!
+```
+
+### 2. Section 5: Write composite image data from a pixel source
+QuickLook reads the merged/composite image from Section 5. Provide pixel data via:
+- `setComposite(labPixels)` for flat files (no layers), OR
+- `addPixelLayer({ pixels: labPixels })` when you have layers
+
+```javascript
+// Option A: Flat mode (no layers, best QuickLook support)
+writer.setComposite(labPixels);
+
+// Option B: With layers (add pixel layer as composite source)
+writer.addPixelLayer({
+  name: 'Original Image (Reference)',
+  pixels: lab8bitData,  // 8-bit Lab encoding (3 bytes/pixel)
+  visible: false
+});
+writer.addFillLayer({ ... });  // Add your ink layers
+```
+
+### 3. Resource 1036: Add JPEG thumbnail
+The thumbnail appears in Finder icons and Adobe dialogs:
+```javascript
+writer.setThumbnail({
+  jpegData: jpegBuffer,  // RGB JPEG, max 160px
+  width: thumbWidth,
+  height: thumbHeight
+});
+```
+
+### Summary
+| Requirement | What to do |
+|-------------|-----------|
+| Header channels | Always 3 (L, a, b) |
+| Section 5 composite | Use `setComposite()` or `addPixelLayer()` |
+| Thumbnail | Call `setThumbnail()` with RGB JPEG |
+
 ## Limitations
 
-- **8-bit only** - No 16-bit support (yet)
-- **Lab only** - No RGB/CMYK support (yet)
-- **Fill layers only** - No raster layers (yet)
-- **No compression** - Raw data only (RLE PackBits could be added)
-- **No composite preview** - Photoshop will generate on first open
+- **Lab only** - No RGB/CMYK support
+- **Fill layers only** - No raster pixel layers with effects
+- **No advanced features** - No text, effects, smart objects
 
 ## Development Status
 

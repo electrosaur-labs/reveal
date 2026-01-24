@@ -27,6 +27,8 @@ class PSDWriter {
         this.nextLayerID = 1;  // Counter for unique layer IDs
         this.thumbnail = null;  // Optional JPEG thumbnail for Resource 1036
         this.compression = options.compression !== undefined ? options.compression : 'rle';  // 'none' or 'rle'
+        this.flatMode = options.flat || false;  // Flat mode: 3 channels, minimal layers, better QuickLook support
+        this.compositePixels = null;  // For flat mode: store composite pixels directly
 
         // Validate constraints
         if (this.colorMode !== 'lab') {
@@ -214,23 +216,50 @@ class PSDWriter {
                 }
             } else {
                 // 8-bit mode
-                const transparency = Buffer.alloc(pixelCount, 255);
-                const L_channel = Buffer.alloc(pixelCount, Math.round((layer.color.L / 100) * 255));
-                const a_channel = Buffer.alloc(pixelCount, Math.round(layer.color.a + 128));
-                const b_channel = Buffer.alloc(pixelCount, Math.round(layer.color.b + 128));
+                if (isPixelLayer) {
+                    // 8-bit pixel layer: extract planar channels from interleaved Lab pixels
+                    const transparency = Buffer.alloc(pixelCount, 255);
+                    const L_channel = Buffer.alloc(pixelCount);
+                    const a_channel = Buffer.alloc(pixelCount);
+                    const b_channel = Buffer.alloc(pixelCount);
 
-                if (useRLE) {
-                    layer._channelData.push(this._compressChannelRLE(transparency, 1));
-                    layer._channelData.push(this._compressChannelRLE(L_channel, 1));
-                    layer._channelData.push(this._compressChannelRLE(a_channel, 1));
-                    layer._channelData.push(this._compressChannelRLE(b_channel, 1));
-                    layer._channelData.push(this._compressChannelRLE(layer.mask, 1));
+                    for (let i = 0; i < pixelCount; i++) {
+                        L_channel[i] = layer.pixels[i * 3];
+                        a_channel[i] = layer.pixels[i * 3 + 1];
+                        b_channel[i] = layer.pixels[i * 3 + 2];
+                    }
+
+                    if (useRLE) {
+                        layer._channelData.push(this._compressChannelRLE(transparency, 1));
+                        layer._channelData.push(this._compressChannelRLE(L_channel, 1));
+                        layer._channelData.push(this._compressChannelRLE(a_channel, 1));
+                        layer._channelData.push(this._compressChannelRLE(b_channel, 1));
+                    } else {
+                        layer._channelData.push({ totalSize: 2 + transparency.length, raw: transparency });
+                        layer._channelData.push({ totalSize: 2 + L_channel.length, raw: L_channel });
+                        layer._channelData.push({ totalSize: 2 + a_channel.length, raw: a_channel });
+                        layer._channelData.push({ totalSize: 2 + b_channel.length, raw: b_channel });
+                    }
                 } else {
-                    layer._channelData.push({ totalSize: 2 + transparency.length, raw: transparency });
-                    layer._channelData.push({ totalSize: 2 + L_channel.length, raw: L_channel });
-                    layer._channelData.push({ totalSize: 2 + a_channel.length, raw: a_channel });
-                    layer._channelData.push({ totalSize: 2 + b_channel.length, raw: b_channel });
-                    layer._channelData.push({ totalSize: 2 + layer.mask.length, raw: layer.mask });
+                    // 8-bit fill layer: solid color channels + mask
+                    const transparency = Buffer.alloc(pixelCount, 255);
+                    const L_channel = Buffer.alloc(pixelCount, Math.round((layer.color.L / 100) * 255));
+                    const a_channel = Buffer.alloc(pixelCount, Math.round(layer.color.a + 128));
+                    const b_channel = Buffer.alloc(pixelCount, Math.round(layer.color.b + 128));
+
+                    if (useRLE) {
+                        layer._channelData.push(this._compressChannelRLE(transparency, 1));
+                        layer._channelData.push(this._compressChannelRLE(L_channel, 1));
+                        layer._channelData.push(this._compressChannelRLE(a_channel, 1));
+                        layer._channelData.push(this._compressChannelRLE(b_channel, 1));
+                        layer._channelData.push(this._compressChannelRLE(layer.mask, 1));
+                    } else {
+                        layer._channelData.push({ totalSize: 2 + transparency.length, raw: transparency });
+                        layer._channelData.push({ totalSize: 2 + L_channel.length, raw: L_channel });
+                        layer._channelData.push({ totalSize: 2 + a_channel.length, raw: a_channel });
+                        layer._channelData.push({ totalSize: 2 + b_channel.length, raw: b_channel });
+                        layer._channelData.push({ totalSize: 2 + layer.mask.length, raw: layer.mask });
+                    }
                 }
             }
         }
@@ -354,6 +383,21 @@ class PSDWriter {
     }
 
     /**
+     * Set composite pixels for flat mode (no layers, just merged image)
+     * This creates PSDs that work well with QuickLook.
+     *
+     * @param {Uint8Array} pixels - Lab pixel data (3 bytes per pixel: L, a, b in byte encoding)
+     */
+    setComposite(pixels) {
+        const expectedSize = this.width * this.height * 3;
+        if (pixels.length !== expectedSize) {
+            throw new Error(`Composite must be ${expectedSize} bytes (${this.width}×${this.height}×3), got ${pixels.length}`);
+        }
+        this.compositePixels = Buffer.from(pixels);
+        this.flatMode = true;
+    }
+
+    /**
      * Write complete PSD file
      *
      * @returns {Buffer} Complete PSD file data
@@ -392,8 +436,8 @@ class PSDWriter {
             writer.writeUint8(0);
         }
 
-        // Channels: 3 Lab (L,a,b) + spot color channels from layers
-        // Note: Photoshop requires these extra channels for layer masks
+        // Channels: 3 for Lab (L,a,b) + alpha channels for layer masks (up to 4)
+        // Photoshop requires extra channels in header and Section 5 for layered documents
         const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
         writer.writeUint16(channelCount);
         writer.writeUint32(this.height);
@@ -526,7 +570,12 @@ class PSDWriter {
         const startPos = writer.tell();
         const updateSectionLength = writer.reserveUint32();
 
-        if (this.bitsPerChannel === 16) {
+        if (this.flatMode) {
+            // Flat mode: minimal layer/mask section for QuickLook compatibility
+            // Just write empty layer info and global mask
+            writer.writeUint32(0);  // Layer info length = 0
+            writer.writeUint32(0);  // Global layer mask length = 0
+        } else if (this.bitsPerChannel === 16) {
             // 16-bit format: empty layer info, use Lr16 block
             writer.writeUint32(0);  // Layer info length = 0
             writer.writeUint32(0);  // Global mask length = 0
@@ -1015,13 +1064,19 @@ class PSDWriter {
      *
      * This is what macOS Finder/QuickLook uses to render previews.
      * Must contain actual flattened image data, not neutral values.
+     *
+     * IMPORTANT: The number of channels written here must match the
+     * channel count declared in the header (Section 1).
      */
     _writeImageData(writer) {
         const pixelCount = this.width * this.height;
-        const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
 
-        // Find the first pixel layer to use as composite source
-        const pixelLayer = this.layers.find(layer => layer.type === 'pixel');
+        // Calculate how many extra alpha channels we need (same formula as header)
+        const extraAlphaCount = this.layers.length > 0 ? Math.min(this.layers.length, 4) : 0;
+
+        // Find the pixel source: compositePixels (flat mode) or first pixel layer
+        const pixelLayer = this.flatMode ? null : this.layers.find(layer => layer.type === 'pixel');
+        const pixelSource = this.flatMode ? this.compositePixels : (pixelLayer ? pixelLayer.pixels : null);
 
         const useRLE = this.compression === 'rle';
 
@@ -1034,7 +1089,7 @@ class PSDWriter {
             const bytesPerPixel = this.bitsPerChannel === 16 ? 2 : 1;
 
             if (this.bitsPerChannel === 16) {
-                if (pixelLayer && pixelLayer.pixels) {
+                if (pixelSource) {
                     // L channel
                     const L_channel = Buffer.alloc(pixelCount * 2);
                     // a channel
@@ -1042,22 +1097,22 @@ class PSDWriter {
                     // b channel
                     const b_channel = Buffer.alloc(pixelCount * 2);
 
-                    if (pixelLayer.pixels16bit) {
+                    if (pixelLayer && pixelLayer.pixels16bit) {
                         // Native 16-bit: copy directly (6 bytes per pixel)
                         for (let i = 0; i < pixelCount; i++) {
-                            L_channel[i * 2] = pixelLayer.pixels[i * 6];
-                            L_channel[i * 2 + 1] = pixelLayer.pixels[i * 6 + 1];
-                            a_channel[i * 2] = pixelLayer.pixels[i * 6 + 2];
-                            a_channel[i * 2 + 1] = pixelLayer.pixels[i * 6 + 3];
-                            b_channel[i * 2] = pixelLayer.pixels[i * 6 + 4];
-                            b_channel[i * 2 + 1] = pixelLayer.pixels[i * 6 + 5];
+                            L_channel[i * 2] = pixelSource[i * 6];
+                            L_channel[i * 2 + 1] = pixelSource[i * 6 + 1];
+                            a_channel[i * 2] = pixelSource[i * 6 + 2];
+                            a_channel[i * 2 + 1] = pixelSource[i * 6 + 3];
+                            b_channel[i * 2] = pixelSource[i * 6 + 4];
+                            b_channel[i * 2 + 1] = pixelSource[i * 6 + 5];
                         }
                     } else {
                         // 8-bit encoding: scale to 16-bit
                         for (let i = 0; i < pixelCount; i++) {
-                            L_channel.writeUInt16BE(pixelLayer.pixels[i * 3] * 257, i * 2);
-                            a_channel.writeUInt16BE(pixelLayer.pixels[i * 3 + 1] * 257, i * 2);
-                            b_channel.writeUInt16BE(pixelLayer.pixels[i * 3 + 2] * 257, i * 2);
+                            L_channel.writeUInt16BE(pixelSource[i * 3] * 257, i * 2);
+                            a_channel.writeUInt16BE(pixelSource[i * 3 + 1] * 257, i * 2);
+                            b_channel.writeUInt16BE(pixelSource[i * 3 + 2] * 257, i * 2);
                         }
                     }
 
@@ -1077,26 +1132,35 @@ class PSDWriter {
                     channels.push(Buffer.from(ab_channel));  // b (copy)
                 }
 
-                // Additional alpha channels
-                for (let ch = 3; ch < channelCount; ch++) {
-                    const alpha = Buffer.alloc(pixelCount * 2);
-                    channels.push(alpha);
+                // Add extra alpha channels for layer masks (16-bit)
+                for (let a = 0; a < extraAlphaCount; a++) {
+                    const alpha_channel = Buffer.alloc(pixelCount * 2);
+                    for (let i = 0; i < pixelCount; i++) {
+                        alpha_channel.writeUInt16BE(65535, i * 2);  // Fully opaque
+                    }
+                    channels.push(alpha_channel);
                 }
             } else {
                 // 8-bit mode
-                if (pixelLayer && pixelLayer.pixels) {
+                if (pixelSource) {
                     const L_channel = Buffer.alloc(pixelCount);
                     const a_channel = Buffer.alloc(pixelCount);
                     const b_channel = Buffer.alloc(pixelCount);
                     for (let i = 0; i < pixelCount; i++) {
-                        L_channel[i] = pixelLayer.pixels[i * 3];
-                        a_channel[i] = pixelLayer.pixels[i * 3 + 1];
-                        b_channel[i] = pixelLayer.pixels[i * 3 + 2];
+                        L_channel[i] = pixelSource[i * 3];
+                        a_channel[i] = pixelSource[i * 3 + 1];
+                        b_channel[i] = pixelSource[i * 3 + 2];
                     }
                     channels.push(L_channel, a_channel, b_channel);
                 } else {
                     const neutral = Buffer.alloc(pixelCount, 128);
                     channels.push(Buffer.from(neutral), Buffer.from(neutral), Buffer.from(neutral));
+                }
+
+                // Add extra alpha channels for layer masks (8-bit)
+                for (let a = 0; a < extraAlphaCount; a++) {
+                    const alpha_channel = Buffer.alloc(pixelCount, 255);  // Fully opaque
+                    channels.push(alpha_channel);
                 }
             }
 
@@ -1126,34 +1190,34 @@ class PSDWriter {
             writer.writeUint16(0);
 
             if (this.bitsPerChannel === 16) {
-                if (pixelLayer && pixelLayer.pixels) {
-                    if (pixelLayer.pixels16bit) {
+                if (pixelSource) {
+                    if (pixelLayer && pixelLayer.pixels16bit) {
                         // Native 16-bit: write directly (6 bytes per pixel)
                         // L channel (planar)
                         for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint8(pixelLayer.pixels[i * 6]);
-                            writer.writeUint8(pixelLayer.pixels[i * 6 + 1]);
+                            writer.writeUint8(pixelSource[i * 6]);
+                            writer.writeUint8(pixelSource[i * 6 + 1]);
                         }
                         // a channel (planar)
                         for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint8(pixelLayer.pixels[i * 6 + 2]);
-                            writer.writeUint8(pixelLayer.pixels[i * 6 + 3]);
+                            writer.writeUint8(pixelSource[i * 6 + 2]);
+                            writer.writeUint8(pixelSource[i * 6 + 3]);
                         }
                         // b channel (planar)
                         for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint8(pixelLayer.pixels[i * 6 + 4]);
-                            writer.writeUint8(pixelLayer.pixels[i * 6 + 5]);
+                            writer.writeUint8(pixelSource[i * 6 + 4]);
+                            writer.writeUint8(pixelSource[i * 6 + 5]);
                         }
                     } else {
                         // 8-bit encoding: scale to 16-bit
                         for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint16(pixelLayer.pixels[i * 3] * 257);
+                            writer.writeUint16(pixelSource[i * 3] * 257);
                         }
                         for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint16(pixelLayer.pixels[i * 3 + 1] * 257);
+                            writer.writeUint16(pixelSource[i * 3 + 1] * 257);
                         }
                         for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint16(pixelLayer.pixels[i * 3 + 2] * 257);
+                            writer.writeUint16(pixelSource[i * 3 + 2] * 257);
                         }
                     }
                 } else {
@@ -1161,18 +1225,29 @@ class PSDWriter {
                     for (let i = 0; i < pixelCount; i++) writer.writeUint16(32768);
                     for (let i = 0; i < pixelCount; i++) writer.writeUint16(32768);
                 }
-                for (let ch = 3; ch < channelCount; ch++) {
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint16(0);
+
+                // Extra alpha channels for layer masks (16-bit uncompressed)
+                for (let a = 0; a < extraAlphaCount; a++) {
+                    for (let i = 0; i < pixelCount; i++) {
+                        writer.writeUint16(65535);  // Fully opaque
+                    }
                 }
             } else {
-                if (pixelLayer && pixelLayer.pixels) {
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelLayer.pixels[i * 3]);
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelLayer.pixels[i * 3 + 1]);
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelLayer.pixels[i * 3 + 2]);
+                if (pixelSource) {
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelSource[i * 3]);
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelSource[i * 3 + 1]);
+                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelSource[i * 3 + 2]);
                 } else {
                     for (let i = 0; i < pixelCount; i++) writer.writeUint8(128);
                     for (let i = 0; i < pixelCount; i++) writer.writeUint8(128);
                     for (let i = 0; i < pixelCount; i++) writer.writeUint8(128);
+                }
+
+                // Extra alpha channels for layer masks (8-bit uncompressed)
+                for (let a = 0; a < extraAlphaCount; a++) {
+                    for (let i = 0; i < pixelCount; i++) {
+                        writer.writeUint8(255);  // Fully opaque
+                    }
                 }
             }
         }
