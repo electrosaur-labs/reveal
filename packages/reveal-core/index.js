@@ -16,7 +16,90 @@ const PreviewEngine = require('./lib/engines/PreviewEngine');
 const DocumentValidator = require('./lib/validation/DocumentValidator');
 const ImageHeuristicAnalyzer = require('./lib/analysis/ImageHeuristicAnalyzer');
 const LabDistance = require('./lib/color/LabDistance');
+const BilateralFilter = require('./lib/preprocessing/BilateralFilter');
+const ParameterGenerator = require('./lib/analysis/ParameterGenerator');
 const logger = require('./lib/utils/logger');
+
+/**
+ * Tool 0: Generate Configuration from DNA
+ *
+ * Creates complete processing configuration from DNA analysis results.
+ * Includes preprocessing settings (bilateral filter), distance metric selection,
+ * and all posterization parameters.
+ *
+ * @param {Object} dna - DNA analysis result from analyzeImage or external analyzer
+ * @param {Object} [options] - Configuration options
+ * @param {Uint8ClampedArray} [options.imageData] - RGBA data for entropy calculation
+ * @param {number} [options.width] - Image width
+ * @param {number} [options.height] - Image height
+ * @param {string} [options.preprocessingIntensity='auto'] - 'off', 'auto', 'light', 'heavy'
+ * @returns {Object} Complete configuration object
+ *
+ * @example
+ * const config = generateConfiguration(dna, {
+ *   imageData: rgbaPixels,
+ *   width: 800,
+ *   height: 600,
+ *   preprocessingIntensity: 'auto'
+ * });
+ * // config.preprocessing.enabled, config.targetColors, config.distanceMetric, etc.
+ */
+function generateConfiguration(dna, options = {}) {
+    return ParameterGenerator.generate(dna, options);
+}
+
+/**
+ * Tool 0.5: Preprocess Image
+ *
+ * Apply bilateral filter for noise reduction while preserving edges.
+ * Part of the 3-Level Perceptual Rescue System.
+ *
+ * @param {Uint8ClampedArray} imageData - RGBA pixel data (modified in place)
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @param {Object} config - Preprocessing config (from generateConfiguration().preprocessing)
+ * @returns {Object} Processing result
+ *
+ * @example
+ * const config = generateConfiguration(dna, { imageData, width, height });
+ * if (config.preprocessing.enabled) {
+ *   preprocessImage(imageData, width, height, config.preprocessing);
+ * }
+ */
+function preprocessImage(imageData, width, height, config) {
+    if (!config || !config.enabled) {
+        return { processed: false, reason: 'Preprocessing disabled' };
+    }
+
+    BilateralFilter.applyBilateralFilter(
+        imageData,
+        width,
+        height,
+        config.radius || 4,
+        config.sigmaR || 30
+    );
+
+    return {
+        processed: true,
+        intensity: config.intensity,
+        reason: config.reason
+    };
+}
+
+/**
+ * Tool 0.6: Calculate Entropy Score
+ *
+ * Measures local variance to detect noise vs texture.
+ * Used internally by generateConfiguration for preprocessing decisions.
+ *
+ * @param {Uint8ClampedArray} imageData - RGBA pixel data
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @returns {number} Entropy score (0-100, higher = noisier)
+ */
+function calculateEntropy(imageData, width, height) {
+    return BilateralFilter.calculateEntropyScore(imageData, width, height);
+}
 
 /**
  * Tool 1: Analyze Image Characteristics
@@ -267,6 +350,11 @@ function labToRgb(L, a, b) {
 
 // Export agent-optimized API
 module.exports = {
+    // Configuration generation (new in v2.0)
+    generateConfiguration,
+    preprocessImage,
+    calculateEntropy,
+
     // Core tools (mid-level granularity for agents)
     analyzeImage,
     posterizeImage,
@@ -282,7 +370,7 @@ module.exports = {
     labToRgb,
 
     // Metadata
-    version: '1.0.0',
+    version: '2.0.0',
     logger
 };
 
@@ -301,8 +389,18 @@ module.exports.engines = {
     DitheringStrategies: require('./lib/engines/DitheringStrategies').DitheringStrategies,
 
     // Lab color distance calculations (v2.1)
-    LabDistance: LabDistance
+    LabDistance: LabDistance,
+
+    // Preprocessing (v2.0)
+    BilateralFilter: BilateralFilter,
+    ParameterGenerator: ParameterGenerator
 };
 
 // Export LabDistance at top level for convenient access
 module.exports.LabDistance = LabDistance;
+
+// Export BilateralFilter at top level for convenient access
+module.exports.BilateralFilter = BilateralFilter;
+
+// Export ParameterGenerator at top level for convenient access
+module.exports.ParameterGenerator = ParameterGenerator;
