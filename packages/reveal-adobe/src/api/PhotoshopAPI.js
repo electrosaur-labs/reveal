@@ -160,10 +160,17 @@ class PhotoshopAPI {
         logger.log(`Data type: ${rgbaData.constructor.name}`);
         logger.log(`Actual dimensions: ${actualWidth}x${actualHeight} (expected ${scaledWidth}x${scaledHeight})`);
 
-        // Verify we got the expected data type
+        // Verify and convert data type if needed
         if (componentSize === 16 && !(rgbaData instanceof Uint16Array)) {
-            logger.error(`⚠️ Expected Uint16Array for 16-bit but got ${rgbaData.constructor.name}`);
-            logger.error(`   UXP may not support 16-bit extraction properly`);
+            logger.log(`⚠️ Expected Uint16Array for 16-bit but got ${rgbaData.constructor.name}`);
+            // Convert byte array to Uint16Array view
+            // UXP returns bytes in platform-native order (little-endian on most systems)
+            if (rgbaData instanceof Uint8Array || rgbaData instanceof Uint8ClampedArray) {
+                logger.log(`Converting ${rgbaData.length} bytes to Uint16Array...`);
+                // Create Uint16Array view from the underlying buffer
+                rgbaData = new Uint16Array(rgbaData.buffer, rgbaData.byteOffset, rgbaData.byteLength / 2);
+                logger.log(`✓ Converted to Uint16Array with ${rgbaData.length} elements`);
+            }
         } else if (componentSize === 8 && !(rgbaData instanceof Uint8Array) && !(rgbaData instanceof Uint8ClampedArray)) {
             logger.error(`⚠️ Expected Uint8Array for 8-bit but got ${rgbaData.constructor.name}`);
         }

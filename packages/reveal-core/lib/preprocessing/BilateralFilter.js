@@ -401,6 +401,17 @@ class RevealPreProcessor {
  * @returns {number} Entropy score (0-100, higher = noisier)
  */
 function calculateEntropyScoreLab(labData, width, height, sampleRate = 4) {
+    // Validate input
+    if (!labData || !labData.length || width <= 0 || height <= 0) {
+        return 0;  // Return 0 for invalid input (no entropy detected)
+    }
+
+    const expectedLength = width * height * 3;
+    if (labData.length < expectedLength) {
+        console.warn(`calculateEntropyScoreLab: data length ${labData.length} < expected ${expectedLength}`);
+        return 0;  // Return 0 for malformed data
+    }
+
     let totalVariance = 0;
     let sampleCount = 0;
 
@@ -430,14 +441,18 @@ function calculateEntropyScoreLab(labData, width, height, sampleRate = 4) {
 
             const mean = sum / n;
             const variance = (sumSq / n) - (mean * mean);
-            totalVariance += Math.sqrt(variance);
+            // Guard against floating-point errors that could make variance slightly negative
+            if (variance > 0 && !isNaN(variance)) {
+                totalVariance += Math.sqrt(variance);
+            }
             sampleCount++;
         }
     }
 
     // Normalize to 0-100 scale
     const avgVariance = totalVariance / Math.max(1, sampleCount);
-    return Math.min(100, avgVariance * 2);
+    const result = Math.min(100, avgVariance * 2);
+    return isNaN(result) ? 0 : result;
 }
 
 /**
