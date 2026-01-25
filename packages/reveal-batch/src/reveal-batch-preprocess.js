@@ -35,8 +35,9 @@ const { PSDWriter } = require('@reveal/psd-writer');
 const { readPsd } = require('@reveal/psd-reader');
 const DynamicConfigurator = require('./DynamicConfigurator');
 const MetricsCalculator = require('./MetricsCalculator');
+const BilateralFilter = require('@reveal/core/lib/preprocessing/BilateralFilter');
 const chalk = require('chalk');
-const sharp = require('sharp');
+const sharp = require('sharp');  // Only used for thumbnail generation
 
 // === PREPROCESSING: BILATERAL FILTER ===
 
@@ -395,15 +396,19 @@ function convertPsd16bitToEngineLab(labPsd16, pixelCount) {
 }
 
 /**
- * Convert 16-bit Lab encoding to 8-bit Lab encoding
+ * Convert Photoshop 16-bit Lab encoding (0-32768) to 8-bit Lab encoding (0-255)
+ * Note: Previously used /257 for ICC encoding (0-65535), now uses /128.5 for Photoshop encoding
  */
 function convert16bitTo8bitLab(lab16bit, pixelCount) {
     const lab8bit = new Uint8Array(pixelCount * 3);
+    const scale = 255 / 32768;  // Photoshop encoding (was 255/65535 = 1/257 for ICC)
 
     for (let i = 0; i < pixelCount; i++) {
-        lab8bit[i * 3] = Math.round(lab16bit[i * 3] / 257);
-        lab8bit[i * 3 + 1] = Math.round(lab16bit[i * 3 + 1] / 257);
-        lab8bit[i * 3 + 2] = Math.round(lab16bit[i * 3 + 2] / 257);
+        // L channel: 0-32768 → 0-255
+        lab8bit[i * 3] = Math.round(Math.min(255, lab16bit[i * 3] * scale));
+        // a/b channels: 0-32768 (neutral=16384) → 0-255 (neutral=128)
+        lab8bit[i * 3 + 1] = Math.round(Math.min(255, lab16bit[i * 3 + 1] * scale));
+        lab8bit[i * 3 + 2] = Math.round(Math.min(255, lab16bit[i * 3 + 2] * scale));
     }
 
     return lab8bit;
@@ -489,6 +494,7 @@ function rgbToHex(r, g, b) {
 
 /**
  * Calculate image DNA from 8-bit Lab data
+ * @deprecated Use calculateImageDNA16 for 16-bit Lab pipelines
  */
 function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
     const pixelCount = width * height;
@@ -529,6 +535,52 @@ function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
 }
 
 /**
+ * Calculate image DNA from 16-bit Lab data
+ * 16-bit Lab encoding: L = 0-32768 (maps to 0-100), a/b = 0-32768 with 16384 = neutral
+ */
+function calculateImageDNA16(lab16bit, width, height, sampleStep = 40) {
+    const pixelCount = width * height;
+    const maxValue = 32768;
+    const neutralAB = 16384;
+    const abScale = 128 / 16384;
+
+    let sumL = 0, sumC = 0;
+    let minL = 100, maxL = 0, maxC = 0;
+    let sampleCount = 0;
+    const lValues = [];
+
+    for (let i = 0; i < pixelCount; i += sampleStep) {
+        const L = (lab16bit[i * 3] / maxValue) * 100;
+        const a = (lab16bit[i * 3 + 1] - neutralAB) * abScale;
+        const b = (lab16bit[i * 3 + 2] - neutralAB) * abScale;
+        const C = Math.sqrt(a * a + b * b);
+
+        sumL += L;
+        sumC += C;
+        lValues.push(L);
+        if (L < minL) minL = L;
+        if (L > maxL) maxL = L;
+        if (C > maxC) maxC = C;
+        sampleCount++;
+    }
+
+    const avgL = sumL / sampleCount;
+    const avgC = sumC / sampleCount;
+    const lVariance = lValues.reduce((sum, l) => sum + Math.pow(l - avgL, 2), 0) / sampleCount;
+    const lStdDev = Math.sqrt(lVariance);
+
+    return {
+        l: parseFloat(avgL.toFixed(1)),
+        c: parseFloat(avgC.toFixed(1)),
+        k: parseFloat((maxL - minL).toFixed(1)),
+        minL: parseFloat(minL.toFixed(1)),
+        maxL: parseFloat(maxL.toFixed(1)),
+        maxC: parseFloat(maxC.toFixed(1)),
+        l_std_dev: parseFloat(lStdDev.toFixed(1))
+    };
+}
+
+/**
  * Process a single Lab PSD with optional preprocessing
  */
 async function processImage(inputPath, outputDir) {
@@ -540,7 +592,7 @@ async function processImage(inputPath, outputDir) {
     let preprocessReason = '';
 
     try {
-        // 1. Read Lab PSD
+        // 1. Read Lab PSD - get raw Lab data
         const buffer = fs.readFileSync(inputPath);
         const psd = readPsd(buffer);
         const { width, height, depth, data: labData } = psd;
@@ -548,17 +600,28 @@ async function processImage(inputPath, outputDir) {
 
         console.log(`  Size: ${width}×${height} (${depth}-bit Lab)`);
 
-        // 2. Convert to 8-bit Lab
-        let lab8bit;
-        if (depth === 8) {
-            lab8bit = new Uint8Array(labData);  // Copy for potential modification
+        // 2. Ensure 16-bit Lab format (engine operates exclusively in 16-bit Lab)
+        // PSD files use ICC Lab encoding (0-65535), but engines expect Photoshop encoding (0-32768)
+        let lab16bit;
+        if (depth === 16) {
+            // Create mutable copy and normalize from ICC Lab (0-65535) to Photoshop Lab (0-32768)
+            // ICC 16-bit Lab: L=0-65535, a/b=0-65535 (neutral=32768)
+            // Photoshop 16-bit Lab: L=0-32768, a/b=0-32768 (neutral=16384)
+            lab16bit = new Uint16Array(pixelCount * 3);
+            const rawData = new Uint16Array(labData.buffer, labData.byteOffset, pixelCount * 3);
+            for (let i = 0; i < rawData.length; i++) {
+                lab16bit[i] = Math.round(rawData[i] / 2);
+            }
+            console.log(`  Normalized ICC Lab (0-65535) → Photoshop Lab (0-32768)`);
         } else {
-            lab8bit = convert16bitTo8bitLab(labData, pixelCount);
+            // Convert 8-bit to 16-bit Lab (8-bit encoding is same in ICC and Photoshop)
+            console.log(`  Converting ${depth}-bit Lab to 16-bit...`);
+            lab16bit = convert8bitTo16bitLab(new Uint8Array(labData), pixelCount);
         }
 
-        // 3. Calculate image DNA (before preprocessing)
+        // 3. Calculate image DNA from 16-bit Lab (no conversion needed)
         console.log(`  Calculating image DNA...`);
-        const dna = calculateImageDNA(lab8bit, width, height);
+        const dna = calculateImageDNA16(lab16bit, width, height);
         dna.filename = basename;
 
         // 4. Generate config to get archetype
@@ -568,29 +631,33 @@ async function processImage(inputPath, outputDir) {
         console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, StdDev=${dna.l_std_dev}, maxC=${dna.maxC}`);
         console.log(chalk.green(`  ✓ Archetype: ${dna.archetype}`));
 
-        // 5. Convert to RGBA for entropy calculation
+        // 5. Calculate entropy from 16-bit Lab L channel (no RGBA conversion)
         console.log(`  Calculating entropy score...`);
-        const rgba = lab8bitToRgba(lab8bit, width, height);
-        const imageData = { width, height, data: rgba };
-        const entropyScore = calculateEntropyScore(imageData);
+        const entropyScore = BilateralFilter.calculateEntropyScoreLab(lab16bit, width, height);
         dna.entropy = parseFloat(entropyScore.toFixed(1));
         console.log(`  Entropy: ${dna.entropy}`);
 
-        // 6. Determine if preprocessing is needed
-        const preprocessDecision = shouldPreprocess(dna, entropyScore);
+        // 6. Determine if preprocessing is needed (using @reveal/core decision logic)
+        const preprocessDecision = BilateralFilter.shouldPreprocess(dna, entropyScore);
 
         if (preprocessDecision.shouldProcess) {
             console.log(chalk.yellow(`  ⚡ Preprocessing: ${preprocessDecision.reason}`));
             console.log(`     Bilateral filter: radius=${preprocessDecision.radius}, sigmaR=${preprocessDecision.sigmaR}`);
 
             const preprocessStart = Date.now();
-            applyOptimizedBilateral(imageData, preprocessDecision.radius, preprocessDecision.sigmaR);
-            const preprocessTime = Date.now() - preprocessStart;
 
+            // Apply bilateral filter directly on 16-bit Lab data (no RGBA conversion)
+            BilateralFilter.applyBilateralFilterLab(
+                lab16bit,
+                width,
+                height,
+                preprocessDecision.radius,
+                preprocessDecision.sigmaR
+            );
+
+            const preprocessTime = Date.now() - preprocessStart;
             console.log(chalk.green(`  ✓ Preprocessing complete (${preprocessTime}ms)`));
 
-            // Convert filtered RGBA back to 8-bit Lab
-            lab8bit = rgbaToLab8bit(imageData.data, width, height);
             preprocessed = true;
             preprocessReason = preprocessDecision.reason;
         } else {
@@ -598,9 +665,7 @@ async function processImage(inputPath, outputDir) {
             preprocessReason = preprocessDecision.reason;
         }
 
-        // 7. Convert to engine 16-bit format
-        console.log(`  Converting to engine 16-bit encoding...`);
-        const lab16bit = convert8bitTo16bitLab(lab8bit, pixelCount);
+        // Lab data is already in 16-bit format - no conversion needed
 
         // 8. Continue with standard posterization pipeline
         console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
@@ -676,6 +741,10 @@ async function processImage(inputPath, outputDir) {
             processedLab[i * 3 + 1] = color.a + 128;
             processedLab[i * 3 + 2] = color.b + 128;
         }
+
+        // Convert 16-bit Lab to 8-bit for output (PSD writing, metrics, thumbnail)
+        // Note: All processing was done in 16-bit; 8-bit is only for legacy output formats
+        const lab8bit = convert16bitTo8bitLab(lab16bit, pixelCount);
 
         // 13. Calculate metrics
         console.log(`  Computing validation metrics...`);
