@@ -1087,6 +1087,26 @@
                                 <br><strong>Museum Grade:</strong> Complex 16-bit files, deep gradients, and blue/violet tones.
                             </div>
                         </div>
+
+                        <!-- Preprocessing (Noise Reduction) -->
+                        <div class="form-group">
+                            <label for="preprocessingIntensity">
+                                <strong>Preprocessing</strong>
+                                <span class="hint">(noise reduction)</span>
+                            </label>
+                            <select id="preprocessingIntensity" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
+                                <option value="off">Off</option>
+                                <option value="auto" selected>Auto (Recommended)</option>
+                                <option value="light">Light</option>
+                                <option value="heavy">Heavy</option>
+                            </select>
+                            <div class="helper-text">
+                                <strong>Auto:</strong> DNA analysis decides based on image entropy (recommended).
+                                <br><strong>Off:</strong> No preprocessing - preserves all detail including noise.
+                                <br><strong>Light:</strong> Gentle bilateral filter for slight noise reduction.
+                                <br><strong>Heavy:</strong> Aggressive bilateral filter for noisy/grainy images.
+                            </div>
+                        </div>
                     </div>
                 </div>
 
