@@ -147,12 +147,12 @@ function testChromaticZeroCrossing() {
     const entropyBefore = calculateEntropyScoreLab(labData, psd.width, psd.height);
     console.log(`  Entropy score: ${entropyBefore.toFixed(2)}`);
 
-    // Verify we have unique a* values per column
-    // After ICC→PS conversion (/2), 1024 ICC values become ~512 PS values
-    // Each column should still have a unique value within PS precision
-    const expectedUniqueA = Math.ceil(psd.width / 2) + 1;  // ~513 after /2 conversion
-    const hasLinearGradientA = beforeA.uniqueValues >= expectedUniqueA * 0.95;
-    console.log(`  ✓ Linear gradient check: ${hasLinearGradientA ? 'PASS' : 'FAIL'} (${beforeA.uniqueValues} unique a* values, expected ~${expectedUniqueA})`);
+    // Verify we have many unique a* values (linear gradient from -30 to +30)
+    // Range is ~15000 ICC values, which becomes ~7500 PS values after /2
+    // Over 1024 pixels = ~7.3 PS values per pixel step
+    // Should have close to 1024 unique values
+    const hasLinearGradientA = beforeA.uniqueValues >= psd.width * 0.9;
+    console.log(`  ✓ Linear gradient check: ${hasLinearGradientA ? 'PASS' : 'FAIL'} (${beforeA.uniqueValues} unique a* values, expected ~${psd.width})`);
 
     // Apply filter (light params for clean image)
     applyBilateralFilterLab(labData, psd.width, psd.height, 3, 30);
@@ -217,12 +217,12 @@ function testSubBitDepthGradient() {
     console.log(`  L range (16-bit steps): ${beforeL.max - beforeL.min}`);
     console.log(`  Unique L values: ${beforeL.uniqueValues}`);
 
-    // Verify we have unique L values per column
-    // After ICC→PS conversion (/2), 1024 ICC values become 512 PS values
-    // But since we're using consecutive integers, each column should still be unique
-    const expectedUniqueL = psd.width;  // Should match width for true linear gradient
-    const has1024UniqueL = beforeL.uniqueValues >= expectedUniqueL * 0.5;  // Allow for /2 quantization
-    console.log(`  ✓ Linear gradient check: ${has1024UniqueL ? 'PASS' : 'FAIL'} (${beforeL.uniqueValues} unique L values)`);
+    // Verify we have many unique L values (linear gradient from 20% to 80%)
+    // Range is ~39000 ICC values, which becomes ~19500 PS values after /2
+    // Over 1024 pixels = ~19 PS values per pixel step
+    // Should have close to 1024 unique values
+    const hasLinearGradientL = beforeL.uniqueValues >= psd.width * 0.9;
+    console.log(`  ✓ Linear gradient check: ${hasLinearGradientL ? 'PASS' : 'FAIL'} (${beforeL.uniqueValues} unique L values, expected ~${psd.width})`);
 
     const entropyBefore = calculateEntropyScoreLab(labData, psd.width, psd.height);
     console.log(`  Entropy score: ${entropyBefore.toFixed(2)}`);
@@ -266,7 +266,7 @@ function testSubBitDepthGradient() {
     const minimalChange = avgChange < 50;
     console.log(`  ✓ Minimal modification: ${minimalChange ? 'PASS' : 'FAIL'} (avg=${avgChange.toFixed(1)})`);
 
-    return has1024UniqueL && rangePreserved && uniquePreserved && minimalChange;
+    return hasLinearGradientL && rangePreserved && uniquePreserved && minimalChange;
 }
 
 // ============================================================================
@@ -297,11 +297,12 @@ function testEdgePreservingImpulse() {
     const edgeX = psd.width / 2;
 
     // PS 16-bit encoding values:
-    // L=20% → 6554, L=30% → 9830, L=40% → 13107
-    // L=60% → 19661, L=70% → 22938, L=80% → 26214
+    // L=10% → 3277, L=30% → 9830, L=50% → 16384
+    // L=70% → 22938, L=90% → 29491
+    // Noise is now ±20% from background (more visible)
     const darkBgPS = 9830;    // L=30%
     const lightBgPS = 22938;  // L=70%
-    const tolerance = 500;    // ~1.5% tolerance for "background" (noise is ±10%)
+    const tolerance = 1000;   // ~3% tolerance for "background"
 
     const entropyBefore = calculateEntropyScoreLab(labData, psd.width, psd.height);
     const noiseBefore = countNoisePixelsEdge(labData, psd.width, psd.height, darkBgPS, lightBgPS, tolerance);
