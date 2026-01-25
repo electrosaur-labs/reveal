@@ -7,9 +7,19 @@ const ParameterGenerator = require('@reveal/core/lib/analysis/ParameterGenerator
 
 class DynamicConfigurator {
 
-    static generate(dna) {
+    /**
+     * Generate configuration from DNA analysis
+     * @param {Object} dna - DNA analysis result
+     * @param {Object} [options] - Generation options (new in v2.0)
+     * @param {Uint8ClampedArray} [options.imageData] - RGBA data for entropy calculation
+     * @param {number} [options.width] - Image width
+     * @param {number} [options.height] - Image height
+     * @param {string} [options.preprocessingIntensity='auto'] - 'off', 'auto', 'light', 'heavy'
+     * @returns {Object} Complete configuration including preprocessing
+     */
+    static generate(dna, options = {}) {
         // Delegate to core implementation
-        return ParameterGenerator.generate(dna);
+        return ParameterGenerator.generate(dna, options);
     }
 
     // Legacy implementation (kept for reference)

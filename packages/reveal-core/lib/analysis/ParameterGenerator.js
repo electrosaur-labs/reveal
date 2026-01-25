@@ -1,5 +1,5 @@
 /**
- * DynamicConfigurator v1.9
+ * DynamicConfigurator v2.0
  * Driven by Archetype Classification (Tonal Variation vs Chroma)
  *
  * CHANGELOG:
@@ -9,10 +9,16 @@
  * - v1.7: Archetype classification with per-archetype strategies
  * - v1.8: Added distanceMetric selection (CIE76 vs CIE94) based on chroma
  * - v1.9: Simplified distanceMetric selection using peakChroma threshold
+ * - v2.0: Added preprocessing configuration (bilateral filter based on entropy)
  *
  * DISTANCE METRIC SELECTION:
  * - peakChroma > 80 OR isPhotographic → CIE94 (perceptual, better for saturated colors)
  * - Otherwise → CIE76 (graphic, faster, sufficient for flat/muted colors)
+ *
+ * PREPROCESSING (3-Level Perceptual Rescue System):
+ * - Level 1: DNA (Archetype Detection) - this module
+ * - Level 2: Entropy (Bilateral Filter) - preprocessing module
+ * - Level 3: Complexity (CIE2000 Override) - future
  *
  * ARCHETYPES:
  * - Vector/Flat:    Low variation (l_std_dev < 15). Logos, icons, text.
@@ -21,9 +27,22 @@
  * - Neon/Vibrant:   Extreme chroma (c > 60). Pop art, neon signs.
  * - Photographic:   High variation + moderate chroma. Natural photos.
  */
+
+const BilateralFilter = require('../preprocessing/BilateralFilter');
 class DynamicConfigurator {
 
-    static generate(dna) {
+    /**
+     * Generate configuration from DNA analysis
+     *
+     * @param {Object} dna - DNA analysis result
+     * @param {Object} [options] - Generation options
+     * @param {Uint8ClampedArray} [options.imageData] - RGBA data for entropy calculation
+     * @param {number} [options.width] - Image width
+     * @param {number} [options.height] - Image height
+     * @param {string} [options.preprocessingIntensity='auto'] - 'off', 'auto', 'light', 'heavy'
+     * @returns {Object} Complete configuration including preprocessing
+     */
+    static generate(dna, options = {}) {
         // 1. CLASSIFY ARCHETYPE
         const archetype = this.getArchetype(dna);
         const isPhotographic = archetype === 'Photographic';
@@ -53,6 +72,21 @@ class DynamicConfigurator {
 
         const finalColors = Math.max(4, Math.min(idealColors, 12));
 
+        // 5. PREPROCESSING CONFIGURATION (Level 2: Entropy-based bilateral filter)
+        // Adds preprocessing settings based on archetype + entropy analysis
+        const preprocessingIntensity = options.preprocessingIntensity || 'auto';
+        const preprocessing = BilateralFilter.createPreprocessingConfig(
+            { ...dna, archetype },
+            options.imageData || null,
+            options.width || 0,
+            options.height || 0,
+            preprocessingIntensity
+        );
+
+        if (preprocessing.enabled) {
+            console.log(`🔧 Preprocessing: ${preprocessing.intensity} (${preprocessing.reason})`);
+        }
+
         return {
             id: `auto_${archetype.toLowerCase().replace('/', '_')}`,
             name: "Dynamic Bespoke",
@@ -62,7 +96,8 @@ class DynamicConfigurator {
             ditherType: strategy.dither,
             distanceMetric: distanceMetric,
             rangeClamp: [dna.minL, dna.maxL],
-            meta: { archetype, peakChroma }
+            meta: { archetype, peakChroma },
+            preprocessing
         };
     }
 
