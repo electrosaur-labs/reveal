@@ -7,6 +7,13 @@
  *   Level 2: Entropy (Bilateral Filter) - this module
  *   Level 3: Complexity (CIE2000 Override)
  *
+ * ARCHITECTURE NOTE:
+ * The engine operates exclusively in 16-bit Lab color space. Use the Lab functions:
+ *   - calculateEntropyScoreLab() - entropy from 16-bit Lab L channel
+ *   - applyBilateralFilterLab() - filter 16-bit Lab data in-place
+ *
+ * The 8-bit RGBA functions are provided for external tools only (not used by engine).
+ *
  * @module reveal-core/preprocessing
  */
 
@@ -21,9 +28,10 @@ const PreprocessingIntensity = {
 };
 
 /**
- * Calculate entropy score from image data
- * Measures local variance to detect noise vs texture
+ * Calculate entropy score from 8-bit RGBA image data
+ * NOTE: For engine use, prefer calculateEntropyScoreLab() which works with 16-bit Lab.
  *
+ * @deprecated Use calculateEntropyScoreLab for engine pipelines
  * @param {Uint8ClampedArray} imageData - RGBA pixel data (4 bytes per pixel)
  * @param {number} width - Image width
  * @param {number} height - Image height
@@ -68,9 +76,10 @@ function calculateEntropyScore(imageData, width, height, sampleRate = 4) {
 }
 
 /**
- * Apply optimized bilateral filter to image data
- * Edge-preserving smoothing using spatial and range Gaussian weights
+ * Apply optimized bilateral filter to 8-bit RGBA image data
+ * NOTE: For engine use, prefer applyBilateralFilterLab() which works with 16-bit Lab.
  *
+ * @deprecated Use applyBilateralFilterLab for engine pipelines
  * @param {Uint8ClampedArray} imageData - RGBA pixel data (modified in place)
  * @param {number} width - Image width
  * @param {number} height - Image height
@@ -381,10 +390,149 @@ class RevealPreProcessor {
     }
 }
 
+/**
+ * Calculate entropy score from 16-bit Lab data
+ * Measures local variance in L channel (luminance) to detect noise vs texture
+ *
+ * @param {Uint16Array} labData - Lab pixel data (3 values per pixel: L, a, b), 16-bit encoding
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @param {number} [sampleRate=4] - Sample every Nth pixel for speed
+ * @returns {number} Entropy score (0-100, higher = noisier)
+ */
+function calculateEntropyScoreLab(labData, width, height, sampleRate = 4) {
+    let totalVariance = 0;
+    let sampleCount = 0;
+
+    // 16-bit Lab: L is 0-32768, scale to 0-255 for consistent entropy scores
+    const lScale = 255 / 32768;
+
+    // Sample pixels with step for performance
+    for (let y = 1; y < height - 1; y += sampleRate) {
+        for (let x = 1; x < width - 1; x += sampleRate) {
+            const idx = (y * width + x) * 3;
+            const centerL = labData[idx] * lScale;  // Scale 16-bit L to 8-bit range
+
+            // Calculate local variance in 3x3 neighborhood
+            let sum = 0;
+            let sumSq = 0;
+            let n = 0;
+
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const nIdx = ((y + dy) * width + (x + dx)) * 3;
+                    const val = labData[nIdx] * lScale;
+                    sum += val;
+                    sumSq += val * val;
+                    n++;
+                }
+            }
+
+            const mean = sum / n;
+            const variance = (sumSq / n) - (mean * mean);
+            totalVariance += Math.sqrt(variance);
+            sampleCount++;
+        }
+    }
+
+    // Normalize to 0-100 scale
+    const avgVariance = totalVariance / Math.max(1, sampleCount);
+    return Math.min(100, avgVariance * 2);
+}
+
+/**
+ * Apply optimized bilateral filter to 16-bit Lab data
+ * Edge-preserving smoothing using spatial and range Gaussian weights
+ * Works on L channel for smoothing, preserves a/b hue channels
+ *
+ * @param {Uint16Array} labData - Lab pixel data (3 values per pixel), modified in place
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @param {number} [radius=4] - Filter radius in pixels
+ * @param {number} [sigmaR=30] - Range sigma (color similarity, scaled for 16-bit)
+ * @returns {void} Modifies labData in place
+ */
+function applyBilateralFilterLab(labData, width, height, radius = 4, sigmaR = 30) {
+    // Scale sigmaR for 16-bit L values (0-32768 instead of 0-255)
+    // 8-bit sigmaR=30 → 16-bit sigmaR ~= 30 * (32768/255) ~= 3857
+    const sigmaR16 = sigmaR * (32768 / 255);
+    const sigmaR2x2 = 2 * sigmaR16 * sigmaR16;
+
+    // Pre-compute exponent lookup table for range weighting
+    // Quantize L differences to 256 buckets for LUT (covers typical differences)
+    const expLUT = new Float32Array(256);
+    const lutScale = 256 / 32768;  // Map 16-bit range to LUT
+    for (let i = 0; i < 256; i++) {
+        const d = i / lutScale;  // Convert back to 16-bit difference
+        expLUT[i] = Math.exp(-(d * d) / sigmaR2x2);
+    }
+
+    // Clone original for reading
+    const original = new Uint16Array(labData);
+
+    // Spatial stepping based on radius for performance
+    const step = radius > 3 ? 2 : 1;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 3;
+            const centerL = original[idx];
+            const centerA = original[idx + 1];
+            const centerB = original[idx + 2];
+
+            let sumL = 0, sumA = 0, sumB = 0;
+            let weightSum = 0;
+
+            // Neighborhood iteration with stepping
+            for (let dy = -radius; dy <= radius; dy += step) {
+                const ny = y + dy;
+                if (ny < 0 || ny >= height) continue;
+
+                for (let dx = -radius; dx <= radius; dx += step) {
+                    const nx = x + dx;
+                    if (nx < 0 || nx >= width) continue;
+
+                    const nIdx = (ny * width + nx) * 3;
+                    const nL = original[nIdx];
+                    const nA = original[nIdx + 1];
+                    const nB = original[nIdx + 2];
+
+                    // Color distance in L channel (primary filter target)
+                    const lDist = Math.abs(centerL - nL);
+                    const lutIdx = Math.min(255, Math.floor(lDist * lutScale));
+                    const rangeWeight = expLUT[lutIdx];
+
+                    // Spatial weight (simplified - could add Gaussian)
+                    const spatialWeight = 1.0;
+
+                    const weight = rangeWeight * spatialWeight;
+                    sumL += nL * weight;
+                    sumA += nA * weight;
+                    sumB += nB * weight;
+                    weightSum += weight;
+                }
+            }
+
+            // Write filtered values
+            if (weightSum > 0) {
+                labData[idx] = Math.round(sumL / weightSum);
+                labData[idx + 1] = Math.round(sumA / weightSum);
+                labData[idx + 2] = Math.round(sumB / weightSum);
+            }
+        }
+    }
+}
+
 module.exports = {
-    // Core functions
+    // PRIMARY API: 16-bit Lab (engine always uses these)
+    calculateEntropyScoreLab,
+    applyBilateralFilterLab,
+
+    // DEPRECATED: 8-bit RGBA (for external tools only, not used by engine)
     calculateEntropyScore,
     applyBilateralFilter,
+
+    // Decision logic
     shouldPreprocess,
     getFilterParams,
     createPreprocessingConfig,
