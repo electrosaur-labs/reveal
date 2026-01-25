@@ -22,11 +22,19 @@ const logger = require("../utils/logger");
 const DitheringStrategies = require("./DitheringStrategies");
 const {
     DistanceMetric,
+    // Perceptual space functions (deprecated for 16-bit pipelines)
     cie76WeightedSquaredInline,
     cie94SquaredInline,
     cie2000SquaredInline,
     preparePaletteChroma,
-    normalizeDistanceConfig
+    normalizeDistanceConfig,
+    // Native 16-bit integer functions
+    cie76WeightedSquaredInline16,
+    cie94SquaredInline16,
+    preparePaletteChroma16,
+    SNAP_THRESHOLD_SQ_16,
+    LAB16_AB_NEUTRAL,
+    DEFAULT_CIE94_PARAMS_16
 } = require("../color/LabDistance");
 
 class SeparationEngine {
@@ -107,6 +115,9 @@ class SeparationEngine {
      * Nearest-neighbor mapping (no dithering)
      * Fast hard-snap to closest palette color in Lab space
      *
+     * NATIVE 16-BIT PROCESSING: Distance calculations happen in integer space (0-32768)
+     * to preserve sub-bit-depth precision. No floating-point normalization leak.
+     *
      * @param {Uint16Array} rawBytes - 16-bit Lab data (L: 0-32768, a/b: 0-32768 neutral=16384)
      * @param {Array} labPalette - Array of {L, a, b} objects (perceptual ranges)
      * @param {Function} onProgress - Progress callback (0-100)
@@ -119,30 +130,43 @@ class SeparationEngine {
         const CHUNK_SIZE = 65536; // 64k pixels per UI yield (optimized for throughput)
 
         const metricLabel = distanceConfig.isCIE2000 ? 'CIE2000' : (distanceConfig.isCIE94 ? 'CIE94' : 'CIE76 (L-weighted)');
-        logger.log(`Mapping ${pixelCount} pixels using ${metricLabel} (async batching: ${Math.ceil(pixelCount / CHUNK_SIZE)} chunks)...`);
+        logger.log(`Mapping ${pixelCount} pixels using ${metricLabel} [NATIVE 16-BIT] (async batching: ${Math.ceil(pixelCount / CHUNK_SIZE)} chunks)...`);
 
-        // OPTIMIZATION 1: Flatten palette to typed arrays to avoid object overhead
+        // NATIVE 16-BIT: Convert palette to 16-bit integer space ONCE
+        // This eliminates per-pixel floating-point conversion (the "Normalization Leak")
         const paletteSize = labPalette.length;
+        const palL16 = new Int32Array(paletteSize);
+        const palA16 = new Int32Array(paletteSize);
+        const palB16 = new Int32Array(paletteSize);
+
+        // Also keep perceptual values for CIE2000 (which requires perceptual space)
         const palL = new Float32Array(paletteSize);
         const palA = new Float32Array(paletteSize);
         const palB = new Float32Array(paletteSize);
 
         for (let j = 0; j < paletteSize; j++) {
+            // Perceptual → 16-bit integer conversion
+            palL16[j] = Math.round((labPalette[j].L / 100) * 32768);
+            palA16[j] = Math.round((labPalette[j].a / 128) * 16384 + 16384);
+            palB16[j] = Math.round((labPalette[j].b / 128) * 16384 + 16384);
+            // Keep perceptual for CIE2000
             palL[j] = labPalette[j].L;
             palA[j] = labPalette[j].a;
             palB[j] = labPalette[j].b;
         }
 
-        // Pre-compute chroma for CIE94 (avoids sqrt in inner loop)
-        let palChroma = null;
-        let k1 = 0.045, k2 = 0.015;
+        // Pre-compute chroma for CIE94 in 16-bit space
+        let palChroma16 = null;
+        let k1_16 = DEFAULT_CIE94_PARAMS_16.k1;
+        let k2_16 = DEFAULT_CIE94_PARAMS_16.k2;
         if (distanceConfig.isCIE94) {
-            palChroma = preparePaletteChroma(labPalette);
-            k1 = distanceConfig.cie94Params.k1;
-            k2 = distanceConfig.cie94Params.k2;
+            palChroma16 = preparePaletteChroma16(labPalette.map((p, i) => ({
+                L: palL16[i], a: palA16[i], b: palB16[i]
+            })));
         }
 
-        const SNAP_THRESHOLD_SQ = 4.0; // Perceptual snap (ΔE 2.0 squared)
+        // Shadow threshold in 16-bit units: 40% L = 13107
+        const SHADOW_THRESHOLD_16 = 13107;
         let lastBestIndex = 0;
 
         // Process in chunks with event loop yielding
@@ -153,69 +177,71 @@ class SeparationEngine {
             for (let p = i; p < chunkEnd; p++) {
                 const pIdx = p * 3;
 
-                // Map 16-bit Lab to perceptual Lab
-                const L = (rawBytes[pIdx] / 32768) * 100;        // L: 0-32768 → 0-100
-                const a = (rawBytes[pIdx + 1] - 16384) * (128 / 16384);  // a: 0-32768 → -128 to +127
-                const b = (rawBytes[pIdx + 2] - 16384) * (128 / 16384);  // b: 0-32768 → -128 to +127
+                // NATIVE 16-BIT: Read raw pixel values directly (no conversion!)
+                const pL = rawBytes[pIdx];      // Raw 16-bit L (0-32768)
+                const pA = rawBytes[pIdx + 1];  // Raw 16-bit a (0-32768, 16384=neutral)
+                const pB = rawBytes[pIdx + 2];  // Raw 16-bit b (0-32768, 16384=neutral)
 
                 // Spatial Locality: Check last winner first
                 let minDistanceSq;
                 if (distanceConfig.isCIE2000) {
-                    // CIE2000 squared distance (most accurate, slowest)
+                    // CIE2000 requires perceptual space - convert just for this metric
+                    const L = (pL / 32768) * 100;
+                    const a = ((pA - 16384) / 16384) * 128;
+                    const b = ((pB - 16384) / 16384) * 128;
                     minDistanceSq = cie2000SquaredInline(
                         L, a, b,
                         palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex]
                     );
                 } else if (distanceConfig.isCIE94) {
-                    // CIE94 squared distance (pre-computed palette chroma)
-                    minDistanceSq = cie94SquaredInline(
-                        L, a, b,
-                        palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex],
-                        palChroma[lastBestIndex], k1, k2
+                    // CIE94 in native 16-bit space
+                    minDistanceSq = cie94SquaredInline16(
+                        pL, pA, pB,
+                        palL16[lastBestIndex], palA16[lastBestIndex], palB16[lastBestIndex],
+                        palChroma16[lastBestIndex], k1_16, k2_16
                     );
                 } else {
-                    // CIE76 with L-weighting for dark color preservation
-                    const avgL_l = (L + palL[lastBestIndex]) / 2;
-                    const lWeight_l = avgL_l < 40 ? 2.0 : 1.0;
-                    minDistanceSq = cie76WeightedSquaredInline(
-                        L, a, b,
-                        palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex],
-                        lWeight_l
+                    // CIE76 with L-weighting in native 16-bit space
+                    minDistanceSq = cie76WeightedSquaredInline16(
+                        pL, pA, pB,
+                        palL16[lastBestIndex], palA16[lastBestIndex], palB16[lastBestIndex],
+                        SHADOW_THRESHOLD_16, 2.0
                     );
                 }
 
-                if (minDistanceSq > SNAP_THRESHOLD_SQ) {
+                if (minDistanceSq > SNAP_THRESHOLD_SQ_16) {
                     let nearestIndex = lastBestIndex;
 
                     // Search all palette colors
                     for (let c = 0; c < paletteSize; c++) {
                         let distSq;
                         if (distanceConfig.isCIE2000) {
+                            const L = (pL / 32768) * 100;
+                            const a = ((pA - 16384) / 16384) * 128;
+                            const b = ((pB - 16384) / 16384) * 128;
                             distSq = cie2000SquaredInline(
                                 L, a, b,
                                 palL[c], palA[c], palB[c]
                             );
                         } else if (distanceConfig.isCIE94) {
-                            distSq = cie94SquaredInline(
-                                L, a, b,
-                                palL[c], palA[c], palB[c],
-                                palChroma[c], k1, k2
+                            distSq = cie94SquaredInline16(
+                                pL, pA, pB,
+                                palL16[c], palA16[c], palB16[c],
+                                palChroma16[c], k1_16, k2_16
                             );
                         } else {
-                            // Apply L-weighting for dark colors
-                            const avgL_c = (L + palL[c]) / 2;
-                            const lWeight_c = avgL_c < 40 ? 2.0 : 1.0;
-                            distSq = cie76WeightedSquaredInline(
-                                L, a, b,
-                                palL[c], palA[c], palB[c],
-                                lWeight_c
+                            // CIE76 with L-weighting in native 16-bit
+                            distSq = cie76WeightedSquaredInline16(
+                                pL, pA, pB,
+                                palL16[c], palA16[c], palB16[c],
+                                SHADOW_THRESHOLD_16, 2.0
                             );
                         }
 
                         if (distSq < minDistanceSq) {
                             minDistanceSq = distSq;
                             nearestIndex = c;
-                            if (distSq < SNAP_THRESHOLD_SQ) break; // Early exit
+                            if (distSq < SNAP_THRESHOLD_SQ_16) break; // Early exit
                         }
                     }
                     lastBestIndex = nearestIndex;

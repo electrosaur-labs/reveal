@@ -470,6 +470,165 @@ function normalizeDistanceConfig(options = {}) {
 }
 
 // ============================================================================
+// Native 16-bit Integer Distance Functions
+// ============================================================================
+
+/**
+ * 16-bit Lab encoding constants
+ * L: 0-32768 (32768 = 100%)
+ * a, b: 0-32768 (16384 = neutral/0)
+ */
+const LAB16_L_MAX = 32768;
+const LAB16_AB_NEUTRAL = 16384;
+
+// Scale factors for converting thresholds
+// Perceptual L (0-100) to 16-bit: multiply by 327.68
+// Perceptual a/b (-128 to +127) to 16-bit offset: multiply by 128
+const L_SCALE = LAB16_L_MAX / 100;       // 327.68
+const AB_SCALE = LAB16_AB_NEUTRAL / 128; // 128
+
+/**
+ * CIE76 squared distance in native 16-bit integer space
+ *
+ * Computes distance directly on 16-bit Lab values without conversion.
+ * For nearest-neighbor comparisons, relative ordering is preserved.
+ *
+ * @param {number} L1 - First color L (0-32768)
+ * @param {number} a1 - First color a (0-32768, 16384=neutral)
+ * @param {number} b1 - First color b (0-32768, 16384=neutral)
+ * @param {number} L2 - Second color L (0-32768)
+ * @param {number} a2 - Second color a (0-32768, 16384=neutral)
+ * @param {number} b2 - Second color b (0-32768, 16384=neutral)
+ * @returns {number} - Squared distance in 16-bit² units
+ */
+function cie76SquaredInline16(L1, a1, b1, L2, a2, b2) {
+    const dL = L1 - L2;
+    const da = a1 - a2;
+    const db = b1 - b2;
+    return dL * dL + da * da + db * db;
+}
+
+/**
+ * CIE76 weighted squared distance in native 16-bit integer space
+ *
+ * Applies L-weighting for shadow preservation, computed in 16-bit space.
+ * Shadow threshold is 13107 (= 40% L in 16-bit units).
+ *
+ * @param {number} L1 - First color L (0-32768)
+ * @param {number} a1 - First color a (0-32768, 16384=neutral)
+ * @param {number} b1 - First color b (0-32768, 16384=neutral)
+ * @param {number} L2 - Second color L (0-32768)
+ * @param {number} a2 - Second color a (0-32768, 16384=neutral)
+ * @param {number} b2 - Second color b (0-32768, 16384=neutral)
+ * @param {number} [shadowThreshold16=13107] - L threshold in 16-bit units (default: 40%)
+ * @param {number} [shadowWeight=2.0] - L multiplier when avgL < threshold
+ * @returns {number} - Squared weighted distance in 16-bit² units
+ */
+function cie76WeightedSquaredInline16(L1, a1, b1, L2, a2, b2, shadowThreshold16 = 13107, shadowWeight = 2.0) {
+    const dL = L1 - L2;
+    const da = a1 - a2;
+    const db = b1 - b2;
+
+    // Apply increased L weight for dark colors (shadow preservation)
+    const avgL = (L1 + L2) >> 1;  // Integer division by 2
+    const lWeight = avgL < shadowThreshold16 ? shadowWeight : 1.0;
+
+    const wdL = dL * lWeight;
+    return wdL * wdL + da * da + db * db;
+}
+
+/**
+ * CIE94 squared distance in native 16-bit integer space
+ *
+ * Applies chroma-dependent weighting computed in 16-bit space.
+ * k1/k2 coefficients are pre-scaled for 16-bit chroma range.
+ *
+ * 16-bit chroma: C16 = √((a-16384)² + (b-16384)²), max ≈ 23170
+ * Perceptual chroma: C = 0-~180
+ * Scale factor: 23170/180 ≈ 128.7
+ *
+ * k1_16 = k1 / 128 = 0.045 / 128 = 0.000352
+ * k2_16 = k2 / 128 = 0.015 / 128 = 0.000117
+ *
+ * @param {number} L1 - First color L (0-32768)
+ * @param {number} a1 - First color a (0-32768, 16384=neutral)
+ * @param {number} b1 - First color b (0-32768, 16384=neutral)
+ * @param {number} L2 - Second color L (0-32768)
+ * @param {number} a2 - Second color a (0-32768, 16384=neutral)
+ * @param {number} b2 - Second color b (0-32768, 16384=neutral)
+ * @param {number} C1 - Pre-computed chroma of first color (in 16-bit units)
+ * @param {number} k1_16 - Scaled k1 coefficient (default: 0.000352)
+ * @param {number} k2_16 - Scaled k2 coefficient (default: 0.000117)
+ * @returns {number} - Squared CIE94 distance in 16-bit² units
+ */
+function cie94SquaredInline16(L1, a1, b1, L2, a2, b2, C1, k1_16 = 0.000352, k2_16 = 0.000117) {
+    const dL = L1 - L2;
+    const da = a1 - a2;
+    const db = b1 - b2;
+
+    // Chroma of second color (offset from neutral)
+    const a2off = a2 - LAB16_AB_NEUTRAL;
+    const b2off = b2 - LAB16_AB_NEUTRAL;
+    const C2 = Math.sqrt(a2off * a2off + b2off * b2off);
+
+    // Chroma difference
+    const dC = C1 - C2;
+
+    // Hue difference squared (derived from dH² = da² + db² - dC²)
+    const dHSquared = Math.max(0, da * da + db * db - dC * dC);
+
+    // Weighting factors (using C1 as reference)
+    const SC = 1 + k1_16 * C1;
+    const SH = 1 + k2_16 * C1;
+
+    // Weighted components
+    const dLterm = dL;           // SL = 1
+    const dCterm = dC / SC;
+    const dHterm = Math.sqrt(dHSquared) / SH;
+
+    return dLterm * dLterm + dCterm * dCterm + dHterm * dHterm;
+}
+
+/**
+ * Pre-computes 16-bit chroma values for a Lab palette
+ *
+ * Chroma is computed as distance from neutral (16384) in a/b space.
+ *
+ * @param {Array<{L, a, b}>} labPalette16 - Lab palette in 16-bit values
+ * @returns {Float32Array} - Pre-computed chroma values in 16-bit units
+ */
+function preparePaletteChroma16(labPalette16) {
+    const chroma = new Float32Array(labPalette16.length);
+    for (let i = 0; i < labPalette16.length; i++) {
+        const p = labPalette16[i];
+        const aOff = p.a - LAB16_AB_NEUTRAL;
+        const bOff = p.b - LAB16_AB_NEUTRAL;
+        chroma[i] = Math.sqrt(aOff * aOff + bOff * bOff);
+    }
+    return chroma;
+}
+
+/**
+ * Default CIE94 parameters scaled for 16-bit space
+ * @constant
+ */
+const DEFAULT_CIE94_PARAMS_16 = {
+    k1: 0.000352,  // 0.045 / 128
+    k2: 0.000117   // 0.015 / 128
+};
+
+/**
+ * Snap threshold in 16-bit² units
+ *
+ * Perceptual ΔE = 2.0 → ΔE² = 4.0
+ * In 16-bit space with balanced L/a/b contribution:
+ * - L contributes: (2.0 * 327.68)² / 3 ≈ 143,000
+ * - a,b contribute: (2.0 * 128)² / 3 * 2 ≈ 44,000
+ * Total ≈ 187,000 (use 180,000 as conservative threshold)
+ */
+const SNAP_THRESHOLD_SQ_16 = 180000;
+
+// ============================================================================
 // Exports
 // ============================================================================
 
@@ -477,21 +636,33 @@ module.exports = {
     // Constants
     DistanceMetric,
     DEFAULT_CIE94_PARAMS,
+    DEFAULT_CIE94_PARAMS_16,
+    SNAP_THRESHOLD_SQ_16,
+    LAB16_L_MAX,
+    LAB16_AB_NEUTRAL,
+    L_SCALE,
+    AB_SCALE,
 
-    // CIE76 functions
+    // CIE76 functions (perceptual space)
     cie76,
     cie76Weighted,
     cie76SquaredInline,
     cie76WeightedSquaredInline,
 
-    // CIE94 functions
+    // CIE94 functions (perceptual space)
     cie94,
     cie94SquaredInline,
 
-    // CIE2000 functions
+    // CIE2000 functions (perceptual space)
     cie2000,
     cie2000Inline,
     cie2000SquaredInline,
+
+    // Native 16-bit integer functions
+    cie76SquaredInline16,
+    cie76WeightedSquaredInline16,
+    cie94SquaredInline16,
+    preparePaletteChroma16,
 
     // Factory & helpers
     createDistanceCalculator,

@@ -154,19 +154,33 @@ function applyBilateralFilter(imageData, width, height, radius = 4, sigmaR = 30)
 }
 
 /**
- * Get filter parameters based on entropy score and optional peak chroma
+ * Get filter parameters based on entropy score and bit depth
+ *
+ * sigmaR is in 16-bit L units (0-32768 range), no internal scaling:
+ * - 16-bit: sigmaR = 5000 (~15% of L range, smooths 10-20% noise spikes)
+ * - 8-bit: sigmaR = 3000 (more conservative for compression artifacts)
  *
  * @param {number} entropyScore - Entropy score from calculateEntropyScore
  * @param {number} [peakChroma=0] - Peak chroma value from DNA analysis
+ * @param {boolean} [is16Bit=false] - Whether source is 16-bit
  * @returns {Object} Filter parameters { radius, sigmaR }
  */
-function getFilterParams(entropyScore, peakChroma = 0) {
-    // Light filter for moderate entropy (25-40)
+function getFilterParams(entropyScore, peakChroma = 0, is16Bit = false) {
+    // sigmaR in 16-bit L units (0-32768 range)
+    // Controls how much L difference is considered "similar" vs "edge"
+    // - Lower values = more edge preservation, less noise smoothing
+    // - Higher values = more noise smoothing, but risks blurring edges
+    //
+    // For 16-bit: ~5000 = ~15% of L range, effectively smooths 10-20% noise spikes
+    // For 8-bit (upscaled to 16-bit): ~3000 = more conservative for compression artifacts
+    const baseSigmaR = is16Bit ? 5000 : 3000;
+
+    // Light filter for moderate entropy
     if (entropyScore <= 40) {
-        return { radius: 3, sigmaR: 30 };
+        return { radius: 3, sigmaR: baseSigmaR };
     }
-    // Heavy filter for high entropy (> 40)
-    return { radius: 5, sigmaR: 45 };
+    // Heavy filter for high entropy - increase radius but keep sigmaR
+    return { radius: 5, sigmaR: baseSigmaR };
 }
 
 /**
@@ -179,19 +193,30 @@ function getFilterParams(entropyScore, peakChroma = 0) {
  * - Vintage/Muted: Filter if entropy > 25
  * - Neon/Vibrant: Filter if entropy > 30 (higher threshold)
  *
+ * Bit-depth aware thresholds (DNA-driven recommendation):
+ * - 8-bit: threshold = 15 (compression artifacts are normal, avoid "plastic" look)
+ * - 16-bit: threshold = 2 (high SNR, any spike is likely dust/sensor noise)
+ *
  * @param {Object} dna - DNA analysis result
  * @param {string} dna.archetype - Detected archetype
  * @param {number} [dna.maxC] - Peak chroma
  * @param {number} entropyScore - Entropy score from calculateEntropyScore
+ * @param {boolean} [is16Bit=false] - Whether source is 16-bit (affects threshold)
  * @returns {Object} Decision result
  * @returns {boolean} returns.shouldProcess - Whether to apply filter
  * @returns {string} returns.reason - Explanation for the decision
  * @returns {number} [returns.radius] - Filter radius if shouldProcess=true
  * @returns {number} [returns.sigmaR] - Filter sigmaR if shouldProcess=true
  */
-function shouldPreprocess(dna, entropyScore) {
+function shouldPreprocess(dna, entropyScore, is16Bit = false) {
     const archetype = (dna.archetype || '').toLowerCase();
     const peakChroma = dna.maxC || 0;
+
+    // Bit-depth aware "very low" threshold:
+    // - 8-bit: 15 (compression artifacts are inherent, don't over-filter)
+    // - 16-bit: 2 (high SNR scans, any detected noise is likely junk)
+    const veryLowThreshold = is16Bit ? 2 : 15;
+    const bitDepthLabel = is16Bit ? '16-bit' : '8-bit';
 
     // Vector/Flat: NEVER filter - preserves sharp edges
     if (archetype.includes('vector') || archetype.includes('flat')) {
@@ -202,72 +227,20 @@ function shouldPreprocess(dna, entropyScore) {
     }
 
     // Very low entropy: Skip (image is already clean)
-    if (entropyScore < 15) {
+    if (entropyScore < veryLowThreshold) {
         return {
             shouldProcess: false,
-            reason: `Very low entropy (${entropyScore.toFixed(1)}) - already clean`
+            reason: `Very low entropy (${entropyScore.toFixed(1)}, ${bitDepthLabel}) - already clean`
         };
     }
 
-    // Neon/Vibrant: Higher threshold (entropy > 30)
-    if (archetype.includes('neon') || archetype.includes('vibrant')) {
-        if (entropyScore > 30) {
-            const params = getFilterParams(entropyScore, peakChroma);
-            return {
-                shouldProcess: true,
-                reason: `Neon/Vibrant + high entropy (${entropyScore.toFixed(1)})`,
-                ...params
-            };
-        }
-        return {
-            shouldProcess: false,
-            reason: `Neon/Vibrant - entropy acceptable (${entropyScore.toFixed(1)})`
-        };
-    }
-
-    // Standard threshold for other archetypes (entropy > 25)
-    if (entropyScore < 25) {
-        return {
-            shouldProcess: false,
-            reason: `Low entropy (${entropyScore.toFixed(1)}) - acceptable`
-        };
-    }
-
-    // Photographic: Filter if entropy > 25
-    if (archetype.includes('photo')) {
-        const params = getFilterParams(entropyScore, peakChroma);
-        return {
-            shouldProcess: true,
-            reason: `Photographic + entropy ${entropyScore.toFixed(1)}`,
-            ...params
-        };
-    }
-
-    // Noir/Mono: Filter if entropy > 25 (grayscale noise)
-    if (archetype.includes('noir') || archetype.includes('mono')) {
-        const params = getFilterParams(entropyScore, peakChroma);
-        return {
-            shouldProcess: true,
-            reason: `Noir/Mono - grayscale noise (${entropyScore.toFixed(1)})`,
-            ...params
-        };
-    }
-
-    // Vintage/Muted: Filter if entropy > 25
-    if (archetype.includes('vintage') || archetype.includes('muted')) {
-        const params = getFilterParams(entropyScore, peakChroma);
-        return {
-            shouldProcess: true,
-            reason: `Vintage/Muted - texture noise (${entropyScore.toFixed(1)})`,
-            ...params
-        };
-    }
-
-    // Default: Filter if entropy > 25
-    const params = getFilterParams(entropyScore, peakChroma);
+    // Both 8-bit and 16-bit: filter when entropy is above threshold
+    // The veryLowThreshold check above already filtered out clean images
+    // At this point, entropy >= threshold so we should process
+    const params = getFilterParams(entropyScore, peakChroma, is16Bit);
     return {
         shouldProcess: true,
-        reason: `High entropy (${entropyScore.toFixed(1)})`,
+        reason: `${bitDepthLabel} noise reduction (entropy ${entropyScore.toFixed(1)})`,
         ...params
     };
 }
@@ -317,6 +290,7 @@ function createPreprocessingConfig(dna, imageData = null, width = 0, height = 0,
 
     // Auto mode: Calculate entropy if image data provided
     let entropyScore = 0;
+    let is16Bit = false;
     if (imageData && width > 0 && height > 0) {
         // Detect data format based on array type and length
         const pixelCount = width * height;
@@ -327,23 +301,27 @@ function createPreprocessingConfig(dna, imageData = null, width = 0, height = 0,
         if (isLab16) {
             // 16-bit Lab data (3 values per pixel: L, a, b)
             entropyScore = calculateEntropyScoreLab(imageData, width, height);
+            is16Bit = true;
         } else if (isRGBA8) {
             // 8-bit RGBA data (4 bytes per pixel)
             entropyScore = calculateEntropyScore(imageData, width, height);
+            is16Bit = false;
         } else {
             // Unknown format - try Lab16 first (more common in modern pipeline)
             // Check if it could be Lab16 with different array type
             if (imageData.length === pixelCount * 3) {
                 entropyScore = calculateEntropyScoreLab(imageData, width, height);
+                is16Bit = true;  // Assume 16-bit for 3-channel data
             } else if (imageData.length === pixelCount * 4) {
                 entropyScore = calculateEntropyScore(imageData, width, height);
+                is16Bit = false;
             }
             // Otherwise leave entropyScore at 0 (unknown format)
         }
     }
 
-    // Make decision based on DNA and entropy
-    const decision = shouldPreprocess(dna, entropyScore);
+    // Make decision based on DNA, entropy, and bit depth
+    const decision = shouldPreprocess(dna, entropyScore, is16Bit);
 
     if (!decision.shouldProcess) {
         return {
@@ -435,47 +413,64 @@ function calculateEntropyScoreLab(labData, width, height, sampleRate = 4) {
         return 0;  // Return 0 for malformed data
     }
 
-    let totalVariance = 0;
-    let sampleCount = 0;
+    // REFACTORED: Detect noise across ALL Lab channels (L, a, b)
+    // This ensures chromatic noise (e.g., Missing Green issue) triggers the filter
+    // Returns the MAXIMUM entropy found in any channel
 
-    // 16-bit Lab: L is 0-32768, scale to 0-255 for consistent entropy scores
-    const lScale = 255 / 32768;
+    // 16-bit Lab scaling for consistent entropy scores
+    const lScale = 255 / 32768;   // L: 0-32768 → 0-255
+    const abScale = 255 / 32768;  // a/b: 0-32768 → 0-255 (same range)
 
-    // Sample pixels with step for performance
-    for (let y = 1; y < height - 1; y += sampleRate) {
-        for (let x = 1; x < width - 1; x += sampleRate) {
-            const idx = (y * width + x) * 3;
-            const centerL = labData[idx] * lScale;  // Scale 16-bit L to 8-bit range
+    let maxChannelEntropy = 0;
 
-            // Calculate local variance in 3x3 neighborhood
-            let sum = 0;
-            let sumSq = 0;
-            let n = 0;
+    // Check each channel independently
+    for (let channel = 0; channel < 3; channel++) {
+        let totalVariance = 0;
+        let sampleCount = 0;
+        const scale = (channel === 0) ? lScale : abScale;
 
-            for (let dy = -1; dy <= 1; dy++) {
-                for (let dx = -1; dx <= 1; dx++) {
-                    const nIdx = ((y + dy) * width + (x + dx)) * 3;
-                    const val = labData[nIdx] * lScale;
-                    sum += val;
-                    sumSq += val * val;
-                    n++;
+        // Sample pixels with step for performance
+        for (let y = 1; y < height - 1; y += sampleRate) {
+            for (let x = 1; x < width - 1; x += sampleRate) {
+                const idx = (y * width + x) * 3 + channel;
+                const centerVal = labData[idx] * scale;
+
+                // Calculate local variance in 3x3 neighborhood
+                let sum = 0;
+                let sumSq = 0;
+                let n = 0;
+
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const nIdx = ((y + dy) * width + (x + dx)) * 3 + channel;
+                        const val = labData[nIdx] * scale;
+                        sum += val;
+                        sumSq += val * val;
+                        n++;
+                    }
                 }
-            }
 
-            const mean = sum / n;
-            const variance = (sumSq / n) - (mean * mean);
-            // Guard against floating-point errors that could make variance slightly negative
-            if (variance > 0 && !isNaN(variance)) {
-                totalVariance += Math.sqrt(variance);
+                const mean = sum / n;
+                const variance = (sumSq / n) - (mean * mean);
+                // Guard against floating-point errors
+                if (variance > 0 && !isNaN(variance)) {
+                    totalVariance += Math.sqrt(variance);
+                }
+                sampleCount++;
             }
-            sampleCount++;
+        }
+
+        // Normalize this channel's entropy to 0-100 scale
+        const avgVariance = totalVariance / Math.max(1, sampleCount);
+        const channelEntropy = Math.min(100, avgVariance * 2);
+
+        // Track the maximum entropy across all channels
+        if (!isNaN(channelEntropy) && channelEntropy > maxChannelEntropy) {
+            maxChannelEntropy = channelEntropy;
         }
     }
 
-    // Normalize to 0-100 scale
-    const avgVariance = totalVariance / Math.max(1, sampleCount);
-    const result = Math.min(100, avgVariance * 2);
-    return isNaN(result) ? 0 : result;
+    return maxChannelEntropy;
 }
 
 /**
@@ -487,14 +482,16 @@ function calculateEntropyScoreLab(labData, width, height, sampleRate = 4) {
  * @param {number} width - Image width
  * @param {number} height - Image height
  * @param {number} [radius=4] - Filter radius in pixels
- * @param {number} [sigmaR=30] - Range sigma (color similarity, scaled for 16-bit)
+ * @param {number} [sigmaR=3000] - Range sigma in 16-bit L units (no internal scaling)
  * @returns {void} Modifies labData in place
  */
-function applyBilateralFilterLab(labData, width, height, radius = 4, sigmaR = 30) {
-    // Scale sigmaR for 16-bit L values (0-32768 instead of 0-255)
-    // 8-bit sigmaR=30 → 16-bit sigmaR ~= 30 * (32768/255) ~= 3857
-    const sigmaR16 = sigmaR * (32768 / 255);
-    const sigmaR2x2 = 2 * sigmaR16 * sigmaR16;
+function applyBilateralFilterLab(labData, width, height, radius = 4, sigmaR = 3000) {
+    // sigmaR is expected to be in 16-bit units (0-32768 range)
+    // Caller provides appropriate value based on bit depth:
+    // - 16-bit source: sigmaR = 5000 (~15% of L range, smooths 10-20% noise)
+    // - 8-bit source: sigmaR = 3000 (more conservative for compression artifacts)
+    // NO internal scaling - caller is responsible for providing correct units
+    const sigmaR2x2 = 2 * sigmaR * sigmaR;
 
     // Pre-compute exponent lookup table for range weighting
     // Quantize L differences to 256 buckets for LUT (covers typical differences)
@@ -535,9 +532,15 @@ function applyBilateralFilterLab(labData, width, height, radius = 4, sigmaR = 30
                     const nA = original[nIdx + 1];
                     const nB = original[nIdx + 2];
 
-                    // Color distance in L channel (primary filter target)
-                    const lDist = Math.abs(centerL - nL);
-                    const lutIdx = Math.min(255, Math.floor(lDist * lutScale));
+                    // PATENT-READY: 3D Lab distance for range weighting
+                    // This ensures chromatic noise (a/b channels) is also filtered
+                    const dL = centerL - nL;
+                    const dA = centerA - nA;
+                    const dB = centerB - nB;
+                    const colorDist = Math.sqrt(dL * dL + dA * dA + dB * dB);
+
+                    // Map to LUT (calibrated for 16-bit 3D distance)
+                    const lutIdx = Math.min(255, Math.floor(colorDist * lutScale));
                     const rangeWeight = expLUT[lutIdx];
 
                     // Spatial weight (simplified - could add Gaussian)

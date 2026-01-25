@@ -13,10 +13,9 @@ class DNAGenerator {
     /**
      * Generate image DNA from Lab pixel data
      *
-     * @param {Uint8ClampedArray} labPixels - Lab pixels in byte encoding
-     *   L: 0-255 (represents 0-100)
-     *   a: 0-255 (represents -128 to +127)
-     *   b: 0-255 (represents -128 to +127)
+     * @param {Uint8ClampedArray|Uint16Array} labPixels - Lab pixels (auto-detects 8-bit vs 16-bit)
+     *   8-bit: L: 0-255 (→ 0-100), a/b: 0-255 (→ -128 to +127)
+     *   16-bit: L: 0-32768 (→ 0-100), a/b: 0-32768 (→ -128 to +127, 16384 = 0)
      * @param {number} width - Image width
      * @param {number} height - Image height
      * @param {number} sampleStep - Sample every Nth pixel (default: 40 for speed)
@@ -34,12 +33,32 @@ class DNAGenerator {
         let maxC = 0;
         let sampleCount = 0;
 
+        // Detect 16-bit vs 8-bit data
+        // 16-bit: Uint16Array with values 0-32768
+        // 8-bit: Uint8Array/Uint8ClampedArray with values 0-255
+        const is16Bit = labPixels instanceof Uint16Array;
+
         // Sample pixels at intervals for performance
         for (let i = 0; i < labPixels.length; i += (3 * sampleStep)) {
-            // Convert byte encoding to perceptual Lab values
-            const L = (labPixels[i] / 255) * 100;      // 0-255 → 0-100
-            const a = labPixels[i + 1] - 128;          // 0-255 → -128 to +127
-            const b = labPixels[i + 2] - 128;          // 0-255 → -128 to +127
+            let L, a, b;
+
+            if (is16Bit) {
+                // 16-bit Lab encoding (Photoshop native)
+                // L: 0-32768 → 0-100
+                // a: 0-32768 → -128 to +127 (16384 = 0)
+                // b: 0-32768 → -128 to +127 (16384 = 0)
+                L = (labPixels[i] / 32768) * 100;
+                a = ((labPixels[i + 1] - 16384) / 16384) * 128;
+                b = ((labPixels[i + 2] - 16384) / 16384) * 128;
+            } else {
+                // 8-bit Lab encoding
+                // L: 0-255 → 0-100
+                // a: 0-255 → -128 to +127
+                // b: 0-255 → -128 to +127
+                L = (labPixels[i] / 255) * 100;
+                a = labPixels[i + 1] - 128;
+                b = labPixels[i + 2] - 128;
+            }
 
             sumL += L;
             sumA += a;
