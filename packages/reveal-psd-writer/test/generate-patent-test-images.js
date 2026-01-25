@@ -125,13 +125,29 @@ function generateChromaticZeroCrossing() {
     console.log(`a* range: ${aStart} to ${aEnd} (16-bit ICC)`);
     console.log(`Unique values: ${aEnd - aStart + 1} over ${WIDTH} pixels`);
 
+    // Add noise spikes to trigger preprocessing (5% of pixels, ~20% L deviation)
+    const noiseRate = 0.05;
+    const noiseAmount = Math.round(32768 * 0.20);  // ~20% L deviation
+    let noiseCount = 0;
+
     for (let y = 0; y < HEIGHT; y++) {
         for (let x = 0; x < WIDTH; x++) {
             // Linear interpolation: each pixel gets a unique a* value
             const a16 = aStart + Math.round((aEnd - aStart) * x / (WIDTH - 1));
-            setPixel16(pixels, WIDTH, x, y, L16, a16, b16);
+
+            // Add occasional noise spike to L channel
+            let L16_final = L16;
+            if (Math.random() < noiseRate) {
+                const spike = (Math.random() > 0.5 ? 1 : -1) * noiseAmount;
+                L16_final = Math.max(0, Math.min(65535, L16 + spike));
+                noiseCount++;
+            }
+
+            setPixel16(pixels, WIDTH, x, y, L16_final, a16, b16);
         }
     }
+
+    console.log(`Added ${noiseCount} noise spikes (${(noiseCount / (WIDTH * HEIGHT) * 100).toFixed(1)}% of pixels)`);
 
     // Create PSD
     const writer = new PSDWriter({
@@ -190,13 +206,28 @@ function generateSubBitDepthGradient() {
     console.log(`Unique values: ${lEnd - lStart + 1} over ${WIDTH} pixels`);
     console.log(`In 8-bit this would be: ${Math.ceil(lPerceptualRange / 100 * 255)} steps`);
 
+    // Add noise spikes to trigger preprocessing (5% of pixels, ~20% L deviation)
+    const noiseRate = 0.05;
+    const noiseAmount = Math.round(32768 * 0.20);  // ~20% L deviation
+    let noiseCount = 0;
+
     for (let y = 0; y < HEIGHT; y++) {
         for (let x = 0; x < WIDTH; x++) {
             // Linear interpolation: each pixel gets a unique L value
-            const L16 = lStart + Math.round((lEnd - lStart) * x / (WIDTH - 1));
+            let L16 = lStart + Math.round((lEnd - lStart) * x / (WIDTH - 1));
+
+            // Add occasional noise spike to L channel
+            if (Math.random() < noiseRate) {
+                const spike = (Math.random() > 0.5 ? 1 : -1) * noiseAmount;
+                L16 = Math.max(0, Math.min(65535, L16 + spike));
+                noiseCount++;
+            }
+
             setPixel16(pixels, WIDTH, x, y, L16, a16, b16);
         }
     }
+
+    console.log(`Added ${noiseCount} noise spikes (${(noiseCount / (WIDTH * HEIGHT) * 100).toFixed(1)}% of pixels)`);
 
     // Create PSD
     const writer = new PSDWriter({

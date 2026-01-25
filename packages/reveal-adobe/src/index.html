@@ -51,8 +51,10 @@
             width: 100%;
             height: 100%;
             background: #ffffff;
-            position: relative;    /* For absolute positioning of buttons */
+            position: relative;
             box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
         }
 
         /* Palette dialog - full viewport layout for UXP resize support */
@@ -111,11 +113,8 @@
         }
 
         .reveal-content {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 80px;          /* Leave space for buttons (height + padding) */
+            flex: 1;
+            min-height: 0;         /* Critical for flex child scrolling */
             overflow-y: auto;
             overflow-x: hidden;
             padding: 24px;
@@ -156,6 +155,19 @@
 
         .info-box strong {
             color: #0d66d0;
+        }
+
+        /* Fixed Header - always visible at top */
+        .reveal-header {
+            flex-shrink: 0;
+            padding: 24px 24px 16px 24px;
+            background: #fff;
+            border-bottom: 1px solid #e1e1e1;
+            box-sizing: border-box;
+        }
+
+        .reveal-header .info-box {
+            margin-bottom: 12px;
         }
 
         /* Form Sections */
@@ -316,17 +328,13 @@
 
         /* Buttons */
         .reveal-buttons {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
+            flex-shrink: 0;
             padding: 16px 24px;
             border-top: 1px solid #e1e1e1;
             background: #fdfdfd;
             display: flex;
             justify-content: space-between;
             gap: 12px;
-            z-index: 100;
             box-sizing: border-box;
         }
 
@@ -913,51 +921,28 @@
 </head>
 <body>
     <dialog id="mainDialog" class="reveal-dialog">
+        <!-- Fixed header - always visible at top -->
+        <div class="reveal-header">
+            <h1 class="reveal-title" style="margin-bottom: 8px;">Reveal - Posterization Parameters</h1>
+            <div class="info-box">
+                <strong>🎨 Posterization Settings</strong><br>
+                Reduce your image to a limited color palette for screen printing. Choose your engine, color mode, and target palette size.
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+                <button id="btnAnalyzeAndSet" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;" title="Analyze image and automatically configure parameters">
+                    Analyse Image
+                </button>
+                <button id="btnResetDefaults" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;">
+                    Reset to Defaults
+                </button>
+            </div>
+        </div>
+
         <div class="reveal-content">
-            <h1 class="reveal-title">Reveal - Posterization Parameters</h1>
-            <div class="version-badge">Posterization Engine</div>
-
             <div id="parameterEntrySection">
-                <div class="info-box">
-                    <strong>🎨 Posterization Settings</strong><br>
-                    Reduce your image to a limited color palette for screen printing. Choose your engine, color mode, and target palette size.
-                </div>
-
                 <!-- Color Separation Settings -->
                 <div class="form-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px;">
-                    <!-- Left side: Preset selector (DEPRECATED - DNA analysis now used) -->
-                    <!-- Kept for rollback if needed -->
-                    <!-- <div style="display: flex; align-items: center; gap: 8px;">
-                        <sp-label style="font-size: 12px; white-space: nowrap;">Quick Preset:</sp-label>
-                        <select id="presetSelector" class="form-control" style="padding: 6px 12px; font-size: 12px; min-width: 200px;">
-                            <option value="" selected>-- Select Preset --</option>
-                            <option value="standard-image">Standard Default</option>
-                            <option value="halftone-portrait">Halftone Portrait</option>
-                            <option value="vibrant-graphic">Vibrant Graphic</option>
-                            <option value="atmospheric-photo">Atmospheric Photo</option>
-                            <option value="pastel-high-key">Pastel / High-Key</option>
-                            <option value="vintage-muted">Vintage / Muted</option>
-                            <option value="deep-shadow-noir">Deep Shadow / Noir</option>
-                            <option value="neon-fluorescent">Neon / Fluorescent</option>
-                            <option value="textural-grunge">Textural / Grunge</option>
-                            <option value="commercial-offset">Commercial Offset</option>
-                            <option value="minkler-justice">Minkler Justice</option>
-                            <option value="warhol-pop">Warhol Pop</option>
-                            <option value="technical-enamel">Industrial Enamel</option>
-                        </select>
-                    </div> -->
-
-                    <!-- Right side: Action buttons -->
-                    <div style="display: flex; gap: 8px;">
-                        <button id="btnAnalyzeAndSet" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;" title="Analyze image and automatically configure parameters">
-                            Analyse Image
-                        </button>
-                        <button id="btnResetDefaults" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;">
-                            Reset to Defaults
-                        </button>
-                    </div>
-                </div>
 
                 <!-- Engine & Strategy Section -->
                 <div class="collapsible-section open">

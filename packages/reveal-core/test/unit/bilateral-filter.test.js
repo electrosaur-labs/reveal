@@ -138,43 +138,68 @@ describe('BilateralFilter', () => {
             const result = BilateralFilter.shouldPreprocess(dna, 35);
 
             expect(result.shouldProcess).toBe(true);
-            expect(result.reason).toContain('Photographic');
+            expect(result.reason).toContain('8-bit');  // Unified message for all archetypes
             expect(result.radius).toBeDefined();
             expect(result.sigmaR).toBeDefined();
         });
 
-        test('should filter Noir/Mono with high entropy', () => {
+        test('should filter Noir/Mono with high entropy (8-bit)', () => {
             const dna = { archetype: 'Noir/Mono', maxC: 10 };
-            const result = BilateralFilter.shouldPreprocess(dna, 30);
+            // 8-bit mode (is16Bit = false), entropy 30 > threshold 25, uses standard path
+            const result = BilateralFilter.shouldPreprocess(dna, 30, false);
 
             expect(result.shouldProcess).toBe(true);
-            expect(result.reason).toContain('Noir/Mono');
+            expect(result.reason).toContain('entropy');
         });
 
-        test('should require higher threshold for Neon/Vibrant', () => {
+        test('should filter 16-bit images aggressively with low entropy', () => {
+            const dna = { archetype: 'Noir/Mono', maxC: 10 };
+            // 16-bit mode, entropy 5 > threshold 2 - aggressive filtering
+            const result = BilateralFilter.shouldPreprocess(dna, 5, true);
+
+            expect(result.shouldProcess).toBe(true);
+            expect(result.reason).toContain('16-bit');
+        });
+
+        test('should skip 8-bit images with low entropy', () => {
+            const dna = { archetype: 'Noir/Mono', maxC: 10 };
+            // 8-bit mode, entropy 5 < threshold 15 - skip to avoid plastic look
+            const result = BilateralFilter.shouldPreprocess(dna, 5, false);
+
+            expect(result.shouldProcess).toBe(false);
+            expect(result.reason).toContain('entropy');
+        });
+
+        test('should filter 8-bit images above threshold', () => {
             const dna = { archetype: 'Neon/Vibrant', maxC: 80 };
 
-            // entropy 28 should not trigger
+            // entropy 28 > threshold 15, should trigger for 8-bit
             const result1 = BilateralFilter.shouldPreprocess(dna, 28);
-            expect(result1.shouldProcess).toBe(false);
+            expect(result1.shouldProcess).toBe(true);
 
-            // entropy 35 should trigger
-            const result2 = BilateralFilter.shouldPreprocess(dna, 35);
-            expect(result2.shouldProcess).toBe(true);
+            // entropy 10 < threshold 15, should not trigger
+            const result2 = BilateralFilter.shouldPreprocess(dna, 10);
+            expect(result2.shouldProcess).toBe(false);
         });
     });
 
     describe('getFilterParams', () => {
-        test('should return light params for moderate entropy', () => {
-            const params = BilateralFilter.getFilterParams(30);
+        test('should return light params for 8-bit moderate entropy', () => {
+            const params = BilateralFilter.getFilterParams(30, 0, false);
             expect(params.radius).toBe(3);
-            expect(params.sigmaR).toBe(30);
+            expect(params.sigmaR).toBe(3000);  // 8-bit: conservative (in 16-bit L units)
         });
 
-        test('should return heavy params for high entropy', () => {
-            const params = BilateralFilter.getFilterParams(50);
+        test('should return heavy params for 8-bit high entropy', () => {
+            const params = BilateralFilter.getFilterParams(50, 0, false);
             expect(params.radius).toBe(5);
-            expect(params.sigmaR).toBe(45);
+            expect(params.sigmaR).toBe(3000);  // 8-bit: conservative, only radius increases
+        });
+
+        test('should return aggressive params for 16-bit', () => {
+            const params = BilateralFilter.getFilterParams(30, 0, true);
+            expect(params.radius).toBe(3);
+            expect(params.sigmaR).toBe(5000);  // 16-bit: aggressive (in 16-bit L units)
         });
     });
 
@@ -376,7 +401,7 @@ describe('BilateralFilter', () => {
             }
 
             const original = new Uint16Array(labData);
-            BilateralFilter.applyBilateralFilterLab(labData, width, height, 2, 30);
+            BilateralFilter.applyBilateralFilterLab(labData, width, height, 2, 3000);
 
             // Should remain approximately the same
             for (let i = 0; i < labData.length; i += 3) {
@@ -406,7 +431,7 @@ describe('BilateralFilter', () => {
             }
             varianceBefore /= (width * height);
 
-            BilateralFilter.applyBilateralFilterLab(labData, width, height, 2, 30);
+            BilateralFilter.applyBilateralFilterLab(labData, width, height, 2, 3000);
 
             // Calculate variance after filtering
             let varianceAfter = 0;
@@ -438,7 +463,7 @@ describe('BilateralFilter', () => {
                 }
             }
 
-            BilateralFilter.applyBilateralFilterLab(labData, width, height, 2, 30);
+            BilateralFilter.applyBilateralFilterLab(labData, width, height, 2, 3000);
 
             // Check that edge is preserved (left side should still be dark, right side light)
             const leftPixelL = labData[(2 * width + 2) * 3]; // x=2
@@ -461,7 +486,7 @@ describe('BilateralFilter', () => {
             }
 
             const originalRef = labData; // Same reference
-            BilateralFilter.applyBilateralFilterLab(labData, width, height, 2, 30);
+            BilateralFilter.applyBilateralFilterLab(labData, width, height, 2, 3000);
 
             // Should be the same array (modified in place)
             expect(labData).toBe(originalRef);

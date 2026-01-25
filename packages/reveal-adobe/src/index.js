@@ -2719,9 +2719,13 @@ async function showDialog() {
                         logger.log(`Entropy result: ${entropyScore}`);
 
                         // Get preprocessing config based on DNA and entropy
+                        // Detect bit depth from pixel data type
+                        const is16Bit = pixelData.pixels instanceof Uint16Array;
+                        logger.log(`Bit depth for preprocessing: ${is16Bit ? '16-bit' : '8-bit'}`);
+
                         let preprocessConfig;
                         if (preprocessingIntensity === 'auto') {
-                            const decision = BilateralFilter.shouldPreprocess(dnaForPreprocessing, entropyScore);
+                            const decision = BilateralFilter.shouldPreprocess(dnaForPreprocessing, entropyScore, is16Bit);
                             preprocessConfig = {
                                 enabled: decision.shouldProcess,
                                 reason: decision.reason,
@@ -2731,14 +2735,17 @@ async function showDialog() {
                                 intensity: decision.shouldProcess ? (decision.radius >= 5 ? 'heavy' : 'light') : 'off'
                             };
                         } else {
-                            // Manual override (light or heavy)
+                            // Manual override (light or heavy) - use bit-depth-aware sigmaR
                             const isHeavy = preprocessingIntensity === 'heavy';
+                            // 8-bit: sigmaR=10, 16-bit: sigmaR=500 (per architect recommendation)
+                            // sigmaR in 16-bit L units (no internal scaling)
+                            const sigmaR = is16Bit ? 5000 : 3000;
                             preprocessConfig = {
                                 enabled: true,
                                 reason: `${preprocessingIntensity} filter (user override)`,
                                 entropyScore,
                                 radius: isHeavy ? 5 : 3,
-                                sigmaR: isHeavy ? 45 : 30,
+                                sigmaR: sigmaR,
                                 intensity: preprocessingIntensity
                             };
                         }
