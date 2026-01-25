@@ -779,7 +779,7 @@ function updateSwatchHighlights() {
     const state = window.previewState;
     if (!state) return;
 
-    const container = document.getElementById('paletteEditorContainer');
+    const container = document.getElementById('editablePaletteContainer');
     if (!container) return;
 
     // Get substrate info to convert swatch indices to palette indices
@@ -795,15 +795,42 @@ function updateSwatchHighlights() {
         }
 
         if (state.activeSoloIndex === paletteIndex) {
-            // Highlight active swatch
-            swatch.style.border = '3px solid #0078d4';
-            swatch.style.boxShadow = '0 0 8px rgba(0,120,212,0.6)';
+            // Highlight swatch - USE INLINE STYLES for UXP compatibility
+            swatch.classList.add('active-solo');
+            swatch.style.outline = '8px solid #1473e6';
+            swatch.style.outlineOffset = '-8px';
+            swatch.style.boxShadow = 'inset 0 0 0 8px rgba(20, 115, 230, 0.5)';
         } else {
-            // Normal swatch appearance
-            swatch.style.border = '1px solid #ccc';
-            swatch.style.boxShadow = 'none';
+            // Remove highlight - restore default styles
+            swatch.classList.remove('active-solo');
+            swatch.style.outline = 'none';
+            swatch.style.outlineOffset = '0';
+            swatch.style.boxShadow = 'inset 0 1px 3px rgba(0, 0, 0, 0.1)';
         }
     });
+
+    // Update preview container solo mode indicator
+    const previewContainer = document.getElementById('previewContainer');
+    if (previewContainer) {
+        if (state.activeSoloIndex !== null) {
+            previewContainer.classList.add('solo-mode');
+        } else {
+            previewContainer.classList.remove('solo-mode');
+        }
+    }
+}
+
+/**
+ * Clear swatch selection (solo mode) - called when clicking outside swatches
+ */
+function clearSwatchSelection() {
+    const state = window.previewState;
+    if (!state || state.activeSoloIndex === null) return;
+
+    logger.log('Clearing swatch selection (clicked outside)');
+    state.activeSoloIndex = null;
+    updateSwatchHighlights();
+    renderPreview();
 }
 
 /**
@@ -875,7 +902,8 @@ function updateSwatchVisuals() {
 }
 
 /**
- * Handle swatch click - toggle highlight for that color in preview
+ * Handle swatch click - select this color and highlight in preview
+ * Clicking the same swatch keeps it selected (click outside to deselect)
  * @param {number} featureIndex - Index of the color feature (0-based, swatch index)
  */
 function handleSwatchClick(featureIndex) {
@@ -894,16 +922,10 @@ function handleSwatchClick(featureIndex) {
         paletteIndex = featureIndex + 1;  // Skip the substrate index
     }
 
-    // Toggle solo mode for this color
-    if (state.activeSoloIndex === paletteIndex) {
-        // Already showing this color - turn off solo mode (show all)
-        state.activeSoloIndex = null;
-        logger.log(`Showing all colors`);
-    } else {
-        // Show only this color (using palette index)
-        state.activeSoloIndex = paletteIndex;
-        logger.log(`Highlighting swatch ${featureIndex + 1} (palette index ${paletteIndex})`);
-    }
+    // Select this color (clicking same swatch keeps it selected)
+    // To deselect, click outside the swatches or click a different swatch
+    state.activeSoloIndex = paletteIndex;
+    logger.log(`Selected swatch ${featureIndex + 1} (palette index ${paletteIndex})`);
 
     // Update swatch highlighting
     updateSwatchHighlights();
@@ -1257,7 +1279,7 @@ function showPaletteEditor(selectedPalette) {
 
         swatches.forEach(swatch => {
             swatch.addEventListener('click', (event) => {
-                event.stopPropagation(); // Prevent bubbling
+                event.stopPropagation(); // Prevent bubbling to container
 
                 const featureIndex = parseInt(swatch.dataset.featureIndex);
 
@@ -1268,11 +1290,21 @@ function showPaletteEditor(selectedPalette) {
                     return;
                 }
 
-                // Normal click: Toggle highlight in preview
+                // Normal click: Select this swatch (not toggle - click again to keep selected)
                 logger.log(`🔍 Swatch ${featureIndex + 1} clicked - highlighting in preview`);
                 handleSwatchClick(featureIndex);
             });
         });
+
+        // Handler: Click on preview container → Clear swatch selection (show all colors)
+        const previewContainer = document.getElementById('previewContainer');
+        if (previewContainer && !previewContainer._clickHandlerAttached) {
+            previewContainer.addEventListener('click', () => {
+                clearSwatchSelection();
+            });
+            previewContainer._clickHandlerAttached = true;
+            logger.log('✓ Attached click handler to preview container (clears swatch selection)');
+        }
     }
 
     // Hide "Posterize" button, show "Apply Separation" and "Back" buttons
