@@ -18,6 +18,7 @@ const jpeg = require("jpeg-js");
 const SeparationEngine = Reveal.engines.SeparationEngine;
 const ImageHeuristicAnalyzer = Reveal.engines.ImageHeuristicAnalyzer;
 const ParameterGenerator = require("@reveal/core/lib/analysis/ParameterGenerator");
+const BilateralFilter = require("@reveal/core/lib/preprocessing/BilateralFilter");
 const logger = Reveal.logger;
 
 // Photoshop-specific API (stays in reveal-adobe)
@@ -2103,7 +2104,9 @@ function getFormValues() {
         mesh: getMeshValue(),  // Screen mesh TPI (0 = pixel-level)
         ppi: PhotoshopAPI.getDocumentInfo()?.resolution || 72,  // Document PPI for mesh calculations
         // Distance metric for color matching
-        distanceMetric: document.getElementById("distanceMetric")?.value ?? "cie94"  // 'cie76' (Graphic) or 'cie94' (Photographic)
+        distanceMetric: document.getElementById("distanceMetric")?.value ?? "cie94",  // 'cie76' (Graphic) or 'cie94' (Photographic)
+        // Preprocessing (noise reduction)
+        preprocessingIntensity: document.getElementById("preprocessingIntensity")?.value ?? "auto"  // 'off', 'auto', 'light', 'heavy'
     };
 }
 
@@ -2673,6 +2676,42 @@ async function showDialog() {
                     logger.log(`Read ${pixelData.width}x${pixelData.height} pixels (${pixelData.scale.toFixed(2)}x scale)`);
                     logger.log(`Pixel format flag: "${pixelData.format}" (undefined means RGB, "lab" means Lab)`);
 
+                    // Apply preprocessing (bilateral filter for noise reduction) if enabled
+                    const preprocessingIntensity = params.preprocessingIntensity || 'auto';
+                    if (preprocessingIntensity !== 'off') {
+                        buttonElement.textContent = "Preprocessing...";
+
+                        // For "auto" mode, use DNA-based decision; for manual modes, force the setting
+                        const dnaForPreprocessing = lastImageDNA || {};
+                        const preprocessConfig = BilateralFilter.createPreprocessingConfig(
+                            dnaForPreprocessing,
+                            pixelData.pixels,
+                            pixelData.width,
+                            pixelData.height,
+                            preprocessingIntensity
+                        );
+
+                        if (preprocessConfig.enabled) {
+                            logger.log(`🔧 Preprocessing: ${preprocessConfig.intensity} (${preprocessConfig.reason})`);
+                            logger.log(`   Entropy: ${preprocessConfig.entropyScore?.toFixed(1) || 'N/A'}, Radius: ${preprocessConfig.radius}, SigmaR: ${preprocessConfig.sigmaR}`);
+
+                            // Apply bilateral filter in-place
+                            BilateralFilter.applyBilateralFilter(
+                                pixelData.pixels,
+                                pixelData.width,
+                                pixelData.height,
+                                preprocessConfig.radius,
+                                preprocessConfig.sigmaR
+                            );
+
+                            logger.log(`✓ Preprocessing complete`);
+                        } else {
+                            logger.log(`⏭️ Preprocessing skipped: ${preprocessConfig.reason}`);
+                        }
+                    } else {
+                        logger.log(`⏭️ Preprocessing: Off (user disabled)`);
+                    }
+
                     // Determine color count (manual override or auto-detect)
                     let colorCount;
                     if (params.targetColors > 0) {
@@ -3124,16 +3163,44 @@ async function showDialog() {
                         logger.log("✓ Image DNA extracted:", dna);
                         logger.log(`  DNA generation time: ${dnaTime.toFixed(2)}ms`);
 
-                        // Run ParameterGenerator to get dynamic configuration
-                        const config = ParameterGenerator.generate(dna);
+                        // Run ParameterGenerator to get dynamic configuration (with entropy analysis)
+                        const config = ParameterGenerator.generate(dna, {
+                            imageData: result.pixels,
+                            width: result.width,
+                            height: result.height,
+                            preprocessingIntensity: 'auto'  // Let entropy analysis decide
+                        });
                         logger.log("✓ Generated dynamic config:", config);
+
+                        // Log preprocessing decision from entropy analysis
+                        if (config.preprocessing) {
+                            const pp = config.preprocessing;
+                            logger.log(`✓ Preprocessing analysis: ${pp.enabled ? pp.intensity : 'off'} (${pp.reason})`);
+                            if (pp.entropyScore !== undefined) {
+                                logger.log(`  Entropy score: ${pp.entropyScore.toFixed(1)}`);
+                            }
+                        }
 
                         // Store DNA globally for "Smart Reveal" auto mode resolution
                         lastImageDNA = {
                             ...dna,
-                            archetype: config.meta?.archetype || null
+                            archetype: config.meta?.archetype || null,
+                            preprocessing: config.preprocessing  // Store preprocessing config for posterization
                         };
                         logger.log(`✓ Stored DNA for Smart Reveal: peakC=${dna.maxC?.toFixed(1)}, archetype=${lastImageDNA.archetype}`);
+
+                        // Determine preprocessing dropdown value based on analysis
+                        // Show the actual decision so user knows what will happen
+                        let preprocessingDropdownValue = 'off';  // Default if no config
+                        if (config.preprocessing) {
+                            if (config.preprocessing.enabled) {
+                                // Show the actual intensity (light or heavy)
+                                preprocessingDropdownValue = config.preprocessing.intensity || 'light';
+                            } else {
+                                // Analysis says no preprocessing needed
+                                preprocessingDropdownValue = 'off';
+                            }
+                        }
 
                         // Map ALL parameters to UI elements (matching batch process configuration)
                         const uiSettings = {
@@ -3143,6 +3210,7 @@ async function showDialog() {
                             ditherType: config.ditherType,
                             vibrancyBoost: config.saturationBoost,
                             distanceMetric: 'auto',  // Keep on auto - will resolve at separation time
+                            preprocessingIntensity: preprocessingDropdownValue,  // Based on entropy analysis
 
                             // Standard configuration parameters (batch defaults)
                             engineType: 'reveal',
@@ -3178,13 +3246,24 @@ async function showDialog() {
                         // Apply ALL DNA-based settings to UI
                         applyAnalyzedSettings(uiSettings);
 
-                        // Show simple alert to user
-                        const alertMsg = `Image Analysis Complete\n\nProfile: ${config.name}\nColors: ${config.targetColors}\nDither: ${config.ditherType}\n\nParameters have been configured.\nClick "Posterize" to generate separations.`;
-
                         // Compute what Smart Reveal would use
                         const smartMetric = resolveDistanceMetric('auto', lastImageDNA);
                         const smartMetricLabels = { 'cie76': 'Poster/Graphic', 'cie94': 'Photographic', 'cie2000': 'Museum Grade' };
                         const smartMetricLabel = smartMetricLabels[smartMetric] || smartMetric;
+
+                        // Format preprocessing info for alert
+                        let preprocessingInfo = 'Off';
+                        if (config.preprocessing) {
+                            if (config.preprocessing.enabled) {
+                                const entropy = config.preprocessing.entropyScore?.toFixed(0) || '?';
+                                preprocessingInfo = `${config.preprocessing.intensity} (entropy: ${entropy})`;
+                            } else {
+                                preprocessingInfo = `Skipped (${config.preprocessing.reason})`;
+                            }
+                        }
+
+                        // Show simple alert to user
+                        const alertMsg = `Image Analysis Complete\n\nProfile: ${config.name}\nArchetype: ${config.meta?.archetype || 'Unknown'}\nColors: ${config.targetColors}\nDither: ${config.ditherType}\nPreprocessing: ${preprocessingInfo}\n\nParameters have been configured.\nClick "Posterize" to generate separations.`;
 
                         // Log full details to console
                         logger.log(`\nDNA ANALYSIS COMPLETE`);
@@ -3196,6 +3275,7 @@ async function showDialog() {
                         logger.log(`  Vibrancy Boost: ${config.saturationBoost.toFixed(2)}`);
                         logger.log(`  Dither Type: ${config.ditherType}`);
                         logger.log(`  Smart Reveal → ${smartMetricLabel} (${smartMetric})`);
+                        logger.log(`  Preprocessing: ${preprocessingInfo}`);
                         logger.log(`Analysis Time: ${dnaTime.toFixed(2)}ms`);
 
                         alert(alertMsg);
