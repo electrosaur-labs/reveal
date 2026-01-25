@@ -1,0 +1,153 @@
+{
+  "timestamp": "2026-01-25T13:32:37.090Z",
+  "system": {
+    "platform": "linux",
+    "nodeVersion": "v24.11.1",
+    "arch": "arm64"
+  },
+  "benchmarks": {
+    "fullWorkflow_photo_8c_noStride": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 8,
+      "durationMs": 164.73,
+      "memoryDeltaMB": 25.41,
+      "pixelsPerMs": 3885,
+      "paletteSize": 1,
+      "strideEnabled": false
+    },
+    "fullWorkflow_photo_8c_withStride": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 8,
+      "durationMs": 111.76,
+      "memoryDeltaMB": 13.57,
+      "pixelsPerMs": 5727,
+      "paletteSize": 1,
+      "strideEnabled": true
+    },
+    "fullWorkflow_highChroma_12c": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 12,
+      "durationMs": 108.87,
+      "memoryDeltaMB": 17.75,
+      "pixelsPerMs": 5879,
+      "paletteSize": 1
+    },
+    "fullWorkflow_grayscale_8c": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 8,
+      "durationMs": 210.16,
+      "memoryDeltaMB": 2.81,
+      "pixelsPerMs": 3045,
+      "paletteSize": 1
+    },
+    "scaling_400×400": {
+      "width": 400,
+      "height": 400,
+      "totalPixels": 160000,
+      "targetColors": 8,
+      "durationMs": 43.31,
+      "memoryDeltaMB": -21.59,
+      "pixelsPerMs": 3694,
+      "msPerMegapixel": 271
+    },
+    "scaling_600×600": {
+      "width": 600,
+      "height": 600,
+      "totalPixels": 360000,
+      "targetColors": 8,
+      "durationMs": 79.94,
+      "memoryDeltaMB": 28.31,
+      "pixelsPerMs": 4503,
+      "msPerMegapixel": 222
+    },
+    "scaling_800×800": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 8,
+      "durationMs": 132.07,
+      "memoryDeltaMB": 9.46,
+      "pixelsPerMs": 4846,
+      "msPerMegapixel": 206
+    },
+    "scaling_1000×1000": {
+      "width": 1000,
+      "height": 1000,
+      "totalPixels": 1000000,
+      "targetColors": 8,
+      "durationMs": 201.48,
+      "memoryDeltaMB": 0.04,
+      "pixelsPerMs": 4963,
+      "msPerMegapixel": 201
+    },
+    "colorCount_4c": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 4,
+      "durationMs": 135.18,
+      "memoryDeltaMB": 9.46,
+      "pixelsPerMs": 4734,
+      "paletteSize": 1
+    },
+    "colorCount_6c": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 6,
+      "durationMs": 134.03,
+      "memoryDeltaMB": 9.46,
+      "pixelsPerMs": 4775,
+      "paletteSize": 1
+    },
+    "colorCount_8c": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 8,
+      "durationMs": 136.76,
+      "memoryDeltaMB": 9.45,
+      "pixelsPerMs": 4680,
+      "paletteSize": 1
+    },
+    "colorCount_10c": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 10,
+      "durationMs": 353.63,
+      "memoryDeltaMB": 7.28,
+      "pixelsPerMs": 1810,
+      "paletteSize": 1
+    },
+    "colorCount_12c": {
+      "width": 800,
+      "height": 800,
+      "totalPixels": 640000,
+      "targetColors": 12,
+      "durationMs": 153.01,
+      "memoryDeltaMB": -29.33,
+      "pixelsPerMs": 4183,
+      "paletteSize": 1
+    },
+    "memoryProfile_1200x1200": {
+      "width": 1200,
+      "height": 1200,
+      "totalPixels": 1440000,
+      "targetColors": 8,
+      "durationMs": 360.8,
+      "heapDeltaMB": 13.41,
+      "heapTotalMB": 147.73,
+      "externalMB": 31.83,
+      "bytesPerPixel": 10
+    }
+  }
+}
