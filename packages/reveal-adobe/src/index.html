@@ -635,7 +635,9 @@
 
         .editable-swatch.active-solo {
             border: 3px solid #1473e6 !important;
-            box-shadow: 0 0 0 2px rgba(20, 115, 230, 0.3);
+            /* Combine depressed inset shadow with selection glow */
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 0 2px rgba(20, 115, 230, 0.4);
+            transform: translateY(1px);
         }
 
         /* Hex Input Field */
