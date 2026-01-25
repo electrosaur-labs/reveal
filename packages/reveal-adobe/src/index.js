@@ -674,6 +674,16 @@ function renderPreview() {
 
     logger.log(`Rendering preview (solo mode: ${activeSoloIndex !== null}, deleted: ${deletedIndices.size})`);
     logger.log(`  Image: ${width}×${height}`);
+    logger.log(`  Palette (${palette.length} colors): ${palette.join(', ')}`);
+
+    // Debug: Check assignment distribution for 2-color images
+    if (palette.length <= 3) {
+        const counts = {};
+        for (let i = 0; i < assignments.length; i++) {
+            counts[assignments[i]] = (counts[assignments[i]] || 0) + 1;
+        }
+        logger.log(`  Assignment distribution: ${JSON.stringify(counts)}`);
+    }
 
     // Build remap table for deleted colors (maps to nearest surviving color)
     let remapTable = null;
@@ -1206,19 +1216,30 @@ function showPaletteEditor(selectedPalette) {
 
                     // Update palette data using feature index (maintains alignment with originalHexColors)
                     selectedPalette.hexColors[featureIndex] = newHex;
-                    selectedPalette.paletteLab[featureIndex] = newLab;  // CRITICAL: Update Lab palette (used for layer creation)
                     logger.log(`✓ Updated Feature ${featureIndex + 1}: ${currentHex} → ${newHex}`);
                     logger.log(`  Lab: L${newLab.L.toFixed(1)} a${newLab.a.toFixed(1)} b${newLab.b.toFixed(1)}`);
                     logger.log(`  Entire feature group will remap to new ink (editing bones, not pixels)`);
+
+                    // Convert featureIndex to full palette index (accounting for substrate)
+                    const substrateIndex = selectedPalette.substrateIndex;
+                    let paletteIndex = featureIndex;
+                    if (substrateIndex !== null && featureIndex >= substrateIndex) {
+                        paletteIndex = featureIndex + 1;  // Skip the substrate index
+                    }
+
+                    // Update full palette (used for preview rendering and layer creation)
+                    selectedPalette.allHexColors[paletteIndex] = newHex;
+                    selectedPalette.paletteLab[paletteIndex] = newLab;  // CRITICAL: Update Lab palette (used for layer creation)
+                    logger.log(`  Full palette index: ${paletteIndex}`);
 
                     // Re-render entire palette to show new color, re-sort by L, and update all Lab values
                     logger.log(`🔄 Re-rendering palette with updated color...`);
                     renderPaletteSwatches();
 
-                    // Update canvas preview with new color
+                    // Update canvas preview with new color (use FULL palette to match assignments)
                     logger.log(`🔄 Updating canvas preview with new color...`);
                     if (window.previewState) {
-                        window.previewState.palette = selectedPalette.hexColors;
+                        window.previewState.palette = selectedPalette.allHexColors;
                         renderPreview();
                         logger.log(`✓ Canvas preview updated with new color`);
                     }
@@ -2674,29 +2695,54 @@ async function showDialog() {
                     logger.log("Reading document pixels...");
                     const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
                     logger.log(`Read ${pixelData.width}x${pixelData.height} pixels (${pixelData.scale.toFixed(2)}x scale)`);
-                    logger.log(`Pixel format flag: "${pixelData.format}" (undefined means RGB, "lab" means Lab)`);
+                    logger.log(`Pixel data: 16-bit Lab (source was ${pixelData.bitDepth}-bit)`);
 
                     // Apply preprocessing (bilateral filter for noise reduction) if enabled
+                    // Engine always operates in 16-bit Lab space
                     const preprocessingIntensity = params.preprocessingIntensity || 'auto';
+
                     if (preprocessingIntensity !== 'off') {
                         buttonElement.textContent = "Preprocessing...";
 
                         // For "auto" mode, use DNA-based decision; for manual modes, force the setting
                         const dnaForPreprocessing = lastImageDNA || {};
-                        const preprocessConfig = BilateralFilter.createPreprocessingConfig(
-                            dnaForPreprocessing,
-                            pixelData.pixels,
-                            pixelData.width,
-                            pixelData.height,
-                            preprocessingIntensity
+
+                        // Calculate entropy from 16-bit Lab L channel
+                        const entropyScore = BilateralFilter.calculateEntropyScoreLab(
+                            pixelData.pixels, pixelData.width, pixelData.height
                         );
+
+                        // Get preprocessing config based on DNA and entropy
+                        let preprocessConfig;
+                        if (preprocessingIntensity === 'auto') {
+                            const decision = BilateralFilter.shouldPreprocess(dnaForPreprocessing, entropyScore);
+                            preprocessConfig = {
+                                enabled: decision.shouldProcess,
+                                reason: decision.reason,
+                                entropyScore,
+                                radius: decision.radius,
+                                sigmaR: decision.sigmaR,
+                                intensity: decision.shouldProcess ? (decision.radius >= 5 ? 'heavy' : 'light') : 'off'
+                            };
+                        } else {
+                            // Manual override (light or heavy)
+                            const isHeavy = preprocessingIntensity === 'heavy';
+                            preprocessConfig = {
+                                enabled: true,
+                                reason: `${preprocessingIntensity} filter (user override)`,
+                                entropyScore,
+                                radius: isHeavy ? 5 : 3,
+                                sigmaR: isHeavy ? 45 : 30,
+                                intensity: preprocessingIntensity
+                            };
+                        }
 
                         if (preprocessConfig.enabled) {
                             logger.log(`🔧 Preprocessing: ${preprocessConfig.intensity} (${preprocessConfig.reason})`);
                             logger.log(`   Entropy: ${preprocessConfig.entropyScore?.toFixed(1) || 'N/A'}, Radius: ${preprocessConfig.radius}, SigmaR: ${preprocessConfig.sigmaR}`);
 
-                            // Apply bilateral filter in-place
-                            BilateralFilter.applyBilateralFilter(
+                            // Apply bilateral filter in 16-bit Lab space
+                            BilateralFilter.applyBilateralFilterLab(
                                 pixelData.pixels,
                                 pixelData.width,
                                 pixelData.height,
@@ -2861,6 +2907,9 @@ async function showDialog() {
                         substrateIndex: result.substrateIndex,  // Index of substrate in full palette (null if none)
                         substrateLab: result.substrateLab   // Substrate Lab color for layer identification
                     };
+
+                    // Store globally for substrate-aware swatch/preview functions
+                    window.selectedPreview = selectedPreview;
 
                     posterizationData = {
                         params,
