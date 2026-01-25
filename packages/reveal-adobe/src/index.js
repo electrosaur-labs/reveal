@@ -2708,9 +2708,15 @@ async function showDialog() {
                         const dnaForPreprocessing = lastImageDNA || {};
 
                         // Calculate entropy from 16-bit Lab L channel
+                        logger.log(`Entropy input: pixels type=${pixelData.pixels?.constructor?.name}, length=${pixelData.pixels?.length}, width=${pixelData.width}, height=${pixelData.height}`);
+                        logger.log(`Expected length: ${pixelData.width * pixelData.height * 3}`);
+                        if (pixelData.pixels && pixelData.pixels.length > 0) {
+                            logger.log(`First 6 values: ${Array.from(pixelData.pixels.slice(0, 6)).join(', ')}`);
+                        }
                         const entropyScore = BilateralFilter.calculateEntropyScoreLab(
                             pixelData.pixels, pixelData.width, pixelData.height
                         );
+                        logger.log(`Entropy result: ${entropyScore}`);
 
                         // Get preprocessing config based on DNA and entropy
                         let preprocessConfig;
