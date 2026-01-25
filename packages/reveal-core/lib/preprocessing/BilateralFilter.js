@@ -277,7 +277,9 @@ function shouldPreprocess(dna, entropyScore) {
  * This is called by ParameterGenerator to include preprocessing in the config
  *
  * @param {Object} dna - DNA analysis result
- * @param {Uint8ClampedArray} [imageData] - Optional RGBA data for entropy calculation
+ * @param {Uint8ClampedArray|Uint16Array} [imageData] - Optional pixel data for entropy calculation
+ *        - Uint8ClampedArray: 8-bit RGBA (4 bytes per pixel)
+ *        - Uint16Array: 16-bit Lab (3 values per pixel)
  * @param {number} [width] - Image width (required if imageData provided)
  * @param {number} [height] - Image height (required if imageData provided)
  * @param {string} [intensityOverride] - Manual override: 'off', 'auto', 'light', 'heavy'
@@ -316,7 +318,28 @@ function createPreprocessingConfig(dna, imageData = null, width = 0, height = 0,
     // Auto mode: Calculate entropy if image data provided
     let entropyScore = 0;
     if (imageData && width > 0 && height > 0) {
-        entropyScore = calculateEntropyScore(imageData, width, height);
+        // Detect data format based on array type and length
+        const pixelCount = width * height;
+        const isLab16 = imageData instanceof Uint16Array && imageData.length === pixelCount * 3;
+        const isRGBA8 = (imageData instanceof Uint8Array || imageData instanceof Uint8ClampedArray) &&
+                        imageData.length === pixelCount * 4;
+
+        if (isLab16) {
+            // 16-bit Lab data (3 values per pixel: L, a, b)
+            entropyScore = calculateEntropyScoreLab(imageData, width, height);
+        } else if (isRGBA8) {
+            // 8-bit RGBA data (4 bytes per pixel)
+            entropyScore = calculateEntropyScore(imageData, width, height);
+        } else {
+            // Unknown format - try Lab16 first (more common in modern pipeline)
+            // Check if it could be Lab16 with different array type
+            if (imageData.length === pixelCount * 3) {
+                entropyScore = calculateEntropyScoreLab(imageData, width, height);
+            } else if (imageData.length === pixelCount * 4) {
+                entropyScore = calculateEntropyScore(imageData, width, height);
+            }
+            // Otherwise leave entropyScore at 0 (unknown format)
+        }
     }
 
     // Make decision based on DNA and entropy
