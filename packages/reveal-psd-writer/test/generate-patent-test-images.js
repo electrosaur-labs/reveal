@@ -103,7 +103,7 @@ function generateChromaticZeroCrossing() {
 
     console.log('\n=== Chromatic Zero-Crossing Target ===');
     console.log(`Dimensions: ${WIDTH}×${HEIGHT}`);
-    console.log('MATHEMATICALLY LINEAR a* gradient with 1024 unique values');
+    console.log('MATHEMATICALLY LINEAR a* gradient from -30 to +30');
 
     const pixels = create16bitLabBuffer(WIDTH, HEIGHT);
 
@@ -111,27 +111,25 @@ function generateChromaticZeroCrossing() {
     const L16 = lPercentToICC16(50);  // L = 50%
     const b16 = abToICC16(20);        // b = +20
 
-    // a* gradient from -30 to +30 perceptual
+    // a* gradient from -30 to +30 perceptual (visible green to red)
     // In ICC 16-bit: a=-30 → ((-30+128)/256)*65535 = 25088
     //                a=+30 → ((30+128)/256)*65535 = 40447
-    // Range = 40447 - 25088 = 15359 values
-    // For 1024 pixels, we'll use 1024 consecutive values centered around neutral
-
-    // Center at neutral (a*=0 → 32768 in ICC)
-    // Span 1024 values: 32768 - 512 to 32768 + 511 = 32256 to 33279
-    const aStart = 32768 - 512;  // Slightly green
-    const aRamp = linearRamp16(aStart, WIDTH);
+    const aStart = abToICC16(-30);  // Green
+    const aEnd = abToICC16(30);     // Red
 
     // Convert back to perceptual for logging
-    const aPerceptualStart = ((aStart / 65535) * 256) - 128;
-    const aPerceptualEnd = (((aStart + WIDTH - 1) / 65535) * 256) - 128;
+    const aPerceptualStart = -30;
+    const aPerceptualEnd = 30;
 
-    console.log(`a* range: ${aPerceptualStart.toFixed(2)} to ${aPerceptualEnd.toFixed(2)} (perceptual)`);
-    console.log(`a* range: ${aStart} to ${aStart + WIDTH - 1} (16-bit ICC)`);
+    console.log(`a* range: ${aPerceptualStart} to ${aPerceptualEnd} (perceptual)`);
+    console.log(`a* range: ${aStart} to ${aEnd} (16-bit ICC)`);
+    console.log(`Unique values: ${aEnd - aStart + 1} over ${WIDTH} pixels`);
 
     for (let y = 0; y < HEIGHT; y++) {
         for (let x = 0; x < WIDTH; x++) {
-            setPixel16(pixels, WIDTH, x, y, L16, aRamp[x], b16);
+            // Linear interpolation: each pixel gets a unique a* value
+            const a16 = aStart + Math.round((aEnd - aStart) * x / (WIDTH - 1));
+            setPixel16(pixels, WIDTH, x, y, L16, a16, b16);
         }
     }
 
@@ -169,7 +167,7 @@ function generateSubBitDepthGradient() {
 
     console.log('\n=== Sub-Bit-Depth Gradient (True 16-bit Linear) ===');
     console.log(`Dimensions: ${WIDTH}×${HEIGHT}`);
-    console.log('MATHEMATICALLY LINEAR L gradient with 1024 unique values');
+    console.log('MATHEMATICALLY LINEAR L gradient from 20% to 80%');
 
     const pixels = create16bitLabBuffer(WIDTH, HEIGHT);
 
@@ -177,25 +175,26 @@ function generateSubBitDepthGradient() {
     const a16 = 32768;  // a* = 0 (neutral)
     const b16 = 32768;  // b* = 0 (neutral)
 
-    // L gradient: 1024 consecutive 16-bit values centered around L=50%
-    // L=50% → 32768 in ICC encoding
-    // Span: 32768 - 512 to 32768 + 511 = 32256 to 33279
-    const lStart = 32768 - 512;
-    const lRamp = linearRamp16(lStart, WIDTH);
+    // L gradient from 20% to 80% (visible range)
+    // In ICC: L=20% → 13107, L=80% → 52428
+    const lStart = lPercentToICC16(20);
+    const lEnd = lPercentToICC16(80);
 
     // Convert to perceptual for logging
-    const lPerceptualStart = (lStart / 65535) * 100;
-    const lPerceptualEnd = ((lStart + WIDTH - 1) / 65535) * 100;
+    const lPerceptualStart = 20;
+    const lPerceptualEnd = 80;
     const lPerceptualRange = lPerceptualEnd - lPerceptualStart;
 
-    console.log(`L range: ${lPerceptualStart.toFixed(3)}% to ${lPerceptualEnd.toFixed(3)}% (perceptual)`);
-    console.log(`L range: ${lStart} to ${lStart + WIDTH - 1} (16-bit ICC)`);
-    console.log(`L span: ${lPerceptualRange.toFixed(4)}% = ${WIDTH} unique 16-bit values`);
-    console.log(`In 8-bit this would be: ${Math.ceil(lPerceptualRange / 100 * 255)} steps (nearly invisible)`);
+    console.log(`L range: ${lPerceptualStart}% to ${lPerceptualEnd}% (perceptual)`);
+    console.log(`L range: ${lStart} to ${lEnd} (16-bit ICC)`);
+    console.log(`Unique values: ${lEnd - lStart + 1} over ${WIDTH} pixels`);
+    console.log(`In 8-bit this would be: ${Math.ceil(lPerceptualRange / 100 * 255)} steps`);
 
     for (let y = 0; y < HEIGHT; y++) {
         for (let x = 0; x < WIDTH; x++) {
-            setPixel16(pixels, WIDTH, x, y, lRamp[x], a16, b16);
+            // Linear interpolation: each pixel gets a unique L value
+            const L16 = lStart + Math.round((lEnd - lStart) * x / (WIDTH - 1));
+            setPixel16(pixels, WIDTH, x, y, L16, a16, b16);
         }
     }
 
@@ -251,13 +250,14 @@ function generateEdgePreservingImpulse() {
     const L_dark = lPercentToICC16(30);   // Left side: L=30%
     const L_light = lPercentToICC16(70);  // Right side: L=70%
 
-    // Noise L values - CLOSER to background so bilateral filter can treat as noise
-    // Dark side noise: L=20% (pepper) and L=40% (salt) - within ±10% of L=30%
-    // Light side noise: L=60% (pepper) and L=80% (salt) - within ±10% of L=70%
-    const L_dark_pepper = lPercentToICC16(20);
-    const L_dark_salt = lPercentToICC16(40);
-    const L_light_pepper = lPercentToICC16(60);
-    const L_light_salt = lPercentToICC16(80);
+    // Noise L values - MORE VISIBLE noise (±15-20% from background)
+    // Dark side noise: L=10% (pepper) and L=50% (salt)
+    // Light side noise: L=50% (pepper) and L=90% (salt)
+    // This creates clearly visible salt-and-pepper noise
+    const L_dark_pepper = lPercentToICC16(10);   // Very dark pepper on dark side
+    const L_dark_salt = lPercentToICC16(50);     // Mid-gray salt on dark side
+    const L_light_pepper = lPercentToICC16(50);  // Mid-gray pepper on light side
+    const L_light_salt = lPercentToICC16(90);    // Very light salt on light side
 
     // Neutral chromatic
     const a16 = 32768;
@@ -313,12 +313,12 @@ function generateEdgePreservingImpulse() {
     console.log(`  Noise pixels: ${noiseCount} (${(100 * noiseCount / totalPixels).toFixed(2)}%)`);
     console.log();
     console.log('  Noise design for bilateral filter:');
-    console.log('    Dark side (L=30%): noise at L=20% and L=40% (±10%)');
-    console.log('    Light side (L=70%): noise at L=60% and L=80% (±10%)');
+    console.log('    Dark side (L=30%): pepper=L=10%, salt=L=50% (visible contrast)');
+    console.log('    Light side (L=70%): pepper=L=50%, salt=L=90% (visible contrast)');
     console.log('    Edge: L jumps from 30% to 70% (40% difference)');
     console.log();
-    console.log('  With σr=30 (scaled for 16-bit):');
-    console.log('    Noise (±10% ΔL) → filtered as noise');
+    console.log('  Bilateral filter behavior:');
+    console.log('    Noise (20% ΔL) → filtered with appropriate σr');
     console.log('    Edge (40% ΔL) → preserved as feature');
 
     return outputPath;
