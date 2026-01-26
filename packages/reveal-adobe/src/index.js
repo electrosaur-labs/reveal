@@ -12,8 +12,8 @@ const { core, action, imaging, app } = require("photoshop");
 const Reveal = require("@reveal/core");
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 
-// Pure JS JPEG encoder for preview scaling workaround
-// (UXP doesn't support canvas.toDataURL, so we encode JPEG manually)
+// Pure JS JPEG encoder for preview
+// (UXP doesn't support canvas.toDataURL, so we encode manually)
 const jpeg = require("jpeg-js");
 const SeparationEngine = Reveal.engines.SeparationEngine;
 const ImageHeuristicAnalyzer = Reveal.engines.ImageHeuristicAnalyzer;
@@ -600,7 +600,7 @@ function rgbToHex(r, g, b) {
 }
 
 /**
- * Initialize preview state for JPEG-encoded img display
+ * Initialize preview state for PNG-encoded img display
  * @param {number} width - Image width (data dimensions)
  * @param {number} height - Image height (data dimensions)
  * @param {Array<string>} palette - Array of hex color strings
@@ -733,20 +733,18 @@ function renderPreview() {
             pixelData[pixelOffset] = r;
             pixelData[pixelOffset + 1] = g;
             pixelData[pixelOffset + 2] = b;
-            pixelData[pixelOffset + 3] = 255; // Alpha (ignored by JPEG but required)
+            pixelData[pixelOffset + 3] = 255; // Alpha
         }
     }
 
     // Encode to JPEG using pure-JS encoder
-    // Use quality 100 for posterized images (already flat colors, compression artifacts would be visible)
     const jpegData = jpeg.encode({
         data: pixelData,
         width: width,
         height: height
-    }, 100);
+    }, 95);
 
     // Convert to base64 data URL
-    // Note: jpeg.encode returns { data: Buffer, width, height }
     const base64 = bufferToBase64(jpegData.data);
     const dataUrl = `data:image/jpeg;base64,${base64}`;
 
@@ -1305,6 +1303,7 @@ function showPaletteEditor(selectedPalette) {
             previewContainer._clickHandlerAttached = true;
             logger.log('✓ Attached click handler to preview container (clears swatch selection)');
         }
+
     }
 
     // Hide "Posterize" button, show "Apply Separation" and "Back" buttons
@@ -2723,8 +2722,8 @@ async function showDialog() {
                     buttonElement.disabled = true;
                     buttonElement.textContent = "Analyzing...";
 
-                    // Read document pixels (scaled to 800x800 max for preview)
-                    logger.log("Reading document pixels...");
+                    // Read document pixels for preview (800px max for performance)
+                    logger.log(`Reading document pixels (max 800px)...`);
                     const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
                     logger.log(`Read ${pixelData.width}x${pixelData.height} pixels (${pixelData.scale.toFixed(2)}x scale)`);
                     logger.log(`Pixel data: 16-bit Lab (source was ${pixelData.bitDepth}-bit)`);
@@ -3237,7 +3236,7 @@ async function showDialog() {
                     btnAnalyzeAndSet.style.opacity = "0.6";
 
                     try {
-                        // Get Lab pixels from current document (downsampled to 800x800 for speed)
+                        // Get Lab pixels from current document (800px for analysis)
                         const result = await core.executeAsModal(async () => {
                             const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
                             return {

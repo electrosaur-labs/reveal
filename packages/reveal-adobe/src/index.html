@@ -580,15 +580,16 @@
             position: absolute;
             top: 2px;
             right: 2px;
-            background: rgba(0, 0, 0, 0.75);
-            color: #ffffff;
-            font-size: 9px;
-            font-weight: 600;
-            padding: 2px 4px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white !important;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 5px;
             border-radius: 3px;
             font-family: 'Courier New', monospace;
             letter-spacing: 0.5px;
             pointer-events: none;  /* Don't block clicks on swatch */
+            z-index: 10;
         }
 
         /* Clickable swatch - artist chooses ink by eye (printer mindset) */
@@ -1516,8 +1517,8 @@
         <div class="reveal-title">Reveal - Customize Palette & Separate</div>
 
         <!-- Content Area -->
-        <div class="reveal-content">
-            <div class="form-section">
+        <div class="reveal-content" style="flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+            <div class="form-section" style="flex: 1; display: flex; flex-direction: column; min-height: 0; margin-bottom: 0;">
                 <!-- Preview + Palette Content (Flexbox Layout) -->
                 <div style="display: flex; gap: 16px; align-items: stretch; flex: 1; min-height: 0;">
 
@@ -1537,17 +1538,16 @@
                             border-radius: 4px;
                             overflow: auto;
                             flex: 1;
-                            min-height: 400px;
+                            min-height: 300px;
+                            padding: 8px;
                             display: flex;
                             align-items: center;
-                            justify-content: center;
-                            padding: 8px;">
-                            <!-- Image for preview (uses JPEG encoding for CSS scaling support) -->
+                            justify-content: center;">
+                            <!-- Image for preview (zoom mode controlled by JS) -->
                             <img id="previewImg" style="
                                 max-width: 100%;
                                 max-height: 100%;
                                 object-fit: contain;
-                                object-position: center;
                                 image-rendering: pixelated;
                                 image-rendering: crisp-edges;
                                 cursor: crosshair;
