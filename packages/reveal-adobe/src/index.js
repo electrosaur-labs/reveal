@@ -2840,7 +2840,10 @@ async function showDialog() {
                         centroid: {
                             lWeight: params.lWeight,                    // Saliency lightness priority (default: 1.1)
                             cWeight: params.cWeight,                    // Saliency chroma priority (default: 2.0)
-                            blackBias: params.blackBias                 // Black boost multiplier for halftones (default: 5.0)
+                            blackBias: params.blackBias,                // Black boost multiplier for halftones (default: 5.0)
+                            bitDepth: pixelData.bitDepth,               // Source bit depth (8 or 16) for 16-bit precision fixes
+                            vibrancyMode: params.vibrancyMode,          // Vibrancy mode: 'aggressive', 'exponential', 'linear'
+                            vibrancyBoost: params.vibrancyBoost         // Vibrancy boost exponent (default: 2.2)
                         }
                     };
 

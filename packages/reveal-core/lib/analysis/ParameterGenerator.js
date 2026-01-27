@@ -13,9 +13,14 @@
  * - v3.0: Full parameter mapping - DNA drives ALL UI sliders
  *
  * DISTANCE METRIC SELECTION:
- * - 16-bit images → CIE2000 (museum grade precision)
+ * - 16-bit images → CIE2000 (museum grade precision) [CONFIG ONLY - see note]
  * - peakChroma > 80 OR isPhotographic → CIE94 (perceptual)
  * - Otherwise → CIE76 (graphic, faster)
+ *
+ * NOTE: The engine currently uses L-weighted Euclidean distance (CIE76-like) for
+ * all pixel assignments. The distanceMetric config is stored for future implementation
+ * of CIE94/CIE2000. The current integer 16-bit path provides excellent precision
+ * without the performance cost of full CIE2000 trigonometric calculations.
  *
  * FULL PARAMETER MAPPING (v3.0):
  * | DNA Condition           | Parameter          | Value              |
@@ -100,11 +105,25 @@ class DynamicConfigurator {
         // ================================================================
         // 4. VIBRANCY SETTINGS
         // ================================================================
+        // Vibrancy modes:
+        // - 'aggressive': Multiplies a* by 1.6× during averaging (protects reds from pink dilution)
+        // - 'exponential': Transforms chroma^(1/boost) in scoring (rescues low-chroma colors)
+        // - 'linear': No transformation (already vibrant images)
         let vibrancyMode = 'aggressive';  // Default
         let vibrancyBoost = 1.6;
 
-        if (lowChromaDensity > 0.6 || isArchive) {
-            // Muted images: exponential boost to rescue color
+        // HIGH PEAK CHROMA OVERRIDE: If image has vibrant color spikes (maxC > 80),
+        // use aggressive mode to protect those colors from being averaged away.
+        // This is critical for Minkler-style graphics with bold primaries.
+        if (peakChroma > 80) {
+            // Vibrant spikes need aggressive a* protection
+            vibrancyMode = 'aggressive';
+            vibrancyBoost = isArchive ? 2.2 : 1.8;  // Archives get stronger boost
+            // CHROMA PRIORITY: Boost cWeight to 2.8 so saturated reds beat pale pinks
+            // The higher cWeight ensures vibrant colors "win" the centroid vote
+            cWeight = 2.8;
+        } else if (lowChromaDensity > 0.6 || isArchive) {
+            // Truly muted images (no vibrant spikes): exponential boost to rescue color
             vibrancyMode = 'exponential';
             vibrancyBoost = 2.2;
         } else if (isVibrant) {

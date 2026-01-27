@@ -58,6 +58,33 @@ class PosterizationEngine {
     };
 
     /**
+     * Normalize bitDepth from various input formats to a number
+     *
+     * Handles:
+     * - Number: 8, 16 → returns as-is
+     * - String: "bitDepth16", "bitDepth8" → extracts number
+     * - String: "16", "8" → parses to number
+     * - Undefined/null → defaults to 8
+     *
+     * @private
+     * @param {number|string|undefined} input - Raw bitDepth value
+     * @returns {number} - Normalized bit depth (8 or 16)
+     */
+    static _normalizeBitDepth(input) {
+        if (typeof input === 'number') {
+            return input;
+        }
+        if (typeof input === 'string') {
+            // Handle "bitDepth16" or "bitDepth8" format from Photoshop
+            const match = input.match(/(\d+)/);
+            if (match) {
+                return parseInt(match[1], 10);
+            }
+        }
+        return 8; // Default
+    }
+
+    /**
      * Factory method: Posterize image using specified engine
      *
      * ENGINES:
@@ -130,9 +157,17 @@ class PosterizationEngine {
                 lWeight: options.lWeight !== undefined ? options.lWeight : this.TUNING.centroid.lWeight,
                 cWeight: options.cWeight !== undefined ? options.cWeight : this.TUNING.centroid.cWeight,
                 blackBias: options.blackBias !== undefined ? options.blackBias : this.TUNING.centroid.blackBias,
-                bitDepth: options.bitDepth || 8  // Source bit depth for 8-bit parity fixes
+                // Normalize bitDepth: handle "bitDepth16" string or number 16
+                bitDepth: this._normalizeBitDepth(options.bitDepth),
+                vibrancyMode: options.vibrancyMode || 'aggressive',  // 'aggressive', 'linear', 'exponential'
+                vibrancyBoost: options.vibrancyBoost !== undefined ? options.vibrancyBoost : 2.2  // Exponential transform exponent
             }
         };
+
+        // Log bitDepth source - either from passed tuning object or normalized from options
+        const bitDepthSource = options.tuning ? 'tuning.centroid.bitDepth' : '_normalizeBitDepth(options.bitDepth)';
+        logger.log(`[Tuning] bitDepth: ${tuning.centroid.bitDepth} (source: ${bitDepthSource}, options.bitDepth=${options.bitDepth}, tuning provided=${!!options.tuning})`);
+        logger.log(`[Tuning] vibrancyMode: ${tuning.centroid.vibrancyMode}, vibrancyBoost: ${tuning.centroid.vibrancyBoost}`);
 
         // Dispatch to appropriate engine with strategy injection
         switch (engineType) {
@@ -363,6 +398,12 @@ class PosterizationEngine {
     /**
      * Split buckets until reaching target count
      *
+     * HUE-SECTOR ANCHOR PROTECTION: Inflates priority for buckets containing
+     * green signals (sectors 3=Y-Green, 4=Green) to rescue minority colors
+     * before they get averaged into larger volume-dominant buckets.
+     *
+     * Patent Claim: "Chromatic Priority Override" for minority color rescue
+     *
      * @private
      * @param {Array<Array>} buckets - Current buckets
      * @param {number} targetCount - Target number of buckets
@@ -371,9 +412,13 @@ class PosterizationEngine {
     static _splitToTarget(buckets, targetCount) {
         const workingBuckets = [...buckets];
 
+        // Protected hue sectors: Y-Green (3) and Green (4) = 90-150°
+        const PROTECTED_SECTORS = [3, 4];
+        const HUE_PRIORITY_MULTIPLIER = 10.0;
+
         while (workingBuckets.length < targetCount) {
-            // Find bucket with widest color range
-            let maxRange = 0;
+            // Find bucket with highest priority (range × hue multiplier)
+            let maxPriority = 0;
             let maxBucketIndex = 0;
             let maxChannel = 'r';
 
@@ -382,19 +427,32 @@ class PosterizationEngine {
                 const widestChannel = ranges.widest.channel;
                 const widestRange = ranges.widest.range;
 
-                if (widestRange > maxRange) {
-                    maxRange = widestRange;
+                // Base priority is the widest range
+                let priority = widestRange;
+
+                // HUE-SECTOR ANCHOR PROTECTION: Check for protected hue sectors
+                // If bucket contains green signal, inflate priority to force split
+                for (const sector of PROTECTED_SECTORS) {
+                    if (this._checkBucketForHueSector(bucket, sector, 2)) {
+                        priority *= HUE_PRIORITY_MULTIPLIER;
+                        logger.log(`[Green Rescue] 🌿 Found hue sector ${sector} in bucket ${index} - inflating priority ${HUE_PRIORITY_MULTIPLIER}×`);
+                        break; // Only multiply once
+                    }
+                }
+
+                if (priority > maxPriority) {
+                    maxPriority = priority;
                     maxBucketIndex = index;
                     maxChannel = widestChannel;
                 }
             });
 
             // If no bucket has range > 0, we can't split further
-            if (maxRange === 0) {
+            if (maxPriority === 0) {
                 break;
             }
 
-            // Split the bucket with widest range
+            // Split the bucket with highest priority
             const bucketToSplit = workingBuckets[maxBucketIndex];
             const [bucket1, bucket2] = this._splitBucket(bucketToSplit, maxChannel);
 
@@ -774,6 +832,49 @@ class PosterizationEngine {
             sorted.slice(0, medianIndex).map(c => ({ r: c.rgb.r, g: c.rgb.g, b: c.rgb.b, count: c.count })),
             sorted.slice(medianIndex).map(c => ({ r: c.rgb.r, g: c.rgb.g, b: c.rgb.b, count: c.count }))
         ];
+    }
+
+    /**
+     * HUE-SECTOR ANCHOR PROTECTION: Check if bucket contains a specific hue sector
+     *
+     * This helper allows the engine to "see" chromatic signals (like green foliage)
+     * before they get averaged into larger, volume-dominant buckets.
+     *
+     * Patent Claim: "Chromatic Priority Override" for minority color rescue
+     *
+     * @private
+     * @param {Array<{r,g,b,count}>} bucket - Colors to check (RGB format)
+     * @param {number} targetSector - Hue sector (0-11, where 4=Green 120-150°)
+     * @param {number} [chromaThreshold=2] - Minimum chroma to count as signal
+     * @returns {boolean} - True if bucket contains the target hue sector
+     */
+    static _checkBucketForHueSector(bucket, targetSector, chromaThreshold = 2) {
+        // Sample up to 200 colors for efficiency
+        const sampleSize = Math.min(bucket.length, 200);
+        const step = Math.max(1, Math.floor(bucket.length / sampleSize));
+
+        for (let i = 0; i < bucket.length; i += step) {
+            const color = bucket[i];
+            const lab = this._rgbToLab(color.r, color.g, color.b);
+
+            // Calculate chroma (distance from neutral axis)
+            const chroma = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
+
+            // Skip near-neutral colors
+            if (chroma < chromaThreshold) continue;
+
+            // Calculate hue angle in degrees (0-360)
+            const hue = Math.atan2(lab.b, lab.a) * 180 / Math.PI;
+            const normHue = hue < 0 ? hue + 360 : hue;
+
+            // Determine sector (12 sectors, 30° each)
+            const sector = Math.floor(normHue / 30) % 12;
+
+            if (sector === targetSector) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1427,6 +1528,70 @@ class PosterizationEngine {
     }
 
     /**
+     * GREEN PEEK: Check if a box contains any colors in specific hue sectors
+     *
+     * This is critical for detecting "hidden" green signals that get averaged
+     * into blue-gray boxes. The box's MEAN might be neutral, but individual
+     * colors could still be green foliage that needs isolation.
+     *
+     * Patent Claim: "Chromatic Inflation Factor" for hidden hue signals
+     *
+     * @private
+     * @param {Array} colors - Box colors: [{L, a, b, count}, ...]
+     * @param {Array<number>} targetSectors - Hue sectors to detect (e.g., [3, 4] for green)
+     * @param {number} chromaThreshold - Minimum chroma to consider (default 2.0)
+     * @returns {boolean} True if box contains any colors in target sectors
+     */
+    static _boxContainsHueSector(colors, targetSectors, chromaThreshold = 2.0) {
+        // Sample up to 100 colors for efficiency
+        const sampleSize = Math.min(colors.length, 100);
+        const step = Math.max(1, Math.floor(colors.length / sampleSize));
+
+        let greenCandidates = 0;
+        let lowChromaSkips = 0;
+
+        for (let i = 0; i < colors.length; i += step) {
+            const c = colors[i];
+            const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
+
+            // Skip near-neutral colors
+            if (chroma < chromaThreshold) {
+                lowChromaSkips++;
+                continue;
+            }
+
+            // Calculate hue angle in degrees (0-360)
+            const hue = Math.atan2(c.b, c.a) * 180 / Math.PI;
+            const normHue = hue < 0 ? hue + 360 : hue;
+
+            // Determine sector (12 sectors, 30° each)
+            const sector = Math.floor(normHue / 30) % 12;
+
+            // For green detection, also check for negative a* (the green axis)
+            // Green colors have a < 0 in perceptual Lab space
+            if (targetSectors.includes(sector)) {
+                greenCandidates++;
+                logger.log(`[Green Peek] Found color in sector ${sector}: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}, hue=${normHue.toFixed(0)}°`);
+                return true;
+            }
+
+            // ADDITIONAL CHECK: Any color with negative a* and positive b* is green-ish
+            // This catches greens that might be classified in adjacent sectors
+            if (c.a < -3 && c.b > 0 && chroma > 3) {
+                logger.log(`[Green Peek] Found green-axis color: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}`);
+                return true;
+            }
+        }
+
+        // Log diagnostic info if no green found
+        if (lowChromaSkips > sampleSize * 0.8) {
+            logger.log(`[Green Peek] Box has mostly low-chroma colors (${lowChromaSkips}/${sampleSize} skipped, threshold=${chromaThreshold})`);
+        }
+
+        return false;
+    }
+
+    /**
      * HUE-AWARE PRIORITY MULTIPLIER: Calculate split priority using Hue Hunger
      *
      * ARCHITECT'S "SECRET SAUCE": Priority = Variance × (1 + HueHunger)
@@ -1464,18 +1629,77 @@ class PosterizationEngine {
         // Apply Hue-Aware multiplier
         let multiplier = 1.0;
         const boxSector = metadata.sector;
+        const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
+                           'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
+
+        // GREEN PEEK: Check if this box CONTAINS green signals even if the mean isn't green
+        // This is critical because green foliage often gets mixed into blue-gray boxes
+        // Patent Claim: "Chromatic Inflation Factor" for hidden hue signals
+        const is16Bit = tuning && tuning.centroid && tuning.centroid.bitDepth === 16;
+        const isArchiveMode = vibrancyMode === 'exponential' || is16Bit;
+        const GREEN_PEEK_THRESHOLD = is16Bit ? 0.5 : 2.0;  // Very low chroma threshold for 16-bit
+        const GREEN_PEEK_MULTIPLIER = 8.0;
+
+        // Log Green Peek status for debugging
+        const greenSector3Covered = coveredSectors.has(3);
+        const greenSector4Covered = coveredSectors.has(4);
+        const greenEnergy = Math.max(sectorEnergy[3] || 0, sectorEnergy[4] || 0);
+
+        if (isArchiveMode) {
+            if (!greenSector3Covered && !greenSector4Covered) {
+                // Check if box contains ANY green signals (sectors 3 or 4)
+                logger.log(`[Green Peek] Checking box with ${box.colors.length} colors (threshold=${GREEN_PEEK_THRESHOLD}, greenEnergy=${greenEnergy.toFixed(1)}%)`);
+                const hasGreenSignal = this._boxContainsHueSector(box.colors, [3, 4], GREEN_PEEK_THRESHOLD);
+
+                if (hasGreenSignal && greenEnergy > 0.1) {
+                    multiplier = GREEN_PEEK_MULTIPLIER;
+                    logger.log(`[Green Peek] 🌿 Box contains hidden green signal (${greenEnergy.toFixed(1)}% image energy) - ${multiplier}× boost`);
+                    return basePriority * multiplier;  // Early return with boost
+                } else if (hasGreenSignal) {
+                    logger.log(`[Green Peek] ⚠️ Green signal found but image greenEnergy too low (${greenEnergy.toFixed(1)}%)`);
+                }
+            } else {
+                logger.log(`[Green Peek] Skipped - green sectors already covered (3:${greenSector3Covered}, 4:${greenSector4Covered})`);
+            }
+        }
 
         if (boxSector >= 0) {
             const sourceEnergy = sectorEnergy[boxSector];
-            const SIGNIFICANCE_THRESHOLD = 5.0; // 5% of image
+
+            // RED RESCUE: JPEG artifacts compress reds into "muddy pink" volumes
+            // that mathematically out-vote the true reds. We use aggressive settings
+            // for Red sector (0) to force isolation before averaging kills it.
+            // Patent Claim: "Chromatic Inflation Factor" for artifact-compressed primaries
+            const isRedSector = boxSector === 0;
+            const RED_RESCUE_THRESHOLD = 2.0;      // Lower threshold for reds (2% vs 5%)
+            const RED_RESCUE_MULTIPLIER = 10.0;    // Minimum boost for reds (10×)
+            const isGreenSector = boxSector === 3 || boxSector === 4; // Y-Green or Green
+            const GREEN_RESCUE_THRESHOLD = is16Bit ? 0.5 : 1.5;    // Even lower for 16-bit archives
+            const GREEN_RESCUE_MULTIPLIER = 10.0;  // Match Red Rescue strength
+
+            // Determine thresholds and multipliers based on rescue type
+            let significanceThreshold = 5.0;
+            let sectorMultiplier = hueMultiplier;
+
+            if (isRedSector) {
+                significanceThreshold = RED_RESCUE_THRESHOLD;
+                sectorMultiplier = Math.max(RED_RESCUE_MULTIPLIER, hueMultiplier);
+            } else if (isArchiveMode && isGreenSector) {
+                significanceThreshold = GREEN_RESCUE_THRESHOLD;
+                sectorMultiplier = Math.max(GREEN_RESCUE_MULTIPLIER, hueMultiplier);
+            }
 
             // CRITICAL: If sector has significant energy but isn't covered yet
-            if (sourceEnergy > SIGNIFICANCE_THRESHOLD && !coveredSectors.has(boxSector)) {
-                multiplier = hueMultiplier; // Default 5.0× boost
+            if (sourceEnergy > significanceThreshold && !coveredSectors.has(boxSector)) {
+                multiplier = sectorMultiplier;
 
-                const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
-                                   'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
-                logger.log(`[Hue Priority] ⭐ ${sectorNames[boxSector]} sector (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
+                if (isRedSector) {
+                    logger.log(`[Red Rescue] 🔴 Forcing split on Red bucket (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
+                } else if (isArchiveMode && isGreenSector) {
+                    logger.log(`[Green Rescue] 🌿 Forcing split on ${sectorNames[boxSector]} bucket (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
+                } else {
+                    logger.log(`[Hue Priority] ⭐ ${sectorNames[boxSector]} sector (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
+                }
             }
         }
 
@@ -1490,10 +1714,13 @@ class PosterizationEngine {
      *
      * @private
      * @param {Float32Array} labPixels - Flat array: [L, a, b, L, a, b, ...]
+     * @param {number} [chromaThreshold=5] - Minimum chroma to count (lower for muted images)
      * @returns {Array<number>} - 12 element array with pixel counts per sector
      */
-    static _analyzeImageHueSectors(labPixels) {
-        const CHROMA_THRESHOLD = 5; // Lower threshold to catch pastelly colors
+    static _analyzeImageHueSectors(labPixels, chromaThreshold = 5) {
+        // MUTED IMAGE RESCUE: For archives with lowChromaDensity > 0.6, use threshold 1.0
+        // to detect desaturated greens (chroma 2-4) that would otherwise be ignored
+        const CHROMA_THRESHOLD = chromaThreshold;
         const hueCounts = new Array(12).fill(0);
         const totalPixels = labPixels.length / 3;
         let chromaSum = 0;
@@ -1541,10 +1768,11 @@ class PosterizationEngine {
      *
      * @private
      * @param {Array} palette - Array of Lab colors: [{L, a, b}, ...]
+     * @param {number} [chromaThreshold=5] - Minimum chroma to count (lower for muted images)
      * @returns {Set<number>} - Set of sector indices (0-11) covered by palette
      */
-    static _analyzePaletteHueCoverage(palette) {
-        const CHROMA_THRESHOLD = 5; // Match image analysis threshold
+    static _analyzePaletteHueCoverage(palette, chromaThreshold = 5) {
+        const CHROMA_THRESHOLD = chromaThreshold; // Match image analysis threshold
         const coveredSectors = new Set();
         const colorCountsBySector = new Array(12).fill(0); // Count colors per sector
         const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
@@ -2137,6 +2365,10 @@ class PosterizationEngine {
      * @returns {Array} palette - Array of Lab colors: [{L, a, b}, ...]
      */
     static medianCutInLabSpace(labPixels, targetColors, grayscaleOnly = false, width = null, height = null, substrateLab = null, substrateTolerance = 3.5, vibrancyMode = 'aggressive', vibrancyBoost = 2.0, highlightThreshold = 92, highlightBoost = 3.0, strategy = null, tuning = null) {
+        // DEBUG: Log tuning object to verify bitDepth is received
+        const tunedBitDepth = tuning && tuning.centroid && tuning.centroid.bitDepth;
+        logger.log(`[MedianCut] Received tuning: bitDepth=${tunedBitDepth}, vibrancyMode=${vibrancyMode}`);
+
         // ARTIST-CENTRIC MODEL: Grid Sampling Optimization
         // Instead of scanning all 640,000 pixels, use stride 4 (every 4th pixel)
         // This reduces computation by 90% with negligible quality impact
@@ -2267,7 +2499,12 @@ class PosterizationEngine {
 
         // HUE-AWARE PRIORITY: Analyze source image hue distribution
         // This powers the "hunger" multiplier that forces hue diversity
-        const sectorEnergy = grayscaleOnly ? null : this._analyzeImageHueSectors(labPixels);
+        // MUTED IMAGE RESCUE: For exponential vibrancy (muted archives) OR 16-bit sources,
+        // use lower chroma threshold to detect desaturated greens (chroma 2-4) that would
+        // otherwise be classified as neutral. 16-bit data is SIGNAL, not noise.
+        const is16Bit = tuning && tuning.centroid && tuning.centroid.bitDepth === 16;
+        const hueChromaThreshold = (vibrancyMode === 'exponential' || is16Bit) ? 1.0 : 5.0;
+        const sectorEnergy = grayscaleOnly ? null : this._analyzeImageHueSectors(labPixels, hueChromaThreshold);
         const coveredSectors = new Set();
 
         // Start with single box containing all colors
@@ -2321,9 +2558,72 @@ class PosterizationEngine {
 
         logger.log(`[MedianCut] Final: ${boxes.length} boxes after ${splitIteration} iterations`);
 
+        // GREEN-PRIORITY CENTROID: Check if we need to rescue green signals
+        // If a box has significant green content, extract green-only centroid
+        // This prevents green from being averaged into orange/yellow
+        // Note: is16Bit already declared earlier in this function
+        const greenEnergy = sectorEnergy ? (sectorEnergy[3] + sectorEnergy[4]) : 0;  // Y-Green + Green
+        const GREEN_RESCUE_THRESHOLD = 1.5;  // Activate if green > 1.5% of image
+        const shouldRescueGreen = !grayscaleOnly && greenEnergy > GREEN_RESCUE_THRESHOLD && is16Bit;
+
+        if (shouldRescueGreen) {
+            logger.log(`[Green Rescue] 🌿 Activating Green-Priority Centroid (green energy: ${greenEnergy.toFixed(1)}%)`);
+        }
+
+        // PRE-SCAN: Find the box with most green content for forced rescue
+        let bestGreenBoxIdx = -1;
+        let bestGreenCount = 0;
+        let bestGreenRatio = 0;
+
+        if (shouldRescueGreen) {
+            boxes.forEach((box, idx) => {
+                const greenColors = box.colors.filter(c => {
+                    const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
+                    if (chroma < 0.5) return false;
+                    const hue = Math.atan2(c.b, c.a) * (180 / Math.PI);
+                    const normalizedHue = hue < 0 ? hue + 360 : hue;
+                    const sector = Math.floor(normalizedHue / 30);
+                    return sector === 3 || sector === 4;  // Y-Green or Green
+                });
+                const greenRatio = box.colors.length > 0 ? greenColors.length / box.colors.length : 0;
+                logger.log(`[Green Rescue] Box ${idx} scan: ${greenColors.length} green pixels (${(greenRatio * 100).toFixed(1)}% of box)`);
+
+                if (greenColors.length > bestGreenCount) {
+                    bestGreenCount = greenColors.length;
+                    bestGreenRatio = greenRatio;
+                    bestGreenBoxIdx = idx;
+                }
+            });
+
+            if (bestGreenBoxIdx >= 0) {
+                logger.log(`[Green Rescue] Best green box: #${bestGreenBoxIdx} with ${bestGreenCount} green pixels (${(bestGreenRatio * 100).toFixed(1)}%)`);
+            }
+        }
+
         // Calculate representative color for each box (centroid in Lab space)
         // Use injected strategy or fallback to VOLUMETRIC
-        const palette = boxes.map(box => this._calculateLabCentroid(box.colors, grayscaleOnly, strategy, tuning));
+        const palette = boxes.map((box, idx) => {
+            // GREEN-PRIORITY CENTROID: Force green centroid for the box with most green content
+            // Threshold lowered: ANY green content qualifies if this is the best green box
+            if (shouldRescueGreen && idx === bestGreenBoxIdx && bestGreenCount > 5) {
+                const greenColors = box.colors.filter(c => {
+                    const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
+                    if (chroma < 0.5) return false;
+                    const hue = Math.atan2(c.b, c.a) * (180 / Math.PI);
+                    const normalizedHue = hue < 0 ? hue + 360 : hue;
+                    const sector = Math.floor(normalizedHue / 30);
+                    return sector === 3 || sector === 4;
+                });
+
+                if (greenColors.length > 0) {
+                    logger.log(`[Green Rescue] ✅ Box ${idx}: FORCING green centroid from ${greenColors.length} pixels`);
+                    return this._calculateLabCentroid(greenColors, grayscaleOnly, strategy, tuning);
+                }
+            }
+
+            // Normal centroid calculation
+            return this._calculateLabCentroid(box.colors, grayscaleOnly, strategy, tuning);
+        });
 
         // Store colors array in palette for later hue gap analysis
         // This allows us to force-include gap colors AFTER perceptual snap
@@ -2553,6 +2853,11 @@ class PosterizationEngine {
 
         const isLabInput = options.format === 'lab';
 
+        // IMPORTANT: Track source bit depth at function level for use in thresholds throughout.
+        // 16-bit data is signal, not noise - use tighter thresholds to preserve subtle differences.
+        const sourceBitDepth = options.bitDepth || 16;  // Default to 16 (engine expects 16-bit)
+        const isEightBitSource = sourceBitDepth <= 8;
+
         // Step 1: Convert all pixels to Lab space (or use directly if Lab input)
         // Also track transparent pixels (alpha < threshold)
         let labPixels;
@@ -2565,8 +2870,6 @@ class PosterizationEngine {
             //
             // IMPORTANT: bitDepth tracks the ORIGINAL source bit depth (for decisions like
             // shadow/highlight gates), but the actual pixel data is ALWAYS 16-bit encoding.
-            const sourceBitDepth = options.bitDepth || 16;  // Default to 16 (engine expects 16-bit)
-            const isEightBitSource = sourceBitDepth <= 8;
 
             logger.log(`✓ Using 16-bit Lab pixels (original source: ${sourceBitDepth}-bit → Float32 perceptual ranges)`);
             labPixels = new Float32Array(pixels.length);
@@ -2712,7 +3015,10 @@ class PosterizationEngine {
             // Thresholds for detecting preserved colors
             const WHITE_L_MIN = 95;
             const BLACK_L_MAX = 10;  // Increased from 5 to catch more near-black pixels
-            const AB_THRESHOLD = 5;
+            // 16-BIT PRECISION FIX: 16-bit data is signal, not noise.
+            // Use very small threshold for 16-bit to preserve subtle chroma in whites/blacks.
+            // Note: Using 0.01 instead of 0 because the < comparison needs a positive value.
+            const AB_THRESHOLD = isEightBitSource ? 5 : 0.01;
 
             // Sample some "black" pixels to see their actual L values (diagnostic)
             let blackLSamples = [];
@@ -2980,10 +3286,12 @@ class PosterizationEngine {
                 logger.log(`[Hue Analysis] Data available: ${initialPaletteLab._allColors.length} unique colors, ${initialPaletteLab._labPixels.length / 3} total pixels`);
 
                 // Step 1: Analyze image hue distribution (12 sectors)
-                const imageHues = this._analyzeImageHueSectors(initialPaletteLab._labPixels);
+                // MUTED IMAGE RESCUE: Use lower chroma threshold for exponential vibrancy mode
+                const hueChromaThreshold = vibrancyMode === 'exponential' ? 1.0 : 5.0;
+                const imageHues = this._analyzeImageHueSectors(initialPaletteLab._labPixels, hueChromaThreshold);
 
                 // Step 2: Check which sectors the curated palette covers
-                const { coveredSectors, colorCountsBySector } = this._analyzePaletteHueCoverage(curatedPaletteLab);
+                const { coveredSectors, colorCountsBySector } = this._analyzePaletteHueCoverage(curatedPaletteLab, hueChromaThreshold);
                 logger.log(`[Hue Analysis] Curated palette covers ${coveredSectors.size}/12 hue sectors`);
 
                 // Step 3: Identify gaps (sectors with >2% image but 0 palette, OR >20% but only 1 color)
@@ -3205,6 +3513,22 @@ class PosterizationEngine {
         const blackSet = preservedPixelMap.get('black');
         const paletteLength = finalPaletteLab.length;
 
+        // 16-BIT INTEGER PRECISION FIX:
+        // Pre-convert palette to 16-bit integer space ONCE to avoid floating-point
+        // precision loss during comparison. This preserves subtle color differences
+        // (especially chromatic zero-crossings where a*/b* values are near neutral).
+        //
+        // Engine 16-bit encoding: L: 0-32768, a/b: 0-32768 (16384=neutral)
+        // Perceptual Lab: L: 0-100, a/b: -128 to +127
+        const palette16 = finalPaletteLab.map(p => ({
+            L: (p.L / 100) * 32768,
+            a: (p.a + 128) * 128,  // Map -128..+127 to 0..32768
+            b: (p.b + 128) * 128
+        }));
+
+        // Use raw 16-bit pixels if available (Lab input), otherwise fall back to labPixels
+        const useInteger16 = isLabInput && pixels;
+
         for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
             const rowOffset = y * width; // Pre-calculate row start
 
@@ -3229,26 +3553,47 @@ class PosterizationEngine {
 
                     if (!isPreserved) {
                         const idx = anchorI * 3;
-                        // Use local variables instead of creating object {L,a,b}
-                        const pL = labPixels[idx];
-                        const pA = labPixels[idx + 1];
-                        const pB = labPixels[idx + 2];
-
                         let minDistance = Infinity;
 
-                        // Inline distance calculation (avoid function call overhead)
-                        for (let j = 0; j < paletteLength; j++) {
-                            const target = finalPaletteLab[j];
-                            const dL = pL - target.L;
-                            const dA = pA - target.a;
-                            const dB = pB - target.b;
+                        if (useInteger16) {
+                            // INTEGER 16-BIT DISTANCE (preserves full precision)
+                            const rawL = pixels[idx];
+                            const rawA = pixels[idx + 1];
+                            const rawB = pixels[idx + 2];
 
-                            // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
-                            const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+                            for (let j = 0; j < paletteLength; j++) {
+                                const target16 = palette16[j];
+                                const dL = rawL - target16.L;
+                                const dA = rawA - target16.a;
+                                const dB = rawB - target16.b;
 
-                            if (dist < minDistance) {
-                                minDistance = dist;
-                                anchorAssignment = j;
+                                // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
+                                const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+
+                                if (dist < minDistance) {
+                                    minDistance = dist;
+                                    anchorAssignment = j;
+                                }
+                            }
+                        } else {
+                            // FLOAT DISTANCE (fallback for non-Lab inputs)
+                            const pL = labPixels[idx];
+                            const pA = labPixels[idx + 1];
+                            const pB = labPixels[idx + 2];
+
+                            for (let j = 0; j < paletteLength; j++) {
+                                const target = finalPaletteLab[j];
+                                const dL = pL - target.L;
+                                const dA = pA - target.a;
+                                const dB = pB - target.b;
+
+                                // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
+                                const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+
+                                if (dist < minDistance) {
+                                    minDistance = dist;
+                                    anchorAssignment = j;
+                                }
                             }
                         }
                     }
@@ -3532,10 +3877,15 @@ class PosterizationEngine {
         const assignments = new Uint16Array(width * height);
         const paletteLen = paletteLab.length;
 
-        // Engine ONLY accepts 16-bit Lab input (callers convert 8-bit → 16-bit before calling)
-        const maxValue = 32768;
-        const neutralAB = 16384;
-        const abScale = 128 / 16384;
+        // 16-BIT INTEGER PRECISION FIX:
+        // Pre-convert palette to 16-bit integer space ONCE to preserve precision.
+        // Engine 16-bit encoding: L: 0-32768, a/b: 0-32768 (16384=neutral)
+        // Perceptual Lab: L: 0-100, a/b: -128 to +127
+        const palette16 = paletteLab.map(p => ({
+            L: (p.L / 100) * 32768,
+            a: (p.a + 128) * 128,  // Map -128..+127 to 0..32768
+            b: (p.b + 128) * 128
+        }));
 
         for (let y = 0; y < height; y += stride) {
             const rowOffset = y * width;
@@ -3544,18 +3894,18 @@ class PosterizationEngine {
                 const anchorI = rowOffset + x;
                 const idx = anchorI * 3;
 
-                // Convert 16-bit Lab to perceptual Lab ranges
-                const pL = (labPixels[idx] / maxValue) * 100;
-                const pA = (labPixels[idx + 1] - neutralAB) * abScale;
-                const pB = (labPixels[idx + 2] - neutralAB) * abScale;
+                // Read raw 16-bit values directly (no normalization)
+                const rawL = labPixels[idx];
+                const rawA = labPixels[idx + 1];
+                const rawB = labPixels[idx + 2];
 
-                // Find nearest palette color (squared Euclidean, L weighted 1.5×)
+                // Find nearest palette color using integer 16-bit distance
                 let minDist = Infinity, anchorAssignment = 0;
                 for (let j = 0; j < paletteLen; j++) {
-                    const target = paletteLab[j];
-                    const dL = pL - target.L;
-                    const dA = pA - target.a;
-                    const dB = pB - target.b;
+                    const target16 = palette16[j];
+                    const dL = rawL - target16.L;
+                    const dA = rawA - target16.a;
+                    const dB = rawB - target16.b;
                     const dist = 1.5 * dL * dL + dA * dA + dB * dB;
                     if (dist < minDist) { minDist = dist; anchorAssignment = j; }
                 }

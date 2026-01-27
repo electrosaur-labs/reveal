@@ -2,14 +2,52 @@
  * ImageHeuristicAnalyzer
  * Logic to detect 'Artistic Signatures' and set Golden Parameters.
  *
- * NOTE: Expects Lab pixels directly from Photoshop (3 bytes per pixel: L, a, b)
- * Photoshop encoding: L: 0-255 (0-100), a: 0-255 (-128 to +127), b: 0-255 (-128 to +127)
+ * SUPPORTS BOTH 8-BIT AND 16-BIT LAB INPUT:
+ * - 8-bit: L: 0-255 (0-100), a: 0-255 (-128 to +127), b: 0-255 (-128 to +127)
+ * - 16-bit: L: 0-32768 (0-100), a: 0-32768 (16384=neutral), b: 0-32768 (16384=neutral)
+ *
+ * The analyzer auto-detects bit depth from the input array type or pixel value ranges.
  */
 const logger = require("../utils/logger");
 
 const ImageHeuristicAnalyzer = {
-    analyze: function(pixels, width, height) {
+    /**
+     * Analyze image for artistic signatures
+     * @param {Uint8Array|Uint16Array} pixels - Lab pixel data (3 values per pixel)
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @param {Object} [options] - Analysis options
+     * @param {number} [options.bitDepth] - Force bit depth (8 or 16), auto-detected if not provided
+     * @returns {Object} Analysis result with label, presetId, and timing
+     */
+    analyze: function(pixels, width, height, options = {}) {
         const startTime = performance.now();
+
+        // AUTO-DETECT BIT DEPTH from array type or explicit option
+        // Uint16Array indicates 16-bit, Uint8Array indicates 8-bit
+        // Can be overridden with options.bitDepth
+        let bitDepth = options.bitDepth;
+        if (!bitDepth) {
+            if (pixels instanceof Uint16Array) {
+                bitDepth = 16;
+            } else if (pixels instanceof Uint8Array || pixels instanceof Uint8ClampedArray) {
+                bitDepth = 8;
+            } else {
+                // For generic arrays, check if any value exceeds 255
+                const sampleMax = Math.max(pixels[0] || 0, pixels[1] || 0, pixels[2] || 0);
+                bitDepth = sampleMax > 255 ? 16 : 8;
+            }
+        }
+
+        const is16Bit = bitDepth === 16;
+        logger.log(`[ImageHeuristicAnalyzer] Analyzing ${is16Bit ? '16-bit' : '8-bit'} Lab data`);
+
+        // Set conversion constants based on bit depth
+        // 8-bit:  L: 0-255 → 0-100, a/b: 0-255 (128=neutral)
+        // 16-bit: L: 0-32768 → 0-100, a/b: 0-32768 (16384=neutral)
+        const maxL = is16Bit ? 32768 : 255;
+        const neutralAB = is16Bit ? 16384 : 128;
+        const abScale = is16Bit ? (128 / 16384) : 1;
 
         let stats = {
             total: 0,
@@ -23,14 +61,14 @@ const ImageHeuristicAnalyzer = {
         };
 
         // Standard step-sampling (every 40th pixel) is blindingly fast (~10ms)
-        // Note: pixels are 3 bytes per pixel (L, a, b) from Photoshop in Lab mode
+        // Note: pixels are 3 values per pixel (L, a, b) in Lab mode
         const step = 3 * 40;
         for (let i = 0; i < pixels.length; i += step) {
-            // Convert from Photoshop's byte encoding to perceptual ranges
-            // L: 0-255 → 0-100, a: 0-255 → -128 to +127, b: 0-255 → -128 to +127
-            const L = (pixels[i] / 255) * 100;
-            const a = pixels[i + 1] - 128;
-            const b = pixels[i + 2] - 128;
+            // Convert from bit-depth encoding to perceptual ranges
+            // L: 0-100, a: -128 to +127, b: -128 to +127
+            const L = (pixels[i] / maxL) * 100;
+            const a = (pixels[i + 1] - neutralAB) * abScale;
+            const b = (pixels[i + 2] - neutralAB) * abScale;
 
             const chroma = Math.sqrt(a**2 + b**2);
 
