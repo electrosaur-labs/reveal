@@ -20,9 +20,24 @@ const SECTOR_NAMES = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
                       'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
 
 /**
- * Chroma threshold for considering a color as chromatic (not grayscale)
+ * Default chroma threshold for considering a color as chromatic (not grayscale)
+ * For 16-bit archives, use 1.5 to capture muted greens (chroma 2-4)
  */
-const CHROMA_THRESHOLD = 5;
+const DEFAULT_CHROMA_THRESHOLD = 5;
+
+/**
+ * Get appropriate chroma threshold based on DNA
+ * 16-bit archives need lower threshold to detect muted colors
+ *
+ * @param {Object} [dna] - Image DNA with bitDepth
+ * @returns {number} Chroma threshold (1.5 for 16-bit, 5.0 for 8-bit)
+ */
+function getChromaThreshold(dna) {
+    if (dna && dna.bitDepth === 16) {
+        return 1.5; // Archive mode: detect muted greens (chroma 2-4)
+    }
+    return DEFAULT_CHROMA_THRESHOLD;
+}
 
 /**
  * Get hue sector (0-11) from Lab a/b coordinates
@@ -37,12 +52,13 @@ const CHROMA_THRESHOLD = 5;
  *
  * @param {number} a - Lab a* channel (-128 to +127)
  * @param {number} b - Lab b* channel (-128 to +127)
+ * @param {number} [chromaThreshold=5] - Minimum chroma to consider chromatic
  * @returns {number} Sector index 0-11, or -1 if grayscale
  */
-function getHueSector(a, b) {
+function getHueSector(a, b, chromaThreshold = DEFAULT_CHROMA_THRESHOLD) {
     const chroma = Math.sqrt(a * a + b * b);
 
-    if (chroma <= CHROMA_THRESHOLD) {
+    if (chroma <= chromaThreshold) {
         return -1; // Grayscale, no hue
     }
 
@@ -71,7 +87,7 @@ function analyzeImageHueSectors(labPixels) {
         const b = labPixels[i + 2];
         const chroma = Math.sqrt(a * a + b * b);
 
-        if (chroma > CHROMA_THRESHOLD) {
+        if (chroma > DEFAULT_CHROMA_THRESHOLD) {
             chromaSum += chroma;
             chromaCount++;
 
@@ -84,12 +100,12 @@ function analyzeImageHueSectors(labPixels) {
     }
 
     const avgChroma = chromaCount > 0 ? chromaSum / chromaCount : 0;
-    logger.log(`[Hue Analysis] Analyzing ${totalPixels} total pixels, ${chromaCount} with chroma > ${CHROMA_THRESHOLD} (avg chroma: ${avgChroma.toFixed(1)})`);
+    logger.log(`[Hue Analysis] Analyzing ${totalPixels} total pixels, ${chromaCount} with chroma > ${DEFAULT_CHROMA_THRESHOLD} (avg chroma: ${avgChroma.toFixed(1)})`);
 
     // Convert counts to percentages
     const huePercentages = hueCounts.map(count => (count / totalPixels) * 100);
 
-    logger.log(`[Hue Analysis] Image hue distribution (12 sectors, chroma > ${CHROMA_THRESHOLD}):`);
+    logger.log(`[Hue Analysis] Image hue distribution (12 sectors, chroma > ${DEFAULT_CHROMA_THRESHOLD}):`);
     huePercentages.forEach((pct, idx) => {
         if (pct > 0.5) {  // Show all sectors with >0.5% presence
             logger.log(`  ${SECTOR_NAMES[idx].padEnd(9)}: ${pct.toFixed(1)}%`);
@@ -115,7 +131,7 @@ function analyzePaletteHueCoverage(palette) {
     for (const color of palette) {
         const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
 
-        if (chroma > CHROMA_THRESHOLD) {
+        if (chroma > DEFAULT_CHROMA_THRESHOLD) {
             const hue = Math.atan2(color.b, color.a) * 180 / Math.PI;
             const hueNorm = hue < 0 ? hue + 360 : hue;
             const sectorIdx = Math.floor(hueNorm / 30);
@@ -342,7 +358,7 @@ function forceIncludeHueGaps(colors, gaps, imageHues = null) {
         // Find all colors in this sector
         const sectorColors = colors.filter(color => {
             const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
-            if (chroma <= CHROMA_THRESHOLD) return false;
+            if (chroma <= DEFAULT_CHROMA_THRESHOLD) return false;
 
             const hue = Math.atan2(color.b, color.a) * 180 / Math.PI;
             const hueNorm = hue < 0 ? hue + 360 : hue;
@@ -431,7 +447,9 @@ function forceIncludeHueGaps(colors, gaps, imageHues = null) {
 
 module.exports = {
     SECTOR_NAMES,
-    CHROMA_THRESHOLD,
+    DEFAULT_CHROMA_THRESHOLD,
+    CHROMA_THRESHOLD: DEFAULT_CHROMA_THRESHOLD,  // Backward compatibility alias
+    getChromaThreshold,
     getHueSector,
     analyzeImageHueSectors,
     analyzePaletteHueCoverage,

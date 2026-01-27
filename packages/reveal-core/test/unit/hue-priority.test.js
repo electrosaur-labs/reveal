@@ -247,15 +247,15 @@ describe('Hue-Aware Priority Multiplier (v0.2.0)', () => {
 
         test('should use custom hueMultiplier parameter', () => {
             // Box with multiple colors to have non-zero variance
-            // a=40, b=10 → sector 0 (Red)
+            // a=-30, b=30 → sector 4 (Green) - NOT Red sector which has 10× minimum due to Red Rescue
             const box = {
                 colors: [
-                    { L: 50, a: 40, b: 10, count: 50 },
-                    { L: 60, a: 45, b: 15, count: 50 }
+                    { L: 50, a: -30, b: 30, count: 50 },
+                    { L: 60, a: -35, b: 35, count: 50 }
                 ]
             };
             const sectorEnergy = new Float32Array(12);
-            sectorEnergy[0] = 10.0;
+            sectorEnergy[4] = 10.0; // Green sector
             const coveredSectors = new Set();
 
             const priority10x = PosterizationEngine._calculateSplitPriority(
