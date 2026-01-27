@@ -10,7 +10,7 @@
     "postbuild": "node scripts/copy-assets.js"
   },
   "dependencies": {
-    "@reveal/core": "1.0.0",
+    "@reveal/core": "*",
     "buffer": "^6.0.3",
     "jpeg-js": "^0.4.4"
   },
