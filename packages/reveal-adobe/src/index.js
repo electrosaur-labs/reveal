@@ -3295,28 +3295,41 @@ async function showDialog() {
                             }
                         }
 
-                        // Map ALL parameters to UI elements (matching batch process configuration)
+                        // Map ALL parameters to UI elements from Expert System Configurator
+                        // ParameterGenerator v3.0 now provides full parameter mapping
                         const uiSettings = {
-                            // DNA-driven parameters
+                            // Core posterization (DNA-driven)
                             targetColorsSlider: config.targetColors,
-                            blackBias: config.blackBias,
                             ditherType: config.ditherType,
-                            vibrancyBoost: config.saturationBoost,
                             distanceMetric: 'auto',  // Keep on auto - will resolve at separation time
-                            preprocessingIntensity: preprocessingDropdownValue,  // Based on entropy analysis
 
-                            // Standard configuration parameters (batch defaults)
+                            // Saliency weights (DNA-driven)
+                            lWeight: config.lWeight,
+                            cWeight: config.cWeight,
+                            blackBias: config.blackBias,
+
+                            // Vibrancy settings (DNA-driven)
+                            vibrancyMode: config.vibrancyMode,
+                            vibrancyBoost: config.vibrancyBoost,
+
+                            // Highlight protection (DNA-driven)
+                            highlightThreshold: config.highlightThreshold,
+                            highlightBoost: config.highlightBoost,
+
+                            // Color merging (DNA-driven)
+                            enablePaletteReduction: true,
+                            paletteReduction: config.paletteReduction,
+
+                            // Substrate (DNA-driven)
+                            substrateMode: config.substrateMode,
+                            substrateTolerance: 3.5,  // Standard tolerance
+
+                            // Preprocessing (entropy-driven)
+                            preprocessingIntensity: preprocessingDropdownValue,
+
+                            // Fixed defaults (these don't need DNA tuning)
                             engineType: 'reveal',
                             centroidStrategy: 'SALIENCY',
-                            lWeight: 1.0,
-                            cWeight: 1.0,
-                            substrateMode: 'white',
-                            substrateTolerance: 2.0,
-                            vibrancyMode: 'moderate',
-                            highlightThreshold: 85,
-                            highlightBoost: 1.0,
-                            enablePaletteReduction: true,
-                            paletteReduction: 10.0,
                             hueLockAngle: 20,
                             shadowPoint: 15,
                             colorMode: 'color',
@@ -3327,14 +3340,28 @@ async function showDialog() {
                             maskProfile: 'Gray Gamma 2.2'
                         };
 
-                        logger.log("  Setting ALL UI parameters from DNA analysis:");
-                        logger.log("  DNA-driven:", {
+                        logger.log("  Setting ALL UI parameters from Expert System:");
+                        logger.log("  Core:", {
                             targetColors: config.targetColors,
-                            blackBias: config.blackBias,
-                            ditherType: config.ditherType,
-                            saturationBoost: config.saturationBoost
+                            ditherType: config.ditherType
                         });
-                        logger.log("  Standard config: lWeight=1.0, cWeight=1.0, vibrancyMode=moderate, etc.");
+                        logger.log("  Saliency:", {
+                            lWeight: config.lWeight,
+                            cWeight: config.cWeight,
+                            blackBias: config.blackBias
+                        });
+                        logger.log("  Vibrancy:", {
+                            mode: config.vibrancyMode,
+                            boost: config.vibrancyBoost
+                        });
+                        logger.log("  Highlights:", {
+                            threshold: config.highlightThreshold,
+                            boost: config.highlightBoost
+                        });
+                        logger.log("  Merging:", {
+                            paletteReduction: config.paletteReduction
+                        });
+                        logger.log("  Substrate:", config.substrateMode);
 
                         // Apply ALL DNA-based settings to UI
                         applyAnalyzedSettings(uiSettings);
