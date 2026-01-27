@@ -23,6 +23,7 @@ Thumbs.db
 # Test artifacts
 test-results/
 .vitest/
+**/test/performance/results/
 
 # Temporary
 tmp/
