@@ -216,10 +216,10 @@ function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
     const CHROMA_THRESH = options.chromaThreshold ?? 12;
     const DISTINCTNESS_THRESHOLD = options.distinctnessThreshold ?? 15;
 
-    // VIABILITY THRESHOLD: 0.25% minimum coverage
+    // VIABILITY THRESHOLD: 1.0% minimum coverage
     // Don't add a diversity color if it only exists as speckles/noise.
-    // A hue that covers <0.25% of the image is not worth burning a screen for.
-    const MIN_HUE_COVERAGE = options.minHueCoverage ?? 0.0025;
+    // A hue that covers <1.0% of the image is not worth burning a screen for.
+    const MIN_HUE_COVERAGE = options.minHueCoverage ?? 0.01;
     const totalPixels = labPixels.length / 3;
 
     const binSamples = new Array(12).fill(null);
