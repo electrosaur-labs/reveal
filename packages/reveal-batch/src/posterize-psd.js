@@ -120,12 +120,14 @@ function reconstructProcessedLab(colorIndices, paletteLab, pixelCount) {
 
 /**
  * Calculate image DNA from 8-bit Lab data
+ * Returns comprehensive DNA metrics for the Expert System Configurator
  */
 function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
     const pixelCount = width * height;
     let sumL = 0, sumC = 0;
     let minL = 100, maxL = 0, maxC = 0;
     let sampleCount = 0;
+    let lowChromaCount = 0;  // Pixels with C < 15 (muted)
     const lValues = [];
 
     for (let i = 0; i < pixelCount; i += sampleStep) {
@@ -141,6 +143,7 @@ function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
         if (L < minL) minL = L;
         if (L > maxL) maxL = L;
         if (C > maxC) maxC = C;
+        if (C < 15) lowChromaCount++;  // Track muted pixels
         sampleCount++;
     }
 
@@ -151,6 +154,9 @@ function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
     const lVariance = lValues.reduce((sum, l) => sum + Math.pow(l - avgL, 2), 0) / sampleCount;
     const lStdDev = Math.sqrt(lVariance);
 
+    // Calculate low chroma density (ratio of muted pixels)
+    const lowChromaDensity = lowChromaCount / sampleCount;
+
     return {
         l: parseFloat(avgL.toFixed(1)),
         c: parseFloat(avgC.toFixed(1)),
@@ -158,7 +164,8 @@ function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
         minL: parseFloat(minL.toFixed(1)),
         maxL: parseFloat(maxL.toFixed(1)),
         maxC: parseFloat(maxC.toFixed(1)),
-        l_std_dev: parseFloat(lStdDev.toFixed(1))
+        l_std_dev: parseFloat(lStdDev.toFixed(1)),
+        lowChromaDensity: parseFloat(lowChromaDensity.toFixed(3))  // 0.0 - 1.0
     };
 }
 
