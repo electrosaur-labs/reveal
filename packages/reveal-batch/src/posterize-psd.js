@@ -21,6 +21,7 @@ const Reveal = require('@reveal/core');
 const { PSDWriter } = require('@reveal/psd-writer');
 const { readPsd } = require('@reveal/psd-reader');
 const DynamicConfigurator = require('./DynamicConfigurator');
+const MetricsCalculator = require('./MetricsCalculator');
 const chalk = require('chalk');
 
 /**
@@ -92,6 +93,29 @@ function rgbToHex(r, g, b) {
         const hex = Math.round(x).toString(16);
         return hex.length === 1 ? '0' + hex : hex;
     }).join('');
+}
+
+/**
+ * Reconstruct processedLab from colorIndices and palette
+ * Output is 8-bit Lab encoding for MetricsCalculator
+ *
+ * Palette Lab is in perceptual format: L: 0-100, a/b: ~-128 to +127
+ * Output 8-bit encoding: L: 0-255, a/b: 0-255 (128=neutral)
+ */
+function reconstructProcessedLab(colorIndices, paletteLab, pixelCount) {
+    const processedLab = new Uint8ClampedArray(pixelCount * 3);
+
+    for (let i = 0; i < pixelCount; i++) {
+        const colorIdx = colorIndices[i];
+        const color = paletteLab[colorIdx];
+
+        // Convert perceptual Lab to 8-bit encoding
+        processedLab[i * 3] = Math.round((color.L / 100) * 255);
+        processedLab[i * 3 + 1] = Math.round(color.a + 128);
+        processedLab[i * 3 + 2] = Math.round(color.b + 128);
+    }
+
+    return processedLab;
 }
 
 /**
@@ -246,7 +270,43 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         masks.push(mask);
     }
 
-    // 9. Calculate coverage
+    // Release lab16bit - no longer needed after separation
+    lab16bit = null;
+
+    // 9. Calculate validation metrics
+    console.log(`  Computing validation metrics...`);
+    const processedLab = reconstructProcessedLab(
+        separateResult.colorIndices,
+        posterizeResult.paletteLab,
+        pixelCount
+    );
+
+    // Create layers array for MetricsCalculator
+    const layersForMetrics = posterizeResult.paletteLab.map((color, idx) => ({
+        name: `Color ${idx + 1}`,
+        color: color,
+        mask: masks[idx]
+    }));
+
+    // Convert lab8bit to Uint8ClampedArray if needed (MetricsCalculator expects this)
+    const originalLabClamped = lab8bit instanceof Uint8ClampedArray
+        ? lab8bit
+        : new Uint8ClampedArray(lab8bit);
+
+    const metrics = MetricsCalculator.compute(
+        originalLabClamped,
+        processedLab,
+        layersForMetrics,
+        width,
+        height,
+        { targetColors: params.targetColorsSlider }
+    );
+
+    console.log(`  DeltaE: avg=${metrics.global_fidelity.avgDeltaE}, max=${metrics.global_fidelity.maxDeltaE}`);
+    console.log(`  Revelation Score: ${metrics.feature_preservation.revelationScore}`);
+    console.log(`  Integrity: ${metrics.physical_feasibility.integrityScore}%`);
+
+    // 10. Calculate coverage
     const coverageCounts = new Uint32Array(posterizeResult.paletteLab.length);
     for (let i = 0; i < pixelCount; i++) {
         coverageCounts[separateResult.colorIndices[i]]++;
@@ -266,12 +326,12 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         };
     });
 
-    // 10. Ensure output directory exists
+    // 11. Ensure output directory exists
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // 11. Write output PSD (8-bit for QuickLook compatibility)
+    // 12. Write output PSD (8-bit for QuickLook compatibility)
     console.log(`  Writing PSD...`);
     const outputPsdPath = path.join(outputDir, `${basename}.psd`);
     const writer = new PSDWriter({
@@ -320,7 +380,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     fs.writeFileSync(outputPsdPath, psdBuffer);
     console.log(chalk.green(`  Saved: ${outputPsdPath} (${(psdBuffer.length / 1024).toFixed(1)} KB)`));
 
-    // 12. Write DNA JSON sidecar
+    // 13. Write validation JSON sidecar
     const jsonPath = path.join(outputDir, `${basename}.json`);
     const sidecar = {
         meta: {
@@ -333,18 +393,27 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         dna,
         configuration: config,
         palette,
+        metrics,
         timing: {
             totalMs: Date.now() - timingStart
         }
     };
     fs.writeFileSync(jsonPath, JSON.stringify(sidecar, null, 2));
-    console.log(chalk.green(`  DNA: ${jsonPath}`));
+    console.log(chalk.green(`  Validation JSON: ${jsonPath}`));
+
+    // 14. Explicit resource cleanup
+    // Release all large arrays to free memory immediately
+    lab8bit = null;
+    masks.length = 0;
+    layersToWrite.length = 0;
+    // psdBuffer is already written and goes out of scope
 
     return {
         success: true,
         filename: basename,
         colors: palette.length,
-        dna: dna
+        dna: dna,
+        metrics: metrics
     };
 }
 
