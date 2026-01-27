@@ -27,7 +27,7 @@ class PosterizationEngine {
      * Colors below these coverage thresholds are absorbed into neighbors or skipped.
      */
     static MIN_PRESERVED_COVERAGE = 0.001;  // 0.1% for preserved colors (white/black)
-    static MIN_HUE_COVERAGE = 0.0025;       // 0.25% for hue gap sectors
+    static MIN_HUE_COVERAGE = 0.01;         // 1.0% for hue gap sectors
     static PRESERVED_UNIFY_THRESHOLD = 12.0; // ΔE to unify preserved colors with existing palette colors
 
     /**
