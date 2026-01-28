@@ -256,43 +256,75 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 
     console.log(`  Generated ${posterizeResult.paletteLab.length} colors`);
 
-    // 7. Separate into layers
+    // 7. Separate into layers (using high-level API that handles mask generation and filtering)
+    // This matches the UI flow which calls SeparationEngine.separateImage() directly
     console.log(`  Separating layers...`);
-    const separateResult = await Reveal.separateImage(
-        lab16bit,
-        posterizeResult.paletteLab,
-        width, height,
-        { ditherType: params.ditherType }
+
+    // Import SeparationEngine for the high-level API
+    const SeparationEngine = Reveal.engines.SeparationEngine;
+
+    // Generate hex colors for display
+    const hexColors = posterizeResult.palette.map(rgb =>
+        rgbToHex(rgb.r, rgb.g, rgb.b)
     );
 
-    // 8. Generate masks
-    console.log(`  Generating masks...`);
-    const masks = [];
-    for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
-        const mask = Reveal.generateMask(
-            separateResult.colorIndices,
-            i,
-            width, height
-        );
-        masks.push(mask);
+    // Call the same high-level API as the UI
+    // This automatically generates masks AND filters out layers with < 0.1% coverage
+    const layers = await SeparationEngine.separateImage(
+        lab16bit,
+        width,
+        height,
+        hexColors,                    // Hex colors for display
+        null,                         // Unused parameter
+        posterizeResult.paletteLab,   // Lab palette
+        {
+            ditherType: params.ditherType,
+            distanceMetric: 'cie76'   // Match default behavior
+        }
+    );
+
+    console.log(`  Generated ${layers.length} layers (${posterizeResult.paletteLab.length - layers.length} empty layers filtered out)`);
+
+    // Extract filtered data from layer objects
+    const filteredMasks = layers.map(layer => layer.mask);
+    const filteredPaletteLab = layers.map(layer => layer.labColor);
+    const filteredPaletteRgb = layers.map(layer => {
+        // Parse hex back to RGB (layers only have hex, not RGB objects)
+        const hex = layer.hex;
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return { r, g, b };
+    });
+
+    // Reconstruct colorIndices from layer masks (for metrics calculation)
+    // Each mask tells us which pixels belong to that color
+    const colorIndices = new Uint8Array(pixelCount);
+    for (let layerIdx = 0; layerIdx < layers.length; layerIdx++) {
+        const mask = layers[layerIdx].mask;
+        for (let pixelIdx = 0; pixelIdx < pixelCount; pixelIdx++) {
+            if (mask[pixelIdx] === 255) {
+                colorIndices[pixelIdx] = layerIdx;
+            }
+        }
     }
 
     // Release lab16bit - no longer needed after separation
     lab16bit = null;
 
-    // 9. Calculate validation metrics
+    // 9. Calculate validation metrics (using filtered colors)
     console.log(`  Computing validation metrics...`);
     const processedLab = reconstructProcessedLab(
-        separateResult.colorIndices,
-        posterizeResult.paletteLab,
+        colorIndices,
+        filteredPaletteLab, // Use filtered palette (matches layers)
         pixelCount
     );
 
-    // Create layers array for MetricsCalculator
-    const layersForMetrics = posterizeResult.paletteLab.map((color, idx) => ({
-        name: `Color ${idx + 1}`,
-        color: color,
-        mask: masks[idx]
+    // Create layers array for MetricsCalculator (already have layer objects)
+    const layersForMetrics = layers.map((layer, idx) => ({
+        name: layer.name,
+        color: layer.labColor,
+        mask: layer.mask
     }));
 
     // Convert lab8bit to Uint8ClampedArray if needed (MetricsCalculator expects this)
@@ -313,14 +345,14 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     console.log(`  Revelation Score: ${metrics.feature_preservation.revelationScore}`);
     console.log(`  Integrity: ${metrics.physical_feasibility.integrityScore}%`);
 
-    // 10. Calculate coverage
-    const coverageCounts = new Uint32Array(posterizeResult.paletteLab.length);
+    // 10. Calculate coverage (colorIndices already map to filtered palette)
+    const coverageCounts = new Uint32Array(filteredPaletteLab.length);
     for (let i = 0; i < pixelCount; i++) {
-        coverageCounts[separateResult.colorIndices[i]]++;
+        coverageCounts[colorIndices[i]]++;
     }
 
-    const palette = posterizeResult.paletteLab.map((color, idx) => {
-        const rgbColor = posterizeResult.palette[idx];
+    const palette = filteredPaletteLab.map((color, idx) => {
+        const rgbColor = filteredPaletteRgb[idx];
         const hex = rgbToHex(rgbColor.r, rgbColor.g, rgbColor.b);
         const coverage = ((coverageCounts[idx] / pixelCount) * 100).toFixed(2);
 
@@ -356,12 +388,12 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         visible: false
     });
 
-    // Sort layers by lightness (light to dark) for proper print stacking
-    const layersToWrite = posterizeResult.paletteLab.map((color, i) => ({
+    // Sort layers by lightness (light to dark) for proper print stacking (using filtered data)
+    const layersToWrite = filteredPaletteLab.map((color, i) => ({
         index: i,
         color: color,
-        rgb: posterizeResult.palette[i],
-        mask: masks[i],
+        rgb: filteredPaletteRgb[i],
+        mask: filteredMasks[i],
         coverage: coverageCounts[i]
     }));
     layersToWrite.sort((a, b) => b.color.L - a.color.L);
@@ -382,6 +414,14 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
             mask: layer.mask
         });
     }
+
+    // Set Reveal metadata (Resource 4000) for filtering and analysis
+    writer.setRevealMetadata({
+        revScore: metrics.feature_preservation.revelationScore,
+        archetype: config.meta?.archetype || 'unknown',
+        colors: filteredPaletteLab.length, // Use filtered count (after removing empty layers)
+        preset: config.id
+    });
 
     const psdBuffer = writer.write();
     fs.writeFileSync(outputPsdPath, psdBuffer);
