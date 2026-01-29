@@ -2359,6 +2359,29 @@ function setupZoomPreviewControls() {
 
     const panStep = 100; // Pan distance for arrow keys (reduced for finer control)
 
+    /**
+     * Helper: Execute async operation with busy cursor
+     * Uses setTimeout to ensure cursor renders before blocking operation
+     */
+    const withBusyCursor = (asyncFn) => {
+        return new Promise((resolve, reject) => {
+            const originalCursor = document.body.style.cursor;
+            document.body.style.cursor = 'wait';
+
+            // Use setTimeout to allow UXP event loop to repaint cursor
+            setTimeout(async () => {
+                try {
+                    const result = await asyncFn();
+                    document.body.style.cursor = originalCursor;
+                    resolve(result);
+                } catch (error) {
+                    document.body.style.cursor = originalCursor;
+                    reject(error);
+                }
+            }, 100);
+        });
+    };
+
     // Resolution dropdown - controls how much area is visible
     if (zoomDownsampleFactor) {
         // Set to 1:1 by default
@@ -2369,21 +2392,14 @@ function setupZoomPreviewControls() {
             const resolution = parseInt(e.target.value);
             logger.log(`Resolution changing to 1:${resolution}...`);
 
-            // Show busy cursor on viewport
-            const viewportContainer = document.getElementById('zoomViewportContainer');
-            if (viewportContainer) {
-                viewportContainer.style.cursor = 'wait';
-            }
             zoomDownsampleFactor.disabled = true;
 
             try {
-                await renderer.setResolution(resolution);
-                logger.log(`✓ Resolution changed to 1:${resolution} (scale: ${1/resolution})`);
+                await withBusyCursor(async () => {
+                    await renderer.setResolution(resolution);
+                    logger.log(`✓ Resolution changed to 1:${resolution} (scale: ${1/resolution})`);
+                });
             } finally {
-                // Restore cursor
-                if (viewportContainer) {
-                    viewportContainer.style.cursor = '';
-                }
                 zoomDownsampleFactor.disabled = false;
             }
         });
@@ -2432,21 +2448,24 @@ function setupZoomPreviewControls() {
     }
 
     // Recenter button (Home key)
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', async (e) => {
         if (!zoomDialog || !zoomDialog.open) return;
 
         if (e.code === 'Home') {
             e.preventDefault();
+
             // Center viewport on image
-            const centerX = Math.max(0, Math.floor((renderer.displayWidth - renderer.width) / 2));
-            const centerY = Math.max(0, Math.floor((renderer.displayHeight - renderer.height) / 2));
+            const centerX = Math.max(0, Math.floor((renderer.docWidth - renderer.width) / 2));
+            const centerY = Math.max(0, Math.floor((renderer.docHeight - renderer.height) / 2));
 
             renderer.viewportX = centerX;
             renderer.viewportY = centerY;
-            renderer.tileImg.style.left = `${-centerX}px`;
-            renderer.tileImg.style.top = `${-centerY}px`;
 
-            logger.log(`Recentered viewport to (${centerX}, ${centerY})`);
+            // Re-render tile at centered position with busy cursor
+            await withBusyCursor(async () => {
+                await renderer.renderTile();
+                logger.log(`Recentered viewport to (${centerX}, ${centerY})`);
+            });
         }
     });
 
@@ -2458,9 +2477,6 @@ function setupZoomPreviewControls() {
             }
 
             // Cleanup
-            if (renderer) {
-                renderer.clearCache();
-            }
             zoomPreviewState = null;
 
             logger.log("✓ Zoom preview closed and cleaned up");
@@ -2471,25 +2487,25 @@ function setupZoomPreviewControls() {
     document.addEventListener('keydown', async (e) => {
         if (!zoomDialog || !zoomDialog.open) return;
 
-        // Arrow keys: Pan viewport (pan() updates CSS directly, no re-render needed)
+        // Arrow keys: Pan viewport (fetches and renders new tile at panned position)
         if (e.code === 'ArrowRight' && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            renderer.pan(panStep, 0);
+            await withBusyCursor(() => renderer.pan(panStep, 0));
         }
 
         if (e.code === 'ArrowLeft' && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            renderer.pan(-panStep, 0);
+            await withBusyCursor(() => renderer.pan(-panStep, 0));
         }
 
         if (e.code === 'ArrowDown' && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            renderer.pan(0, panStep);
+            await withBusyCursor(() => renderer.pan(0, panStep));
         }
 
         if (e.code === 'ArrowUp' && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            renderer.pan(0, -panStep);
+            await withBusyCursor(() => renderer.pan(0, -panStep));
         }
 
         // Escape: Close
@@ -2820,6 +2836,9 @@ async function showDialog() {
                         }
                         logger.log("✓ Zoom preview dialog opened");
 
+                        // Show busy cursor immediately after dialog opens
+                        document.body.style.cursor = 'wait';
+
                         // Wait for dialog layout, THEN create renderer with actual container dimensions
                         if (typeof localStorage !== 'undefined') {
                             localStorage.setItem('reveal_checkpoint', 'zoom_waiting_for_layout');
@@ -2850,43 +2869,42 @@ async function showDialog() {
 
                                 logger.log(`Renderer created: ${renderer.width}×${renderer.height}`);
 
-                                // Show busy cursor during initial load
-                                viewportContainer.style.cursor = 'wait';
+                                try {
+                                    // Fetch image scaled to fit zoom window
+                                    logger.log("Fetching image for zoom...");
+                                    await renderer.init();
+                                    logger.log(`✓ Image loaded: ${renderer.fullImageWidth}×${renderer.fullImageHeight}`);
 
-                                // Fetch image scaled to fit zoom window
-                                logger.log("Fetching image for zoom...");
-                                await renderer.init();
-                                logger.log(`✓ Image loaded: ${renderer.fullImageWidth}×${renderer.fullImageHeight}`);
+                                    if (typeof localStorage !== 'undefined') {
+                                        localStorage.setItem('reveal_checkpoint', 'zoom_renderer_created');
+                                    }
+                                    logger.log("✓ Renderer created");
 
-                                if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', 'zoom_renderer_created');
+                                    // Store state for button handlers
+                                    zoomPreviewState = {
+                                        renderer,
+                                        docWidth,
+                                        docHeight
+                                    };
+
+                                    if (typeof localStorage !== 'undefined') {
+                                        localStorage.setItem('reveal_checkpoint', 'zoom_state_stored');
+                                    }
+
+                                    // Setup UI controls (mode toggle, etc.)
+                                    setupZoomPreviewControls();
+
+                                    // Render initial viewport
+                                    if (typeof localStorage !== 'undefined') {
+                                        localStorage.setItem('reveal_checkpoint', 'zoom_rendering_initial_viewport');
+                                    }
+
+                                    logger.log("Rendering initial high-res tile...");
+                                    await renderer.renderTile();
+                                } finally {
+                                    // Restore cursor after initial render
+                                    document.body.style.cursor = '';
                                 }
-                                logger.log("✓ Renderer created");
-
-                                // Store state for button handlers
-                                zoomPreviewState = {
-                                    renderer,
-                                    docWidth,
-                                    docHeight
-                                };
-
-                                if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', 'zoom_state_stored');
-                                }
-
-                                // Setup UI controls (mode toggle, etc.)
-                                setupZoomPreviewControls();
-
-                                // Render initial viewport
-                                if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', 'zoom_rendering_initial_viewport');
-                                }
-
-                                logger.log("Rendering initial high-res tile...");
-                                await renderer.renderTile();
-
-                                // Restore cursor after initial render
-                                viewportContainer.style.cursor = '';
 
                                 if (typeof localStorage !== 'undefined') {
                                     localStorage.setItem('reveal_checkpoint', 'zoom_initial_tile_rendered');
