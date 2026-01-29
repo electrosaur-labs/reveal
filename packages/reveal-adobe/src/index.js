@@ -25,6 +25,11 @@ const logger = Reveal.logger;
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 const DNAGenerator = require("./DNAGenerator");
 
+// Zoom preview components
+const TileManager = require("./api/TileManager");
+const ViewportTracker = require("./api/ViewportTracker");
+const ZoomPreviewRenderer = require("./api/ZoomPreviewRenderer");
+
 // Test utilities
 const { testTransparencySelection } = require("./test-16bit-transparency-selection");
 
@@ -54,6 +59,12 @@ let posterizationData = null;
  * Stores { maxC, l_std_dev, c, k, minL, maxL, archetype } from analysis
  */
 let lastImageDNA = null;
+
+/**
+ * Zoom preview state (tile managers, viewport tracker, renderer)
+ * Initialized when zoom preview dialog is opened
+ */
+let zoomPreviewState = null;
 
 /**
  * Resolve "auto" distance metric to actual metric using DNA-based rule
@@ -2330,6 +2341,166 @@ function validateForm() {
 }
 
 /**
+ * Setup zoom preview dialog controls
+ */
+function setupZoomPreviewControls() {
+    if (!zoomPreviewState) {
+        logger.error("Cannot setup zoom preview controls - state not initialized");
+        return;
+    }
+
+    const { renderer, docWidth, docHeight } = zoomPreviewState;
+
+    // Get UI elements
+    const btnClose = document.getElementById('btnZoomClose');
+    const zoomDialog = document.getElementById('zoomPreviewDialog');
+    const zoomTileImg = document.getElementById('zoomTileImg');
+    const zoomDownsampleFactor = document.getElementById('zoomDownsampleFactor');
+
+    const panStep = 100; // Pan distance for arrow keys (reduced for finer control)
+
+    // Resolution dropdown - controls how much area is visible
+    if (zoomDownsampleFactor) {
+        // Set to 1:1 by default
+        zoomDownsampleFactor.value = '1';
+        renderer.setResolution(1);
+
+        zoomDownsampleFactor.addEventListener('change', async (e) => {
+            const resolution = parseInt(e.target.value);
+            logger.log(`Resolution changing to 1:${resolution}...`);
+
+            // Show busy cursor on viewport
+            const viewportContainer = document.getElementById('zoomViewportContainer');
+            if (viewportContainer) {
+                viewportContainer.style.cursor = 'wait';
+            }
+            zoomDownsampleFactor.disabled = true;
+
+            try {
+                await renderer.setResolution(resolution);
+                logger.log(`✓ Resolution changed to 1:${resolution} (scale: ${1/resolution})`);
+            } finally {
+                // Restore cursor
+                if (viewportContainer) {
+                    viewportContainer.style.cursor = '';
+                }
+                zoomDownsampleFactor.disabled = false;
+            }
+        });
+
+        logger.log('✓ Resolution dropdown initialized: 1:1');
+    }
+
+    // Mouse drag panning
+    const viewportContainer = document.getElementById('zoomViewportContainer');
+    if (viewportContainer) {
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+
+        viewportContainer.addEventListener('mousedown', (e) => {
+            // Start dragging
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            viewportContainer.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const deltaX = dragStartX - e.clientX;
+            const deltaY = dragStartY - e.clientY;
+
+            // Pan the viewport
+            renderer.pan(deltaX, deltaY);
+
+            // Update drag start position for next move
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                viewportContainer.style.cursor = '';
+            }
+        });
+
+        logger.log('✓ Mouse drag panning initialized');
+    }
+
+    // Recenter button (Home key)
+    document.addEventListener('keydown', (e) => {
+        if (!zoomDialog || !zoomDialog.open) return;
+
+        if (e.code === 'Home') {
+            e.preventDefault();
+            // Center viewport on image
+            const centerX = Math.max(0, Math.floor((renderer.displayWidth - renderer.width) / 2));
+            const centerY = Math.max(0, Math.floor((renderer.displayHeight - renderer.height) / 2));
+
+            renderer.viewportX = centerX;
+            renderer.viewportY = centerY;
+            renderer.tileImg.style.left = `${-centerX}px`;
+            renderer.tileImg.style.top = `${-centerY}px`;
+
+            logger.log(`Recentered viewport to (${centerX}, ${centerY})`);
+        }
+    });
+
+    // Close button
+    if (btnClose) {
+        btnClose.addEventListener('click', () => {
+            if (zoomDialog) {
+                zoomDialog.close();
+            }
+
+            // Cleanup
+            if (renderer) {
+                renderer.clearCache();
+            }
+            zoomPreviewState = null;
+
+            logger.log("✓ Zoom preview closed and cleaned up");
+        });
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', async (e) => {
+        if (!zoomDialog || !zoomDialog.open) return;
+
+        // Arrow keys: Pan viewport (pan() updates CSS directly, no re-render needed)
+        if (e.code === 'ArrowRight' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            renderer.pan(panStep, 0);
+        }
+
+        if (e.code === 'ArrowLeft' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            renderer.pan(-panStep, 0);
+        }
+
+        if (e.code === 'ArrowDown' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            renderer.pan(0, panStep);
+        }
+
+        if (e.code === 'ArrowUp' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            renderer.pan(0, -panStep);
+        }
+
+        // Escape: Close
+        if (e.code === 'Escape') {
+            e.preventDefault();
+            btnClose?.click();
+        }
+    });
+}
+
+/**
  * Show the main dialog
  */
 async function showDialog() {
@@ -2517,6 +2688,226 @@ async function showDialog() {
                     // They can modify settings and re-posterize if desired
 
                     logger.log("✓ Returned to posterization settings");
+                });
+            }
+
+            // Set up Zoom Preview button (WITH DEBUG CHECKPOINTS)
+            const btnZoomPreview = document.getElementById("btnZoomPreview");
+            if (btnZoomPreview) {
+                btnZoomPreview.addEventListener("click", async () => {
+                    if (typeof localStorage !== 'undefined') {
+                        localStorage.setItem('reveal_checkpoint', 'zoom_preview_clicked');
+                    }
+                    logger.log("🔍 Opening zoom preview with debug checkpoints...");
+
+                    try {
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('reveal_checkpoint', 'zoom_validate_start');
+                        }
+
+                        // Validate posterization data
+                        if (!posterizationData || !posterizationData.selectedPreview) {
+                            showErrorDialog("No Data", "Please posterize the image first before opening zoom preview.");
+                            return;
+                        }
+
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('reveal_checkpoint', 'zoom_data_validated');
+                        }
+
+                        // Get document info for tile loading
+                        const docInfo = posterizationData.docInfo;
+                        if (!docInfo) {
+                            showErrorDialog("No Document Info", "Document information not found. Please re-run posterization.");
+                            return;
+                        }
+
+                        const docWidth = docInfo.width;
+                        const docHeight = docInfo.height;
+                        const documentID = docInfo.id;
+
+                        // Get the ORIGINAL layer ID (the layer with actual image data)
+                        // This is critical - otherwise we load from white background!
+                        const originalLayerID = docInfo.activeLayerID;
+                        if (!originalLayerID) {
+                            logger.warn("No activeLayerID found - will load from flattened document");
+                        }
+
+                        logger.log(`Document: ${docWidth}×${docHeight} (ID: ${documentID})`);
+                        logger.log(`Layer ID: ${originalLayerID || 'flattened (no layer ID)'}`);
+                        logger.log(`Bit depth: ${posterizationData.bitDepth}-bit`);
+
+                        // Check if we have stored preview pixels from posterization
+                        const hasStoredPixels = posterizationData.originalPixels && posterizationData.originalWidth && posterizationData.originalHeight;
+                        logger.log(`\nStored preview pixels from posterization: ${hasStoredPixels ? 'YES' : 'NO'}`);
+                        if (hasStoredPixels) {
+                            logger.log(`  Preview size: ${posterizationData.originalWidth}×${posterizationData.originalHeight}`);
+                            logger.log(`  Note: Zoom will fetch from full-res PSD (${docWidth}×${docHeight}), not preview`);
+                        }
+                        logger.log(``)
+
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('reveal_checkpoint', 'zoom_got_doc_info');
+                        }
+
+                        // Create separation data for palette-based rendering
+                        const selectedPreview = posterizationData.selectedPreview;
+                        logger.log(`\n🎨 Palette debug:`);
+                        logger.log(`  selectedPreview exists: ${!!selectedPreview}`);
+                        if (selectedPreview) {
+                            logger.log(`  selectedPreview.paletteLab exists: ${!!selectedPreview.paletteLab}`);
+                            logger.log(`  selectedPreview.paletteLab length: ${selectedPreview.paletteLab?.length}`);
+                            logger.log(`  Available properties:`, Object.keys(selectedPreview).join(', '));
+                        }
+
+                        const separationData = {
+                            palette: selectedPreview.paletteLab
+                        };
+
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('reveal_checkpoint', 'zoom_separation_data_ready');
+                        }
+
+                        // Get dialog elements
+                        const zoomDialog = document.getElementById('zoomPreviewDialog');
+                        const zoomTileImg = document.getElementById('zoomTileImg');
+                        const viewportContainer = document.getElementById('zoomViewportContainer');
+
+                        if (!zoomDialog || !zoomTileImg || !viewportContainer) {
+                            showErrorDialog("UI Error", "Zoom preview dialog elements not found.");
+                            return;
+                        }
+
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('reveal_checkpoint', 'zoom_dialog_elements_found');
+                        }
+
+                        // Set proxy image to the 800px posterized preview
+                        logger.log("Setting proxy image to 800px preview...");
+                        const previewImg = document.getElementById('previewImg');
+                        logger.log(`  previewImg element: ${previewImg ? 'FOUND' : 'NULL'}`);
+                        if (previewImg) {
+                            logger.log(`  previewImg.src: ${previewImg.src ? previewImg.src.substring(0, 50) + '...' : 'EMPTY'}`);
+                            logger.log(`  previewImg dimensions: ${previewImg.width}×${previewImg.height}`);
+                            logger.log(`  previewImg naturalWidth: ${previewImg.naturalWidth}×${previewImg.naturalHeight}`);
+                        }
+
+                        if (!previewImg || !previewImg.src) {
+                            showErrorDialog("Preview Not Ready", "The preview image is not ready yet. Please wait for the preview to fully render before opening zoom preview.");
+                            return;
+                        }
+
+                        // Open dialog FIRST so container gets proper dimensions
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('reveal_checkpoint', 'zoom_opening_dialog');
+                        }
+
+                        logger.log("Opening zoom dialog...");
+                        zoomDialog.showModal({
+                            resize: "both",
+                            size: {
+                                width: 1200,
+                                height: 800,
+                                minWidth: 800,
+                                minHeight: 600,
+                                maxWidth: 1920,
+                                maxHeight: 1080
+                            }
+                        });
+
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('reveal_checkpoint', 'zoom_dialog_opened');
+                        }
+                        logger.log("✓ Zoom preview dialog opened");
+
+                        // Wait for dialog layout, THEN create renderer with actual container dimensions
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('reveal_checkpoint', 'zoom_waiting_for_layout');
+                        }
+
+                        setTimeout(async () => {
+                            try {
+                                if (typeof localStorage !== 'undefined') {
+                                    localStorage.setItem('reveal_checkpoint', 'zoom_creating_renderer');
+                                }
+
+                                // Create renderer
+                                logger.log("Creating ZoomPreviewRenderer...");
+                                logger.log(`Container dimensions: ${viewportContainer.clientWidth}×${viewportContainer.clientHeight}`);
+
+                                // Create renderer - will fetch from full-res PSD, not preview pixels
+                                const renderer = new ZoomPreviewRenderer(
+                                    viewportContainer,
+                                    zoomTileImg,
+                                    documentID,
+                                    originalLayerID,
+                                    docWidth,
+                                    docHeight,
+                                    posterizationData.bitDepth,
+                                    separationData,
+                                    null  // Don't use preview pixels for zoom
+                                );
+
+                                logger.log(`Renderer created: ${renderer.width}×${renderer.height}`);
+
+                                // Show busy cursor during initial load
+                                viewportContainer.style.cursor = 'wait';
+
+                                // Fetch image scaled to fit zoom window
+                                logger.log("Fetching image for zoom...");
+                                await renderer.init();
+                                logger.log(`✓ Image loaded: ${renderer.fullImageWidth}×${renderer.fullImageHeight}`);
+
+                                if (typeof localStorage !== 'undefined') {
+                                    localStorage.setItem('reveal_checkpoint', 'zoom_renderer_created');
+                                }
+                                logger.log("✓ Renderer created");
+
+                                // Store state for button handlers
+                                zoomPreviewState = {
+                                    renderer,
+                                    docWidth,
+                                    docHeight
+                                };
+
+                                if (typeof localStorage !== 'undefined') {
+                                    localStorage.setItem('reveal_checkpoint', 'zoom_state_stored');
+                                }
+
+                                // Setup UI controls (mode toggle, etc.)
+                                setupZoomPreviewControls();
+
+                                // Render initial viewport
+                                if (typeof localStorage !== 'undefined') {
+                                    localStorage.setItem('reveal_checkpoint', 'zoom_rendering_initial_viewport');
+                                }
+
+                                logger.log("Rendering initial high-res tile...");
+                                await renderer.renderTile();
+
+                                // Restore cursor after initial render
+                                viewportContainer.style.cursor = '';
+
+                                if (typeof localStorage !== 'undefined') {
+                                    localStorage.setItem('reveal_checkpoint', 'zoom_initial_tile_rendered');
+                                }
+                                logger.log("✓ Initial high-res tile rendered successfully");
+                            } catch (error) {
+                                logger.error("Failed to render initial tile:", error);
+                                if (typeof localStorage !== 'undefined') {
+                                    localStorage.setItem('reveal_checkpoint', `zoom_initial_render_error_${error.message}`);
+                                }
+                            }
+                        }, 200);
+
+                    } catch (error) {
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.setItem('reveal_checkpoint', `zoom_error_${error.message}`);
+                        }
+                        logger.error("Failed to open zoom preview:", error);
+                        logger.error("Error stack:", error.stack);
+                        showErrorDialog("Zoom Preview Error", error.message, error.stack);
+                    }
                 });
             }
 
@@ -2727,6 +3118,22 @@ async function showDialog() {
                     const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
                     logger.log(`Read ${pixelData.width}x${pixelData.height} pixels (${pixelData.scale.toFixed(2)}x scale)`);
                     logger.log(`Pixel data: 16-bit Lab (source was ${pixelData.bitDepth}-bit)`);
+
+                    // DIAGNOSTIC: Check ORIGINAL buffer before copying
+                    logger.log(`🔍 DIAGNOSTIC - Original pixelData.pixels:`);
+                    logger.log(`   Type: ${pixelData.pixels.constructor.name}`);
+                    logger.log(`   Length: ${pixelData.pixels.length}`);
+                    logger.log(`   First pixel (ORIGINAL): L=${pixelData.pixels[0]} a=${pixelData.pixels[1]} b=${pixelData.pixels[2]}`);
+                    logger.log(`   Pixel at index 1000: L=${pixelData.pixels[3000]} a=${pixelData.pixels[3001]} b=${pixelData.pixels[3002]}`);
+                    logger.log(`   Pixel at index 10000: L=${pixelData.pixels[30000]} a=${pixelData.pixels[30001]} b=${pixelData.pixels[30002]}`);
+
+                    // CRITICAL: Copy pixel buffer IMMEDIATELY before any processing
+                    // Photoshop may clear/reuse the buffer after the API call returns
+                    const pixelsCopy = new Uint16Array(pixelData.pixels);
+                    logger.log(`📦 Copied pixel buffer: ${pixelsCopy.length} elements`);
+                    logger.log(`   First pixel (COPY): L=${pixelsCopy[0]} a=${pixelsCopy[1]} b=${pixelsCopy[2]}`);
+                    logger.log(`   Second pixel (COPY): L=${pixelsCopy[3]} a=${pixelsCopy[4]} b=${pixelsCopy[5]}`);
+                    logger.log(`   Third pixel (COPY): L=${pixelsCopy[6]} a=${pixelsCopy[7]} b=${pixelsCopy[8]}`);
 
                     // Apply preprocessing (bilateral filter for noise reduction) if enabled
                     // Engine always operates in 16-bit Lab space
@@ -2958,9 +3365,13 @@ async function showDialog() {
                     // Store globally for substrate-aware swatch/preview functions
                     window.selectedPreview = selectedPreview;
 
+                    // Use the pixel copy we made at the beginning (before any processing)
+                    logger.log(`📦 Storing original pixel buffer copy: ${pixelsCopy.length} elements`);
+                    logger.log(`   First 3 pixels (from original copy): L=${pixelsCopy[0]} a=${pixelsCopy[1]} b=${pixelsCopy[2]}`);
+
                     posterizationData = {
                         params,
-                        originalPixels: pixelData.pixels,  // Lab format (3 bytes/pixel for 8-bit, 3 words/pixel for 16-bit)
+                        originalPixels: pixelsCopy,  // Lab format - COPIED at start, before any processing!
                         originalWidth: pixelData.width,
                         originalHeight: pixelData.height,
                         bitDepth: pixelData.bitDepth,  // Source bit depth (8 or 16)
