@@ -1571,8 +1571,10 @@
                             display: flex;
                             align-items: center;
                             justify-content: center;">
-                            <!-- Image for preview (zoom mode controlled by JS) -->
-                            <img id="previewImg" style="
+                            <!-- Double-buffered images for smooth zoom (front and back buffer) -->
+                            <!-- In fit mode: Only img1 visible, normal positioning -->
+                            <!-- In zoom mode: Both absolute positioned, one visible at a time -->
+                            <img id="previewImg" class="preview-buffer" style="
                                 max-width: 100%;
                                 max-height: 100%;
                                 object-fit: contain;
@@ -1580,6 +1582,17 @@
                                 image-rendering: crisp-edges;
                                 cursor: crosshair;
                                 display: block;
+                                border: 2px solid #666;
+                                box-sizing: border-box;">
+                            <img id="previewImgBuffer2" class="preview-buffer" style="
+                                max-width: 100%;
+                                max-height: 100%;
+                                object-fit: contain;
+                                image-rendering: pixelated;
+                                image-rendering: crisp-edges;
+                                cursor: crosshair;
+                                opacity: 0;
+                                pointer-events: none;
                                 border: 2px solid #666;
                                 box-sizing: border-box;">
                             <!-- HQ Badge for zoom mode -->
@@ -1666,9 +1679,6 @@
         <div class="reveal-buttons">
             <div style="display: flex; gap: 12px;">
                 <button id="btnPaletteCancel" class="btn-cancel">Cancel</button>
-                <button id="btnZoomPreview" class="btn-secondary" title="Open 1:1 zoom preview to compare original and posterized output">
-                    🔍 Zoom Preview
-                </button>
             </div>
             <div style="display: flex; gap: 12px;">
                 <button id="btnBack" class="btn-secondary">← Back to Settings</button>

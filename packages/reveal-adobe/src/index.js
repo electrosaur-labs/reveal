@@ -844,27 +844,37 @@ async function setPreviewMode(mode) {
             palette: selectedPreview.paletteLab
         };
 
-        // Store container dimensions before zoom mode (to restore later)
-        state._containerDimensions = {
-            width: container.clientWidth,
-            height: container.clientHeight
-        };
-
-        // CRITICAL: Set fixed dimensions on container BEFORE creating renderer
-        // This prevents the container from resizing when image changes
-        container.style.width = `${container.clientWidth}px`;
-        container.style.height = `${container.clientHeight}px`;
-        container.style.minHeight = `${container.clientHeight}px`;
-
-        // Add zoom mode class
+        // Add zoom mode class (container stays responsive via flex layout)
         container.classList.add('zoom-mode');
 
-        logger.log(`Container size AFTER fixing: ${container.clientWidth}×${container.clientHeight}`);
+        logger.log(`Container size: ${container.clientWidth}×${container.clientHeight}`);
 
-        // Initialize ZoomPreviewRenderer on the preview panel
+        // Get both buffer images for double buffering
+        const imageEl2 = document.getElementById('previewImgBuffer2');
+        if (!imageEl2) {
+            logger.error('Second buffer image not found');
+            return;
+        }
+
+        // Set up images for zoom mode (absolute positioning)
+        imageEl.style.position = 'absolute';
+        imageEl.style.willChange = 'transform';
+        imageEl.style.top = '0';
+        imageEl.style.left = '0';
+        imageEl.style.opacity = '1';
+        imageEl.style.pointerEvents = 'auto';
+        imageEl2.style.position = 'absolute';
+        imageEl2.style.willChange = 'transform';
+        imageEl2.style.top = '0';
+        imageEl2.style.left = '0';
+        imageEl2.style.opacity = '0';
+        imageEl2.style.pointerEvents = 'none';
+
+        // Initialize ZoomPreviewRenderer on the preview panel with double buffering
         state.zoomRenderer = new ZoomPreviewRenderer(
             container,
             imageEl,
+            imageEl2,
             documentID,
             originalLayerID,
             docWidth,
@@ -876,36 +886,105 @@ async function setPreviewMode(mode) {
         // Set HQ badge element
         state.zoomRenderer.hqBadge = document.getElementById('previewHqBadge');
 
+        // Preserve solo mode if active
+        if (state.activeSoloIndex !== null) {
+            logger.log(`Preserving solo mode: color ${state.activeSoloIndex}`);
+            state.zoomRenderer.setSoloColor(state.activeSoloIndex);
+        }
+
         logger.log(`Renderer viewport: ${state.zoomRenderer.width}×${state.zoomRenderer.height}`);
 
         // Initialize renderer (centers viewport, fetches first render)
         logger.log('Initializing renderer...');
-        await state.zoomRenderer.init();
-        logger.log('✓ Renderer initialized');
+        try {
+            await state.zoomRenderer.init();
+            logger.log('✓ Renderer initialized');
+        } catch (err) {
+            logger.error('Failed to initialize renderer:', err);
+            throw err;
+        }
 
         // Update dropdown label and options
-        previewStrideLabel.textContent = 'Resolution:';
-        previewStrideSelect.innerHTML = `
-            <option value="1" selected>1:1 (Full Res)</option>
-            <option value="2">1:2 (Half Res)</option>
-            <option value="4">1:4 (Quarter Res)</option>
-            <option value="8">1:8 (Eighth Res)</option>
-        `;
+        logger.log('Updating dropdown...');
+        if (previewStrideLabel) {
+            previewStrideLabel.textContent = 'Resolution:';
+            logger.log('✓ Label updated');
+        } else {
+            logger.error('previewStrideLabel not found!');
+        }
+
+        if (previewStrideSelect) {
+            previewStrideSelect.innerHTML = `
+                <option value="1" selected>1:1 (Full Res)</option>
+                <option value="2">1:2 (Half Res)</option>
+                <option value="4">1:4 (Quarter Res)</option>
+                <option value="8">1:8 (Eighth Res)</option>
+            `;
+            logger.log('✓ Dropdown options updated');
+        } else {
+            logger.error('previewStrideSelect not found!');
+        }
 
         // Attach zoom event handlers
         attachPreviewZoomHandlers();
+
+        // Set up resize observer to handle dialog resize
+        state._resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const newWidth = entry.contentRect.width;
+                const newHeight = entry.contentRect.height;
+
+                // Update renderer dimensions if they changed significantly (> 10px)
+                if (state.zoomRenderer &&
+                    (Math.abs(newWidth - state.zoomRenderer.width) > 10 ||
+                     Math.abs(newHeight - state.zoomRenderer.height) > 10)) {
+
+                    logger.log(`Container resized: ${state.zoomRenderer.width}×${state.zoomRenderer.height} → ${newWidth}×${newHeight}`);
+
+                    // Update renderer dimensions
+                    state.zoomRenderer.width = newWidth;
+                    state.zoomRenderer.height = newHeight;
+
+                    // Reallocate RGBA buffer for new size
+                    state.zoomRenderer.rgbaBuffer = new Uint8Array(newWidth * newHeight * 4);
+
+                    // Re-center viewport and re-render
+                    state.zoomRenderer.applyBounds();
+                    state.zoomRenderer.fetchAndRender();
+                }
+            }
+        });
+        state._resizeObserver.observe(container);
+        logger.log('✓ Resize observer attached');
 
         state.viewMode = 'zoom';
         logger.log('✓ Zoom mode initialized');
 
     } else if (mode === 'fit') {
         // FIT MODE: Cleanup ZoomPreviewRenderer, restore renderPreview
+        logger.log('Starting fit mode restoration...');
 
         // Cleanup zoom renderer
         if (state.zoomRenderer) {
+            logger.log('Cleaning up zoom renderer...');
             // Clear quality timeout
             if (state.zoomRenderer.qualityTimeout) {
                 clearTimeout(state.zoomRenderer.qualityTimeout);
+            }
+
+            // Force stop any in-progress rendering
+            state.zoomRenderer.isRendering = false;
+
+            // Remove onload/onerror handlers from both images to prevent delayed loads
+            const img1 = state.zoomRenderer.images[0];
+            const img2 = state.zoomRenderer.images[1];
+            if (img1) {
+                img1.onload = null;
+                img1.onerror = null;
+            }
+            if (img2) {
+                img2.onload = null;
+                img2.onerror = null;
             }
 
             // Dispose pixel data
@@ -915,26 +994,58 @@ async function setPreviewMode(mode) {
             }
 
             state.zoomRenderer = null;
+            logger.log('✓ Renderer cleaned up');
         }
 
         // Remove zoom event handlers
+        logger.log('Detaching zoom handlers...');
         detachPreviewZoomHandlers();
 
+        // Disconnect resize observer
+        if (state._resizeObserver) {
+            state._resizeObserver.disconnect();
+            state._resizeObserver = null;
+            logger.log('✓ Resize observer disconnected');
+        }
+
         // Remove zoom mode class
+        logger.log('Removing zoom-mode class...');
         container.classList.remove('zoom-mode');
 
-        // Restore container dimensions (remove fixed sizing)
-        container.style.width = '';
-        container.style.height = '';
-        container.style.minHeight = '300px';  // Restore original min-height
-
-        // Reset image styles
+        // Reset first image to normal (fit mode) styles
+        logger.log('Resetting image 1 styles...');
+        logger.log(`  Before: position=${imageEl.style.position}, transform=${imageEl.style.transform}, opacity=${imageEl.style.opacity}`);
         imageEl.style.position = '';
         imageEl.style.top = '';
         imageEl.style.left = '';
         imageEl.style.transform = '';
         imageEl.style.width = '';
         imageEl.style.height = '';
+        imageEl.style.willChange = '';
+        imageEl.style.opacity = '1';
+        imageEl.style.pointerEvents = 'auto';
+        imageEl.style.maxWidth = '100%';
+        imageEl.style.maxHeight = '100%';
+        imageEl.style.objectFit = 'contain';
+        logger.log(`  After: position=${imageEl.style.position}, transform=${imageEl.style.transform}, opacity=${imageEl.style.opacity}`);
+
+        // Hide and reset second buffer image
+        const imageEl2 = document.getElementById('previewImgBuffer2');
+        if (imageEl2) {
+            logger.log('Resetting image 2 styles...');
+            imageEl2.onload = null;
+            imageEl2.onerror = null;
+            imageEl2.src = ''; // Clear any pending image loads
+            imageEl2.style.opacity = '0';
+            imageEl2.style.pointerEvents = 'none';
+            imageEl2.style.position = '';
+            imageEl2.style.top = '';
+            imageEl2.style.left = '';
+            imageEl2.style.transform = '';
+            imageEl2.style.width = '';
+            imageEl2.style.height = '';
+            imageEl2.style.willChange = '';
+        }
 
         // Hide HQ badge
         const hqBadge = document.getElementById('previewHqBadge');
@@ -943,6 +1054,7 @@ async function setPreviewMode(mode) {
         }
 
         // Restore dropdown label and options
+        logger.log('Restoring dropdown...');
         previewStrideLabel.textContent = 'Preview Quality:';
         previewStrideSelect.innerHTML = `
             <option value="4" selected>Standard (fast)</option>
@@ -951,6 +1063,7 @@ async function setPreviewMode(mode) {
         `;
 
         // Re-render preview in fit mode
+        logger.log('Re-rendering preview in fit mode...');
         renderPreview();
 
         state.viewMode = 'fit';
@@ -1019,30 +1132,30 @@ function attachPreviewZoomHandlers() {
             hasMoved = true;
         }
 
-        // Accumulate transform offset for immediate visual feedback
+        // 1. Update the renderer's logical position
+        renderer.pan(deltaX, deltaY);
+
+        // 2. Update visual offset for CSS transform
         transformX -= deltaX;
         transformY -= deltaY;
 
-        // Apply CSS transform immediately
-        const imageEl = document.getElementById('previewImg');
-        if (imageEl) {
-            imageEl.style.transform = `translate3d(${transformX}px, ${transformY}px, 0)`;
+        // 3. Move the CURRENTLY VISIBLE image (smooth 60fps)
+        const activeImg = renderer.getActiveImage();
+        if (activeImg) {
+            activeImg.style.transform = `translate3d(${transformX}px, ${transformY}px, 0)`;
         }
 
-        // Update viewport position
-        renderer.pan(deltaX, deltaY);
-
-        // Frequent pixel fetching to minimize white space visibility
+        // 4. Request background render into hidden buffer (throttled)
+        // When ready, images will swap seamlessly
         const now = Date.now();
-        if (now - lastRenderTime > RENDER_INTERVAL) {
-            // Reset transform and fetch new pixels
-            if (imageEl) {
-                imageEl.style.transform = 'translate3d(0, 0, 0)';
-            }
-            transformX = 0;
-            transformY = 0;
-
-            renderer.fetchAndRender();
+        if (now - lastRenderTime > RENDER_INTERVAL && !renderer.isRendering) {
+            renderer.fetchAndRender(false).then(() => {
+                // After swap, reset visual offset since we have fresh pixels
+                transformX = 0;
+                transformY = 0;
+            }).catch(err => {
+                logger.error('Background render failed:', err);
+            });
             lastRenderTime = now;
         }
 
@@ -1055,15 +1168,16 @@ function attachPreviewZoomHandlers() {
         isDragging = false;
         container.classList.remove('panning');
 
-        // Final render if there's any remaining transform
-        const imageEl = document.getElementById('previewImg');
-        if (imageEl) {
-            imageEl.style.transform = 'translate3d(0, 0, 0)';
+        // Reset transform on the active image and fetch HQ at final position
+        const activeImg = renderer.getActiveImage();
+        if (activeImg) {
+            activeImg.style.transform = 'translate3d(0, 0, 0)';
         }
         transformX = 0;
         transformY = 0;
 
-        renderer.fetchAndRender();
+        // Final high-quality render
+        renderer.fetchAndRender(true);
 
         // If we actually dragged (moved), suppress the next click event
         if (hasMoved) {
@@ -3176,223 +3290,6 @@ async function showDialog() {
                     // They can modify settings and re-posterize if desired
 
                     logger.log("✓ Returned to posterization settings");
-                });
-            }
-
-            // Set up Zoom Preview button (WITH DEBUG CHECKPOINTS)
-            const btnZoomPreview = document.getElementById("btnZoomPreview");
-            if (btnZoomPreview) {
-                btnZoomPreview.addEventListener("click", async () => {
-                    if (typeof localStorage !== 'undefined') {
-                        localStorage.setItem('reveal_checkpoint', 'zoom_preview_clicked');
-                    }
-                    logger.log("🔍 Opening zoom preview with debug checkpoints...");
-
-                    try {
-                        if (typeof localStorage !== 'undefined') {
-                            localStorage.setItem('reveal_checkpoint', 'zoom_validate_start');
-                        }
-
-                        // Validate posterization data
-                        if (!posterizationData || !posterizationData.selectedPreview) {
-                            showErrorDialog("No Data", "Please posterize the image first before opening zoom preview.");
-                            return;
-                        }
-
-                        if (typeof localStorage !== 'undefined') {
-                            localStorage.setItem('reveal_checkpoint', 'zoom_data_validated');
-                        }
-
-                        // Get document info for tile loading
-                        const docInfo = posterizationData.docInfo;
-                        if (!docInfo) {
-                            showErrorDialog("No Document Info", "Document information not found. Please re-run posterization.");
-                            return;
-                        }
-
-                        const docWidth = docInfo.width;
-                        const docHeight = docInfo.height;
-                        const documentID = typeof docInfo.id === 'number' ? docInfo.id : parseInt(docInfo.id, 10);
-
-                        // Get the ORIGINAL layer ID (the layer with actual image data)
-                        // This is critical - otherwise we load from white background!
-                        const originalLayerID = docInfo.activeLayerID;
-                        if (!originalLayerID) {
-                            logger.warn("No activeLayerID found - will load from flattened document");
-                        }
-
-                        logger.log(`Document: ${docWidth}×${docHeight} (ID: ${documentID})`);
-                        logger.log(`Layer ID: ${originalLayerID || 'flattened (no layer ID)'}`);
-                        logger.log(`Bit depth: ${posterizationData.bitDepth}-bit`);
-
-                        // Check if we have stored preview pixels from posterization
-                        const hasStoredPixels = posterizationData.originalPixels && posterizationData.originalWidth && posterizationData.originalHeight;
-                        logger.log(`\nStored preview pixels from posterization: ${hasStoredPixels ? 'YES' : 'NO'}`);
-                        if (hasStoredPixels) {
-                            logger.log(`  Preview size: ${posterizationData.originalWidth}×${posterizationData.originalHeight}`);
-                            logger.log(`  Note: Zoom will fetch from full-res PSD (${docWidth}×${docHeight}), not preview`);
-                        }
-                        logger.log(``)
-
-                        if (typeof localStorage !== 'undefined') {
-                            localStorage.setItem('reveal_checkpoint', 'zoom_got_doc_info');
-                        }
-
-                        // Create separation data for palette-based rendering
-                        const selectedPreview = posterizationData.selectedPreview;
-                        logger.log(`\n🎨 Palette debug:`);
-                        logger.log(`  selectedPreview exists: ${!!selectedPreview}`);
-                        if (selectedPreview) {
-                            logger.log(`  selectedPreview.paletteLab exists: ${!!selectedPreview.paletteLab}`);
-                            logger.log(`  selectedPreview.paletteLab length: ${selectedPreview.paletteLab?.length}`);
-                            logger.log(`  Available properties:`, Object.keys(selectedPreview).join(', '));
-                        }
-
-                        const separationData = {
-                            palette: selectedPreview.paletteLab
-                        };
-
-                        if (typeof localStorage !== 'undefined') {
-                            localStorage.setItem('reveal_checkpoint', 'zoom_separation_data_ready');
-                        }
-
-                        // Get dialog elements
-                        const zoomDialog = document.getElementById('zoomPreviewDialog');
-                        const zoomTileImg = document.getElementById('zoomTileImg');
-                        const viewportContainer = document.getElementById('zoomViewportContainer');
-
-                        if (!zoomDialog || !zoomTileImg || !viewportContainer) {
-                            showErrorDialog("UI Error", "Zoom preview dialog elements not found.");
-                            return;
-                        }
-
-                        if (typeof localStorage !== 'undefined') {
-                            localStorage.setItem('reveal_checkpoint', 'zoom_dialog_elements_found');
-                        }
-
-                        // Set proxy image to the 800px posterized preview
-                        logger.log("Setting proxy image to 800px preview...");
-                        const previewImg = document.getElementById('previewImg');
-                        logger.log(`  previewImg element: ${previewImg ? 'FOUND' : 'NULL'}`);
-                        if (previewImg) {
-                            logger.log(`  previewImg.src: ${previewImg.src ? previewImg.src.substring(0, 50) + '...' : 'EMPTY'}`);
-                            logger.log(`  previewImg dimensions: ${previewImg.width}×${previewImg.height}`);
-                            logger.log(`  previewImg naturalWidth: ${previewImg.naturalWidth}×${previewImg.naturalHeight}`);
-                        }
-
-                        if (!previewImg || !previewImg.src) {
-                            showErrorDialog("Preview Not Ready", "The preview image is not ready yet. Please wait for the preview to fully render before opening zoom preview.");
-                            return;
-                        }
-
-                        // Open dialog FIRST so container gets proper dimensions
-                        if (typeof localStorage !== 'undefined') {
-                            localStorage.setItem('reveal_checkpoint', 'zoom_opening_dialog');
-                        }
-
-                        logger.log("Opening zoom dialog...");
-                        zoomDialog.showModal({
-                            resize: "both",
-                            size: {
-                                width: 1200,
-                                height: 800,
-                                minWidth: 800,
-                                minHeight: 600,
-                                maxWidth: 1920,
-                                maxHeight: 1080
-                            }
-                        });
-
-                        if (typeof localStorage !== 'undefined') {
-                            localStorage.setItem('reveal_checkpoint', 'zoom_dialog_opened');
-                        }
-                        logger.log("✓ Zoom preview dialog opened");
-
-                        // Wait for dialog layout, THEN create renderer with actual container dimensions
-                        if (typeof localStorage !== 'undefined') {
-                            localStorage.setItem('reveal_checkpoint', 'zoom_waiting_for_layout');
-                        }
-
-                        setTimeout(async () => {
-                            try {
-                                if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', 'zoom_creating_renderer');
-                                }
-
-                                // Create renderer
-                                logger.log("Creating ZoomPreviewRenderer...");
-                                logger.log(`Container dimensions: ${viewportContainer.clientWidth}×${viewportContainer.clientHeight}`);
-
-                                // Create renderer - will fetch from full-res PSD, not preview pixels
-                                const renderer = new ZoomPreviewRenderer(
-                                    viewportContainer,
-                                    zoomTileImg,
-                                    documentID,
-                                    originalLayerID,
-                                    docWidth,
-                                    docHeight,
-                                    posterizationData.bitDepth,
-                                    separationData,
-                                    null  // Don't use preview pixels for zoom
-                                );
-
-                                logger.log(`Renderer created: ${renderer.width}×${renderer.height}`);
-
-                                // Show busy cursor during initial load
-                                viewportContainer.style.cursor = 'wait';
-
-                                // Initialize renderer and fetch initial viewport
-                                logger.log("Initializing zoom renderer...");
-                                await renderer.init();
-                                logger.log(`✓ Renderer initialized: ${docWidth}×${docHeight}`);
-
-                                if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', 'zoom_renderer_created');
-                                }
-                                logger.log("✓ Renderer created");
-
-                                // Store state for button handlers
-                                zoomPreviewState = {
-                                    renderer,
-                                    docWidth,
-                                    docHeight
-                                };
-
-                                if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', 'zoom_state_stored');
-                                }
-
-                                // Setup UI controls (mode toggle, etc.)
-                                setupZoomPreviewControls();
-
-                                if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', 'zoom_initial_tile_rendered');
-                                }
-                                logger.log("✓ Initial viewport rendered successfully");
-
-                                // Restore cursor after initial render
-                                viewportContainer.style.cursor = '';
-
-                                if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', 'zoom_initial_tile_rendered');
-                                }
-                                logger.log("✓ Initial high-res tile rendered successfully");
-                            } catch (error) {
-                                logger.error("Failed to render initial tile:", error);
-                                if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', `zoom_initial_render_error_${error.message}`);
-                                }
-                            }
-                        }, 200);
-
-                    } catch (error) {
-                        if (typeof localStorage !== 'undefined') {
-                            localStorage.setItem('reveal_checkpoint', `zoom_error_${error.message}`);
-                        }
-                        logger.error("Failed to open zoom preview:", error);
-                        logger.error("Error stack:", error.stack);
-                        showErrorDialog("Zoom Preview Error", error.message, error.stack);
-                    }
                 });
             }
 

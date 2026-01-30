@@ -12,9 +12,10 @@ const photoshop = require('photoshop');
 const jpeg = require('jpeg-js');
 
 class ZoomPreviewRenderer {
-    constructor(container, imageEl, documentID, layerID, docWidth, docHeight, bitDepth, separationData) {
+    constructor(container, imageEl1, imageEl2, documentID, layerID, docWidth, docHeight, bitDepth, separationData) {
         this.container = container;
-        this.imageEl = imageEl;
+        this.images = [imageEl1, imageEl2]; // Double buffer
+        this.activeIndex = 0; // Track which image is currently visible
         this.documentID = documentID;
         this.docWidth = docWidth;
         this.docHeight = docHeight;
@@ -59,6 +60,20 @@ class ZoomPreviewRenderer {
     setSoloColor(colorIndex) {
         this.soloColorIndex = colorIndex;
         console.log(`[ZoomRenderer] Solo mode: ${colorIndex !== null ? `color ${colorIndex}` : 'off'}`);
+    }
+
+    /**
+     * Get the currently visible image element
+     */
+    getActiveImage() {
+        return this.images[this.activeIndex];
+    }
+
+    /**
+     * Get the hidden image element (for background loading)
+     */
+    getNextImage() {
+        return this.images[1 - this.activeIndex];
     }
 
     async init() {
@@ -190,36 +205,81 @@ class ZoomPreviewRenderer {
             // Higher JPEG quality for final high-quality pass
             const jpegQuality = highQuality ? 90 : 70;
             const jpegData = jpeg.encode({ data: rgba, width: w, height: h }, jpegQuality);
-            this.imageEl.src = `data:image/jpeg;base64,${this.uint8ToBase64(jpegData.data)}`;
+            const base64Data = `data:image/jpeg;base64,${this.uint8ToBase64(jpegData.data)}`;
 
             const cssScale = 1 / this.resolution;
-            this.imageEl.style.width = `${(w * cssScale) | 0}px`;
-            this.imageEl.style.height = `${(h * cssScale) | 0}px`;
+            const imgWidth = `${(w * cssScale) | 0}px`;
+            const imgHeight = `${(h * cssScale) | 0}px`;
 
-            // translate3d(0,0,0) triggers GPU acceleration in the UXP renderer
-            this.imageEl.style.transform = `translate3d(0, 0, 0)`;
-            this.imageEl.style.left = '0px';
-            this.imageEl.style.top = '0px';
+            // DOUBLE BUFFERING: Load into hidden image, then swap when ready
+            const nextImg = this.getNextImage();
+            const activeImg = this.getActiveImage();
 
-            console.log(`[ZoomRenderer] ✓ Rendered ${w}×${h} at CSS scale ${cssScale} (${highQuality ? 'HQ' : 'Fast'})`);
+            // Return promise that resolves when swap is complete
+            return new Promise((resolve, reject) => {
+                console.log(`[ZoomRenderer] Setting up image swap - nextImg: ${nextImg ? 'exists' : 'NULL'}, activeImg: ${activeImg ? 'exists' : 'NULL'}`);
+                console.log(`[ZoomRenderer] Next buffer: ${1 - this.activeIndex}, Active buffer: ${this.activeIndex}`);
+                console.log(`[ZoomRenderer] Base64 data length: ${base64Data ? base64Data.length : 0} chars`);
 
-            // If HQ pass finished, brighten badge then fade out
-            if (highQuality && this.hqBadge) {
-                this.hqBadge.style.opacity = '1'; // Full brightness when complete
-                setTimeout(() => {
-                    if (this.hqBadge) {
-                        this.hqBadge.style.display = 'none';
+                nextImg.onload = () => {
+                    console.log('[ZoomRenderer] Image onload fired!');
+                    try {
+                        // Set dimensions for the new image
+                        nextImg.style.width = imgWidth;
+                        nextImg.style.height = imgHeight;
+                        nextImg.style.transform = 'translate3d(0, 0, 0)';
+                        nextImg.style.left = '0px';
+                        nextImg.style.top = '0px';
+
+                        // SWAP: Show new, hide old (using opacity for faster rendering)
+                        nextImg.style.opacity = '1';
+                        nextImg.style.pointerEvents = 'auto';
+                        activeImg.style.opacity = '0';
+                        activeImg.style.pointerEvents = 'none';
+
+                        // Flip the active index
+                        this.activeIndex = 1 - this.activeIndex;
+
+                        console.log(`[ZoomRenderer] ✓ Rendered ${w}×${h} at CSS scale ${cssScale} (${highQuality ? 'HQ' : 'Fast'}) [Buffer ${this.activeIndex}]`);
+
+                        // If HQ pass finished, brighten badge then fade out
+                        if (highQuality && this.hqBadge) {
+                            this.hqBadge.style.opacity = '1';
+                            setTimeout(() => {
+                                if (this.hqBadge) {
+                                    this.hqBadge.style.display = 'none';
+                                }
+                            }, 1000);
+                        }
+
+                        // Schedule high-quality upgrade after interaction settles
+                        if (!highQuality) {
+                            this.qualityTimeout = setTimeout(() => {
+                                console.log('[ZoomRenderer] Upgrading to 16-bit high-quality render...');
+                                this.fetchAndRender(true);
+                            }, 500);
+                        }
+
+                        this.isRendering = false;
+                        resolve();
+                    } catch (err) {
+                        console.error('[ZoomRenderer] Error in onload callback:', err);
+                        this.isRendering = false;
+                        reject(err);
                     }
-                }, 1000);
-            }
+                };
 
-            // Schedule high-quality upgrade after interaction settles
-            if (!highQuality) {
-                this.qualityTimeout = setTimeout(() => {
-                    console.log('[ZoomRenderer] Upgrading to 16-bit high-quality render...');
-                    this.fetchAndRender(true);
-                }, 500);
-            }
+                nextImg.onerror = (err) => {
+                    console.error('[ZoomRenderer] Image load error:', err);
+                    this.isRendering = false;
+                    reject(new Error('Image failed to load'));
+                };
+
+                // Trigger the load into hidden image
+                console.log('[ZoomRenderer] Setting src on nextImg...');
+                nextImg.src = base64Data;
+                console.log('[ZoomRenderer] Src set, waiting for onload...');
+            });
 
         } catch (error) {
             console.error("[ZoomRenderer] ❌ Render failed:", error);
@@ -227,8 +287,8 @@ class ZoomPreviewRenderer {
             if (this.hqBadge) {
                 this.hqBadge.style.display = 'none';
             }
-        } finally {
             this.isRendering = false;
+            return Promise.reject(error);
         }
     }
 
