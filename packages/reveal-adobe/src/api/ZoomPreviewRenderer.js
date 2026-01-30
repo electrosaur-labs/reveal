@@ -45,8 +45,20 @@ class ZoomPreviewRenderer {
         // HQ badge for visual feedback
         this.hqBadge = document.getElementById('hqBadge');
 
+        // Solo mode support (highlight only one color)
+        this.soloColorIndex = null;
+
         console.log(`[ZoomRenderer] Viewport size: ${this.width}×${this.height}`);
         console.log(`[ZoomRenderer] Document size: ${docWidth}×${docHeight}`);
+    }
+
+    /**
+     * Set solo mode to highlight only one color
+     * @param {number|null} colorIndex - Palette index to highlight, or null for all colors
+     */
+    setSoloColor(colorIndex) {
+        this.soloColorIndex = colorIndex;
+        console.log(`[ZoomRenderer] Solo mode: ${colorIndex !== null ? `color ${colorIndex}` : 'off'}`);
     }
 
     async init() {
@@ -118,23 +130,61 @@ class ZoomPreviewRenderer {
             const lut = this.lut;
             const size = this.lutSize;
             const sm1 = this.sm1;
+            const palette = this.separationData.palette;
+            const soloMode = this.soloColorIndex !== null;
 
             // PERFORMANCE: Bitwise floor and pre-calculated constants
             for (let i = 0; i < w * h; i++) {
                 const srcIdx = i * 3;
                 const dstIdx = i * 4;
 
-                // Precision mapping based on bit depth
+                // Get Lab values (normalized 0-100 for L, -128 to 127 for a/b)
+                const L = pixelBuffer[srcIdx] / divisor * 100;
+                const a = pixelBuffer[srcIdx + 1] / divisor * 255 - 128;
+                const b = pixelBuffer[srcIdx + 2] / divisor * 255 - 128;
+
+                // LUT lookup for RGB
                 const lN = (pixelBuffer[srcIdx] * sm1 / divisor) | 0;
                 const aN = (pixelBuffer[srcIdx + 1] * sm1 / divisor) | 0;
                 const bN = (pixelBuffer[srcIdx + 2] * sm1 / divisor) | 0;
-
                 const lIdx = (lN * size * size + aN * size + bN) * 3;
 
-                rgba[dstIdx]     = lut[lIdx];
-                rgba[dstIdx + 1] = lut[lIdx + 1];
-                rgba[dstIdx + 2] = lut[lIdx + 2];
-                rgba[dstIdx + 3] = 255;
+                // Solo mode: Check if this pixel matches the selected color
+                let showPixel = true;
+                if (soloMode) {
+                    // Find closest palette color
+                    let minDist = Infinity;
+                    let closestIdx = 0;
+                    for (let p = 0; p < palette.length; p++) {
+                        const dL = L - palette[p].L;
+                        const da = a - palette[p].a;
+                        const db = b - palette[p].b;
+                        const dist = dL * dL + da * da + db * db;
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closestIdx = p;
+                        }
+                    }
+                    showPixel = (closestIdx === this.soloColorIndex);
+                }
+
+                if (showPixel) {
+                    // Show actual color
+                    rgba[dstIdx]     = lut[lIdx];
+                    rgba[dstIdx + 1] = lut[lIdx + 1];
+                    rgba[dstIdx + 2] = lut[lIdx + 2];
+                    rgba[dstIdx + 3] = 255;
+                } else {
+                    // Checkered background for non-matching pixels
+                    const x = (i % w);
+                    const y = (i / w) | 0;
+                    const checker = ((x >> 3) + (y >> 3)) & 1;
+                    const gray = checker ? 200 : 230;
+                    rgba[dstIdx]     = gray;
+                    rgba[dstIdx + 1] = gray;
+                    rgba[dstIdx + 2] = gray;
+                    rgba[dstIdx + 3] = 255;
+                }
             }
 
             // Higher JPEG quality for final high-quality pass

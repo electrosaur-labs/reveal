@@ -633,7 +633,13 @@ function initializePreviewCanvas(width, height, palette, assignments) {
         palette: palette,
         assignments: assignments,
         activeSoloIndex: null,  // null = show all, number = solo that color
-        deletedIndices: new Set()  // Track soft-deleted color indices
+        deletedIndices: new Set(),  // Track soft-deleted color indices
+
+        // View mode state (fit vs zoom)
+        viewMode: 'fit',
+        zoomRenderer: null,
+        _previewZoomHandlers: null,
+        _suppressNextClick: false  // Prevent click after drag
     };
 
     // Add click handler to preview image - clicking shows all colors
@@ -643,10 +649,28 @@ function initializePreviewCanvas(width, height, palette, assignments) {
 
     newImg.addEventListener('click', () => {
         const state = window.previewState;
-        if (state && state.activeSoloIndex !== null) {
+        if (!state) return;
+
+        // Suppress click if it was actually a drag gesture
+        if (state._suppressNextClick) {
+            state._suppressNextClick = false;
+            return;
+        }
+
+        if (state.activeSoloIndex !== null) {
             logger.log('Preview image clicked - returning to full preview');
             state.activeSoloIndex = null;
-            renderPreview();
+
+            // Re-render in both modes
+            if (state.viewMode === 'fit') {
+                renderPreview();
+            } else if (state.viewMode === 'zoom' && state.zoomRenderer) {
+                state.zoomRenderer.setSoloColor(null);
+                state.zoomRenderer.fetchAndRender();
+            }
+
+            // Update visual highlighting
+            updateSwatchHighlights();
         }
     });
 
@@ -768,6 +792,377 @@ function renderPreview() {
 }
 
 /**
+ * Switch preview panel between Fit and Zoom modes
+ */
+async function setPreviewMode(mode) {
+    const state = window.previewState;
+    if (!state) {
+        logger.error('Preview state not initialized');
+        return;
+    }
+
+    if (state.viewMode === mode) {
+        logger.log(`Already in ${mode} mode`);
+        return;
+    }
+
+    const container = document.getElementById('previewContainer');
+    const imageEl = document.getElementById('previewImg');
+    const previewStrideLabel = document.getElementById('previewStrideLabel');
+    const previewStrideSelect = document.getElementById('previewStride');
+
+    logger.log(`Switching preview mode: ${state.viewMode} → ${mode}`);
+
+    if (mode === 'zoom') {
+        // ZOOM MODE: Initialize ZoomPreviewRenderer
+
+        // Get metadata from posterizationData
+        if (!posterizationData || !posterizationData.docInfo) {
+            logger.error('Missing posterizationData for zoom mode');
+            return;
+        }
+
+        const docInfo = posterizationData.docInfo;
+        const documentID = typeof docInfo.id === 'number' ? docInfo.id : parseInt(docInfo.id, 10);
+        const originalLayerID = docInfo.activeLayerID;
+        // Use docInfo dimensions (full document), not posterization preview dimensions
+        const docWidth = docInfo.width;
+        const docHeight = docInfo.height;
+        const bitDepth = posterizationData.bitDepth || 8;
+
+        logger.log(`Zoom mode - Document: ${docWidth}×${docHeight}, Layer: ${originalLayerID}, BitDepth: ${bitDepth}`);
+        logger.log(`Container size BEFORE: ${container.clientWidth}×${container.clientHeight}`);
+
+        // Create separation data for ZoomPreviewRenderer
+        const selectedPreview = posterizationData.selectedPreview;
+        logger.log(`Palette debug: ${selectedPreview.paletteLab.length} colors`);
+        if (selectedPreview.paletteLab.length > 0) {
+            logger.log(`First color format:`, selectedPreview.paletteLab[0]);
+        }
+
+        const separationData = {
+            palette: selectedPreview.paletteLab
+        };
+
+        // Store container dimensions before zoom mode (to restore later)
+        state._containerDimensions = {
+            width: container.clientWidth,
+            height: container.clientHeight
+        };
+
+        // CRITICAL: Set fixed dimensions on container BEFORE creating renderer
+        // This prevents the container from resizing when image changes
+        container.style.width = `${container.clientWidth}px`;
+        container.style.height = `${container.clientHeight}px`;
+        container.style.minHeight = `${container.clientHeight}px`;
+
+        // Add zoom mode class
+        container.classList.add('zoom-mode');
+
+        logger.log(`Container size AFTER fixing: ${container.clientWidth}×${container.clientHeight}`);
+
+        // Initialize ZoomPreviewRenderer on the preview panel
+        state.zoomRenderer = new ZoomPreviewRenderer(
+            container,
+            imageEl,
+            documentID,
+            originalLayerID,
+            docWidth,
+            docHeight,
+            bitDepth,
+            separationData
+        );
+
+        // Set HQ badge element
+        state.zoomRenderer.hqBadge = document.getElementById('previewHqBadge');
+
+        logger.log(`Renderer viewport: ${state.zoomRenderer.width}×${state.zoomRenderer.height}`);
+
+        // Initialize renderer (centers viewport, fetches first render)
+        logger.log('Initializing renderer...');
+        await state.zoomRenderer.init();
+        logger.log('✓ Renderer initialized');
+
+        // Update dropdown label and options
+        previewStrideLabel.textContent = 'Resolution:';
+        previewStrideSelect.innerHTML = `
+            <option value="1" selected>1:1 (Full Res)</option>
+            <option value="2">1:2 (Half Res)</option>
+            <option value="4">1:4 (Quarter Res)</option>
+            <option value="8">1:8 (Eighth Res)</option>
+        `;
+
+        // Attach zoom event handlers
+        attachPreviewZoomHandlers();
+
+        state.viewMode = 'zoom';
+        logger.log('✓ Zoom mode initialized');
+
+    } else if (mode === 'fit') {
+        // FIT MODE: Cleanup ZoomPreviewRenderer, restore renderPreview
+
+        // Cleanup zoom renderer
+        if (state.zoomRenderer) {
+            // Clear quality timeout
+            if (state.zoomRenderer.qualityTimeout) {
+                clearTimeout(state.zoomRenderer.qualityTimeout);
+            }
+
+            // Dispose pixel data
+            if (state.zoomRenderer.activePixelData && state.zoomRenderer.activePixelData.imageData) {
+                state.zoomRenderer.activePixelData.imageData.dispose();
+                state.zoomRenderer.activePixelData = null;
+            }
+
+            state.zoomRenderer = null;
+        }
+
+        // Remove zoom event handlers
+        detachPreviewZoomHandlers();
+
+        // Remove zoom mode class
+        container.classList.remove('zoom-mode');
+
+        // Restore container dimensions (remove fixed sizing)
+        container.style.width = '';
+        container.style.height = '';
+        container.style.minHeight = '300px';  // Restore original min-height
+
+        // Reset image styles
+        imageEl.style.position = '';
+        imageEl.style.top = '';
+        imageEl.style.left = '';
+        imageEl.style.transform = '';
+        imageEl.style.width = '';
+        imageEl.style.height = '';
+
+        // Hide HQ badge
+        const hqBadge = document.getElementById('previewHqBadge');
+        if (hqBadge) {
+            hqBadge.style.display = 'none';
+        }
+
+        // Restore dropdown label and options
+        previewStrideLabel.textContent = 'Preview Quality:';
+        previewStrideSelect.innerHTML = `
+            <option value="4" selected>Standard (fast)</option>
+            <option value="2">Fine (slow)</option>
+            <option value="1">Finest (slower)</option>
+        `;
+
+        // Re-render preview in fit mode
+        renderPreview();
+
+        state.viewMode = 'fit';
+        logger.log('✓ Fit mode restored');
+    }
+}
+
+/**
+ * Attach zoom event handlers for preview panel zoom mode
+ */
+function attachPreviewZoomHandlers() {
+    const state = window.previewState;
+    if (!state || !state.zoomRenderer) return;
+
+    const container = document.getElementById('previewContainer');
+    const renderer = state.zoomRenderer;
+
+    // Store handlers for cleanup
+    state._previewZoomHandlers = {
+        mousedown: null,
+        mousemove: null,
+        mouseup: null,
+        wheel: null,
+        keydown: null
+    };
+
+    // Mouse drag panning with frequent updates to minimize white space
+    let isDragging = false;
+    let hasMoved = false; // Track if actual dragging occurred
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let lastX = 0;
+    let lastY = 0;
+    let transformX = 0;
+    let transformY = 0;
+    let lastRenderTime = 0;
+    const RENDER_INTERVAL = 80; // Fetch pixels every 80ms during drag
+    const MIN_DRAG_DISTANCE = 3; // Minimum pixels to count as drag vs click
+
+    state._previewZoomHandlers.mousedown = (e) => {
+        isDragging = true;
+        hasMoved = false;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        transformX = 0;
+        transformY = 0;
+        lastRenderTime = 0; // Allow immediate first render
+        container.classList.add('panning');
+        e.preventDefault();
+    };
+
+    state._previewZoomHandlers.mousemove = (e) => {
+        if (!isDragging) return;
+
+        const deltaX = lastX - e.clientX;
+        const deltaY = lastY - e.clientY;
+
+        // Check if we've moved enough to count as a drag
+        const totalDragDistance = Math.sqrt(
+            Math.pow(e.clientX - dragStartX, 2) +
+            Math.pow(e.clientY - dragStartY, 2)
+        );
+        if (totalDragDistance > MIN_DRAG_DISTANCE) {
+            hasMoved = true;
+        }
+
+        // Accumulate transform offset for immediate visual feedback
+        transformX -= deltaX;
+        transformY -= deltaY;
+
+        // Apply CSS transform immediately
+        const imageEl = document.getElementById('previewImg');
+        if (imageEl) {
+            imageEl.style.transform = `translate3d(${transformX}px, ${transformY}px, 0)`;
+        }
+
+        // Update viewport position
+        renderer.pan(deltaX, deltaY);
+
+        // Frequent pixel fetching to minimize white space visibility
+        const now = Date.now();
+        if (now - lastRenderTime > RENDER_INTERVAL) {
+            // Reset transform and fetch new pixels
+            if (imageEl) {
+                imageEl.style.transform = 'translate3d(0, 0, 0)';
+            }
+            transformX = 0;
+            transformY = 0;
+
+            renderer.fetchAndRender();
+            lastRenderTime = now;
+        }
+
+        lastX = e.clientX;
+        lastY = e.clientY;
+    };
+
+    state._previewZoomHandlers.mouseup = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        container.classList.remove('panning');
+
+        // Final render if there's any remaining transform
+        const imageEl = document.getElementById('previewImg');
+        if (imageEl) {
+            imageEl.style.transform = 'translate3d(0, 0, 0)';
+        }
+        transformX = 0;
+        transformY = 0;
+
+        renderer.fetchAndRender();
+
+        // If we actually dragged (moved), suppress the next click event
+        if (hasMoved) {
+            state._suppressNextClick = true;
+            // Clear the flag after a short delay (in case click event doesn't fire)
+            setTimeout(() => {
+                state._suppressNextClick = false;
+            }, 100);
+        }
+    };
+
+    // Wheel zoom to cursor
+    state._previewZoomHandlers.wheel = async (e) => {
+        e.preventDefault();
+
+        const resolutions = [1, 2, 4, 8];
+        let currentIndex = resolutions.indexOf(renderer.resolution);
+        const zoomDirection = e.deltaY > 0 ? 1 : -1;
+        let nextIndex = currentIndex + zoomDirection;
+
+        if (nextIndex < 0 || nextIndex >= resolutions.length) return;
+
+        const nextRes = resolutions[nextIndex];
+
+        // Get mouse position relative to container
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Zoom to cursor position
+        await renderer.setResolutionAtPoint(nextRes, mouseX, mouseY);
+
+        // Update dropdown to match
+        const previewStrideSelect = document.getElementById('previewStride');
+        if (previewStrideSelect) {
+            previewStrideSelect.value = nextRes;
+        }
+    };
+
+    // Arrow key panning
+    state._previewZoomHandlers.keydown = (e) => {
+        const PAN_STEP = 50; // pixels to pan per key press
+        let handled = false;
+
+        switch(e.key) {
+            case 'ArrowLeft':
+                renderer.pan(-PAN_STEP, 0);
+                handled = true;
+                break;
+            case 'ArrowRight':
+                renderer.pan(PAN_STEP, 0);
+                handled = true;
+                break;
+            case 'ArrowUp':
+                renderer.pan(0, -PAN_STEP);
+                handled = true;
+                break;
+            case 'ArrowDown':
+                renderer.pan(0, PAN_STEP);
+                handled = true;
+                break;
+        }
+
+        if (handled) {
+            e.preventDefault();
+            renderer.fetchAndRender();
+        }
+    };
+
+    // Attach handlers
+    container.addEventListener('mousedown', state._previewZoomHandlers.mousedown);
+    document.addEventListener('mousemove', state._previewZoomHandlers.mousemove);
+    document.addEventListener('mouseup', state._previewZoomHandlers.mouseup);
+    container.addEventListener('wheel', state._previewZoomHandlers.wheel, { passive: false });
+    document.addEventListener('keydown', state._previewZoomHandlers.keydown);
+
+    logger.log('✓ Preview zoom handlers attached');
+}
+
+/**
+ * Detach zoom event handlers
+ */
+function detachPreviewZoomHandlers() {
+    const state = window.previewState;
+    if (!state || !state._previewZoomHandlers) return;
+
+    const container = document.getElementById('previewContainer');
+
+    container.removeEventListener('mousedown', state._previewZoomHandlers.mousedown);
+    document.removeEventListener('mousemove', state._previewZoomHandlers.mousemove);
+    document.removeEventListener('mouseup', state._previewZoomHandlers.mouseup);
+    container.removeEventListener('wheel', state._previewZoomHandlers.wheel);
+    document.removeEventListener('keydown', state._previewZoomHandlers.keydown);
+
+    delete state._previewZoomHandlers;
+    logger.log('✓ Preview zoom handlers detached');
+}
+
+/**
  * Convert Uint8Array/Buffer to base64 string
  */
 function bufferToBase64(buffer) {
@@ -837,7 +1232,16 @@ function clearSwatchSelection() {
     logger.log('Clearing swatch selection (clicked outside)');
     state.activeSoloIndex = null;
     updateSwatchHighlights();
-    renderPreview();
+
+    // Re-render preview (works in both modes)
+    if (state.viewMode === 'fit') {
+        renderPreview();
+    } else if (state.viewMode === 'zoom' && state.zoomRenderer) {
+        // Clear solo mode in zoom renderer
+        state.zoomRenderer.setSoloColor(null);
+        state.zoomRenderer.fetchAndRender();
+        logger.log('✓ Zoom solo mode cleared');
+    }
 }
 
 /**
@@ -937,8 +1341,15 @@ function handleSwatchClick(featureIndex) {
     // Update swatch highlighting
     updateSwatchHighlights();
 
-    // Re-render preview
-    renderPreview();
+    // Re-render preview (works in both modes now!)
+    if (state.viewMode === 'fit') {
+        renderPreview();
+    } else if (state.viewMode === 'zoom' && state.zoomRenderer) {
+        // In zoom mode: Update renderer's solo color and re-render
+        state.zoomRenderer.setSoloColor(paletteIndex);
+        state.zoomRenderer.fetchAndRender();
+        logger.log(`✓ Zoom solo mode: showing only color ${featureIndex + 1}`);
+    }
 }
 
 /**
@@ -2675,6 +3086,27 @@ async function showDialog() {
             if (btnPaletteCancel) {
                 btnPaletteCancel.addEventListener("click", () => {
                     logger.log("Palette Cancel button clicked - dismissing plugin");
+
+                    // Cleanup zoom renderer if in zoom mode
+                    if (window.previewState && window.previewState.viewMode === 'zoom') {
+                        detachPreviewZoomHandlers();
+
+                        if (window.previewState.zoomRenderer) {
+                            // Clear quality timeout
+                            if (window.previewState.zoomRenderer.qualityTimeout) {
+                                clearTimeout(window.previewState.zoomRenderer.qualityTimeout);
+                            }
+
+                            // Dispose pixel data
+                            if (window.previewState.zoomRenderer.activePixelData &&
+                                window.previewState.zoomRenderer.activePixelData.imageData) {
+                                window.previewState.zoomRenderer.activePixelData.imageData.dispose();
+                            }
+
+                            window.previewState.zoomRenderer = null;
+                        }
+                    }
+
                     const paletteDialog = document.getElementById('paletteDialog');
                     if (paletteDialog) {
                         paletteDialog.close();
@@ -2688,6 +3120,26 @@ async function showDialog() {
             if (btnBack) {
                 btnBack.addEventListener("click", () => {
                     logger.log("Back button clicked - returning to posterization settings");
+
+                    // Cleanup zoom renderer if in zoom mode
+                    if (window.previewState && window.previewState.viewMode === 'zoom') {
+                        detachPreviewZoomHandlers();
+
+                        if (window.previewState.zoomRenderer) {
+                            // Clear quality timeout
+                            if (window.previewState.zoomRenderer.qualityTimeout) {
+                                clearTimeout(window.previewState.zoomRenderer.qualityTimeout);
+                            }
+
+                            // Dispose pixel data
+                            if (window.previewState.zoomRenderer.activePixelData &&
+                                window.previewState.zoomRenderer.activePixelData.imageData) {
+                                window.previewState.zoomRenderer.activePixelData.imageData.dispose();
+                            }
+
+                            window.previewState.zoomRenderer = null;
+                        }
+                    }
 
                     // Close palette dialog
                     const paletteDialog = document.getElementById('paletteDialog');
@@ -3442,6 +3894,28 @@ async function showDialog() {
                         // Render initial preview
                         renderPreview();
                         logger.log('✓ Preview rendered');
+
+                        // Set up view mode dropdown
+                        const viewModeSelect = document.getElementById('viewMode');
+                        if (viewModeSelect) {
+                            viewModeSelect.value = 'fit';  // Default to fit mode
+
+                            viewModeSelect.addEventListener('change', async (e) => {
+                                const mode = e.target.value;
+                                logger.log(`View mode changing to: ${mode}`);
+
+                                document.body.style.cursor = 'wait';
+                                try {
+                                    await setPreviewMode(mode);
+                                    logger.log(`✓ View mode switched to ${mode}`);
+                                } catch (error) {
+                                    logger.error('Failed to switch view mode:', error);
+                                    showErrorDialog("View Mode Error", error.message, error.stack);
+                                } finally {
+                                    document.body.style.cursor = '';
+                                }
+                            });
+                        }
                     }, 300); // 300ms delay for UXP layout
 
                 } catch (error) {
@@ -3632,39 +4106,55 @@ async function showDialog() {
                 logger.log("✓ Reset to Defaults button attached");
             }
 
-            // Preview Quality dropdown - reassign pixels with new stride
+            // Preview Quality dropdown - reassign pixels with new stride (fit mode) or change resolution (zoom mode)
             const previewStrideSelect = document.getElementById('previewStride');
             if (previewStrideSelect) {
-                previewStrideSelect.addEventListener('change', () => {
+                previewStrideSelect.addEventListener('change', async () => {
                     if (!posterizationData || !window.previewState) return;
 
-                    const stride = parseInt(previewStrideSelect.value, 10);
-                    const pixels = posterizationData.originalPixels;
-                    const paletteLab = posterizationData.selectedPreview.paletteLab;
-                    const width = posterizationData.originalWidth;
-                    const height = posterizationData.originalHeight;
+                    const value = parseInt(previewStrideSelect.value, 10);
+                    const state = window.previewState;
 
-                    const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
-                    logger.log(`Preview stride change: ${labels[stride] || stride} (stride=${stride}), ${width}x${height}, palette=${paletteLab.length}`);
-                    document.body.style.cursor = 'wait';
+                    if (state.viewMode === 'fit') {
+                        // FIT MODE: Change stride (existing logic)
+                        const stride = value;
+                        const pixels = posterizationData.originalPixels;
+                        const paletteLab = posterizationData.selectedPreview.paletteLab;
+                        const width = posterizationData.originalWidth;
+                        const height = posterizationData.originalHeight;
 
-                    // Use setTimeout with enough delay for UXP to repaint cursor
-                    setTimeout(() => {
-                        try {
-                            // Delegate to PosterizationEngine
-                            const bitDepth = posterizationData.bitDepth || 8;
-                            const assignments = PosterizationEngine.reassignWithStride(
-                                pixels, paletteLab, width, height, stride, bitDepth
-                            );
+                        const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
+                        logger.log(`Preview stride change: ${labels[stride] || stride} (stride=${stride}), ${width}x${height}, palette=${paletteLab.length}`);
+                        document.body.style.cursor = 'wait';
 
-                            window.previewState.assignments = assignments;
-                            renderPreview();
-                            logger.log(`✓ Preview updated: stride=${stride}, bitDepth=${bitDepth}`);
-                        } catch (err) {
-                            logger.error('Stride change error:', err);
+                        // Use setTimeout with enough delay for UXP to repaint cursor
+                        setTimeout(() => {
+                            try {
+                                // Delegate to PosterizationEngine
+                                const bitDepth = posterizationData.bitDepth || 8;
+                                const assignments = PosterizationEngine.reassignWithStride(
+                                    pixels, paletteLab, width, height, stride, bitDepth
+                                );
+
+                                window.previewState.assignments = assignments;
+                                renderPreview();
+                                logger.log(`✓ Preview updated: stride=${stride}, bitDepth=${bitDepth}`);
+                            } catch (err) {
+                                logger.error('Stride change error:', err);
+                            }
+                            document.body.style.cursor = '';
+                        }, 50);
+
+                    } else if (state.viewMode === 'zoom') {
+                        // ZOOM MODE: Change resolution
+                        logger.log(`Resolution changing to 1:${value}`);
+
+                        if (state.zoomRenderer) {
+                            const centerX = state.zoomRenderer.width / 2;
+                            const centerY = state.zoomRenderer.height / 2;
+                            await state.zoomRenderer.setResolutionAtPoint(value, centerX, centerY);
                         }
-                        document.body.style.cursor = '';
-                    }, 50);
+                    }
                 });
             }
 
