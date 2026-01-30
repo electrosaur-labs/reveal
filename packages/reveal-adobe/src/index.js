@@ -26,8 +26,6 @@ const PhotoshopAPI = require("./api/PhotoshopAPI");
 const DNAGenerator = require("./DNAGenerator");
 
 // Zoom preview components
-const TileManager = require("./api/TileManager");
-const ViewportTracker = require("./api/ViewportTracker");
 const ZoomPreviewRenderer = require("./api/ZoomPreviewRenderer");
 
 // Test utilities
@@ -2724,7 +2722,7 @@ async function showDialog() {
 
                         const docWidth = docInfo.width;
                         const docHeight = docInfo.height;
-                        const documentID = docInfo.id;
+                        const documentID = typeof docInfo.id === 'number' ? docInfo.id : parseInt(docInfo.id, 10);
 
                         // Get the ORIGINAL layer ID (the layer with actual image data)
                         // This is critical - otherwise we load from white background!

@@ -24,7 +24,7 @@ module.exports = (env, argv) => {
         output: {
             path: path.resolve(__dirname, 'dist'),
             filename: 'index.js',
-            clean: true
+            clean: false
         },
         module: {
             rules: []
