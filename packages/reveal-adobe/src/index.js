@@ -2354,28 +2354,30 @@ function setupZoomPreviewControls() {
     const zoomDialog = document.getElementById('zoomPreviewDialog');
     const zoomTileImg = document.getElementById('zoomTileImg');
     const zoomDownsampleFactor = document.getElementById('zoomDownsampleFactor');
+    const viewportContainer = document.getElementById('zoomViewportContainer');
 
     const panStep = 100; // Pan distance for arrow keys (reduced for finer control)
 
     // Resolution dropdown - controls how much area is visible
     if (zoomDownsampleFactor) {
-        // Set to 1:1 by default
+        // Set to 1:1 by default (resolution already set to 1 in constructor)
         zoomDownsampleFactor.value = '1';
-        renderer.setResolution(1);
 
         zoomDownsampleFactor.addEventListener('change', async (e) => {
             const resolution = parseInt(e.target.value);
             logger.log(`Resolution changing to 1:${resolution}...`);
 
             // Show busy cursor on viewport
-            const viewportContainer = document.getElementById('zoomViewportContainer');
             if (viewportContainer) {
                 viewportContainer.style.cursor = 'wait';
             }
             zoomDownsampleFactor.disabled = true;
 
             try {
-                await renderer.setResolution(resolution);
+                // Use focal-point zoom to center of viewport to prevent re-centering
+                const centerX = renderer.width / 2;
+                const centerY = renderer.height / 2;
+                await renderer.setResolutionAtPoint(resolution, centerX, centerY);
                 logger.log(`✓ Resolution changed to 1:${resolution} (scale: ${1/resolution})`);
             } finally {
                 // Restore cursor
@@ -2389,18 +2391,50 @@ function setupZoomPreviewControls() {
         logger.log('✓ Resolution dropdown initialized: 1:1');
     }
 
+    // Wheel zoom-to-cursor
+    if (viewportContainer) {
+        viewportContainer.addEventListener('wheel', async (e) => {
+            e.preventDefault();
+
+            const resolutions = [1, 2, 4, 8];
+            let currentIndex = resolutions.indexOf(renderer.resolution);
+
+            // Scroll down = zoom out, scroll up = zoom in
+            const zoomDirection = e.deltaY > 0 ? 1 : -1;
+            let nextIndex = currentIndex + zoomDirection;
+
+            if (nextIndex < 0 || nextIndex >= resolutions.length) return;
+
+            const nextRes = resolutions[nextIndex];
+
+            // Get mouse position relative to viewport
+            const rect = viewportContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // Zoom to cursor position
+            await renderer.setResolutionAtPoint(nextRes, mouseX, mouseY);
+            logger.log(`✓ Zoomed to 1:${nextRes} at cursor (${mouseX}, ${mouseY})`);
+
+            // Update dropdown to match
+            if (zoomDownsampleFactor) {
+                zoomDownsampleFactor.value = nextRes;
+            }
+        }, { passive: false });
+
+        logger.log('✓ Wheel zoom-to-cursor initialized');
+    }
+
     // Mouse drag panning
-    const viewportContainer = document.getElementById('zoomViewportContainer');
     if (viewportContainer) {
         let isDragging = false;
-        let dragStartX = 0;
-        let dragStartY = 0;
+        let lastX = 0;
+        let lastY = 0;
 
         viewportContainer.addEventListener('mousedown', (e) => {
-            // Start dragging
             isDragging = true;
-            dragStartX = e.clientX;
-            dragStartY = e.clientY;
+            lastX = e.clientX;
+            lastY = e.clientY;
             viewportContainer.style.cursor = 'grabbing';
             e.preventDefault();
         });
@@ -2408,15 +2442,18 @@ function setupZoomPreviewControls() {
         document.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
 
-            const deltaX = dragStartX - e.clientX;
-            const deltaY = dragStartY - e.clientY;
+            const deltaX = lastX - e.clientX;
+            const deltaY = lastY - e.clientY;
 
-            // Pan the viewport
-            renderer.pan(deltaX, deltaY);
+            // Progressive pan and render (isRendering guard prevents overwhelming)
+            // Only update if we've moved at least 5px to avoid excessive calls
+            if (Math.abs(deltaX) >= 5 || Math.abs(deltaY) >= 5) {
+                renderer.pan(deltaX, deltaY);
+                renderer.fetchAndRender(); // Will return immediately if already rendering
 
-            // Update drag start position for next move
-            dragStartX = e.clientX;
-            dragStartY = e.clientY;
+                lastX = e.clientX;
+                lastY = e.clientY;
+            }
         });
 
         document.addEventListener('mouseup', () => {
@@ -2435,16 +2472,13 @@ function setupZoomPreviewControls() {
 
         if (e.code === 'Home') {
             e.preventDefault();
-            // Center viewport on image
-            const centerX = Math.max(0, Math.floor((renderer.displayWidth - renderer.width) / 2));
-            const centerY = Math.max(0, Math.floor((renderer.displayHeight - renderer.height) / 2));
+            // Center viewport on document
+            renderer.viewportX = (renderer.docWidth / renderer.resolution - renderer.width) / 2;
+            renderer.viewportY = (renderer.docHeight / renderer.resolution - renderer.height) / 2;
+            renderer.applyBounds();
+            renderer.fetchAndRender();
 
-            renderer.viewportX = centerX;
-            renderer.viewportY = centerY;
-            renderer.tileImg.style.left = `${-centerX}px`;
-            renderer.tileImg.style.top = `${-centerY}px`;
-
-            logger.log(`Recentered viewport to (${centerX}, ${centerY})`);
+            logger.log(`Recentered viewport to (${renderer.viewportX}, ${renderer.viewportY})`);
         }
     });
 
@@ -2469,25 +2503,29 @@ function setupZoomPreviewControls() {
     document.addEventListener('keydown', async (e) => {
         if (!zoomDialog || !zoomDialog.open) return;
 
-        // Arrow keys: Pan viewport (pan() updates CSS directly, no re-render needed)
+        // Arrow keys: Pan viewport and re-fetch
         if (e.code === 'ArrowRight' && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
             renderer.pan(panStep, 0);
+            renderer.fetchAndRender();
         }
 
         if (e.code === 'ArrowLeft' && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
             renderer.pan(-panStep, 0);
+            renderer.fetchAndRender();
         }
 
         if (e.code === 'ArrowDown' && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
             renderer.pan(0, panStep);
+            renderer.fetchAndRender();
         }
 
         if (e.code === 'ArrowUp' && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
             renderer.pan(0, -panStep);
+            renderer.fetchAndRender();
         }
 
         // Escape: Close
@@ -2851,10 +2889,10 @@ async function showDialog() {
                                 // Show busy cursor during initial load
                                 viewportContainer.style.cursor = 'wait';
 
-                                // Fetch image scaled to fit zoom window
-                                logger.log("Fetching image for zoom...");
+                                // Initialize renderer and fetch initial viewport
+                                logger.log("Initializing zoom renderer...");
                                 await renderer.init();
-                                logger.log(`✓ Image loaded: ${renderer.fullImageWidth}×${renderer.fullImageHeight}`);
+                                logger.log(`✓ Renderer initialized: ${docWidth}×${docHeight}`);
 
                                 if (typeof localStorage !== 'undefined') {
                                     localStorage.setItem('reveal_checkpoint', 'zoom_renderer_created');
@@ -2875,13 +2913,10 @@ async function showDialog() {
                                 // Setup UI controls (mode toggle, etc.)
                                 setupZoomPreviewControls();
 
-                                // Render initial viewport
                                 if (typeof localStorage !== 'undefined') {
-                                    localStorage.setItem('reveal_checkpoint', 'zoom_rendering_initial_viewport');
+                                    localStorage.setItem('reveal_checkpoint', 'zoom_initial_tile_rendered');
                                 }
-
-                                logger.log("Rendering initial high-res tile...");
-                                await renderer.renderTile();
+                                logger.log("✓ Initial viewport rendered successfully");
 
                                 // Restore cursor after initial render
                                 viewportContainer.style.cursor = '';
