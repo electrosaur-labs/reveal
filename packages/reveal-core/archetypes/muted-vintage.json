@@ -1,0 +1,43 @@
+{
+  "id": "muted_vintage",
+  "name": "Muted / Vintage",
+  "description": "Mid-bright, desaturated, flat (faded posters, WPA prints)",
+  "centroid": {
+    "l": 60,
+    "c": 10,
+    "k": 40,
+    "l_std_dev": 10
+  },
+  "weights": {
+    "l": 0.5,
+    "c": 1.0,
+    "k": 1.0,
+    "l_std_dev": 3.0
+  },
+  "parameters": {
+    "engineType": "balanced",
+    "centroidStrategy": "VOLUMETRIC",
+    "lWeight": 0.8,
+    "cWeight": 1.0,
+    "blackBias": 2.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 4.0,
+    "vibrancyMode": "linear",
+    "vibrancyBoost": 1.0,
+    "vibrancyThreshold": 15,
+    "highlightThreshold": 90,
+    "highlightBoost": 1.1,
+    "enablePaletteReduction": true,
+    "paletteReduction": 10.0,
+    "hueLockAngle": 18,
+    "shadowPoint": 12,
+    "colorMode": "color",
+    "targetColorsSlider": 8,
+    "preserveWhite": false,
+    "preserveBlack": false,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "BlueNoise",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}

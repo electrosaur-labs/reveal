@@ -1,0 +1,43 @@
+{
+  "id": "pastel_high_key",
+  "name": "Pastel / High-Key",
+  "description": "Very bright, soft colors, low contrast",
+  "centroid": {
+    "l": 85,
+    "c": 20,
+    "k": 30,
+    "l_std_dev": 15
+  },
+  "weights": {
+    "l": 1.0,
+    "c": 1.0,
+    "k": 0.5,
+    "l_std_dev": 1.5
+  },
+  "parameters": {
+    "engineType": "reveal",
+    "centroidStrategy": "SALIENCY",
+    "lWeight": 1.0,
+    "cWeight": 1.8,
+    "blackBias": 0.0,
+    "substrateMode": "white",
+    "substrateTolerance": 5.0,
+    "vibrancyMode": "linear",
+    "vibrancyBoost": 1.1,
+    "vibrancyThreshold": 20,
+    "highlightThreshold": 94,
+    "highlightBoost": 1.4,
+    "enablePaletteReduction": true,
+    "paletteReduction": 6.0,
+    "hueLockAngle": 12,
+    "shadowPoint": 20,
+    "colorMode": "color",
+    "targetColorsSlider": 8,
+    "preserveWhite": true,
+    "preserveBlack": false,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "none",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}

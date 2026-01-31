@@ -1,0 +1,43 @@
+{
+  "id": "silver_gelatin",
+  "name": "Silver Gelatin / Tonal B&W",
+  "description": "High-quality black-and-white photography with deep range and fine grain simulation.",
+  "centroid": {
+    "l": 50,
+    "c": 2,
+    "k": 85,
+    "l_std_dev": 25
+  },
+  "weights": {
+    "l": 1.5,
+    "c": 2.0,
+    "k": 1.5,
+    "l_std_dev": 1.0
+  },
+  "parameters": {
+    "engineType": "reveal",
+    "centroidStrategy": "SALIENCY",
+    "lWeight": 2.0,
+    "cWeight": 0.5,
+    "blackBias": 4.0,
+    "substrateMode": "white",
+    "substrateTolerance": 2.0,
+    "vibrancyMode": "subtle",
+    "vibrancyBoost": 0.5,
+    "vibrancyThreshold": 5,
+    "highlightThreshold": 92,
+    "highlightBoost": 1.2,
+    "enablePaletteReduction": true,
+    "paletteReduction": 5.0,
+    "hueLockAngle": 10,
+    "shadowPoint": 5,
+    "colorMode": "grayscale",
+    "targetColorsSlider": 6,
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": false,
+    "ditherType": "Atkinson",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}

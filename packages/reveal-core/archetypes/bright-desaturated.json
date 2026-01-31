@@ -1,0 +1,43 @@
+{
+  "id": "bright_desaturated",
+  "name": "Bright Desaturated / High-Key Contrast",
+  "description": "Bright, washed-out photographic images with extreme contrast and minimal color (overexposed look, bleached aesthetics)",
+  "centroid": {
+    "l": 75,
+    "c": 12,
+    "k": 95,
+    "l_std_dev": 24
+  },
+  "weights": {
+    "l": 1.0,
+    "c": 2.0,
+    "k": 2.5,
+    "l_std_dev": 1.0
+  },
+  "parameters": {
+    "engineType": "reveal",
+    "centroidStrategy": "SALIENCY",
+    "lWeight": 1.2,
+    "cWeight": 0.8,
+    "blackBias": 3.0,
+    "substrateMode": "white",
+    "substrateTolerance": 4.0,
+    "vibrancyMode": "subtle",
+    "vibrancyBoost": 0.9,
+    "vibrancyThreshold": 20,
+    "highlightThreshold": 92,
+    "highlightBoost": 1.8,
+    "enablePaletteReduction": true,
+    "paletteReduction": 7.0,
+    "hueLockAngle": 20,
+    "shadowPoint": 8,
+    "colorMode": "color",
+    "targetColorsSlider": 7,
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "none",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}

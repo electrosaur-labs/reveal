@@ -40,4 +40,10 @@ if (fs.existsSync(presetsSrc)) {
     copyDirRecursive(presetsSrc, presetsDst);
     console.log('✓ Copied presets/ from @reveal/core');
 }
+const archetypesSrc = path.join(__dirname, '..', '..', 'reveal-core', 'archetypes');
+const archetypesDst = path.join(distDir, 'archetypes');
+if (fs.existsSync(archetypesSrc)) {
+    copyDirRecursive(archetypesSrc, archetypesDst);
+    console.log('✓ Copied archetypes/ from @reveal/core');
+}
 console.log('Asset copying complete!');

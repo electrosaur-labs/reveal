@@ -1,0 +1,43 @@
+{
+  "id": "cinematic_moody",
+  "name": "Cinematic / Moody",
+  "description": "Darker tones, moderate saturation, good contrast",
+  "centroid": {
+    "l": 40,
+    "c": 25,
+    "k": 65,
+    "l_std_dev": 22
+  },
+  "weights": {
+    "l": 1.0,
+    "c": 1.0,
+    "k": 1.5,
+    "l_std_dev": 1.0
+  },
+  "parameters": {
+    "engineType": "reveal",
+    "centroidStrategy": "VOLUMETRIC",
+    "lWeight": 1.5,
+    "cWeight": 1.0,
+    "blackBias": 5.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 2.0,
+    "vibrancyMode": "subtle",
+    "vibrancyBoost": 0.95,
+    "vibrancyThreshold": 10,
+    "highlightThreshold": 85,
+    "highlightBoost": 1.2,
+    "enablePaletteReduction": true,
+    "paletteReduction": 10.0,
+    "hueLockAngle": 20,
+    "shadowPoint": 20,
+    "colorMode": "color",
+    "targetColorsSlider": 8,
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "BlueNoise",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}

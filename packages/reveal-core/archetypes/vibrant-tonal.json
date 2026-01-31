@@ -1,0 +1,43 @@
+{
+  "id": "vibrant_tonal",
+  "name": "Vibrant Tonal / Neon-High-Chroma",
+  "description": "Traps high-chroma spikes (Yellows/Neons) in otherwise tonal or dark images.",
+  "centroid": {
+    "l": 50,
+    "c": 45,
+    "k": 95,
+    "l_std_dev": 25
+  },
+  "weights": {
+    "l": 0.2,
+    "c": 6.0,
+    "k": 1.0,
+    "l_std_dev": 0.5
+  },
+  "parameters": {
+    "engineType": "reveal",
+    "centroidStrategy": "SALIENCY",
+    "lWeight": 0.2,
+    "cWeight": 6.5,
+    "blackBias": 4.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 2.5,
+    "vibrancyMode": "exponential",
+    "vibrancyBoost": 1.8,
+    "vibrancyThreshold": 5.0,
+    "highlightThreshold": 95,
+    "highlightBoost": 1.4,
+    "enablePaletteReduction": true,
+    "paletteReduction": 3.0,
+    "hueLockAngle": 45,
+    "shadowPoint": 10,
+    "colorMode": "color",
+    "targetColorsSlider": 10,
+    "preserveWhite": false,
+    "preserveBlack": false,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "BlueNoise",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}

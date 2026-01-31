@@ -63,7 +63,7 @@ class DynamicConfigurator {
         // ================================================================
         // 1. CLASSIFY ARCHETYPE
         // ================================================================
-        const archetype = this.getArchetype(dna);
+        let archetype = this.getArchetype(dna);
 
         // ================================================================
         // 2. DERIVE FLAGS FROM DNA
@@ -74,13 +74,23 @@ class DynamicConfigurator {
         const peakChroma = dna.maxC || 0;
         const bitDepth = dna.bitDepth || 8;
         const lowChromaDensity = dna.lowChromaDensity || 0;  // % of pixels with C < 15
+        const k = dna.k || 0;
+
+        // ================================================================
+        // MAX CHROMA OVERRIDE: Force vibrant_tonal for extreme chroma spikes
+        // Even if average C is low, peak chroma > 120 indicates neon/yellow spikes
+        // ================================================================
+        if (peakChroma > 120 && k > 80) {
+            console.log(`⚡ Max Chroma Override: maxC=${peakChroma.toFixed(1)}, K=${k.toFixed(1)} → Vibrant Tonal (was: ${archetype})`);
+            archetype = 'Vibrant Tonal';
+        }
 
         // Derived classification flags
         const isPhoto = archetype === 'Photographic' || (l_std_dev > 25 && meanC > 15 && meanC < 50);
         const isGraphic = archetype === 'Vector/Flat' || l_std_dev < 15;
         const isArchive = bitDepth === 16 && meanC < 30 && l_std_dev > 20;  // 16-bit + muted + detailed
         const isNoir = archetype === 'Noir/Mono' || (meanC < 10 && dna.k > 60);
-        const isVibrant = archetype === 'Neon/Vibrant' || meanC > 60;
+        const isVibrant = archetype === 'Neon/Vibrant' || archetype === 'Vibrant Tonal' || meanC > 60;
 
         // ================================================================
         // 3. SALIENCY WEIGHTS (lWeight, cWeight)
@@ -378,6 +388,12 @@ class DynamicConfigurator {
                 return {
                     dither: 'blue-noise',    // Smooth gradients needed for neon glows
                     bias: 2.0
+                };
+
+            case 'Vibrant Tonal':
+                return {
+                    dither: 'blue-noise',    // Smooth gradients for chroma spikes
+                    bias: 4.0                // Protect chroma spikes from halftone loss
                 };
 
             case 'Photographic':

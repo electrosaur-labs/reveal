@@ -1,0 +1,43 @@
+{
+  "id": "warm_tonal_optimized",
+  "name": "Warm Tonal / Yellow Protect",
+  "description": "Optimized for photographic images where yellows must remain sovereign from browns and earthy tones.",
+  "centroid": {
+    "l": 55,
+    "c": 35,
+    "k": 70,
+    "l_std_dev": 22
+  },
+  "weights": {
+    "l": 0.2,
+    "c": 4.5,
+    "k": 1.0,
+    "l_std_dev": 1.5
+  },
+  "parameters": {
+    "engineType": "reveal",
+    "centroidStrategy": "SALIENCY",
+    "lWeight": 0.3,
+    "cWeight": 5.0,
+    "blackBias": 4.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 3.0,
+    "vibrancyMode": "exponential",
+    "vibrancyBoost": 1.8,
+    "vibrancyThreshold": 8.0,
+    "highlightThreshold": 96,
+    "highlightBoost": 1.6,
+    "enablePaletteReduction": true,
+    "paletteReduction": 4.0,
+    "hueLockAngle": 45,
+    "shadowPoint": 12,
+    "colorMode": "color",
+    "targetColorsSlider": 10,
+    "preserveWhite": true,
+    "preserveBlack": false,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "BlueNoise",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}

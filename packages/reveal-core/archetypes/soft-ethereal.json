@@ -1,0 +1,43 @@
+{
+  "id": "soft_ethereal",
+  "name": "Soft / Ethereal",
+  "description": "Mid-bright, low contrast, soft (dreamy photos)",
+  "centroid": {
+    "l": 65,
+    "c": 20,
+    "k": 40,
+    "l_std_dev": 18
+  },
+  "weights": {
+    "l": 0.5,
+    "c": 1.0,
+    "k": 0.5,
+    "l_std_dev": 1.0
+  },
+  "parameters": {
+    "engineType": "reveal",
+    "centroidStrategy": "VOLUMETRIC",
+    "lWeight": 1.2,
+    "cWeight": 1.0,
+    "blackBias": 3.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 4.5,
+    "vibrancyMode": "linear",
+    "vibrancyBoost": 1.1,
+    "vibrancyThreshold": 15,
+    "highlightThreshold": 95,
+    "highlightBoost": 1.2,
+    "enablePaletteReduction": true,
+    "paletteReduction": 9.0,
+    "hueLockAngle": 15,
+    "shadowPoint": 10,
+    "colorMode": "color",
+    "targetColorsSlider": 8,
+    "preserveWhite": false,
+    "preserveBlack": false,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": true,
+    "ditherType": "none",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}
