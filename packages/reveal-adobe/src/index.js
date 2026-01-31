@@ -3793,11 +3793,14 @@ async function showDialog() {
                         logger.log('✓ Preview rendered');
 
                         // Set up view mode dropdown
+                        // Clone element to remove any existing listeners from previous posterization
                         const viewModeSelect = document.getElementById('viewMode');
                         if (viewModeSelect) {
-                            viewModeSelect.value = 'fit';  // Default to fit mode
+                            const newViewModeSelect = viewModeSelect.cloneNode(true);
+                            viewModeSelect.parentNode.replaceChild(newViewModeSelect, viewModeSelect);
+                            newViewModeSelect.value = 'fit';  // Default to fit mode
 
-                            viewModeSelect.addEventListener('change', async (e) => {
+                            newViewModeSelect.addEventListener('change', async (e) => {
                                 const mode = e.target.value;
                                 logger.log(`View mode changing to: ${mode}`);
 
@@ -4004,12 +4007,16 @@ async function showDialog() {
             }
 
             // Preview Quality dropdown - reassign pixels with new stride (fit mode) or change resolution (zoom mode)
+            // Clone element to remove any existing listeners from previous posterization
             const previewStrideSelect = document.getElementById('previewStride');
             if (previewStrideSelect) {
-                previewStrideSelect.addEventListener('change', async () => {
+                const newPreviewStrideSelect = previewStrideSelect.cloneNode(true);
+                previewStrideSelect.parentNode.replaceChild(newPreviewStrideSelect, previewStrideSelect);
+
+                newPreviewStrideSelect.addEventListener('change', async () => {
                     if (!posterizationData || !window.previewState) return;
 
-                    const value = parseInt(previewStrideSelect.value, 10);
+                    const value = parseInt(newPreviewStrideSelect.value, 10);
                     const state = window.previewState;
 
                     if (state.viewMode === 'fit') {
