@@ -212,6 +212,8 @@ function identifyHueGaps(imageHues, paletteCoverage, paletteColorCountsBySector 
  * @returns {Array} - Distinct high-chroma colors for missing sectors
  */
 function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
+    logger.log(`🔍🔍🔍 DEBUG: findTrueMissingHues() called with ${gaps.length} gaps: ${gaps.map(g => SECTOR_NAMES[g]).join(', ')}`);
+
     // Configurable thresholds (lowered from 15/20 to 12/15 for better detection)
     const CHROMA_THRESH = options.chromaThreshold ?? 12;
     const DISTINCTNESS_THRESHOLD = options.distinctnessThreshold ?? 15;
@@ -237,6 +239,11 @@ function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
     logger.log(`[Hue Gap Refinement] Scanning image for distinct colors in ${gaps.length} missing sector(s)...`);
     logger.log(`  Thresholds: Chroma ≥ ${CHROMA_THRESH}, ΔE ≥ ${DISTINCTNESS_THRESHOLD}`);
 
+    // Track if we're using yellow-specific scoring
+    let yellowScoringApplied = false;
+    let yellowCandidatesFound = 0;
+    let yellowComparisons = 0;
+
     // Scan image for high-chroma colors in missing sectors
     for (let i = 0; i < labPixels.length; i += 3) {
         const L = labPixels[i];
@@ -257,8 +264,42 @@ function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
 
         diag.highChroma++;
 
-        // If this bin already has a sample, only replace if this one is more saturated
-        if (binSamples[binIdx] && binSamples[binIdx].chroma >= chroma) continue;
+        // DEBUG: Track yellow candidates
+        const isYellow = binIdx === 2; // Sector 2 = Yellow (60-90°)
+        if (isYellow) {
+            yellowCandidatesFound++;
+            if (yellowCandidatesFound <= 3) {
+                logger.log(`[Yellow Debug] Candidate #${yellowCandidatesFound}: L=${L.toFixed(1)}, C=${chroma.toFixed(1)}, H=${hue.toFixed(1)}°, binSamples[2]=${binSamples[2] ? 'EXISTS' : 'EMPTY'}`);
+            }
+        }
+
+        // If this bin already has a sample, decide whether to replace it
+        // For Yellow sector (60-90°): use lightness+hue scoring instead of chroma
+        if (binSamples[binIdx]) {
+            if (isYellow) {
+                yellowComparisons++;
+                // YELLOW-SPECIFIC: Score by lightness + hue accuracy, not chroma
+                yellowScoringApplied = true;
+                const targetYellow = 90;
+                const hueDistCurrent = Math.abs(hue - targetYellow);
+                const hueDistExisting = Math.abs(binSamples[binIdx].hue - targetYellow);
+
+                const scoreCurrent = L * 10 + (15 - hueDistCurrent) * 5 + chroma * 0.1;
+                const scoreExisting = binSamples[binIdx].L * 10 + (15 - hueDistExisting) * 5 + binSamples[binIdx].chroma * 0.1;
+
+                if (yellowComparisons <= 3) {
+                    logger.log(`[Yellow Debug] Comparison #${yellowComparisons}:`);
+                    logger.log(`  Current: L=${L.toFixed(1)}, H=${hue.toFixed(1)}°, Score=${scoreCurrent.toFixed(1)}`);
+                    logger.log(`  Existing: L=${binSamples[binIdx].L.toFixed(1)}, H=${binSamples[binIdx].hue.toFixed(1)}°, Score=${scoreExisting.toFixed(1)}`);
+                    logger.log(`  Decision: ${scoreExisting >= scoreCurrent ? 'KEEP existing' : 'REPLACE with current'}`);
+                }
+
+                if (scoreExisting >= scoreCurrent) continue; // Keep existing
+            } else {
+                // Non-yellow: Keep highest chroma (original behavior)
+                if (binSamples[binIdx].chroma >= chroma) continue;
+            }
+        }
 
         // Check if this color is distinct from current palette
         let minDistanceFromPalette = Infinity;
@@ -282,13 +323,19 @@ function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
         }
 
         if (isDistinct) {
-            binSamples[binIdx] = {L, a, b, chroma};
+            binSamples[binIdx] = {L, a, b, chroma, hue};
         } else {
             diag.failedDistinctness++;
         }
     }
 
     // Output diagnostic information for each missing sector
+    logger.log(`[Yellow Debug Summary] Yellow candidates found: ${yellowCandidatesFound}, Comparisons: ${yellowComparisons}`);
+    if (yellowScoringApplied) {
+        logger.log(`[Yellow Scan Priority] ⭐ Applied lightness-first scoring during Yellow sector scan`);
+    } else if (yellowCandidatesFound > 0) {
+        logger.log(`[Yellow Scan Priority] ⚠️ Found ${yellowCandidatesFound} yellow candidates but no comparisons happened (only 1 made it to binSamples?)`);
+    }
     logger.log(`[Hue Gap Diagnostics] Analysis complete:`);
     for (const diag of diagnostics) {
         const found = binSamples[SECTOR_NAMES.indexOf(diag.sector)] !== null;
@@ -326,16 +373,77 @@ function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
             continue;
         }
 
-        logger.log(`  ✓ Force-including ${SECTOR_NAMES[gapIdx]}: L=${sample.L.toFixed(1)}, a=${sample.a.toFixed(1)}, b=${sample.b.toFixed(1)}, C=${sample.chroma.toFixed(1)} (ΔE ≥ ${DISTINCTNESS_THRESHOLD}, coverage: ${(coverage * 100).toFixed(2)}%)`);
+        // Calculate hue for diagnostic logging
+        const hue = (Math.atan2(sample.b, sample.a) * 180 / Math.PI + 360) % 360;
+
+        logger.log(`  ✓ Force-including ${SECTOR_NAMES[gapIdx]}: L=${sample.L.toFixed(1)}, a=${sample.a.toFixed(1)}, b=${sample.b.toFixed(1)}, C=${sample.chroma.toFixed(1)}, H=${hue.toFixed(1)}° (ΔE ≥ ${DISTINCTNESS_THRESHOLD}, coverage: ${(coverage * 100).toFixed(2)}%)`);
         forcedColors.push({L: sample.L, a: sample.a, b: sample.b});
     }
 
     // Sort by chroma (most saturated first)
+    // EXCEPT for Yellow (sector 2): prioritize lightness and hue accuracy
+    const yellowCandidates = [];
+
     forcedColors.sort((a, b) => {
         const chromaA = Math.sqrt(a.a * a.a + a.b * a.b);
         const chromaB = Math.sqrt(b.a * b.a + b.b * b.b);
-        return chromaB - chromaA;
+
+        // Calculate hue angles
+        const hueA = (Math.atan2(a.b, a.a) * 180 / Math.PI + 360) % 360;
+        const hueB = (Math.atan2(b.b, b.a) * 180 / Math.PI + 360) % 360;
+
+        // Detect Yellow sector (60-90°) - use special scoring
+        const isYellowA = hueA >= 60 && hueA <= 90;
+        const isYellowB = hueB >= 60 && hueB <= 90;
+
+        if (isYellowA && isYellowB) {
+            // YELLOW-SPECIFIC SCORING:
+            // Yellow's identity is BRIGHTNESS (L) + HUE ACCURACY, not chroma
+            // Target hue: 90° (pure yellow in Lab space)
+            const targetYellow = 90;
+            const hueDistA = Math.abs(hueA - targetYellow);
+            const hueDistB = Math.abs(hueB - targetYellow);
+
+            // Score = L * 10 + (15 - hueDist) * 5 + C * 0.1
+            // This heavily weights lightness, then hue accuracy, with chroma as tiebreaker
+            const scoreA = a.L * 10 + (15 - hueDistA) * 5 + chromaA * 0.1;
+            const scoreB = b.L * 10 + (15 - hueDistB) * 5 + chromaB * 0.1;
+
+            // Track for diagnostic logging (store both candidates)
+            yellowCandidates.push({
+                L: a.L.toFixed(1),
+                h: hueA.toFixed(1),
+                C: chromaA.toFixed(1),
+                score: scoreA.toFixed(1)
+            });
+            yellowCandidates.push({
+                L: b.L.toFixed(1),
+                h: hueB.toFixed(1),
+                C: chromaB.toFixed(1),
+                score: scoreB.toFixed(1)
+            });
+
+            return scoreB - scoreA;  // Higher score wins
+        } else if (isYellowA) {
+            return -1;  // Yellow gets priority over non-yellows
+        } else if (isYellowB) {
+            return 1;
+        } else {
+            // Non-yellow colors: use chroma as before
+            return chromaB - chromaA;
+        }
     });
+
+    // Log Yellow-specific scoring if we had yellow candidates
+    if (yellowCandidates.length > 0) {
+        logger.log(`[Yellow Priority] Applied lightness-first scoring for ${yellowCandidates.length} yellow candidate(s):`);
+        // Remove duplicates and show unique candidates
+        const unique = Array.from(new Map(yellowCandidates.map(c => [c.L + c.h, c])).values());
+        unique.sort((a, b) => parseFloat(b.score) - parseFloat(a.score));
+        for (const c of unique.slice(0, 3)) {
+            logger.log(`  L=${c.L}, H=${c.h}°, C=${c.C} → Score: ${c.score}`);
+        }
+    }
 
     if (forcedColors.length === 0 && skippedForViability > 0) {
         logger.log(`  ⚠️ All ${skippedForViability} gap candidate(s) below viability threshold - not worth burning screens for dust`);

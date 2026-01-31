@@ -3456,6 +3456,48 @@ async function showDialog() {
 
             // Posterization handler - reads color mode from form values
             const handlePosterization = async (buttonElement, buttonOriginalText) => {
+                // CRITICAL: Clean up any existing preview state from previous posterization
+                // This prevents zoom mode from showing stale images
+                if (window.previewState) {
+                    logger.log("Cleaning up previous preview state...");
+
+                    // If in zoom mode, detach event handlers first
+                    if (window.previewState.viewMode === 'zoom') {
+                        logger.log("Detaching old zoom handlers...");
+                        detachPreviewZoomHandlers();
+
+                        // Then clean up zoom renderer
+                        if (window.previewState.zoomRenderer) {
+                            logger.log("Disposing old zoom renderer...");
+
+                            // Clear quality timeout
+                            if (window.previewState.zoomRenderer.qualityTimeout) {
+                                clearTimeout(window.previewState.zoomRenderer.qualityTimeout);
+                            }
+
+                            // Clear pixel data
+                            if (window.previewState.zoomRenderer.activePixelData?.imageData) {
+                                window.previewState.zoomRenderer.activePixelData.imageData.dispose();
+                            }
+
+                            window.previewState.zoomRenderer = null;
+                        }
+                    }
+
+                    // Clear resize observer
+                    if (window.previewState._resizeObserver) {
+                        window.previewState._resizeObserver.disconnect();
+                        window.previewState._resizeObserver = null;
+                    }
+
+                    // Clear entire state
+                    window.previewState = null;
+                    logger.log("✓ Previous preview state cleared");
+                }
+
+                // Clear posterization data
+                posterizationData = null;
+
                 // Validate form
                 const errors = validateForm();
 
@@ -3516,6 +3558,44 @@ async function showDialog() {
                     logger.log(`   First pixel (COPY): L=${pixelsCopy[0]} a=${pixelsCopy[1]} b=${pixelsCopy[2]}`);
                     logger.log(`   Second pixel (COPY): L=${pixelsCopy[3]} a=${pixelsCopy[4]} b=${pixelsCopy[5]}`);
                     logger.log(`   Third pixel (COPY): L=${pixelsCopy[6]} a=${pixelsCopy[7]} b=${pixelsCopy[8]}`);
+
+                    // ============================================================
+                    // CHECKPOINT: If you see this log, new code is running
+                    // ============================================================
+                    const buildInfo = `Build: 41b1ae16-68da-430c-8e47-b85ffabbefc1 (2026-01-31T02:55:55Z)`;
+                    console.log(`\n\n🚨🚨🚨 CHECKPOINT: DNA GENERATION CODE REACHED 🚨🚨🚨`);
+                    console.log(`EXPECTED: ${buildInfo}`);
+                    console.log(`ACTUAL Build ID: ${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'MISSING'}`);
+                    console.log(`ACTUAL Build Time: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'MISSING'}`);
+                    logger.log(`\n\n🚨🚨🚨 CHECKPOINT: DNA GENERATION CODE REACHED 🚨🚨🚨`);
+                    logger.log(`EXPECTED: ${buildInfo}`);
+                    logger.log(`ACTUAL Build ID: ${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'MISSING'}`);
+                    logger.log(`ACTUAL Build Time: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'MISSING'}`);
+
+                    // CRITICAL: Generate DNA for parameter morphing
+                    logger.log(`\n🧬 Generating DNA for parameter morphing...`);
+                    try {
+                        const dna = DNAGenerator.generate(
+                            pixelData.pixels,
+                            pixelData.width,
+                            pixelData.height,
+                            40  // Sample stride
+                        );
+                        logger.log(`✓ DNA extracted: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, maxCHue=${dna.maxCHue}°`);
+                        logger.log(`🎯 Yellow Zone Check: maxCHue=${dna.maxCHue}° (target: 70-95°), maxC=${dna.maxC} (threshold: 80)`);
+
+                        // Apply DNA-based parameter morphing
+                        logger.log(`\n🔀 Applying DNA-based parameter morphing...`);
+                        const morphedParams = ParameterGenerator.applyDynamicMorphing(params, dna, null);
+                        logger.log(`✓ Parameters morphed`);
+
+                        // Merge morphed parameters back into params
+                        Object.assign(params, morphedParams);
+                        logger.log(`✓ Using morphed parameters for posterization`);
+                    } catch (dnaError) {
+                        logger.error(`❌ DNA morphing failed:`, dnaError);
+                        logger.log(`   Continuing with form parameters (no morphing)`);
+                    }
 
                     // Apply preprocessing (bilateral filter for noise reduction) if enabled
                     // Engine always operates in 16-bit Lab space
@@ -4221,7 +4301,8 @@ async function showDialog() {
 
                         // Log full details to console
                         logger.log(`\nDNA ANALYSIS COMPLETE`);
-                        logger.log(`Image DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
+                        logger.log(`Image DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, maxCHue=${dna.maxCHue}°, range=[${dna.minL}, ${dna.maxL}]`);
+                        logger.log(`🎯 Yellow Zone Check: maxCHue=${dna.maxCHue}° (target: 70-95°), maxC=${dna.maxC} (threshold: 80)`);
                         logger.log(`Archetype: ${config.meta?.archetype || 'unknown'}`);
                         logger.log(`Config: ${config.name}`);
                         logger.log(`  Target Colors: ${config.targetColors}`);

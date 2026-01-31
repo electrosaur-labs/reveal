@@ -46,7 +46,489 @@
  */
 
 const BilateralFilter = require('../preprocessing/BilateralFilter');
+
+// Node.js modules - only available in Node environment
+let fs, path;
+try {
+    fs = require('fs');
+    path = require('path');
+} catch (e) {
+    // Running in browser/UXP - archetype loading not available
+    fs = null;
+    path = null;
+}
+
 class DynamicConfigurator {
+
+    /**
+     * Load archetype configurations from JSON files
+     * Only works in Node.js environment (not browser/UXP)
+     * @returns {Array|null} Array of archetype configs or null if unavailable
+     */
+    static loadArchetypes() {
+        // Check if fs/path are available (Node.js only)
+        if (!fs || !path) {
+            return null;  // Silently fall back to legacy generation
+        }
+
+        try {
+            const archetypeDir = path.join(__dirname, '../../archetypes');
+
+            if (!fs.existsSync(archetypeDir)) {
+                return null;
+            }
+
+            const files = fs.readdirSync(archetypeDir).filter(f => f.endsWith('.json') && f !== 'schema.json');
+            const archetypes = [];
+
+            for (const file of files) {
+                try {
+                    const data = JSON.parse(fs.readFileSync(path.join(archetypeDir, file), 'utf-8'));
+                    if (data.id && data.centroid && data.weights && data.parameters) {
+                        archetypes.push(data);
+                    }
+                } catch (err) {
+                    console.warn(`⚠️  Failed to load ${file}: ${err.message}`);
+                }
+            }
+
+            return archetypes.length > 0 ? archetypes : null;
+        } catch (err) {
+            return null;  // Silently fall back to legacy
+        }
+    }
+
+    /**
+     * Find nearest archetype using 4D weighted Euclidean distance
+     * @param {Object} dna - Image DNA
+     * @param {Array} archetypes - Array of archetype configs
+     * @returns {Object} Nearest archetype with distance
+     */
+    static findNearestArchetype(dna, archetypes) {
+        const l = dna.l || 50;
+        const c = dna.c || 20;
+        const k = dna.k || 60;
+        const l_std_dev = dna.l_std_dev !== undefined ? dna.l_std_dev : 25;
+
+        let nearest = null;
+        let minDistance = Infinity;
+
+        for (const arch of archetypes) {
+            const centroid = arch.centroid;
+            const weights = arch.weights;
+
+            const dSquared =
+                weights.l * Math.pow(l - centroid.l, 2) +
+                weights.c * Math.pow(c - centroid.c, 2) +
+                weights.k * Math.pow(k - centroid.k, 2) +
+                weights.l_std_dev * Math.pow(l_std_dev - centroid.l_std_dev, 2);
+
+            const distance = Math.sqrt(dSquared);
+
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearest = arch;
+            }
+        }
+
+        return { archetype: nearest, distance: minDistance };
+    }
+
+    /**
+     * Apply dynamic morphing to archetype baseline parameters
+     * Adjusts parameters based on DNA deviations from archetype centroid
+     *
+     * @param {Object} baseParams - Baseline parameters from archetype
+     * @param {Object} dna - Image DNA
+     * @param {Object} archetype - Matched archetype
+     * @returns {Object} Morphed parameters
+     */
+    static applyDynamicMorphing(baseParams, dna, archetype) {
+        const params = { ...baseParams };
+        const morphs = [];
+
+        // Extract DNA values
+        const maxC = dna.maxC || 0;
+        const minL = dna.minL || 0;
+        const maxL = dna.maxL || 100;
+        const l_std_dev = dna.l_std_dev !== undefined ? dna.l_std_dev : 25;
+        const meanC = dna.c || 20;
+        const k = dna.k || 60;
+        const yellowDominance = dna.yellowDominance || 0;
+
+        // ================================================================
+        // MORPH 1: Chroma Sovereignty Scaling
+        // If maxC significantly exceeds archetype centroid, boost cWeight
+        // ================================================================
+        if (maxC > 100) {
+            const chromaDeviation = maxC - (archetype?.centroid?.c || 25);
+            if (chromaDeviation > 50) {
+                const boostFactor = Math.min((chromaDeviation - 50) / 50, 2.0);
+                const originalCWeight = params.cWeight;
+                params.cWeight = Math.min(6.5, params.cWeight + (boostFactor * 1.5));
+                params.lWeight = Math.max(0.2, params.lWeight - (boostFactor * 0.3));
+                morphs.push(`maxC spike (${maxC.toFixed(0)}) → cWeight ${originalCWeight.toFixed(1)}→${params.cWeight.toFixed(1)}`);
+            }
+        }
+
+        // ================================================================
+        // MORPH 2: Shadow Gate Calibration
+        // Ultra-low minL requires tighter shadowPoint to prevent tonal noise
+        // ================================================================
+        if (minL < 2) {
+            const originalShadowPoint = params.shadowPoint;
+            params.shadowPoint = Math.max(2, Math.min(params.shadowPoint, 5));
+            if (originalShadowPoint !== params.shadowPoint) {
+                morphs.push(`ultra-low minL (${minL.toFixed(1)}) → shadowPoint ${originalShadowPoint}→${params.shadowPoint}`);
+            }
+        }
+
+        // ================================================================
+        // MORPH 3: Flatness Override (Dither & Hue Lock)
+        // Ultra-flat images need clean edges and wider hue locks
+        // ================================================================
+        if (l_std_dev < 8) {
+            if (params.ditherType !== 'none') {
+                params.ditherType = 'none';
+                morphs.push(`ultra-flat (σL=${l_std_dev.toFixed(1)}) → ditherType=none`);
+            }
+            if (params.hueLockAngle < 35) {
+                const originalAngle = params.hueLockAngle;
+                params.hueLockAngle = Math.max(params.hueLockAngle, 35);
+                morphs.push(`ultra-flat → hueLockAngle ${originalAngle}→${params.hueLockAngle}`);
+            }
+        }
+
+        // ================================================================
+        // MORPH 4: Highlight Threshold (White Protection)
+        // Near-100 maxL requires tighter highlight protection
+        // ================================================================
+        if (maxL > 98) {
+            const originalThreshold = params.highlightThreshold;
+            params.highlightThreshold = Math.max(96, params.highlightThreshold);
+            if (originalThreshold !== params.highlightThreshold) {
+                morphs.push(`peak whites (${maxL.toFixed(0)}) → highlightThreshold ${originalThreshold}→${params.highlightThreshold}`);
+            }
+        }
+
+        // ================================================================
+        // MORPH 5: Vibrancy Floor (Low Chroma Nullification)
+        // If image is genuinely desaturated (not just averaging), reduce vibrancy
+        // ================================================================
+        if (meanC < 12 && maxC < 80) {
+            const originalBoost = params.vibrancyBoost;
+            params.vibrancyBoost = Math.max(0.8, Math.min(params.vibrancyBoost, 1.0));
+            params.vibrancyThreshold = Math.max(params.vibrancyThreshold || 0, 18);
+            if (originalBoost !== params.vibrancyBoost) {
+                morphs.push(`low chroma (C=${meanC.toFixed(1)}) → vibrancyBoost ${originalBoost.toFixed(1)}→${params.vibrancyBoost.toFixed(1)}`);
+            }
+        }
+
+        // ================================================================
+        // MORPH 6: Extreme Contrast Boost
+        // Very high K requires stronger black protection
+        // ================================================================
+        if (k > 95) {
+            const originalBias = params.blackBias;
+            params.blackBias = Math.max(params.blackBias, 4.5);
+            if (originalBias !== params.blackBias) {
+                morphs.push(`extreme contrast (K=${k.toFixed(0)}) → blackBias ${originalBias.toFixed(1)}→${params.blackBias.toFixed(1)}`);
+            }
+        }
+
+        // ================================================================
+        // MORPH 7: NUCLEAR YELLOW-PROTECT (Force Sovereignty)
+        // Orange (C=141, H=63°) is "blinding" the engine to Yellow (C=93, H=72°)
+        // Even with high lWeight, the 63-point b* difference overwhelms L difference
+        // Solution: EXTREME L weighting + disable hue-gap optimization
+        // Yellow Zone: 70-95° (pure yellows, not oranges at 60° or greens at 110°)
+        //
+        // ENHANCED: Also triggers on yellowDominance score (>15 = significant yellow presence)
+        // When yellowDominance is HIGH (>20), apply THERMONUCLEAR settings
+        // ================================================================
+        const maxCHue = dna.maxCHue || 0;
+        const isYellowSpike = maxCHue >= 70 && maxCHue <= 95;
+        const isYellowDominant = yellowDominance > 15;
+
+        if ((isYellowSpike && maxC > 80) || isYellowDominant) {
+            const thermonuclear = yellowDominance > 20;  // Ultra-aggressive mode
+
+            console.log(`\n☢️☢️☢️ ${thermonuclear ? 'THERMONUCLEAR' : 'NUCLEAR'} YELLOW MORPH TRIGGERED ☢️☢️☢️`);
+            console.log(`  Hue: ${maxCHue.toFixed(1)}° (target: 70-95°)`);
+            console.log(`  maxC: ${maxC.toFixed(1)} (threshold: 80)`);
+            console.log(`  avgC: ${meanC.toFixed(1)}`);
+            console.log(`  yellowDominance: ${yellowDominance.toFixed(1)}% (threshold: 15)`);
+            if (thermonuclear) {
+                console.log(`  🔥 THERMONUCLEAR MODE: yellowDominance > 20% - MAXIMUM AGGRESSION`);
+            }
+            console.log(`  Base archetype: ${archetype ? archetype.name : 'unknown'}`);
+            console.log(`  Base params BEFORE morph:`);
+            console.log(`    lWeight: ${params.lWeight}`);
+            console.log(`    cWeight: ${params.cWeight}`);
+            console.log(`    centroidStrategy: ${params.centroidStrategy}`);
+            console.log(`    paletteReduction: ${params.paletteReduction}`);
+            console.log(`    hueLockAngle: ${params.hueLockAngle}`);
+            console.log(`    enableHueGapAnalysis: ${params.enableHueGapAnalysis}`);
+
+            // Force SALIENCY to find highlights over volume
+            // (prevents 59.6% white substrate from dominating)
+            if (params.centroidStrategy !== 'SALIENCY') {
+                morphs.push(`yellow spike → centroidStrategy=SALIENCY`);
+                params.centroidStrategy = 'SALIENCY';
+                console.log(`  ✓ Forced centroidStrategy = SALIENCY`);
+            } else {
+                console.log(`  ✓ Already using SALIENCY strategy`);
+            }
+
+            // TARGETED YELLOW PROTECTION: Balance palette diversity with yellow sovereignty
+            // Strategy: Use MODERATE weights for palette discovery (so we get diverse colors)
+            //           Apply NUCLEAR protection via pixel assignment hue anchoring (already in engine)
+            //
+            // OLD APPROACH (too broad): lWeight=15, cWeight=1 → Found 3 yellows, collapsed everything else
+            // NEW APPROACH: lWeight=5, cWeight=2.5 → Diverse palette + targeted yellow protection
+            const originalLWeight = params.lWeight;
+            const originalCWeight = params.cWeight;
+
+            if (thermonuclear) {
+                // THERMONUCLEAR: Strong L-bias but not extreme (preserve palette diversity)
+                params.lWeight = 5.0;   // Strong L-sensitivity for yellow/orange separation
+                params.cWeight = 2.5;   // Moderate chroma weight (allows vibrant colors to survive)
+                morphs.push(`🔥 THERMONUCLEAR yellow weights → lWeight=5.0, cWeight=2.5 (balanced L supremacy)`);
+            } else {
+                // NUCLEAR: Moderate boost
+                params.lWeight = 3.5;   // Elevated L-weight
+                params.cWeight = 3.0;   // Keep chroma importance
+                morphs.push(`nuclear yellow weights → lWeight=3.5, cWeight=3.0 (moderate L boost)`);
+            }
+
+            // PREVENT MERGING: Yellow and Orange are separate species
+            if (params.hueLockAngle < 90) {
+                morphs.push(`yellow sovereignty → hueLockAngle=90° (effectively disables warm-quadrant pruning)`);
+                params.hueLockAngle = 90;
+            }
+
+            // DISABLE ALL PRUNING: Forbid consolidation entirely
+            if (params.paletteReduction > 0) {
+                morphs.push(`yellow preserve → paletteReduction=0 (DISABLE all pruning)`);
+                params.paletteReduction = 0;
+            }
+
+            // KEEP HUE-GAP ANALYSIS ENABLED: We need it to find blues/purples!
+            // The ghost shield (in PosterizationEngine) already protects gap-filled colors from pruning
+            // So we don't need to disable hue gap analysis entirely
+            if (!params.enableHueGapAnalysis) {
+                morphs.push(`yellow + diversity → enableHueGapAnalysis=true (find ALL hue gaps)`);
+                params.enableHueGapAnalysis = true;
+            }
+
+            // VIBRANCY MORPH: Exponential boost widens distance from muddy browns
+            params.vibrancyMode = 'exponential';
+            const targetVibrancyBoost = thermonuclear ? 1.8 : 1.5;
+            if (params.vibrancyBoost < targetVibrancyBoost) {
+                params.vibrancyBoost = targetVibrancyBoost;
+                morphs.push(`yellow vibrancy → vibrancyBoost=${targetVibrancyBoost}, mode=exponential`);
+            }
+
+            // DIAGNOSTIC: Log final morphed parameters
+            console.log(`\n  FINAL MORPHED PARAMETERS (Palette Discovery):`);
+            console.log(`    lWeight: ${params.lWeight} ${thermonuclear ? '🔥🔥🔥' : '⚡'} (moderate for diversity)`);
+            console.log(`    cWeight: ${params.cWeight} ${thermonuclear ? '🔥🔥🔥' : '⚡'} (allows vibrant colors)`);
+            console.log(`    centroidStrategy: ${params.centroidStrategy} ⚡`);
+            console.log(`    paletteReduction: ${params.paletteReduction} ⚡`);
+            console.log(`    hueLockAngle: ${params.hueLockAngle} ⚡`);
+            console.log(`    enableHueGapAnalysis: ${params.enableHueGapAnalysis} ⚡`);
+            console.log(`    vibrancyMode: ${params.vibrancyMode}`);
+            console.log(`    vibrancyBoost: ${params.vibrancyBoost} ${thermonuclear ? '🔥' : ''}`);
+            console.log(`  NOTE: Nuclear yellow protection via 1024× hue anchoring in pixel assignment`);
+            console.log(`☢️☢️☢️ END ${thermonuclear ? 'THERMONUCLEAR' : 'NUCLEAR'} YELLOW MORPH ☢️☢️☢️\n`);
+        }
+
+        // ================================================================
+        // MORPH 7B: HIGH-CHROMA NON-YELLOW SPIKES (Other vibrant colors)
+        // For blues, greens, magentas with extreme chroma but NOT in yellow zone
+        // ================================================================
+        else if (maxC > 120) {
+            console.log(`⚡ High-Chroma Spike (non-yellow): maxC=${maxC.toFixed(0)}, hue=${maxCHue.toFixed(0)}°`);
+
+            // Force SALIENCY
+            if (params.centroidStrategy !== 'SALIENCY') {
+                morphs.push(`chroma spike → centroidStrategy=SALIENCY`);
+                params.centroidStrategy = 'SALIENCY';
+            }
+
+            // Switch from "Chroma-Chasing" to "Tonal Ladder" for extreme spikes
+            if (maxC > 130) {
+                // Discovery Phase: LOW L-weight lets centroids find vibrant colors without grouping by brightness
+                params.lWeight = 1.2;
+                // Chroma chase: Find the saturation spikes first
+                params.cWeight = 5.0;
+                // Tone down aggressive boost to keep midtones natural
+                params.vibrancyBoost = 1.2;
+                // Force assignment engine to favor bright highlight plates
+                params.highlightBoost = 3.0;
+                morphs.push(`extreme chroma (${maxC.toFixed(0)}) → tonal ladder mode: lWeight=1.2, cWeight=5.0, highlightBoost=3.0`);
+            } else {
+                // Standard high-chroma handling (for maxC 120-130)
+                params.cWeight = Math.min(6.0, params.cWeight + 3.0);
+                params.lWeight = Math.max(0.3, params.lWeight - 0.5);
+                morphs.push(`non-yellow spike → cWeight=${params.cWeight.toFixed(1)}, lWeight=${params.lWeight.toFixed(1)}`);
+            }
+
+            // Moderate hue protection
+            params.hueLockAngle = Math.max(params.hueLockAngle, 35);
+            params.paletteReduction = Math.min(params.paletteReduction, 4.0);
+        }
+
+        // ================================================================
+        // MORPH 8: ADAPTIVE HUE PROTECTION (High Dynamic Range)
+        // High K requires wider hue locks and lower palette reduction
+        // Prevents vibrant spikes from merging into neutral midtones
+        // ================================================================
+        if (k > 90) {
+            const originalAngle = params.hueLockAngle;
+            const originalReduction = params.paletteReduction;
+
+            params.hueLockAngle = Math.max(params.hueLockAngle, 35);
+            params.paletteReduction = Math.min(params.paletteReduction, 4.0);
+
+            if (originalAngle !== params.hueLockAngle || originalReduction !== params.paletteReduction) {
+                morphs.push(`high K (${k.toFixed(0)}) → hueLockAngle ${originalAngle}→${params.hueLockAngle}, paletteReduction ${originalReduction.toFixed(1)}→${params.paletteReduction.toFixed(1)}`);
+            }
+        }
+
+        // ================================================================
+        // MORPH 9: AUTO-DITHER FOR TONAL COMPLEXITY
+        // Complex photographic images need dithering for smooth gradients
+        // ================================================================
+        if (l_std_dev > 15 && params.ditherType === 'none') {
+            params.ditherType = 'BlueNoise';
+            morphs.push(`complex tones (σL=${l_std_dev.toFixed(1)}) → ditherType=BlueNoise`);
+        }
+
+        // ================================================================
+        // MORPH 10: HIGHLIGHT BOOST FOR YELLOW DETECTION
+        // Increase highlight sensitivity for capturing small bright yellow areas
+        // ================================================================
+        if (maxC > 100 && meanC < 30) {
+            const originalHighlightBoost = params.highlightBoost;
+            params.highlightBoost = Math.max(params.highlightBoost, 2.2);
+
+            if (originalHighlightBoost !== params.highlightBoost) {
+                morphs.push(`yellow spike potential → highlightBoost ${originalHighlightBoost.toFixed(1)}→${params.highlightBoost.toFixed(1)}`);
+            }
+        }
+
+        // Log morphs if any were applied
+        if (morphs.length > 0) {
+            console.log(`🔀 Dynamic Morphs (${morphs.length}):`);
+            morphs.forEach(m => console.log(`   - ${m}`));
+        }
+
+        // DIAGNOSTIC: Final parameter check before return
+        console.log(`\n📤 RETURNING PARAMETERS TO ENGINE:`);
+        console.log(`   lWeight: ${params.lWeight}`);
+        console.log(`   cWeight: ${params.cWeight}`);
+        console.log(`   centroidStrategy: ${params.centroidStrategy}`);
+        console.log(`   paletteReduction: ${params.paletteReduction}`);
+        console.log(`   hueLockAngle: ${params.hueLockAngle}`);
+        console.log(`   enableHueGapAnalysis: ${params.enableHueGapAnalysis}\n`);
+
+        return params;
+    }
+
+    /**
+     * Generate configuration using archetype baselines with dynamic morphing
+     * @param {Object} dna - Image DNA
+     * @param {Array} archetypes - Loaded archetype configurations
+     * @param {Object} options - Generation options
+     * @returns {Object} Complete configuration with morphed parameters
+     */
+    static generateFromArchetypes(dna, archetypes, options = {}) {
+        // ================================================================
+        // 1. FIND NEAREST ARCHETYPE (Baseline)
+        // ================================================================
+        const { archetype, distance } = this.findNearestArchetype(dna, archetypes);
+
+        console.log(`🎯 Matched Archetype: ${archetype.name} (distance: ${distance.toFixed(1)})`);
+
+        // ================================================================
+        // 2. MAX CHROMA OVERRIDE (Before morphing)
+        // Force vibrant_tonal for extreme chroma spikes
+        // ================================================================
+        const maxC = dna.maxC || 0;
+        const k = dna.k || 0;
+        let selectedArchetype = archetype;
+
+        if (maxC > 120 && k > 80) {
+            const vibrantTonal = archetypes.find(a => a.id === 'vibrant_tonal');
+            if (vibrantTonal) {
+                console.log(`⚡ Max Chroma Override: maxC=${maxC.toFixed(1)}, K=${k.toFixed(1)} → Vibrant Tonal (was: ${archetype.name})`);
+                selectedArchetype = vibrantTonal;
+            }
+        }
+
+        // ================================================================
+        // 3. START WITH ARCHETYPE BASELINE
+        // ================================================================
+        let params = { ...selectedArchetype.parameters };
+
+        // ================================================================
+        // 4. APPLY DYNAMIC MORPHING
+        // Adjust parameters based on DNA deviations
+        // ================================================================
+        params = this.applyDynamicMorphing(params, dna, selectedArchetype);
+
+        // ================================================================
+        // 5. PREPROCESSING CONFIGURATION
+        // ================================================================
+        const preprocessingIntensity = options.preprocessingIntensity || 'auto';
+        const preprocessing = BilateralFilter.createPreprocessingConfig(
+            { ...dna, archetype: selectedArchetype.name },
+            options.imageData || null,
+            options.width || 0,
+            options.height || 0,
+            preprocessingIntensity
+        );
+
+        if (preprocessing.enabled) {
+            console.log(`🔧 Preprocessing: ${preprocessing.intensity} (${preprocessing.reason})`);
+        }
+
+        // ================================================================
+        // 6. LOG CONFIGURATION
+        // ================================================================
+        const l_std_dev = dna.l_std_dev !== undefined ? dna.l_std_dev : 25;
+        const meanC = dna.c || 20;
+        console.log(`🧬 DNA: L=${dna.l?.toFixed(1)}, C=${meanC.toFixed(1)}, K=${k.toFixed(1)}, σL=${l_std_dev.toFixed(1)}, maxC=${maxC.toFixed(1)}`);
+
+        // ================================================================
+        // 7. RETURN COMPLETE CONFIGURATION
+        // ================================================================
+        return {
+            // Identity
+            id: selectedArchetype.id,
+            name: selectedArchetype.name,
+            description: selectedArchetype.description || '',
+
+            // All parameters from archetype (with morphing applied)
+            ...params,
+
+            // Legacy fields
+            rangeClamp: [dna.minL || 0, dna.maxL || 100],
+
+            // Metadata
+            meta: {
+                archetype: selectedArchetype.name,
+                archetypeId: selectedArchetype.id,
+                peakChroma: maxC,
+                distance: distance,
+                bitDepth: dna.bitDepth || 8
+            },
+
+            // Preprocessing
+            preprocessing
+        };
+    }
 
     /**
      * Generate configuration from DNA analysis
@@ -60,6 +542,21 @@ class DynamicConfigurator {
      * @returns {Object} Complete configuration including ALL tunable parameters
      */
     static generate(dna, options = {}) {
+        // ================================================================
+        // 0. TRY ARCHETYPE-BASED GENERATION (New System)
+        // ================================================================
+        const archetypes = this.loadArchetypes();
+
+        if (archetypes) {
+            // Use archetype baseline + dynamic morphing approach
+            return this.generateFromArchetypes(dna, archetypes, options);
+        }
+
+        // ================================================================
+        // FALLBACK: Legacy hardcoded generation
+        // ================================================================
+        console.log('ℹ️  Using legacy parameter generation (archetypes not found)');
+
         // ================================================================
         // 1. CLASSIFY ARCHETYPE
         // ================================================================
@@ -228,7 +725,7 @@ class DynamicConfigurator {
         // ================================================================
         // 11. COLOR COUNT LOGIC (The "Chroma Driver")
         // ================================================================
-        let idealColors = 8;
+        let idealColors = isPhoto ? 10 : 8;  // Photos start at 10 for better gradation
         if (meanC > 20) idealColors = 10;
         if (meanC > 50) idealColors = 12;
 

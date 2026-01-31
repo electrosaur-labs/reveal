@@ -28,7 +28,7 @@
     "highlightThreshold": 90,
     "highlightBoost": 1.3,
     "enablePaletteReduction": true,
-    "paletteReduction": 12.0,
+    "paletteReduction": 6.0,
     "hueLockAngle": 25,
     "shadowPoint": 15,
     "colorMode": "color",

@@ -19,19 +19,26 @@ class DNAGenerator {
      * @param {number} width - Image width
      * @param {number} height - Image height
      * @param {number} sampleStep - Sample every Nth pixel (default: 40 for speed)
-     * @returns {Object} DNA object with { l, c, k, maxC, minL, maxL }
+     * @returns {Object} DNA object with { l, c, k, maxC, maxCHue, minL, maxL, yellowDominance }
      *   - l: Average lightness (0-100)
      *   - c: Average chroma (color intensity)
      *   - k: Contrast (maxL - minL)
      *   - maxC: Maximum chroma found in image
+     *   - maxCHue: Hue angle (0-360°) of the peak chroma pixel
      *   - minL: Minimum lightness (darkest point)
      *   - maxL: Maximum lightness (brightest point)
+     *   - yellowDominance: Yellow dominance score (0-100), weighted by chroma
      */
     static generate(labPixels, width, height, sampleStep = 40) {
         let sumL = 0, sumA = 0, sumB = 0;
         let minL = 100, maxL = 0;
         let maxC = 0;
+        let maxCHue = 0;
         let sampleCount = 0;
+
+        // Yellow dominance tracking (50-100° hue range)
+        let yellowPixelWeightSum = 0;
+        let totalColorWeightSum = 0;
 
         // Detect 16-bit vs 8-bit data
         // 16-bit: Uint16Array with values 0-32768
@@ -70,7 +77,26 @@ class DNAGenerator {
 
             // Calculate chroma (color intensity) and track maximum
             const chroma = Math.sqrt(a * a + b * b);
-            if (chroma > maxC) maxC = chroma;
+            if (chroma > maxC) {
+                maxC = chroma;
+                // Calculate hue angle in degrees (0-360°)
+                maxCHue = (Math.atan2(b, a) * 180 / Math.PI + 360) % 360;
+            }
+
+            // Track yellow dominance (chroma-weighted)
+            // Only count pixels with meaningful chroma (>5) to exclude grays
+            if (chroma > 5) {
+                const hue = (Math.atan2(b, a) * 180 / Math.PI + 360) % 360;
+                const chromaWeight = Math.min(chroma / 100, 1.0); // Normalize to 0-1
+
+                totalColorWeightSum += chromaWeight;
+
+                // Yellow zone: 60-100° (PURE yellows, excludes oranges at 50-60°)
+                // This is intentionally narrow to avoid false positives from orange-dominant images
+                if (hue >= 60 && hue <= 100) {
+                    yellowPixelWeightSum += chromaWeight;
+                }
+            }
 
             sampleCount++;
         }
@@ -82,13 +108,21 @@ class DNAGenerator {
         const avgC = Math.sqrt(avgA * avgA + avgB * avgB);
         const contrast = maxL - minL;
 
+        // Calculate yellow dominance score (0-100)
+        // Represents percentage of chromatic pixels in yellow hue range
+        const yellowDominance = totalColorWeightSum > 0
+            ? (yellowPixelWeightSum / totalColorWeightSum) * 100
+            : 0;
+
         return {
             l: parseFloat(avgL.toFixed(1)),
             c: parseFloat(avgC.toFixed(1)),
             k: parseFloat(contrast.toFixed(1)),
             maxC: parseFloat(maxC.toFixed(1)),
+            maxCHue: parseFloat(maxCHue.toFixed(1)),
             minL: parseFloat(minL.toFixed(1)),
-            maxL: parseFloat(maxL.toFixed(1))
+            maxL: parseFloat(maxL.toFixed(1)),
+            yellowDominance: parseFloat(yellowDominance.toFixed(1))
         };
     }
 }

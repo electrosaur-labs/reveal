@@ -33,7 +33,7 @@
     "shadowPoint": 10,
     "colorMode": "color",
     "targetColorsSlider": 10,
-    "preserveWhite": false,
+    "preserveWhite": true,
     "preserveBlack": false,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,

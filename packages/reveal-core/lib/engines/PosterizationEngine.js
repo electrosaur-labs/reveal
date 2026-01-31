@@ -1571,21 +1571,21 @@ class PosterizationEngine {
             // Green colors have a < 0 in perceptual Lab space
             if (targetSectors.includes(sector)) {
                 greenCandidates++;
-                logger.log(`[Green Peek] Found color in sector ${sector}: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}, hue=${normHue.toFixed(0)}°`);
+                // logger.log(`[Green Peek] Found color in sector ${sector}: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}, hue=${normHue.toFixed(0)}°`);
                 return true;
             }
 
             // ADDITIONAL CHECK: Any color with negative a* and positive b* is green-ish
             // This catches greens that might be classified in adjacent sectors
             if (c.a < -3 && c.b > 0 && chroma > 3) {
-                logger.log(`[Green Peek] Found green-axis color: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}`);
+                // logger.log(`[Green Peek] Found green-axis color: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}`);
                 return true;
             }
         }
 
         // Log diagnostic info if no green found
         if (lowChromaSkips > sampleSize * 0.8) {
-            logger.log(`[Green Peek] Box has mostly low-chroma colors (${lowChromaSkips}/${sampleSize} skipped, threshold=${chromaThreshold})`);
+            // logger.log(`[Green Peek] Box has mostly low-chroma colors (${lowChromaSkips}/${sampleSize} skipped, threshold=${chromaThreshold})`);
         }
 
         return false;
@@ -1648,18 +1648,18 @@ class PosterizationEngine {
         if (isArchiveMode) {
             if (!greenSector3Covered && !greenSector4Covered) {
                 // Check if box contains ANY green signals (sectors 3 or 4)
-                logger.log(`[Green Peek] Checking box with ${box.colors.length} colors (threshold=${GREEN_PEEK_THRESHOLD}, greenEnergy=${greenEnergy.toFixed(1)}%)`);
+                // logger.log(`[Green Peek] Checking box with ${box.colors.length} colors (threshold=${GREEN_PEEK_THRESHOLD}, greenEnergy=${greenEnergy.toFixed(1)}%)`);
                 const hasGreenSignal = this._boxContainsHueSector(box.colors, [3, 4], GREEN_PEEK_THRESHOLD);
 
                 if (hasGreenSignal && greenEnergy > 0.1) {
                     multiplier = GREEN_PEEK_MULTIPLIER;
-                    logger.log(`[Green Peek] 🌿 Box contains hidden green signal (${greenEnergy.toFixed(1)}% image energy) - ${multiplier}× boost`);
+                    // logger.log(`[Green Peek] 🌿 Box contains hidden green signal (${greenEnergy.toFixed(1)}% image energy) - ${multiplier}× boost`);
                     return basePriority * multiplier;  // Early return with boost
                 } else if (hasGreenSignal) {
-                    logger.log(`[Green Peek] ⚠️ Green signal found but image greenEnergy too low (${greenEnergy.toFixed(1)}%)`);
+                    // logger.log(`[Green Peek] ⚠️ Green signal found but image greenEnergy too low (${greenEnergy.toFixed(1)}%)`);
                 }
             } else {
-                logger.log(`[Green Peek] Skipped - green sectors already covered (3:${greenSector3Covered}, 4:${greenSector4Covered})`);
+                // logger.log(`[Green Peek] Skipped - green sectors already covered (3:${greenSector3Covered}, 4:${greenSector4Covered})`);
             }
         }
 
@@ -2154,8 +2154,28 @@ class PosterizationEngine {
 
             diag.highChroma++;
 
-            // If this bin already has a sample, only replace if this one is more saturated
-            if (binSamples[binIdx] && binSamples[binIdx].chroma >= chroma) continue;
+            // If this bin already has a sample, decide whether to replace it
+            // For Yellow sector (60-90°): prioritize lightness + hue accuracy over chroma
+            if (binSamples[binIdx]) {
+                const isYellow = binIdx === 2; // Sector 2 = Yellow (60-90°)
+
+                if (isYellow) {
+                    // YELLOW-SPECIFIC: Score by lightness + hue accuracy, not raw chroma
+                    // Target pure yellow at 90°, prioritize brightness
+                    const targetYellow = 90;
+                    const hueDistCurrent = Math.abs(hue - targetYellow);
+                    const hueDistExisting = Math.abs(binSamples[binIdx].hue - targetYellow);
+
+                    // Scoring: L*10 (lightness is most important) + hue accuracy bonus + small chroma bonus
+                    const scoreCurrent = L * 10 + (15 - hueDistCurrent) * 5 + chroma * 0.1;
+                    const scoreExisting = binSamples[binIdx].L * 10 + (15 - hueDistExisting) * 5 + binSamples[binIdx].chroma * 0.1;
+
+                    if (scoreExisting >= scoreCurrent) continue; // Keep existing
+                } else {
+                    // Non-yellow: Keep highest chroma (original behavior)
+                    if (binSamples[binIdx].chroma >= chroma) continue;
+                }
+            }
 
             // Check if this color is distinct from current palette
             let minDistanceFromPalette = Infinity;
@@ -2179,7 +2199,7 @@ class PosterizationEngine {
             }
 
             if (isDistinct) {
-                binSamples[binIdx] = {L, a, b, chroma};
+                binSamples[binIdx] = {L, a, b, chroma, hue};
             } else {
                 diag.failedDistinctness++;
             }
@@ -3273,6 +3293,9 @@ class PosterizationEngine {
             logger.log(`✓ Palette at or below target (${curatedPaletteLab.length} ≤ ${targetColors}) - skipping pruning`);
         }
 
+        // GHOST SHIELD: Track gap-filled color indices for protection from density floor
+        const gapFilledIndices = [];
+
         // ARTIST-CENTRIC / HUE-AWARE MODEL: Check for hue gaps AFTER perceptual snap & pruning
         // This prevents forced colors from being merged away by the snap/prune process
         // CONDITIONAL: Only run if enableHueGapAnalysis is true (Reveal Mode)
@@ -3355,8 +3378,16 @@ class PosterizationEngine {
                         logger.log(`[Hue Analysis] No distinct colors found for gaps (all candidates < ΔE ${MIN_GAP_DISTANCE} from palette)`);
                     } else {
                         // Add forced colors to curated palette (AFTER snap, so they won't be merged)
+                        const baseLength = curatedPaletteLab.length;
                         curatedPaletteLab = curatedPaletteLab.concat(forcedColors);
-                        logger.log(`[Hue Analysis] ✓ Palette expanded: ${curatedPaletteLab.length - forcedColors.length} → ${curatedPaletteLab.length} colors (${candidateColors.length - forcedColors.length} candidates rejected)`);
+
+                        // Record indices of gap-filled colors for Ghost Shield protection
+                        for (let i = baseLength; i < curatedPaletteLab.length; i++) {
+                            gapFilledIndices.push(i);
+                        }
+
+                        logger.log(`[Hue Analysis] ✓ Palette expanded: ${baseLength} → ${curatedPaletteLab.length} colors (${candidateColors.length - forcedColors.length} candidates rejected)`);
+                        logger.log(`[Ghost Shield] 🛡️ Protecting ${gapFilledIndices.length} gap-filled color(s) from density floor`);
 
                         // Re-check coverage
                         const { coveredSectors: newCoverage } = this._analyzePaletteHueCoverage(curatedPaletteLab);
@@ -3387,21 +3418,12 @@ class PosterizationEngine {
 
             if (coverage >= MIN_PRESERVED_COVERAGE) {
                 const absoluteWhite = { L: 100, a: 0, b: 0 };
-                const UNIFY_THRESHOLD = PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
 
-                // Check if palette already has a highlight color close to white
-                const existingMatch = curatedPaletteLab.find(color =>
-                    PosterizationEngine._labDistance(color, absoluteWhite) < UNIFY_THRESHOLD
-                );
-
-                if (existingMatch) {
-                    const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteWhite);
-                    logger.log(`  🔗 White unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)})`);
-                } else {
-                    preservedColors.push(absoluteWhite);
-                    actuallyPreservedWhite = true;
-                    logger.log(`  + Added white to palette (${pixelCount} pixels, ${(coverage * 100).toFixed(2)}%)`);
-                }
+                // ALWAYS add white as preserved color when explicitly requested
+                // Don't unify with near-whites - user wants distinct substrate layer
+                preservedColors.push(absoluteWhite);
+                actuallyPreservedWhite = true;
+                logger.log(`  + Added white to palette (${pixelCount} pixels, ${(coverage * 100).toFixed(2)}%)`);
             } else {
                 logger.log(`  🗑️ Skipped white - below viability threshold (${pixelCount} pixels, ${(coverage * 100).toFixed(3)}% < ${(MIN_PRESERVED_COVERAGE * 100).toFixed(1)}%)`);
             }
@@ -3412,21 +3434,12 @@ class PosterizationEngine {
 
             if (coverage >= MIN_PRESERVED_COVERAGE) {
                 const absoluteBlack = { L: 0, a: 0, b: 0 };
-                const UNIFY_THRESHOLD = PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
 
-                // Check if palette already has a deep shadow color close to black
-                const existingMatch = curatedPaletteLab.find(color =>
-                    PosterizationEngine._labDistance(color, absoluteBlack) < UNIFY_THRESHOLD
-                );
-
-                if (existingMatch) {
-                    const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteBlack);
-                    logger.log(`  🔗 Black unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)})`);
-                } else {
-                    preservedColors.push(absoluteBlack);
-                    actuallyPreservedBlack = true;
-                    logger.log(`  + Added black to palette (${pixelCount} pixels, ${(coverage * 100).toFixed(2)}%)`);
-                }
+                // ALWAYS add black as preserved color when explicitly requested
+                // Don't unify with near-blacks - user wants distinct black ink layer
+                preservedColors.push(absoluteBlack);
+                actuallyPreservedBlack = true;
+                logger.log(`  + Added black to palette (${pixelCount} pixels, ${(coverage * 100).toFixed(2)}%)`);
             } else {
                 logger.log(`  🗑️ Skipped black - below viability threshold (${pixelCount} pixels, ${(coverage * 100).toFixed(3)}% < ${(MIN_PRESERVED_COVERAGE * 100).toFixed(1)}%)`);
             }
@@ -3561,6 +3574,16 @@ class PosterizationEngine {
                             const rawA = pixels[idx + 1];
                             const rawB = pixels[idx + 2];
 
+                            // HUE-AXIS ANCHORING: Convert 16-bit to perceptual for hue calculation
+                            const pL = (rawL / 32768) * 100;
+                            const pA = ((rawA / 128) - 128);
+                            const pB = ((rawB / 128) - 128);
+                            const pixelChroma = Math.sqrt(pA * pA + pB * pB);
+                            const pixelHue = pixelChroma > 5 ? (Math.atan2(pB, pA) * 180 / Math.PI + 360) % 360 : -1;
+                            const isYellowPixel = pixelHue >= 60 && pixelHue <= 100;
+                            const isGreenPixel = pixelHue >= 120 && pixelHue <= 150;
+                            const isBluePixel = pixelHue >= 210 && pixelHue <= 270;
+
                             for (let j = 0; j < paletteLength; j++) {
                                 const target16 = palette16[j];
                                 const dL = rawL - target16.L;
@@ -3568,7 +3591,66 @@ class PosterizationEngine {
                                 const dB = rawB - target16.b;
 
                                 // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
-                                const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+                                let dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+
+                                // TARGET-BASED HUE ANCHORING: Penalize palette colors that drift from TRUE YELLOW
+                                // This prevents orange (H=64°) from stealing yellow pixels by being "closer"
+                                // to orange-yellow transitionals (H=70°). Instead, we anchor ALL yellow pixels
+                                // to prefer the palette color closest to 90° (true yellow).
+                                if (isYellowPixel && !grayscaleOnly) {
+                                    const target = finalPaletteLab[j];
+                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
+                                    if (targetChroma > 5) {
+                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
+                                        // Calculate how far THIS PALETTE COLOR drifts from true yellow (90°)
+                                        const trueYellow = 90;
+                                        let paletteDrift = Math.abs(targetHue - trueYellow);
+                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+
+                                        // Penalize palette colors that are >15° away from true yellow
+                                        // Color 1 (H=64°): drift=26° → MASSIVE penalty
+                                        // Color 7 (H=89°): drift=1° → tiny penalty
+                                        if (paletteDrift > 15) {
+                                            dist += (paletteDrift * paletteDrift * 256 * 128 * 128);
+                                        }
+                                    }
+                                }
+
+                                // GREEN HUE ANCHORING: Protect greens from being absorbed by yellows or cyans
+                                // Green zone: 120-150° (true green at 135°)
+                                if (isGreenPixel && !grayscaleOnly) {
+                                    const target = finalPaletteLab[j];
+                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
+                                    if (targetChroma > 5) {
+                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
+                                        const trueGreen = 135;
+                                        let paletteDrift = Math.abs(targetHue - trueGreen);
+                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+
+                                        if (paletteDrift > 15) {
+                                            dist += (paletteDrift * paletteDrift * 256 * 128 * 128);
+                                        }
+                                    }
+                                }
+
+                                // BLUE HUE ANCHORING: INCREASED PROTECTION (2× stronger than yellow/green)
+                                // Prevents purples (H=280°) and cyans (H=180°) from stealing blue pixels
+                                // Anchors to true blue (240°)
+                                if (isBluePixel && !grayscaleOnly) {
+                                    const target = finalPaletteLab[j];
+                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
+                                    if (targetChroma > 5) {
+                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
+                                        const trueBlue = 240;
+                                        let paletteDrift = Math.abs(targetHue - trueBlue);
+                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+
+                                        if (paletteDrift > 15) {
+                                            // 2× stronger than yellow/green (512 vs 256)
+                                            dist += (paletteDrift * paletteDrift * 512 * 128 * 128);
+                                        }
+                                    }
+                                }
 
                                 if (dist < minDistance) {
                                     minDistance = dist;
@@ -3581,6 +3663,13 @@ class PosterizationEngine {
                             const pA = labPixels[idx + 1];
                             const pB = labPixels[idx + 2];
 
+                            // HUE-AXIS ANCHORING: Calculate pixel hue for yellow zone detection
+                            const pixelChroma = Math.sqrt(pA * pA + pB * pB);
+                            const pixelHue = pixelChroma > 5 ? (Math.atan2(pB, pA) * 180 / Math.PI + 360) % 360 : -1;
+                            const isYellowPixel = pixelHue >= 60 && pixelHue <= 100;
+                            const isGreenPixel = pixelHue >= 120 && pixelHue <= 150;
+                            const isBluePixel = pixelHue >= 210 && pixelHue <= 270;
+
                             for (let j = 0; j < paletteLength; j++) {
                                 const target = finalPaletteLab[j];
                                 const dL = pL - target.L;
@@ -3588,7 +3677,60 @@ class PosterizationEngine {
                                 const dB = pB - target.b;
 
                                 // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
-                                const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+                                let dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+
+                                // TARGET-BASED HUE ANCHORING: Penalize palette colors that drift from TRUE YELLOW
+                                // This prevents orange (H=64°) from stealing yellow pixels by being "closer"
+                                // to orange-yellow transitionals (H=70°). Instead, we anchor ALL yellow pixels
+                                // to prefer the palette color closest to 90° (true yellow).
+                                if (isYellowPixel && !grayscaleOnly) {
+                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
+                                    if (targetChroma > 5) {
+                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
+                                        // Calculate how far THIS PALETTE COLOR drifts from true yellow (90°)
+                                        const trueYellow = 90;
+                                        let paletteDrift = Math.abs(targetHue - trueYellow);
+                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+
+                                        // Penalize palette colors that are >15° away from true yellow
+                                        // Color 1 (H=64°): drift=26° → MASSIVE penalty
+                                        // Color 7 (H=89°): drift=1° → tiny penalty
+                                        if (paletteDrift > 15) {
+                                            dist += (paletteDrift * paletteDrift * 256);
+                                        }
+                                    }
+                                }
+
+                                // GREEN HUE ANCHORING: Protect greens (120-150°, target 135°)
+                                if (isGreenPixel && !grayscaleOnly) {
+                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
+                                    if (targetChroma > 5) {
+                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
+                                        const trueGreen = 135;
+                                        let paletteDrift = Math.abs(targetHue - trueGreen);
+                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+
+                                        if (paletteDrift > 15) {
+                                            dist += (paletteDrift * paletteDrift * 256);
+                                        }
+                                    }
+                                }
+
+                                // BLUE HUE ANCHORING: INCREASED PROTECTION (2× stronger)
+                                if (isBluePixel && !grayscaleOnly) {
+                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
+                                    if (targetChroma > 5) {
+                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
+                                        const trueBlue = 240;
+                                        let paletteDrift = Math.abs(targetHue - trueBlue);
+                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+
+                                        if (paletteDrift > 15) {
+                                            // 2× stronger than yellow/green
+                                            dist += (paletteDrift * paletteDrift * 512);
+                                        }
+                                    }
+                                }
 
                                 if (dist < minDistance) {
                                     minDistance = dist;
@@ -3619,12 +3761,48 @@ class PosterizationEngine {
         }
 
         // Apply density floor to remove ghost colors (<0.5% coverage)
-        // IMPORTANT: Never remove preserved colors (white/black) or substrate
+        // IMPORTANT: Never remove preserved colors (white/black), substrate, or gap-filled colors
         // Use actuallyPreserved flags - if a color was skipped by viability threshold, don't protect it
         const protectedIndices = new Set();
         if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
         if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
         if (substrateLab) protectedIndices.add(finalPaletteLab.length - 1);  // Substrate is always last
+
+        // GHOST SHIELD: Protect gap-filled colors from density floor pruning
+        // These colors were explicitly added to fill hue gaps and should survive
+        // at least one assignment pass, even if coverage is initially low
+        for (const idx of gapFilledIndices) {
+            protectedIndices.add(idx);
+        }
+        if (gapFilledIndices.length > 0) {
+            logger.log(`[Ghost Shield] 🛡️ Protecting ${gapFilledIndices.length} gap-filled color(s) at indices ${gapFilledIndices.join(', ')}`);
+        }
+
+        // YELLOW SHIELD: Protect yellow colors from density floor pruning
+        // Yellows are often found by median cut but have low initial coverage due to hue anchoring
+        // spreading pixels across similar oranges/greens. Protect them to allow assignment to redistribute.
+        const yellowIndices = [];
+        for (let i = 0; i < finalPaletteLab.length; i++) {
+            // Skip already protected indices
+            if (protectedIndices.has(i)) continue;
+
+            const lab = finalPaletteLab[i];
+            const chroma = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
+
+            // Only protect chromatic yellows (chroma > 15 to exclude beiges)
+            if (chroma > 15) {
+                const hue = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
+
+                // Yellow zone: 60-100° (same range as DNA yellowDominance)
+                if (hue >= 60 && hue <= 100) {
+                    yellowIndices.push(i);
+                    protectedIndices.add(i);
+                }
+            }
+        }
+        if (yellowIndices.length > 0) {
+            logger.log(`[Yellow Shield] ☀️ Protecting ${yellowIndices.length} yellow color(s) at indices ${yellowIndices.join(', ')}`);
+        }
 
         const densityResult = this._applyDensityFloor(
             assignments,

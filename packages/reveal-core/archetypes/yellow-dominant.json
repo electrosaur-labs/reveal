@@ -1,0 +1,43 @@
+{
+  "id": "yellow_dominant",
+  "name": "Yellow-Dominant / Citrus",
+  "description": "Images with extreme yellow presence (lemons, sunflowers, highlighters). Requires aggressive orange suppression and yellow protection to prevent vibrancy bullying.",
+  "centroid": {
+    "l": 85,
+    "c": 50,
+    "k": 70,
+    "l_std_dev": 20
+  },
+  "weights": {
+    "l": 2.0,
+    "c": 1.0,
+    "k": 1.0,
+    "l_std_dev": 0.5
+  },
+  "parameters": {
+    "engineType": "reveal",
+    "centroidStrategy": "SALIENCY",
+    "lWeight": 15.0,
+    "cWeight": 1.0,
+    "blackBias": 2.5,
+    "substrateMode": "auto",
+    "substrateTolerance": 4.5,
+    "vibrancyMode": "exponential",
+    "vibrancyBoost": 1.8,
+    "vibrancyThreshold": 15,
+    "highlightThreshold": 95,
+    "highlightBoost": 3.5,
+    "enablePaletteReduction": false,
+    "paletteReduction": 0,
+    "hueLockAngle": 90,
+    "shadowPoint": 10,
+    "colorMode": "color",
+    "targetColorsSlider": 8,
+    "preserveWhite": false,
+    "preserveBlack": false,
+    "ignoreTransparent": true,
+    "enableHueGapAnalysis": false,
+    "ditherType": "BlueNoise",
+    "maskProfile": "Gray Gamma 2.2"
+  }
+}
