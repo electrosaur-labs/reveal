@@ -3487,9 +3487,8 @@ class PosterizationEngine {
             });
 
             if (!hasMidToneGray) {
-                // Find the average L value of neutral pixels in the mid-tone range
-                // For now, use L=50 as a good mid-point between shadows and highlights
-                const darkGraySeed = { L: 50, a: 0, b: 0 };
+                // Inject dark gray at L=40 to match fur density and compete directly with blue (L≈42)
+                const darkGraySeed = { L: 40, a: 0, b: 0 };
                 curatedPaletteLab.push(darkGraySeed);
                 logger.log(`✓ Shadow Sovereignty: Injected dark gray centroid at L=${darkGraySeed.L} to compete with chromatic mid-tones`);
             }
