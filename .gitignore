@@ -38,3 +38,4 @@ temp/
 # Data can be regenerated from public domain sources using conversion scripts
 packages/reveal-batch/data/CQ100_v4/
 packages/reveal-batch/data/SP100/
+packages/reveal-batch/data/TESTIMAGES/
