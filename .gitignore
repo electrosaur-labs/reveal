@@ -24,6 +24,7 @@ Thumbs.db
 test-results/
 .vitest/
 **/test/performance/results/
+**/test/output/
 
 # Temporary
 tmp/
