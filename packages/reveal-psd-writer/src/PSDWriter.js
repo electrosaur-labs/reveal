@@ -25,7 +25,7 @@ class PSDWriter {
         this.bitsPerChannel = options.bitsPerChannel || 8;
         this.layers = [];
         this.nextLayerID = 1;  // Counter for unique layer IDs
-        this.thumbnail = null;  // Optional JPEG thumbnail for Resource 1036
+        this.thumbnail = null;  // Optional JPEG thumbnail for Resource 1033
         this.compression = options.compression !== undefined ? options.compression : 'rle';  // 'none' or 'rle'
         this.flatMode = options.flat || false;  // Flat mode: 3 channels, minimal layers, better QuickLook support
         this.compositePixels = null;  // For flat mode: store composite pixels directly
@@ -364,7 +364,7 @@ class PSDWriter {
     }
 
     /**
-     * Set thumbnail for Resource 1036 (Adobe dialogs) and Finder preview
+     * Set thumbnail for Resource 1033 (Adobe dialogs) and Finder preview
      *
      * @param {Object} options - Thumbnail options
      * @param {Buffer} options.jpegData - JPEG-encoded thumbnail image (RGB)
@@ -501,7 +501,7 @@ class PSDWriter {
         );
         writer.writeBytes(displayInfo);
 
-        // Resource 1036: Thumbnail (JPEG) - for Adobe dialogs and Finder preview
+        // Resource 1033: Thumbnail (JPEG) - for Adobe dialogs and Finder preview
         if (this.thumbnail) {
             this._writeThumbnailResource(writer);
         }
@@ -512,7 +512,7 @@ class PSDWriter {
     }
 
     /**
-     * Write Resource 1036: Thumbnail Resource
+     * Write Resource 1033: Thumbnail Resource
      *
      * Format: 28-byte header + JPEG data
      * This provides thumbnails for Adobe "Open" dialogs and macOS Finder
@@ -545,7 +545,7 @@ class PSDWriter {
 
         // Write 8BIM resource block
         writer.writeString('8BIM');     // Signature
-        writer.writeUint16(1036);       // ID: Thumbnail Resource
+        writer.writeUint16(1036);       // ID: Thumbnail Resource (working PS files use 1036)
         writer.writeUint8(0);           // Name length (0 = no name)
         writer.writeUint8(0);           // Padding
 
@@ -1078,6 +1078,9 @@ class PSDWriter {
         const pixelLayer = this.flatMode ? null : this.layers.find(layer => layer.type === 'pixel');
         const pixelSource = this.flatMode ? this.compositePixels : (pixelLayer ? pixelLayer.pixels : null);
 
+        // Check if flat mode composite is native 16-bit (6 bytes/pixel instead of 3)
+        const compositeIs16bit = this.flatMode && this.compositePixels16bit;
+
         const useRLE = this.compression === 'rle';
 
         if (useRLE) {
@@ -1097,7 +1100,7 @@ class PSDWriter {
                     // b channel
                     const b_channel = Buffer.alloc(pixelCount * 2);
 
-                    if (pixelLayer && pixelLayer.pixels16bit) {
+                    if ((pixelLayer && pixelLayer.pixels16bit) || compositeIs16bit) {
                         // Native 16-bit: copy directly (6 bytes per pixel)
                         for (let i = 0; i < pixelCount; i++) {
                             L_channel[i * 2] = pixelSource[i * 6];
@@ -1191,7 +1194,7 @@ class PSDWriter {
 
             if (this.bitsPerChannel === 16) {
                 if (pixelSource) {
-                    if (pixelLayer && pixelLayer.pixels16bit) {
+                    if ((pixelLayer && pixelLayer.pixels16bit) || compositeIs16bit) {
                         // Native 16-bit: write directly (6 bytes per pixel)
                         // L channel (planar)
                         for (let i = 0; i < pixelCount; i++) {
