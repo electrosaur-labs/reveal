@@ -3487,8 +3487,8 @@ class PosterizationEngine {
             });
 
             if (!hasMidToneGray) {
-                // Inject dark gray at L=40 to match fur density and compete directly with blue (L≈42)
-                const darkGraySeed = { L: 40, a: 0, b: 0 };
+                // Inject dark gray at L=42 to EXACTLY match blue centroid, eliminating tonal advantage
+                const darkGraySeed = { L: 42, a: 0, b: 0 };
                 curatedPaletteLab.push(darkGraySeed);
                 logger.log(`✓ Shadow Sovereignty: Injected dark gray centroid at L=${darkGraySeed.L} to compete with chromatic mid-tones`);
             }

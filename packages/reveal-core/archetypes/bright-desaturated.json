@@ -48,12 +48,12 @@
       "then": {
         "useAchromaticProjection": true,
         "hardNeutralLock": true,
-        "neutralSovereigntyThreshold": 15.0,
-        "neutralCentroidClampThreshold": 15.0,
-        "lWeight": 30.0,
+        "neutralSovereigntyThreshold": 18.0,
+        "neutralCentroidClampThreshold": 18.0,
+        "lWeight": 40.0,
         "cWeight": 0.0,
         "blackBias": 6.0,
-        "description": "Wide-Gate Isolation: Forces ALL low-saturation pixels (chroma < 15.0) to use L-only distance with 30.0× lightness weighting, preventing 'ghost swatches' like desaturated blue-pink grays from attracting fur pixels. Centroid clamping snaps weak-chroma clusters to pure gray."
+        "description": "Wide-Gate Isolation: Forces ALL low-saturation pixels (chroma < 18.0) to use L-only distance with 40.0× lightness weighting, preventing 'ghost swatches' like desaturated blue-pink grays from attracting fur pixels. Centroid clamping snaps weak-chroma clusters to pure gray."
       }
     },
     {
