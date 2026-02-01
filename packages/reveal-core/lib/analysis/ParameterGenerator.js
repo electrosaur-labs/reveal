@@ -46,6 +46,7 @@
  */
 
 const BilateralFilter = require('../preprocessing/BilateralFilter');
+const ConstraintEvaluator = require('./ConstraintEvaluator');
 
 // Node.js modules - only available in Node environment
 let fs, path;
@@ -59,6 +60,143 @@ try {
 }
 
 class DynamicConfigurator {
+
+    /**
+     * Get nested value from DNA object
+     * @param {Object} dna - DNA object
+     * @param {string} path - Property path (e.g., "sectors.yellow.lMean")
+     * @returns {*} Value at path or undefined
+     */
+    static getNestedValue(dna, path) {
+        const parts = path.split('.');
+        let value = dna;
+        for (const part of parts) {
+            if (value === undefined || value === null) {
+                return undefined;
+            }
+            value = value[part];
+        }
+        return value;
+    }
+
+    /**
+     * Scale a value based on input/output ranges
+     * @param {number} inputValue - Input value
+     * @param {Array} inputRange - [min, max] input range
+     * @param {Array} outputRange - [min, max] output range
+     * @param {boolean} clamp - Whether to clamp output to range
+     * @returns {number} Scaled value
+     */
+    static scaleValue(inputValue, inputRange, outputRange, clamp = true) {
+        const [inMin, inMax] = inputRange;
+        const [outMin, outMax] = outputRange;
+
+        let normalized = (inputValue - inMin) / (inMax - inMin);
+        if (clamp) {
+            normalized = Math.max(0, Math.min(1, normalized));
+        }
+
+        return outMin + normalized * (outMax - outMin);
+    }
+
+    /**
+     * Apply DNA scales to parameters (continuous adjustments)
+     * @param {Object} params - Parameter object (modified in place)
+     * @param {Array} scales - Array of scale definitions
+     * @param {Object} dna - DNA object
+     */
+    static applyDNAScales(params, scales, dna) {
+        if (!scales || !Array.isArray(scales)) {
+            return;
+        }
+
+        for (const scale of scales) {
+            const inputValue = this.getNestedValue(dna, scale.by);
+            if (inputValue === undefined || inputValue === null) {
+                console.warn(`⚠️  DNA scale: property "${scale.by}" not found in DNA, skipping`);
+                continue;
+            }
+
+            const scaledValue = this.scaleValue(
+                inputValue,
+                scale.inputRange,
+                scale.outputRange,
+                scale.clamp !== false // Default to true
+            );
+
+            params[scale.param] = scaledValue;
+
+            if (scale.name) {
+                console.log(`🎚️  DNA Scale: ${scale.name} → ${scale.param}=${scaledValue.toFixed(2)} (input: ${inputValue.toFixed(1)})`);
+            }
+        }
+    }
+
+    /**
+     * Apply DNA constraints to parameters (conditional overrides)
+     * @param {Object} params - Parameter object (modified in place)
+     * @param {Array} constraints - Array of constraint definitions
+     * @param {Object} dna - DNA object
+     */
+    static applyDNAConstraints(params, constraints, dna) {
+        if (!constraints || !Array.isArray(constraints)) {
+            return;
+        }
+
+        const evaluator = new ConstraintEvaluator();
+
+        // Sort by priority (higher priority = later application = wins)
+        const sortedConstraints = [...constraints].sort((a, b) => {
+            const aPriority = a.priority || 100;
+            const bPriority = b.priority || 100;
+            return aPriority - bPriority;
+        });
+
+        for (const constraint of sortedConstraints) {
+            try {
+                const condition = evaluator.evaluate(constraint.if, dna);
+
+                if (condition) {
+                    console.log(`✅ DNA Constraint: ${constraint.name || 'unnamed'} (condition met)`);
+
+                    // Apply all parameter overrides in "then" block
+                    Object.assign(params, constraint.then);
+                }
+            } catch (error) {
+                console.warn(`⚠️  Failed to evaluate constraint "${constraint.name}": ${error.message}`);
+            }
+        }
+    }
+
+    /**
+     * Normalize DNA to ensure backward compatibility
+     * Converts v2.0 DNA to include legacy fields if missing
+     * @param {Object} dna - DNA object (may be v1.0 or v2.0)
+     * @returns {Object} Normalized DNA with legacy fields
+     */
+    static normalizeDNA(dna) {
+        // If already has legacy fields, return as-is
+        if ('l' in dna && 'c' in dna && 'k' in dna) {
+            return dna;
+        }
+
+        // v2.0 format: extract legacy fields from global
+        if (dna.global) {
+            return {
+                ...dna,
+                l: dna.global.l,
+                c: dna.global.c,
+                k: dna.global.k,
+                l_std_dev: dna.global.l_std_dev,
+                maxC: dna.global.maxC,
+                maxCHue: dna.global.maxCHue,
+                minL: dna.global.minL,
+                maxL: dna.global.maxL
+            };
+        }
+
+        return dna;
+    }
 
     /**
      * Load archetype configurations from JSON files
@@ -438,12 +576,18 @@ class DynamicConfigurator {
 
     /**
      * Generate configuration using archetype baselines with dynamic morphing
-     * @param {Object} dna - Image DNA
+     * @param {Object} dna - Image DNA (v1.0 or v2.0)
      * @param {Array} archetypes - Loaded archetype configurations
      * @param {Object} options - Generation options
+     * @param {boolean} options.skipLegacyMorphing - Skip legacy morphing (for testing constraints)
      * @returns {Object} Complete configuration with morphed parameters
      */
     static generateFromArchetypes(dna, archetypes, options = {}) {
+        // ================================================================
+        // 0. NORMALIZE DNA (Ensure backward compatibility)
+        // ================================================================
+        dna = this.normalizeDNA(dna);
+
         // ================================================================
         // 1. FIND NEAREST ARCHETYPE (Baseline)
         // ================================================================
@@ -473,13 +617,32 @@ class DynamicConfigurator {
         let params = { ...selectedArchetype.parameters };
 
         // ================================================================
-        // 4. APPLY DYNAMIC MORPHING
-        // Adjust parameters based on DNA deviations
+        // 4. APPLY DNA SCALES (Continuous adjustments)
         // ================================================================
-        params = this.applyDynamicMorphing(params, dna, selectedArchetype);
+        if (selectedArchetype.dna_scales) {
+            console.log(`🎚️  Applying DNA scales...`);
+            this.applyDNAScales(params, selectedArchetype.dna_scales, dna);
+        }
 
         // ================================================================
-        // 5. PREPROCESSING CONFIGURATION
+        // 5. APPLY DNA CONSTRAINTS (Conditional overrides)
+        // ================================================================
+        if (selectedArchetype.dna_constraints) {
+            console.log(`📋 Evaluating DNA constraints...`);
+            this.applyDNAConstraints(params, selectedArchetype.dna_constraints, dna);
+        }
+
+        // ================================================================
+        // 6. APPLY LEGACY MORPHING (During migration only)
+        // ================================================================
+        if (!options.skipLegacyMorphing) {
+            params = this.applyDynamicMorphing(params, dna, selectedArchetype);
+        } else {
+            console.log(`⏭️  Skipping legacy morphing (constraint-only mode)`);
+        }
+
+        // ================================================================
+        // 7. PREPROCESSING CONFIGURATION
         // ================================================================
         const preprocessingIntensity = options.preprocessingIntensity || 'auto';
         const preprocessing = BilateralFilter.createPreprocessingConfig(
@@ -495,14 +658,14 @@ class DynamicConfigurator {
         }
 
         // ================================================================
-        // 6. LOG CONFIGURATION
+        // 8. LOG CONFIGURATION
         // ================================================================
         const l_std_dev = dna.l_std_dev !== undefined ? dna.l_std_dev : 25;
         const meanC = dna.c || 20;
         console.log(`🧬 DNA: L=${dna.l?.toFixed(1)}, C=${meanC.toFixed(1)}, K=${k.toFixed(1)}, σL=${l_std_dev.toFixed(1)}, maxC=${maxC.toFixed(1)}`);
 
         // ================================================================
-        // 7. RETURN COMPLETE CONFIGURATION
+        // 9. RETURN COMPLETE CONFIGURATION
         // ================================================================
         return {
             // Identity

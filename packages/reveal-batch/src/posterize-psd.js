@@ -20,9 +20,11 @@ const path = require('path');
 const Reveal = require('@reveal/core');
 const { PSDWriter } = require('@reveal/psd-writer');
 const { readPsd } = require('@reveal/psd-reader');
-const DynamicConfigurator = require('./DynamicConfigurator');
 const MetricsCalculator = require('./MetricsCalculator');
 const chalk = require('chalk');
+
+// Import Rich DNA v2.0 generator and archetype-based configuration
+const { DNAGenerator, ParameterGenerator } = Reveal;
 
 /**
  * Convert 8-bit Lab encoding to engine 16-bit Lab encoding
@@ -118,56 +120,6 @@ function reconstructProcessedLab(colorIndices, paletteLab, pixelCount) {
     return processedLab;
 }
 
-/**
- * Calculate image DNA from 8-bit Lab data
- * Returns comprehensive DNA metrics for the Expert System Configurator
- */
-function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
-    const pixelCount = width * height;
-    let sumL = 0, sumC = 0;
-    let minL = 100, maxL = 0, maxC = 0;
-    let sampleCount = 0;
-    let lowChromaCount = 0;  // Pixels with C < 15 (muted)
-    const lValues = [];
-
-    for (let i = 0; i < pixelCount; i += sampleStep) {
-        // Convert 8-bit to perceptual
-        const L = (lab8bit[i * 3] / 255) * 100;
-        const a = lab8bit[i * 3 + 1] - 128;
-        const b = lab8bit[i * 3 + 2] - 128;
-        const C = Math.sqrt(a * a + b * b);
-
-        sumL += L;
-        sumC += C;
-        lValues.push(L);
-        if (L < minL) minL = L;
-        if (L > maxL) maxL = L;
-        if (C > maxC) maxC = C;
-        if (C < 15) lowChromaCount++;  // Track muted pixels
-        sampleCount++;
-    }
-
-    const avgL = sumL / sampleCount;
-    const avgC = sumC / sampleCount;
-
-    // Calculate L standard deviation
-    const lVariance = lValues.reduce((sum, l) => sum + Math.pow(l - avgL, 2), 0) / sampleCount;
-    const lStdDev = Math.sqrt(lVariance);
-
-    // Calculate low chroma density (ratio of muted pixels)
-    const lowChromaDensity = lowChromaCount / sampleCount;
-
-    return {
-        l: parseFloat(avgL.toFixed(1)),
-        c: parseFloat(avgC.toFixed(1)),
-        k: parseFloat((maxL - minL).toFixed(1)),
-        minL: parseFloat(minL.toFixed(1)),
-        maxL: parseFloat(maxL.toFixed(1)),
-        maxC: parseFloat(maxC.toFixed(1)),
-        l_std_dev: parseFloat(lStdDev.toFixed(1)),
-        lowChromaDensity: parseFloat(lowChromaDensity.toFixed(3))  // 0.0 - 1.0
-    };
-}
 
 /**
  * Process a single Lab PSD (8-bit or 16-bit)
@@ -178,11 +130,17 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 
     const timingStart = Date.now();
 
-    // 1. Read Lab PSD
+    // 1. Read Lab PSD (with thumbnail extraction)
     const buffer = fs.readFileSync(inputPath);
     const psd = readPsd(buffer);
-    const { width, height, depth, data: labData } = psd;
+    const { width, height, depth, data: labData, thumbnail } = psd;
     const pixelCount = width * height;
+
+    if (thumbnail) {
+        console.log(`  Thumbnail: ${thumbnail.width}×${thumbnail.height} (${thumbnail.jpegData.length} bytes)`);
+    } else {
+        console.log(chalk.yellow(`  Warning: No thumbnail found in input PSD`));
+    }
 
     console.log(`  Size: ${width}×${height} (${depth}-bit Lab)`);
 
@@ -204,54 +162,62 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         lab8bit = convert16bitTo8bitLab(labData, pixelCount);
     }
 
-    // 3. Calculate image DNA
-    console.log(`  Calculating image DNA...`);
-    const dna = calculateImageDNA(lab8bit, width, height);
+    // 3. Generate Rich DNA v2.0 (with sectors, neutral metrics, and spatial complexity)
+    console.log(`  Generating Rich DNA v2.0...`);
+    const dna = DNAGenerator.generate(lab8bit, width, height, 40, {
+        richDNA: true,
+        spatialMetrics: true  // Include entropy, edge density, complexity score
+    });
     dna.filename = basename;
     dna.bitDepth = depth;
 
-    console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, StdDev=${dna.l_std_dev}, maxC=${dna.maxC}`);
+    // Log DNA summary
+    console.log(`  DNA v2.0: L=${dna.global.l}, C=${dna.global.c}, K=${dna.global.k}, Neutral=${(dna.global.neutralWeight * 100).toFixed(1)}%`);
 
-    // 4. Generate configuration
-    const config = DynamicConfigurator.generate(dna);
-    console.log(chalk.green(`  Archetype: ${config.meta?.archetype || 'unknown'}`));
-    console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
+    // Log dominant sectors
+    const dominantSectors = Object.entries(dna.sectors)
+        .filter(([_, s]) => s.weight > 0.10)
+        .sort((a, b) => b[1].weight - a[1].weight)
+        .slice(0, 3);
 
-    // 5. Prepare params
-    const params = {
-        targetColorsSlider: config.targetColors,
-        blackBias: config.blackBias,
-        ditherType: config.ditherType,
-        format: 'lab',
-        bitDepth: 8,
-        engineType: 'reveal',
-        centroidStrategy: 'SALIENCY',
-        lWeight: 1.0,
-        cWeight: 1.0,
-        substrateMode: 'auto',
-        substrateTolerance: 2.0,
-        vibrancyMode: 'moderate',
-        vibrancyBoost: config.saturationBoost,
-        highlightThreshold: 85,
-        highlightBoost: 1.0,
-        enablePaletteReduction: true,
-        paletteReduction: 10.0,
-        hueLockAngle: 20,
-        shadowPoint: 15,
-        colorMode: 'color',
-        preserveWhite: true,
-        preserveBlack: true,
-        ignoreTransparent: true,
-        enableHueGapAnalysis: true
-    };
+    if (dominantSectors.length > 0) {
+        console.log(`  Dominant sectors: ${dominantSectors.map(([name, s]) => `${name}(${(s.weight * 100).toFixed(0)}%)`).join(', ')}`);
+    }
 
-    // 6. Posterize
-    console.log(`  Posterizing to ${params.targetColorsSlider} colors...`);
+    // 4. Load archetypes and generate configuration (DNA-driven constraints)
+    console.log(`  Loading archetypes...`);
+    const archetypes = ParameterGenerator.loadArchetypes();
+
+    if (!archetypes) {
+        throw new Error('Failed to load archetypes - ensure @reveal/core archetypes directory exists');
+    }
+
+    console.log(`  Generating archetype-based configuration...`);
+    const config = ParameterGenerator.generateFromArchetypes(dna, archetypes, {
+        targetColorsSlider: 8,  // User preference for number of colors
+        bitDepth: depth
+    });
+
+    console.log(chalk.green(`  Archetype: ${config.selectedArchetype}`));
+    console.log(`  Colors: ${config.targetColorsSlider}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
+
+    // Log activated constraints
+    if (config.activatedConstraints && config.activatedConstraints.length > 0) {
+        console.log(`  Activated constraints: ${config.activatedConstraints.join(', ')}`);
+    }
+
+    // 5. Posterize with archetype-based config + DNA for constraint evaluation
+    console.log(`  Posterizing to ${config.targetColorsSlider} colors...`);
     const posterizeResult = await Reveal.posterizeImage(
         lab16bit,
         width, height,
-        params.targetColorsSlider,
-        params
+        config.targetColorsSlider,
+        {
+            ...config,  // Use all archetype-based parameters
+            dna: dna,   // Pass DNA for constraint evaluation (enables Dynamic Hue Anchoring, Neutral Gravity, etc.)
+            format: 'lab',
+            bitDepth: 8
+        }
     );
 
     console.log(`  Generated ${posterizeResult.paletteLab.length} colors`);
@@ -278,8 +244,8 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         null,                         // Unused parameter
         posterizeResult.paletteLab,   // Lab palette
         {
-            ditherType: params.ditherType,
-            distanceMetric: 'cie76'   // Match default behavior
+            ditherType: config.ditherType,
+            distanceMetric: config.distanceMetric || 'cie76'
         }
     );
 
@@ -338,7 +304,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         layersForMetrics,
         width,
         height,
-        { targetColors: params.targetColorsSlider }
+        { targetColors: config.targetColorsSlider }
     );
 
     console.log(`  DeltaE: avg=${metrics.global_fidelity.avgDeltaE}, max=${metrics.global_fidelity.maxDeltaE}`);
@@ -415,13 +381,15 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         });
     }
 
-    // Set Reveal metadata (Resource 4000) for filtering and analysis
-    writer.setRevealMetadata({
-        revScore: metrics.feature_preservation.revelationScore,
-        archetype: config.meta?.archetype || 'unknown',
-        colors: filteredPaletteLab.length, // Use filtered count (after removing empty layers)
-        preset: config.id
-    });
+    // Preserve thumbnail from input PSD (for Finder/Bridge icon previews)
+    if (thumbnail) {
+        console.log(`  Preserving thumbnail: ${thumbnail.width}×${thumbnail.height}`);
+        writer.setThumbnail({
+            jpegData: thumbnail.jpegData,
+            width: thumbnail.width,
+            height: thumbnail.height
+        });
+    }
 
     const psdBuffer = writer.write();
     fs.writeFileSync(outputPsdPath, psdBuffer);
@@ -451,7 +419,6 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     // 14. Explicit resource cleanup
     // Release all large arrays to free memory immediately
     lab8bit = null;
-    masks.length = 0;
     layersToWrite.length = 0;
     // psdBuffer is already written and goes out of scope
 

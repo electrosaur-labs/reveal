@@ -39,5 +39,59 @@
     "enableHueGapAnalysis": true,
     "ditherType": "none",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_scales": [
+    {
+      "name": "Scale cWeight by peak chroma",
+      "param": "cWeight",
+      "by": "maxC",
+      "inputRange": [80, 140],
+      "outputRange": [2.5, 4.0],
+      "clamp": true
+    }
+  ],
+  "dna_constraints": [
+    {
+      "name": "Sector-Specific Neon Spike (Flat + High Chroma)",
+      "priority": 110,
+      "if": "sectors.any.cMax > 110 && l_std_dev < 10",
+      "then": {
+        "lWeight": 0.2,
+        "cWeight": 5.0,
+        "centroidStrategy": "SALIENCY",
+        "ditherType": "none",
+        "hueLockAngle": 60
+      }
+    },
+    {
+      "name": "Neon Spike Protection (Force SALIENCY)",
+      "priority": 100,
+      "if": "maxC > 100",
+      "then": {
+        "centroidStrategy": "SALIENCY",
+        "hueLockAngle": 45,
+        "paletteReduction": 2.0,
+        "vibrancyBoost": 1.8
+      }
+    },
+    {
+      "name": "Extreme Neon (>130 chroma)",
+      "priority": 105,
+      "if": "maxC > 130",
+      "then": {
+        "cWeight": 4.0,
+        "lWeight": 0.3,
+        "highlightBoost": 2.5
+      }
+    },
+    {
+      "name": "Flat Neon Graphic",
+      "priority": 90,
+      "if": "l_std_dev < 8",
+      "then": {
+        "ditherType": "none",
+        "hueLockAngle": 60
+      }
+    }
+  ]
 }

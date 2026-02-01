@@ -55,7 +55,63 @@ function readPsd(buffer) {
 
     // ===== IMAGE RESOURCES SECTION =====
     const imageResourcesLength = readUInt32BE();
-    skip(imageResourcesLength);
+    const imageResourcesStart = offset;
+    const imageResourcesEnd = offset + imageResourcesLength;
+
+    // Extract thumbnail (Resource 1036 or 1033)
+    let thumbnail = null;
+
+    while (offset < imageResourcesEnd - 8) {
+        const signature = readBytes(4).toString('ascii');
+        if (signature !== '8BIM') {
+            offset++;
+            continue;
+        }
+
+        const resourceID = readUInt16BE();
+
+        // Pascal string name (1 byte length + string + padding to even)
+        const nameLength = buffer[offset++];
+        const namePadding = nameLength % 2 === 0 ? 1 : 0;
+        skip(nameLength + namePadding);
+
+        const dataLength = readUInt32BE();
+        const dataStart = offset;
+
+        // Resource 1036: JPEG Thumbnail (preferred)
+        // Resource 1033: Older thumbnail format
+        if (resourceID === 1036 || resourceID === 1033) {
+            // Thumbnail header (28 bytes)
+            const format = readUInt32BE();  // 1 = kJpegRGB
+            const thumbWidth = readUInt32BE();
+            const thumbHeight = readUInt32BE();
+            const widthBytes = readUInt32BE();
+            const totalSize = readUInt32BE();
+            const compressedSize = readUInt32BE();
+            const bpp = readUInt16BE();
+            const planes = readUInt16BE();
+
+            // Extract JPEG data
+            const jpegData = readBytes(compressedSize);
+
+            thumbnail = {
+                width: thumbWidth,
+                height: thumbHeight,
+                jpegData: Buffer.from(jpegData)
+            };
+        } else {
+            // Skip other resources
+            skip(dataLength);
+        }
+
+        // Pad to even offset
+        if (dataLength % 2 !== 0) {
+            skip(1);
+        }
+    }
+
+    // Skip to end of image resources section
+    offset = imageResourcesEnd;
 
     // ===== LAYER AND MASK INFORMATION SECTION =====
     const layerMaskLength = readUInt32BE();
@@ -124,7 +180,7 @@ function readPsd(buffer) {
             data[i * 3 + 1] = channelData[1][i];
             data[i * 3 + 2] = channelData[2][i];
         }
-        return { width, height, colorMode, depth, channels: 3, data };
+        return { width, height, colorMode, depth, channels: 3, data, thumbnail };
     } else {
         // 16-bit: return full 16-bit values as Uint16Array
         const data = new Uint16Array(pixelCount * 3);
@@ -134,7 +190,7 @@ function readPsd(buffer) {
             data[i * 3 + 1] = (channelData[1][i * 2] << 8) | channelData[1][i * 2 + 1];
             data[i * 3 + 2] = (channelData[2][i * 2] << 8) | channelData[2][i * 2 + 1];
         }
-        return { width, height, colorMode, depth, channels: 3, data };
+        return { width, height, colorMode, depth, channels: 3, data, thumbnail };
     }
 }
 

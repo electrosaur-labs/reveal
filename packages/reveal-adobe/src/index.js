@@ -920,6 +920,7 @@ async function setPreviewMode(mode) {
                 <option value="4">1:4 (Quarter Res)</option>
                 <option value="8">1:8 (Eighth Res)</option>
             `;
+            previewStrideSelect.value = '1';  // Explicitly set value for zoom mode
             logger.log('✓ Dropdown options updated');
         } else {
             logger.error('previewStrideSelect not found!');
@@ -1061,6 +1062,7 @@ async function setPreviewMode(mode) {
             <option value="2">Fine (slow)</option>
             <option value="1">Finest (slower)</option>
         `;
+        previewStrideSelect.value = '4';  // Explicitly set value for fit mode
 
         // Re-render preview in fit mode
         logger.log('Re-rendering preview in fit mode...');

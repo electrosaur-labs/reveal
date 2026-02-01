@@ -39,5 +39,76 @@
     "enableHueGapAnalysis": true,
     "ditherType": "BlueNoise",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_scales": [
+    {
+      "name": "Scale blackBias by darkness",
+      "param": "blackBias",
+      "by": "minL",
+      "inputRange": [0, 20],
+      "outputRange": [8.0, 5.0],
+      "clamp": true
+    }
+  ],
+  "dna_constraints": [
+    {
+      "name": "Dominant Dark Sector (L-Centroid Driven)",
+      "priority": 105,
+      "if": "sectors.any.weight > 0.25 && sectors.any.lMean < 40",
+      "then": {
+        "blackBias": 7.0,
+        "shadowPoint": 5,
+        "lWeight": 1.6
+      }
+    },
+    {
+      "name": "Deep Shadow Protection",
+      "priority": 100,
+      "if": "minL < 5",
+      "then": {
+        "shadowPoint": 3,
+        "blackBias": 8.0,
+        "preserveBlack": true
+      }
+    },
+    {
+      "name": "Moderate Contrast Enhancement",
+      "priority": 90,
+      "if": "k > 70",
+      "then": {
+        "lWeight": 1.5,
+        "paletteReduction": 5.0
+      }
+    },
+    {
+      "name": "Moody Color Preservation",
+      "priority": 85,
+      "if": "c > 20 && c < 40",
+      "then": {
+        "vibrancyMode": "moderate",
+        "vibrancyBoost": 1.1,
+        "cWeight": 1.8
+      }
+    },
+    {
+      "name": "Dark Texture Smoothing",
+      "priority": 80,
+      "if": "l < 45",
+      "then": {
+        "ditherType": "BlueNoise",
+        "lWeight": 1.4
+      }
+    },
+    {
+      "name": "Cool-to-Neutral Protection",
+      "priority": 950,
+      "if": "sectors.blue.weight > 0.15 && global.neutralWeight > 0.10",
+      "then": {
+        "cWeight": 3.5,
+        "useNeutralAnchoring": true,
+        "neutralStiffness": 5.0,
+        "description": "Moderate neutral anchoring allows artistic color grading while preventing excessive blue bleeding"
+      }
+    }
+  ]
 }

@@ -39,5 +39,55 @@
     "enableHueGapAnalysis": true,
     "ditherType": "none",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_constraints": [
+    {
+      "name": "Enable Dithering for Tonal Complexity",
+      "priority": 80,
+      "if": "l_std_dev > 15",
+      "then": {
+        "ditherType": "BlueNoise",
+        "lWeight": 1.2
+      }
+    },
+    {
+      "name": "Highlight Protection (Dreamy Whites)",
+      "priority": 90,
+      "if": "maxL > 95",
+      "then": {
+        "highlightThreshold": 96,
+        "highlightBoost": 1.5,
+        "substrateTolerance": 5.0
+      }
+    },
+    {
+      "name": "Low Contrast Softness",
+      "priority": 70,
+      "if": "k < 50",
+      "then": {
+        "blackBias": 2.0,
+        "paletteReduction": 8.0
+      }
+    },
+    {
+      "name": "Muted Color Enhancement",
+      "priority": 75,
+      "if": "c < 25",
+      "then": {
+        "vibrancyMode": "exponential",
+        "vibrancyBoost": 1.3
+      }
+    },
+    {
+      "name": "Cool-to-Neutral Protection",
+      "priority": 950,
+      "if": "sectors.blue.weight > 0.15 && global.neutralWeight > 0.10",
+      "then": {
+        "cWeight": 3.5,
+        "useNeutralAnchoring": true,
+        "neutralStiffness": 15.0,
+        "description": "Increases chroma weighting and enables neutral anchoring to prevent blue bleeding into gray midtones"
+      }
+    }
+  ]
 }

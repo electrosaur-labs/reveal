@@ -39,5 +39,45 @@
     "enableHueGapAnalysis": true,
     "ditherType": "none",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_constraints": [
+    {
+      "name": "Extreme Desaturation Floor",
+      "priority": 100,
+      "if": "c < 15 && maxC < 80",
+      "then": {
+        "vibrancyBoost": 0.8,
+        "vibrancyThreshold": 25,
+        "cWeight": 0.5
+      }
+    },
+    {
+      "name": "Extreme Contrast Boost (Bleached Look)",
+      "priority": 90,
+      "if": "k > 90",
+      "then": {
+        "blackBias": 4.5,
+        "shadowPoint": 5,
+        "highlightThreshold": 94
+      }
+    },
+    {
+      "name": "Washed Highlight Protection",
+      "priority": 85,
+      "if": "maxL > 96",
+      "then": {
+        "highlightThreshold": 95,
+        "substrateTolerance": 5.0
+      }
+    },
+    {
+      "name": "Enable Dithering for Texture",
+      "priority": 75,
+      "if": "l_std_dev > 20",
+      "then": {
+        "ditherType": "BlueNoise",
+        "lWeight": 1.4
+      }
+    }
+  ]
 }

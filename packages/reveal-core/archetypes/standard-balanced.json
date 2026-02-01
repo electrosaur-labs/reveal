@@ -39,5 +39,43 @@
     "enableHueGapAnalysis": true,
     "ditherType": "none",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_constraints": [
+    {
+      "name": "Flatness Override",
+      "priority": 50,
+      "if": "l_std_dev < 8",
+      "then": {
+        "ditherType": "none",
+        "hueLockAngle": 35
+      }
+    },
+    {
+      "name": "Shadow Gate Calibration",
+      "priority": 60,
+      "if": "minL < 2",
+      "then": {
+        "shadowPoint": 5
+      }
+    },
+    {
+      "name": "Highlight Threshold (White Protection)",
+      "priority": 70,
+      "if": "maxL > 98",
+      "then": {
+        "highlightThreshold": 96
+      }
+    },
+    {
+      "name": "Cool-to-Neutral Protection",
+      "priority": 950,
+      "if": "sectors.blue.weight > 0.15 && global.neutralWeight > 0.10",
+      "then": {
+        "cWeight": 3.5,
+        "useNeutralAnchoring": true,
+        "neutralStiffness": 15.0,
+        "description": "Increases chroma weighting and enables neutral anchoring to prevent blue bleeding into gray midtones"
+      }
+    }
+  ]
 }

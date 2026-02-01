@@ -214,6 +214,81 @@
           "description": "Color profile for mask generation"
         }
       }
+    },
+    "dna_scales": {
+      "type": "array",
+      "description": "Continuous parameter adjustments based on DNA values (v2.0)",
+      "items": {
+        "type": "object",
+        "required": ["param", "by", "inputRange", "outputRange"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable description of this scale (for logging)"
+          },
+          "param": {
+            "type": "string",
+            "description": "Parameter name to scale (must be a valid parameter key)"
+          },
+          "by": {
+            "type": "string",
+            "description": "DNA property path to use as input (e.g., 'yellowDominance' or 'sectors.yellow.lMean')"
+          },
+          "inputRange": {
+            "type": "array",
+            "description": "Input value range [min, max]",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "outputRange": {
+            "type": "array",
+            "description": "Output value range [min, max]",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "clamp": {
+            "type": "boolean",
+            "description": "Whether to clamp output to range (default: true)",
+            "default": true
+          }
+        }
+      }
+    },
+    "dna_constraints": {
+      "type": "array",
+      "description": "Conditional parameter overrides based on DNA patterns (v2.0)",
+      "items": {
+        "type": "object",
+        "required": ["if", "then"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable description of this constraint (for logging)"
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Evaluation priority (higher = later = wins). Default: 100",
+            "minimum": 0,
+            "maximum": 1000,
+            "default": 100
+          },
+          "if": {
+            "type": "string",
+            "description": "Boolean expression to evaluate. Supported operators: >, >=, <, <=, ===, !==, &&, ||, !, +, -, *, /. Supported properties: legacy DNA (l, c, k, maxC, yellowDominance), sectors (sectors.yellow.lMean, sectors.any.cMax), spatial (spatial.entropy, spatial.edgeDensity). Example: 'sectors.yellow.weight > 0.15 && sectors.yellow.lMean > 80'"
+          },
+          "then": {
+            "type": "object",
+            "description": "Parameter overrides to apply if condition is true. Keys must be valid parameter names.",
+            "additionalProperties": true
+          }
+        }
+      }
     }
   }
 }

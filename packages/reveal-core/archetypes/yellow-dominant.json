@@ -39,5 +39,64 @@
     "enableHueGapAnalysis": false,
     "ditherType": "BlueNoise",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_scales": [
+    {
+      "name": "Scale lWeight by yellow dominance (MORPH 7: Thermonuclear Yellow)",
+      "param": "lWeight",
+      "by": "yellowDominance",
+      "inputRange": [15, 40],
+      "outputRange": [3.5, 15.0],
+      "clamp": true
+    }
+  ],
+  "dna_constraints": [
+    {
+      "name": "PILOT MORPH 3: Flatness Override",
+      "priority": 50,
+      "if": "l_std_dev < 8",
+      "then": {
+        "ditherType": "none",
+        "hueLockAngle": 35
+      }
+    },
+    {
+      "name": "PILOT MORPH 2: Shadow Gate Calibration",
+      "priority": 60,
+      "if": "minL < 2",
+      "then": {
+        "shadowPoint": 5
+      }
+    },
+    {
+      "name": "PILOT MORPH 4: Highlight Threshold (White Protection)",
+      "priority": 70,
+      "if": "maxL > 98",
+      "then": {
+        "highlightThreshold": 96
+      }
+    },
+    {
+      "name": "MORPH 7: Nuclear Yellow - Force SALIENCY",
+      "priority": 100,
+      "if": "(maxC > 80 && maxCHue >= 70 && maxCHue <= 95) || yellowDominance > 15",
+      "then": {
+        "centroidStrategy": "SALIENCY",
+        "hueLockAngle": 90,
+        "paletteReduction": 0,
+        "enableHueGapAnalysis": true,
+        "vibrancyMode": "exponential"
+      }
+    },
+    {
+      "name": "MORPH 7: Thermonuclear Yellow (Ultra-Aggressive)",
+      "priority": 200,
+      "if": "yellowDominance > 20",
+      "then": {
+        "lWeight": 5.0,
+        "cWeight": 2.5,
+        "vibrancyBoost": 1.8
+      }
+    }
+  ]
 }

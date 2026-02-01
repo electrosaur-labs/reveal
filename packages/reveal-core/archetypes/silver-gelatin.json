@@ -39,5 +39,45 @@
     "enableHueGapAnalysis": false,
     "ditherType": "Atkinson",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_constraints": [
+    {
+      "name": "Texture Preservation (High Entropy - Entropy King)",
+      "priority": 90,
+      "if": "l_std_dev > 20",
+      "then": {
+        "lWeight": 3.0,
+        "ditherType": "BlueNoise",
+        "blackBias": 5.0
+      }
+    },
+    {
+      "name": "Shadow Protection (Deep Blacks)",
+      "priority": 80,
+      "if": "minL < 5",
+      "then": {
+        "shadowPoint": 3,
+        "blackBias": 6.0
+      }
+    },
+    {
+      "name": "High Contrast B&W",
+      "priority": 85,
+      "if": "k > 90",
+      "then": {
+        "lWeight": 3.0,
+        "paletteReduction": 4.0,
+        "hueLockAngle": 8
+      }
+    },
+    {
+      "name": "Highlight Detail (Bright Zones)",
+      "priority": 75,
+      "if": "maxL > 95",
+      "then": {
+        "highlightThreshold": 94,
+        "highlightBoost": 1.5
+      }
+    }
+  ]
 }

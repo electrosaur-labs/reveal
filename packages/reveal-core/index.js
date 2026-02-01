@@ -18,6 +18,7 @@ const ImageHeuristicAnalyzer = require('./lib/analysis/ImageHeuristicAnalyzer');
 const LabDistance = require('./lib/color/LabDistance');
 const BilateralFilter = require('./lib/preprocessing/BilateralFilter');
 const ParameterGenerator = require('./lib/analysis/ParameterGenerator');
+const DNAGenerator = require('./lib/analysis/DNAGenerator');
 const logger = require('./lib/utils/logger');
 
 /**
@@ -404,3 +405,6 @@ module.exports.BilateralFilter = BilateralFilter;
 
 // Export ParameterGenerator at top level for convenient access
 module.exports.ParameterGenerator = ParameterGenerator;
+
+// Export DNAGenerator at top level for convenient access
+module.exports.DNAGenerator = DNAGenerator;

@@ -39,5 +39,64 @@
     "enableHueGapAnalysis": true,
     "ditherType": "Atkinson",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_scales": [
+    {
+      "name": "Scale cWeight by chroma intensity",
+      "param": "cWeight",
+      "by": "c",
+      "inputRange": [20, 50],
+      "outputRange": [1.5, 3.0],
+      "clamp": true
+    }
+  ],
+  "dna_constraints": [
+    {
+      "name": "Extreme Contrast Punch",
+      "priority": 100,
+      "if": "k > 80",
+      "then": {
+        "blackBias": 5.5,
+        "lWeight": 1.3,
+        "paletteReduction": 5.0
+      }
+    },
+    {
+      "name": "Chroma Boost (Saturated Commercial)",
+      "priority": 95,
+      "if": "maxC > 80",
+      "then": {
+        "centroidStrategy": "SALIENCY",
+        "cWeight": 2.5,
+        "vibrancyMode": "moderate",
+        "vibrancyBoost": 1.3
+      }
+    },
+    {
+      "name": "Shadow Deepening",
+      "priority": 85,
+      "if": "minL < 10",
+      "then": {
+        "shadowPoint": 10,
+        "blackBias": 6.0
+      }
+    },
+    {
+      "name": "Highlight Punch",
+      "priority": 90,
+      "if": "maxL > 93",
+      "then": {
+        "highlightThreshold": 91,
+        "highlightBoost": 1.6
+      }
+    },
+    {
+      "name": "Complex Gradation",
+      "priority": 75,
+      "if": "l_std_dev > 18",
+      "then": {
+        "ditherType": "BlueNoise"
+      }
+    }
+  ]
 }

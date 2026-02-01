@@ -39,5 +39,56 @@
     "enableHueGapAnalysis": true,
     "ditherType": "none",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_scales": [
+    {
+      "name": "Scale highlight threshold by brightness",
+      "param": "highlightThreshold",
+      "by": "maxL",
+      "inputRange": [90, 100],
+      "outputRange": [94, 98],
+      "clamp": true
+    }
+  ],
+  "dna_constraints": [
+    {
+      "name": "Extreme Highlight Protection (Near-White)",
+      "priority": 100,
+      "if": "maxL > 97",
+      "then": {
+        "highlightThreshold": 98,
+        "substrateTolerance": 6.0,
+        "preserveWhite": true
+      }
+    },
+    {
+      "name": "Soft Gradients (Enable Dithering)",
+      "priority": 80,
+      "if": "l_std_dev > 12",
+      "then": {
+        "ditherType": "BlueNoise",
+        "lWeight": 1.2
+      }
+    },
+    {
+      "name": "Muted Pastel Enhancement",
+      "priority": 85,
+      "if": "c < 25",
+      "then": {
+        "vibrancyMode": "exponential",
+        "vibrancyBoost": 1.3,
+        "cWeight": 2.0
+      }
+    },
+    {
+      "name": "Very Low Contrast Adjustment",
+      "priority": 70,
+      "if": "k < 40",
+      "then": {
+        "blackBias": 0.0,
+        "shadowPoint": 25,
+        "paletteReduction": 8.0
+      }
+    }
+  ]
 }

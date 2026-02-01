@@ -39,5 +39,35 @@
     "enableHueGapAnalysis": true,
     "ditherType": "BlueNoise",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_constraints": [
+    {
+      "name": "Chroma Distribution (Washed-Out Palette Detection)",
+      "priority": 100,
+      "if": "maxC < 50",
+      "then": {
+        "paletteReduction": 12.0,
+        "vibrancyBoost": 0.8,
+        "cWeight": 1.0
+      }
+    },
+    {
+      "name": "Vibrancy Floor (Low Chroma Nullification)",
+      "priority": 75,
+      "if": "c < 12 && maxC < 80",
+      "then": {
+        "vibrancyBoost": 0.8,
+        "vibrancyThreshold": 18
+      }
+    },
+    {
+      "name": "Limited Ink Palette Simulation",
+      "priority": 90,
+      "if": "c < 20 && k < 60",
+      "then": {
+        "paletteReduction": 14.0,
+        "hueLockAngle": 25
+      }
+    }
+  ]
 }

@@ -39,5 +39,48 @@
     "enableHueGapAnalysis": false,
     "ditherType": "none",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_constraints": [
+    {
+      "name": "Minkler Flatten (Entropy-Driven Ultra-Flat Graphics)",
+      "priority": 100,
+      "if": "l_std_dev < 5",
+      "then": {
+        "lWeight": 0.0,
+        "ditherType": "none",
+        "paletteReduction": 3.0,
+        "blackBias": 1.0,
+        "hueLockAngle": 60
+      }
+    },
+    {
+      "name": "Sector Hue Locking (Flat Color Planes)",
+      "priority": 95,
+      "if": "sectors.any.weight > 0.20 && sectors.any.lStdDev < 5",
+      "then": {
+        "lWeight": 0.2,
+        "hueLockAngle": 75,
+        "paletteReduction": 2.0
+      }
+    },
+    {
+      "name": "High Chroma Graphic Protection",
+      "priority": 90,
+      "if": "maxC > 80",
+      "then": {
+        "centroidStrategy": "SALIENCY",
+        "cWeight": 2.0,
+        "vibrancyBoost": 1.2
+      }
+    },
+    {
+      "name": "Preserve Sharp Edges",
+      "priority": 80,
+      "if": "k > 70",
+      "then": {
+        "ditherType": "none",
+        "paletteReduction": 2.0
+      }
+    }
+  ]
 }

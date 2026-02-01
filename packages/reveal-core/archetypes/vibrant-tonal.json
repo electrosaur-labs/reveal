@@ -1,7 +1,7 @@
 {
   "id": "vibrant_tonal",
   "name": "Vibrant Tonal / Neon-High-Chroma",
-  "description": "Traps high-chroma spikes (Yellows/Neons) in otherwise tonal or dark images.",
+  "description": "Traps high-chroma spikes (Yellows/Neons) in otherwise tonal or dark images. Self-correcting for yellow-orange bleed.",
   "centroid": {
     "l": 50,
     "c": 45,
@@ -30,6 +30,8 @@
     "enablePaletteReduction": true,
     "paletteReduction": 3.0,
     "hueLockAngle": 45,
+    "hueLockSensitivity": 1.0,
+    "useDynamicAnchors": false,
     "shadowPoint": 10,
     "colorMode": "color",
     "targetColorsSlider": 10,
@@ -37,7 +39,108 @@
     "preserveBlack": false,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
-    "ditherType": "BlueNoise",
+    "ditherType": "none",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_scales": [
+    {
+      "name": "Chroma Sovereignty Scaling",
+      "param": "cWeight",
+      "by": "maxC",
+      "inputRange": [100, 150],
+      "outputRange": [6.5, 8.0],
+      "clamp": true
+    }
+  ],
+  "dna_constraints": [
+    {
+      "name": "Thermonuclear Yellow Morph",
+      "priority": 1000,
+      "if": "sectors.yellow.weight > 0.15 && sectors.yellow.lMean > 75",
+      "then": {
+        "lWeight": 5.0,
+        "cWeight": 2.5,
+        "centroidStrategy": "SALIENCY",
+        "hueLockAngle": 90,
+        "paletteReduction": 0,
+        "vibrancyBoost": 1.8,
+        "hueLockSensitivity": 12.0,
+        "useDynamicAnchors": true
+      }
+    },
+    {
+      "name": "Graphic/Minkler Protection",
+      "priority": 900,
+      "if": "l_std_dev < 12",
+      "then": {
+        "lWeight": 0.1,
+        "cWeight": 8.0,
+        "blackBias": 1.0,
+        "ditherType": "none"
+      }
+    },
+    {
+      "name": "High-Chroma Texture Guard",
+      "priority": 800,
+      "if": "l_std_dev > 25 && maxC > 100",
+      "then": {
+        "ditherType": "BlueNoise",
+        "blackBias": 6.0,
+        "lWeight": 1.5
+      }
+    },
+    {
+      "name": "Extreme Chroma (>130) - Tonal Ladder Mode",
+      "priority": 700,
+      "if": "maxC > 130",
+      "then": {
+        "lWeight": 1.2,
+        "cWeight": 5.0,
+        "vibrancyBoost": 1.2,
+        "highlightBoost": 3.0
+      }
+    },
+    {
+      "name": "High-Chroma Non-Yellow Spike - Force SALIENCY",
+      "priority": 600,
+      "if": "maxC > 120 && (maxCHue < 70 || maxCHue > 95)",
+      "then": {
+        "centroidStrategy": "SALIENCY"
+      }
+    },
+    {
+      "name": "Standard High-Chroma (120-130)",
+      "priority": 500,
+      "if": "maxC > 120 && maxC <= 130",
+      "then": {
+        "hueLockAngle": 35,
+        "paletteReduction": 4.0
+      }
+    },
+    {
+      "name": "Adaptive Hue Protection (High K)",
+      "priority": 400,
+      "if": "k > 90",
+      "then": {
+        "hueLockAngle": 35,
+        "paletteReduction": 4.0
+      }
+    },
+    {
+      "name": "Auto-Dither for Tonal Complexity",
+      "priority": 300,
+      "if": "l_std_dev > 15",
+      "then": {
+        "ditherType": "BlueNoise"
+      }
+    },
+    {
+      "name": "Highlight Boost for Yellow Detection",
+      "priority": 200,
+      "if": "maxC > 100 && c < 30",
+      "then": {
+        "highlightBoost": 2.2
+      }
+    }
+  ]
 }

@@ -85,6 +85,176 @@ class PosterizationEngine {
     }
 
     /**
+     * DYNAMIC HUE ANCHORING: Helper Methods
+     *
+     * These methods implement DNA-derived hue anchoring to replace hardcoded
+     * penalties (yellow at 90°, green at 135°, etc.) with adaptive anchors
+     * based on each image's actual color distribution.
+     */
+
+    /**
+     * Determine which 12-sector a hue belongs to
+     *
+     * @param {number} hue - Hue angle (0-360°)
+     * @returns {string} Sector name (e.g., "yellow", "orange")
+     */
+    static getSectorForHue(hue) {
+        const SECTORS = [
+            'red', 'orange', 'yellow', 'chartreuse',
+            'green', 'cyan', 'blue', 'violet',
+            'purple', 'magenta', 'pink', 'crimson'
+        ];
+
+        const sectorIndex = Math.floor(hue / 30) % 12;
+        return SECTORS[sectorIndex];
+    }
+
+    /**
+     * Get adjacent sectors for a given sector (for bully detection)
+     *
+     * @param {string} sectorName - Sector name (e.g., "yellow")
+     * @returns {Array<string>} Array of 2 adjacent sector names
+     */
+    static getAdjacentSectors(sectorName) {
+        const SECTORS = [
+            'red', 'orange', 'yellow', 'chartreuse',
+            'green', 'cyan', 'blue', 'violet',
+            'purple', 'magenta', 'pink', 'crimson'
+        ];
+
+        const index = SECTORS.indexOf(sectorName);
+        if (index === -1) return [];
+
+        const prevIndex = (index - 1 + SECTORS.length) % SECTORS.length;
+        const nextIndex = (index + 1) % SECTORS.length;
+
+        return [SECTORS[prevIndex], SECTORS[nextIndex]];
+    }
+
+    /**
+     * Adjust stiffness for sectors being "bullied" by dominant neighbors
+     *
+     * Example: Orange (40% weight) bullying Yellow (15% weight)
+     * → Yellow's stiffness boosted 2.3× to resist merging
+     *
+     * @param {Map} anchors - sector → anchor data {hue, lMean, weight, stiffness}
+     */
+    static adjustStiffnessForBullies(anchors) {
+        const BULLY_THRESHOLD = 2.0; // Bully if 2× larger
+        const STIFFNESS_BOOST = 0.5; // Increase stiffness by 50% per bully ratio
+
+        for (const [sectorName, anchorData] of anchors) {
+            // Check adjacent sectors (±30° for 12-sector system)
+            const neighbors = this.getAdjacentSectors(sectorName);
+
+            for (const neighborName of neighbors) {
+                const neighbor = anchors.get(neighborName);
+                if (!neighbor) continue;
+
+                const bullyRatio = neighbor.weight / anchorData.weight;
+
+                if (bullyRatio > BULLY_THRESHOLD) {
+                    // This sector is being bullied - increase its stiffness
+                    const boost = 1 + (bullyRatio * STIFFNESS_BOOST);
+                    anchorData.stiffness *= boost;
+
+                    logger.log(`  🛡️  ${sectorName} stiffness boosted by ${boost.toFixed(2)}× (bullied by ${neighborName}, ratio=${bullyRatio.toFixed(2)})`);
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculate dynamic hue anchors from DNA sectors
+     *
+     * Replaces hardcoded anchors (yellow=90°, green=135°, blue=240°) with
+     * DNA-derived anchors based on actual sector centroids.
+     *
+     * @param {Object} dna - Image DNA with sectors
+     * @param {Object} config - Configuration with useDynamicAnchors flag and hueLockSensitivity
+     * @returns {Map|null} sector → anchor mapping, or null if disabled
+     */
+    static calculateDynamicAnchors(dna, config) {
+        if (!config.useDynamicAnchors || !dna || !dna.sectors) {
+            return null; // Fall back to static anchors
+        }
+
+        const anchors = new Map();
+        const minWeight = 0.05; // Only anchor sectors with >5% weight
+
+        for (const [sectorName, sectorData] of Object.entries(dna.sectors)) {
+            if (sectorData.weight > minWeight) {
+                anchors.set(sectorName, {
+                    hue: sectorData.hMean,
+                    lMean: sectorData.lMean,
+                    weight: sectorData.weight,
+                    stiffness: config.hueLockSensitivity || 1.0
+                });
+
+                logger.log(`  📍 Anchor: ${sectorName} at ${sectorData.hMean.toFixed(1)}° (weight=${(sectorData.weight * 100).toFixed(1)}%, L=${sectorData.lMean.toFixed(1)})`);
+            }
+        }
+
+        // Calculate cross-sector bully adjustments
+        this.adjustStiffnessForBullies(anchors);
+
+        logger.log(`  ✓ Dynamic anchors calculated: ${anchors.size} sectors`);
+        return anchors;
+    }
+
+    /**
+     * Pre-calculates a Hue Penalty Lookup Table to offload the hot loop.
+     * Maps all 360 integer hue degrees to pre-calculated penalty values.
+     *
+     * @param {Object} dna - The finalized sector DNA with hMean per sector
+     * @param {Object} config - Active archetype parameters
+     * @param {boolean} config.useDynamicAnchors - Enable dynamic anchoring
+     * @param {number} config.hueLockSensitivity - Penalty strength multiplier
+     * @param {number} [config.hueLockAngle=15] - Tolerance angle before penalty applies
+     * @returns {Float32Array|null} 360-element penalty map (null if disabled)
+     */
+    static generateHuePenaltyLUT(dna, config) {
+        if (!config.useDynamicAnchors || !dna || !dna.sectors) {
+            return null;
+        }
+
+        const lut = new Float32Array(360);
+        const sensitivity = config.hueLockSensitivity || 1.0;
+        const lockAngle = config.hueLockAngle !== undefined ? config.hueLockAngle : 15;
+        const minWeight = 0.05; // Only apply penalties for significant sectors
+
+        // Get sector names (12 × 30° buckets)
+        const SECTORS = ['red', 'orange', 'yellow', 'chartreuse', 'green', 'cyan',
+                         'blue', 'violet', 'purple', 'magenta', 'pink', 'crimson'];
+
+        // Pre-calculate penalties for each hue degree
+        for (let h = 0; h < 360; h++) {
+            const sectorIndex = Math.floor(h / 30) % 12;
+            const sectorName = SECTORS[sectorIndex];
+            const sectorData = dna.sectors[sectorName];
+
+            // Only calculate penalties for sectors with significant presence
+            if (sectorData && sectorData.weight > minWeight) {
+                const anchorHue = sectorData.hMean;
+
+                // Calculate circular hue distance
+                let drift = Math.abs(h - anchorHue);
+                if (drift > 180) drift = 360 - drift; // Wrap around hue circle
+
+                // Apply penalty if drift exceeds tolerance angle
+                if (drift > lockAngle) {
+                    // Quadratic penalty curve: drift² × sensitivity
+                    // This creates "gravity wells" around DNA-derived anchor hues
+                    lut[h] = Math.pow(drift - lockAngle, 2) * sensitivity;
+                }
+            }
+        }
+
+        logger.log(`  ⚡ Hue Penalty LUT generated: 360 entries, ${sensitivity.toFixed(1)}× sensitivity, ${lockAngle}° tolerance`);
+        return lut;
+    }
+
+    /**
      * Factory method: Posterize image using specified engine
      *
      * ENGINES:
@@ -106,6 +276,8 @@ class PosterizationEngine {
      * @param {boolean} [options.grayscaleOnly=false] - L-channel only mode
      * @param {boolean} [options.preserveWhite=true] - Force white into palette
      * @param {boolean} [options.preserveBlack=true] - Force black into palette
+     * @param {boolean} [options.useNeutralAnchoring=false] - Enable neutral gravity (prevents color bleeding into grays)
+     * @param {number} [options.neutralStiffness=10.0] - Neutral anchoring strength (higher = stronger protection)
      * @returns {Object} - {palette, paletteLab, assignments, labPixels, metadata}
      */
     static posterize(pixels, width, height, targetColors, options = {}) {
@@ -137,6 +309,21 @@ class PosterizationEngine {
         logger.log(`  Centroid Strategy: ${strategyName} (user-selected)`);
         logger.log(`  Grid optimization: ${enableGridOptimization ? 'ON' : 'OFF'}`);
         logger.log(`  Hue gap analysis: ${enableHueGapAnalysis ? 'ON' : 'OFF (respect exact color count)'}`);
+
+        // DNA-based dynamic anchoring
+        const dna = options.dna;
+        const useDynamicAnchors = options.useDynamicAnchors || false;
+        const hueLockSensitivity = options.hueLockSensitivity || 1.0;
+
+        if (dna && useDynamicAnchors) {
+            logger.log(`  Dynamic Hue Anchoring: ENABLED (sensitivity=${hueLockSensitivity})`);
+            if (dna.sectors) {
+                const sectorCount = Object.keys(dna.sectors).length;
+                logger.log(`    DNA sectors available: ${sectorCount}`);
+            }
+        } else {
+            logger.log(`  Dynamic Hue Anchoring: OFF (using static anchors)`);
+        }
 
         // Build tuning object from options if not provided
         // This allows presets to pass individual parameters (vibrancyBoost, highlightBoost, etc.)
@@ -3542,6 +3729,26 @@ class PosterizationEngine {
         // Use raw 16-bit pixels if available (Lab input), otherwise fall back to labPixels
         const useInteger16 = isLabInput && pixels;
 
+        // DYNAMIC HUE ANCHORING: Calculate DNA-derived anchors
+        const dna = options.dna;
+        const useDynamicAnchors = options.useDynamicAnchors || false;
+        const hueLockSensitivity = options.hueLockSensitivity || 1.0;
+        const hueLockAngle = options.hueLockAngle !== undefined ? options.hueLockAngle : 15;
+        const dynamicAnchors = this.calculateDynamicAnchors(dna, { useDynamicAnchors, hueLockSensitivity });
+
+        // PERFORMANCE: Pre-generate Hue Penalty LUT for O(1) lookups in hot loop
+        const huePenaltyLUT = this.generateHuePenaltyLUT(dna, {
+            useDynamicAnchors,
+            hueLockSensitivity,
+            hueLockAngle
+        });
+
+        if (dynamicAnchors) {
+            logger.log(`✓ Using dynamic hue anchors (${dynamicAnchors.size} sectors)`);
+        } else {
+            logger.log(`✓ Using static hue anchors (yellow=90°, green=135°, blue=240°)`);
+        }
+
         for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
             const rowOffset = y * width; // Pre-calculate row start
 
@@ -3593,61 +3800,67 @@ class PosterizationEngine {
                                 // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
                                 let dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
 
-                                // TARGET-BASED HUE ANCHORING: Penalize palette colors that drift from TRUE YELLOW
-                                // This prevents orange (H=64°) from stealing yellow pixels by being "closer"
-                                // to orange-yellow transitionals (H=70°). Instead, we anchor ALL yellow pixels
-                                // to prefer the palette color closest to 90° (true yellow).
-                                if (isYellowPixel && !grayscaleOnly) {
-                                    const target = finalPaletteLab[j];
-                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
-                                    if (targetChroma > 5) {
-                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
-                                        // Calculate how far THIS PALETTE COLOR drifts from true yellow (90°)
-                                        const trueYellow = 90;
-                                        let paletteDrift = Math.abs(targetHue - trueYellow);
-                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                // DYNAMIC HUE ANCHORING: LUT-based O(1) penalty lookup (cache-friendly)
+                                if (!grayscaleOnly && pixelHue >= 0) {
+                                    if (huePenaltyLUT) {
+                                        // OPTIMIZED: Pre-calculated LUT replaces per-pixel conditionals
+                                        const target = finalPaletteLab[j];
+                                        const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
 
-                                        // Penalize palette colors that are >15° away from true yellow
-                                        // Color 1 (H=64°): drift=26° → MASSIVE penalty
-                                        // Color 7 (H=89°): drift=1° → tiny penalty
-                                        if (paletteDrift > 15) {
-                                            dist += (paletteDrift * paletteDrift * 256 * 128 * 128);
+                                        if (targetChroma > 5) {
+                                            const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
+                                            const hueIdx = Math.floor(targetHue) % 360;
+
+                                            // Single array lookup replaces sector checks, anchor lookups, and drift calculations
+                                            // LUT stores pre-calculated drift²×sensitivity, scale to match distance magnitude
+                                            dist += huePenaltyLUT[hueIdx] * 256 * 128 * 128;
                                         }
-                                    }
-                                }
 
-                                // GREEN HUE ANCHORING: Protect greens from being absorbed by yellows or cyans
-                                // Green zone: 120-150° (true green at 135°)
-                                if (isGreenPixel && !grayscaleOnly) {
-                                    const target = finalPaletteLab[j];
-                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
-                                    if (targetChroma > 5) {
-                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
-                                        const trueGreen = 135;
-                                        let paletteDrift = Math.abs(targetHue - trueGreen);
-                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
-
-                                        if (paletteDrift > 15) {
-                                            dist += (paletteDrift * paletteDrift * 256 * 128 * 128);
+                                        // NEUTRAL GRAVITY: Prevent colorful centroids from absorbing neutral pixels
+                                        // If pixel is near-neutral (chroma < 3) and centroid is colorful (chroma > 8),
+                                        // add "Migration Tax" to prevent blue/cool colors bleeding into gray midtones
+                                        const useNeutralAnchoring = options.useNeutralAnchoring || false;
+                                        const neutralStiffness = options.neutralStiffness || 10.0;
+                                        if (useNeutralAnchoring && pixelChroma < 3.0 && targetChroma > 8.0) {
+                                            // Penalty scales with centroid chroma: more colorful = higher penalty
+                                            const neutralPenalty = targetChroma * neutralStiffness * 256 * 128 * 128;
+                                            dist += neutralPenalty;
                                         }
-                                    }
-                                }
+                                    } else {
+                                        // FALLBACK: Static anchors (original behavior) - only used if dynamic anchors disabled
+                                        const target = finalPaletteLab[j];
+                                        const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
 
-                                // BLUE HUE ANCHORING: INCREASED PROTECTION (2× stronger than yellow/green)
-                                // Prevents purples (H=280°) and cyans (H=180°) from stealing blue pixels
-                                // Anchors to true blue (240°)
-                                if (isBluePixel && !grayscaleOnly) {
-                                    const target = finalPaletteLab[j];
-                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
-                                    if (targetChroma > 5) {
-                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
-                                        const trueBlue = 240;
-                                        let paletteDrift = Math.abs(targetHue - trueBlue);
-                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                        if (targetChroma > 5) {
+                                            const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
 
-                                        if (paletteDrift > 15) {
-                                            // 2× stronger than yellow/green (512 vs 256)
-                                            dist += (paletteDrift * paletteDrift * 512 * 128 * 128);
+                                            // Yellow zone: 60-100° (anchor at 90°)
+                                            if (isYellowPixel) {
+                                                const trueYellow = 90;
+                                                let paletteDrift = Math.abs(targetHue - trueYellow);
+                                                if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                                if (paletteDrift > 15) {
+                                                    dist += (paletteDrift * paletteDrift * 256 * 128 * 128);
+                                                }
+                                            }
+                                            // Green zone: 120-150° (anchor at 135°)
+                                            else if (isGreenPixel) {
+                                                const trueGreen = 135;
+                                                let paletteDrift = Math.abs(targetHue - trueGreen);
+                                                if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                                if (paletteDrift > 15) {
+                                                    dist += (paletteDrift * paletteDrift * 256 * 128 * 128);
+                                                }
+                                            }
+                                            // Blue zone: 210-270° (anchor at 240°, 2× stronger)
+                                            else if (isBluePixel) {
+                                                const trueBlue = 240;
+                                                let paletteDrift = Math.abs(targetHue - trueBlue);
+                                                if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                                if (paletteDrift > 15) {
+                                                    dist += (paletteDrift * paletteDrift * 512 * 128 * 128);
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -3679,55 +3892,63 @@ class PosterizationEngine {
                                 // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
                                 let dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
 
-                                // TARGET-BASED HUE ANCHORING: Penalize palette colors that drift from TRUE YELLOW
-                                // This prevents orange (H=64°) from stealing yellow pixels by being "closer"
-                                // to orange-yellow transitionals (H=70°). Instead, we anchor ALL yellow pixels
-                                // to prefer the palette color closest to 90° (true yellow).
-                                if (isYellowPixel && !grayscaleOnly) {
-                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
-                                    if (targetChroma > 5) {
-                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
-                                        // Calculate how far THIS PALETTE COLOR drifts from true yellow (90°)
-                                        const trueYellow = 90;
-                                        let paletteDrift = Math.abs(targetHue - trueYellow);
-                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                // DYNAMIC HUE ANCHORING: LUT-based O(1) penalty lookup (cache-friendly)
+                                if (!grayscaleOnly && pixelHue >= 0) {
+                                    if (huePenaltyLUT) {
+                                        // OPTIMIZED: Pre-calculated LUT replaces per-pixel conditionals
+                                        const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
 
-                                        // Penalize palette colors that are >15° away from true yellow
-                                        // Color 1 (H=64°): drift=26° → MASSIVE penalty
-                                        // Color 7 (H=89°): drift=1° → tiny penalty
-                                        if (paletteDrift > 15) {
-                                            dist += (paletteDrift * paletteDrift * 256);
+                                        if (targetChroma > 5) {
+                                            const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
+                                            const hueIdx = Math.floor(targetHue) % 360;
+
+                                            // Single array lookup replaces sector checks, anchor lookups, and drift calculations
+                                            // Float path uses smaller scale factor (256 vs 256×128×128)
+                                            dist += huePenaltyLUT[hueIdx] * 256;
                                         }
-                                    }
-                                }
 
-                                // GREEN HUE ANCHORING: Protect greens (120-150°, target 135°)
-                                if (isGreenPixel && !grayscaleOnly) {
-                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
-                                    if (targetChroma > 5) {
-                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
-                                        const trueGreen = 135;
-                                        let paletteDrift = Math.abs(targetHue - trueGreen);
-                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
-
-                                        if (paletteDrift > 15) {
-                                            dist += (paletteDrift * paletteDrift * 256);
+                                        // NEUTRAL GRAVITY: Prevent colorful centroids from absorbing neutral pixels
+                                        const useNeutralAnchoring = options.useNeutralAnchoring || false;
+                                        const neutralStiffness = options.neutralStiffness || 10.0;
+                                        if (useNeutralAnchoring && pixelChroma < 3.0 && targetChroma > 8.0) {
+                                            // Float path uses smaller scale factor
+                                            const neutralPenalty = targetChroma * neutralStiffness * 256;
+                                            dist += neutralPenalty;
                                         }
-                                    }
-                                }
+                                    } else {
+                                        // FALLBACK: Static anchors (original behavior) - only used if dynamic anchors disabled
+                                        const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
 
-                                // BLUE HUE ANCHORING: INCREASED PROTECTION (2× stronger)
-                                if (isBluePixel && !grayscaleOnly) {
-                                    const targetChroma = Math.sqrt(target.a * target.a + target.b * target.b);
-                                    if (targetChroma > 5) {
-                                        const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
-                                        const trueBlue = 240;
-                                        let paletteDrift = Math.abs(targetHue - trueBlue);
-                                        if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                        if (targetChroma > 5) {
+                                            const targetHue = (Math.atan2(target.b, target.a) * 180 / Math.PI + 360) % 360;
 
-                                        if (paletteDrift > 15) {
-                                            // 2× stronger than yellow/green
-                                            dist += (paletteDrift * paletteDrift * 512);
+                                            // Yellow zone: 60-100° (anchor at 90°)
+                                            if (isYellowPixel) {
+                                                const trueYellow = 90;
+                                                let paletteDrift = Math.abs(targetHue - trueYellow);
+                                                if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                                if (paletteDrift > 15) {
+                                                    dist += (paletteDrift * paletteDrift * 256);
+                                                }
+                                            }
+                                            // Green zone: 120-150° (anchor at 135°)
+                                            else if (isGreenPixel) {
+                                                const trueGreen = 135;
+                                                let paletteDrift = Math.abs(targetHue - trueGreen);
+                                                if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                                if (paletteDrift > 15) {
+                                                    dist += (paletteDrift * paletteDrift * 256);
+                                                }
+                                            }
+                                            // Blue zone: 210-270° (anchor at 240°, 2× stronger)
+                                            else if (isBluePixel) {
+                                                const trueBlue = 240;
+                                                let paletteDrift = Math.abs(targetHue - trueBlue);
+                                                if (paletteDrift > 180) paletteDrift = 360 - paletteDrift;
+                                                if (paletteDrift > 15) {
+                                                    dist += (paletteDrift * paletteDrift * 512);
+                                                }
+                                            }
                                         }
                                     }
                                 }

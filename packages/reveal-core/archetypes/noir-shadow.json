@@ -39,5 +39,15 @@
     "enableHueGapAnalysis": true,
     "ditherType": "none",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_constraints": [
+    {
+      "name": "MORPH 6: Extreme Contrast Boost",
+      "priority": 95,
+      "if": "k > 95",
+      "then": {
+        "blackBias": 4.5
+      }
+    }
+  ]
 }

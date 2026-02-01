@@ -39,5 +39,56 @@
     "enableHueGapAnalysis": true,
     "ditherType": "BlueNoise",
     "maskProfile": "Gray Gamma 2.2"
-  }
+  },
+  "dna_scales": [
+    {
+      "name": "Scale lWeight for yellow/orange separation",
+      "param": "lWeight",
+      "by": "yellowDominance",
+      "inputRange": [10, 30],
+      "outputRange": [0.3, 2.5],
+      "clamp": true
+    }
+  ],
+  "dna_constraints": [
+    {
+      "name": "Yellow Protection (Warm Photos)",
+      "priority": 100,
+      "if": "yellowDominance > 10 || (maxC > 70 && maxCHue >= 60 && maxCHue <= 100)",
+      "then": {
+        "centroidStrategy": "SALIENCY",
+        "lWeight": 2.5,
+        "hueLockAngle": 50,
+        "vibrancyBoost": 1.8
+      }
+    },
+    {
+      "name": "Warmth Preservation (Orange/Red)",
+      "priority": 95,
+      "if": "maxCHue >= 0 && maxCHue <= 60",
+      "then": {
+        "hueLockAngle": 45,
+        "cWeight": 5.5,
+        "paletteReduction": 3.5
+      }
+    },
+    {
+      "name": "High Contrast Warm Tones",
+      "priority": 85,
+      "if": "k > 75",
+      "then": {
+        "blackBias": 5.0,
+        "shadowPoint": 10
+      }
+    },
+    {
+      "name": "Complex Tonal Gradients",
+      "priority": 80,
+      "if": "l_std_dev > 20",
+      "then": {
+        "ditherType": "BlueNoise",
+        "lWeight": 1.0
+      }
+    }
+  ]
 }
