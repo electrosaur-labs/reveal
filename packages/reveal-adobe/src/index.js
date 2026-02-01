@@ -3574,17 +3574,61 @@ async function showDialog() {
                     logger.log(`ACTUAL Build ID: ${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'MISSING'}`);
                     logger.log(`ACTUAL Build Time: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'MISSING'}`);
 
-                    // CRITICAL: Generate DNA for parameter morphing
+                    // CRITICAL: Generate DNA for parameter morphing (Rich DNA v2.0 with sectors)
                     logger.log(`\n🧬 Generating DNA for parameter morphing...`);
+                    let dna = null;  // Declare outside try block for broader scope
                     try {
-                        const dna = DNAGenerator.generate(
+                        dna = DNAGenerator.generate(
                             pixelData.pixels,
                             pixelData.width,
                             pixelData.height,
-                            40  // Sample stride
+                            40,  // Sample stride
+                            { richDNA: true }  // Enable Rich DNA v2.0 with sectors
                         );
                         logger.log(`✓ DNA extracted: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, maxCHue=${dna.maxCHue}°`);
                         logger.log(`🎯 Yellow Zone Check: maxCHue=${dna.maxCHue}° (target: 70-95°), maxC=${dna.maxC} (threshold: 80)`);
+
+                        // CRITICAL: Restore achromatic protection flags AND WEIGHTS from analysis phase
+                        // These were set by DNA constraints (THERMONUCLEAR) and must be preserved during posterization
+                        if (lastImageDNA) {
+                            if (lastImageDNA.useAchromaticProjection) {
+                                params.useAchromaticProjection = lastImageDNA.useAchromaticProjection;
+                                logger.log(`🛡️ Restored useAchromaticProjection=${params.useAchromaticProjection} from analysis`);
+                            }
+                            if (lastImageDNA.hardNeutralLock) {
+                                params.hardNeutralLock = lastImageDNA.hardNeutralLock;
+                                logger.log(`🛡️ Restored hardNeutralLock=${params.hardNeutralLock} from analysis`);
+                            }
+                            if (lastImageDNA.neutralSovereigntyThreshold) {
+                                params.neutralSovereigntyThreshold = lastImageDNA.neutralSovereigntyThreshold;
+                                logger.log(`🛡️ Restored neutralSovereigntyThreshold=${params.neutralSovereigntyThreshold} (wide-gate pixel assignment)`);
+                            }
+                            if (lastImageDNA.neutralCentroidClampThreshold) {
+                                params.neutralCentroidClampThreshold = lastImageDNA.neutralCentroidClampThreshold;
+                                logger.log(`🛡️ Restored neutralCentroidClampThreshold=${params.neutralCentroidClampThreshold} (ghost swatch prevention)`);
+                            }
+                            if (lastImageDNA.neutralStiffness) {
+                                params.neutralStiffness = lastImageDNA.neutralStiffness;
+                            }
+                            if (lastImageDNA.neutralDeadZone) {
+                                params.neutralDeadZone = lastImageDNA.neutralDeadZone;
+                            }
+                            if (lastImageDNA.neutralChromaThreshold) {
+                                params.neutralChromaThreshold = lastImageDNA.neutralChromaThreshold;
+                            }
+                            if (lastImageDNA.useNeutralGravity) {
+                                params.useNeutralGravity = lastImageDNA.useNeutralGravity;
+                            }
+                            // CRITICAL: Restore the THERMONUCLEAR weights (lWeight=15, cWeight=0)
+                            if (lastImageDNA.analyzedLWeight !== undefined) {
+                                params.lWeight = lastImageDNA.analyzedLWeight;
+                                logger.log(`🛡️ Restored lWeight=${params.lWeight} from analysis (THERMONUCLEAR)`);
+                            }
+                            if (lastImageDNA.analyzedCWeight !== undefined) {
+                                params.cWeight = lastImageDNA.analyzedCWeight;
+                                logger.log(`🛡️ Restored cWeight=${params.cWeight} from analysis (THERMONUCLEAR)`);
+                            }
+                        }
 
                         // Apply DNA-based parameter morphing
                         logger.log(`\n🔀 Applying DNA-based parameter morphing...`);
@@ -3743,6 +3787,16 @@ async function showDialog() {
                             enablePaletteReduction: params.enablePaletteReduction,  // Enable/disable palette reduction (default: true)
                             paletteReduction: params.paletteReduction,  // Color merging threshold (prune.threshold)
                             tuning: tuning,                          // NEW: Centralized tuning configuration
+                            dna: dna,                                // DNA for Shadow Sovereignty neutral weight check
+                            // THERMONUCLEAR: Achromatic protection parameters
+                            useAchromaticProjection: params.useAchromaticProjection,  // Force L-only distance for neutral pixels
+                            hardNeutralLock: params.hardNeutralLock,                  // Lock neutral centroids to a=0, b=0
+                            neutralSovereigntyThreshold: params.neutralSovereigntyThreshold,  // Pixel chroma threshold for wide-gate (12.0)
+                            neutralCentroidClampThreshold: params.neutralCentroidClampThreshold,  // Centroid chroma threshold for clamping (12.0)
+                            useNeutralGravity: params.useNeutralGravity,              // Apply chroma penalty to centroids
+                            neutralStiffness: params.neutralStiffness,                // Neutral gravity penalty multiplier
+                            neutralDeadZone: params.neutralDeadZone,                  // Chroma dead-zone for absolute neutrals
+                            neutralChromaThreshold: params.neutralChromaThreshold,    // Chroma threshold for neutral gravity
                             // ignoreTransparent is handled during RGB→Lab conversion (alpha channel check)
                             isPreview: true,                          // Enable stride optimization for preview speed
                             previewStride: parseInt(document.getElementById('previewStride')?.value || '4', 10)  // User-selected stride (4=Standard, 2=Fine, 1=Finest)
@@ -4171,12 +4225,12 @@ async function showDialog() {
 
                         logger.log(`✓ Retrieved ${result.pixels.length} bytes (${result.width}×${result.height})`);
 
-                        // Generate DNA from Lab pixels
+                        // Generate DNA from Lab pixels (Rich DNA v2.0 with sectors)
                         const startTime = Date.now();
-                        const dna = DNAGenerator.generate(result.pixels, result.width, result.height, 40);
+                        const dna = DNAGenerator.generate(result.pixels, result.width, result.height, 40, { richDNA: true });
                         const dnaTime = Date.now() - startTime;
 
-                        logger.log("✓ Image DNA extracted:", dna);
+                        logger.log("✓ Image DNA extracted (Rich DNA v2.0):", dna);
                         logger.log(`  DNA generation time: ${dnaTime.toFixed(2)}ms`);
 
                         // Run ParameterGenerator to get dynamic configuration (with entropy analysis)
@@ -4201,7 +4255,19 @@ async function showDialog() {
                         lastImageDNA = {
                             ...dna,
                             archetype: config.meta?.archetype || null,
-                            preprocessing: config.preprocessing  // Store preprocessing config for posterization
+                            preprocessing: config.preprocessing,  // Store preprocessing config for posterization
+                            // CRITICAL: Store achromatic protection flags AND WEIGHTS for posterization phase
+                            useAchromaticProjection: config.useAchromaticProjection,
+                            hardNeutralLock: config.hardNeutralLock,
+                            neutralSovereigntyThreshold: config.neutralSovereigntyThreshold,
+                            neutralCentroidClampThreshold: config.neutralCentroidClampThreshold,
+                            neutralStiffness: config.neutralStiffness,
+                            neutralDeadZone: config.neutralDeadZone,
+                            neutralChromaThreshold: config.neutralChromaThreshold,
+                            useNeutralGravity: config.useNeutralGravity,
+                            // CRITICAL: Store lWeight and cWeight that were set by THERMONUCLEAR constraint
+                            analyzedLWeight: config.lWeight,
+                            analyzedCWeight: config.cWeight
                         };
                         logger.log(`✓ Stored DNA for Smart Reveal: peakC=${dna.maxC?.toFixed(1)}, archetype=${lastImageDNA.archetype}`);
 
@@ -4314,10 +4380,10 @@ async function showDialog() {
                         logger.log(`🎯 Yellow Zone Check: maxCHue=${dna.maxCHue}° (target: 70-95°), maxC=${dna.maxC} (threshold: 80)`);
                         logger.log(`Archetype: ${config.meta?.archetype || 'unknown'}`);
                         logger.log(`Config: ${config.name}`);
-                        logger.log(`  Target Colors: ${config.targetColors}`);
-                        logger.log(`  Black Bias: ${config.blackBias.toFixed(1)}`);
-                        logger.log(`  Vibrancy Boost: ${config.saturationBoost.toFixed(2)}`);
-                        logger.log(`  Dither Type: ${config.ditherType}`);
+                        logger.log(`  Target Colors: ${config.targetColors || 'auto'}`);
+                        logger.log(`  Black Bias: ${config.blackBias !== undefined ? config.blackBias.toFixed(1) : 'N/A'}`);
+                        logger.log(`  Vibrancy Boost: ${(config.saturationBoost || config.vibrancyBoost) !== undefined ? (config.saturationBoost || config.vibrancyBoost).toFixed(2) : 'N/A'}`);
+                        logger.log(`  Dither Type: ${config.ditherType || 'none'}`);
                         logger.log(`  Smart Reveal → ${smartMetricLabel} (${smartMetric})`);
                         logger.log(`  Preprocessing: ${preprocessingInfo}`);
                         logger.log(`Analysis Time: ${dnaTime.toFixed(2)}ms`);

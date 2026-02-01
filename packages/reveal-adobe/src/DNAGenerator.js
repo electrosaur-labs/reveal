@@ -228,7 +228,15 @@ class DNAGenerator {
         }
 
         // v2.0: Return hierarchical structure
-        return {
+        const neutralWeightValue = parseFloat((neutralPixelCount / sampleCount).toFixed(3));
+        const chromaticCoverageValue = parseFloat((chromaticPixelCount / sampleCount).toFixed(2));
+
+        console.log(`🔬 DNAGenerator v2.0 - Neutral tracking:`);
+        console.log(`   neutralPixelCount: ${neutralPixelCount}, sampleCount: ${sampleCount}`);
+        console.log(`   neutralWeight: ${neutralWeightValue} (${(neutralWeightValue * 100).toFixed(1)}%)`);
+        console.log(`   chromaticCoverage: ${chromaticCoverageValue}`);
+
+        const dna = {
             version: '2.0',
 
             // Legacy top-level fields (backward compatible)
@@ -246,8 +254,8 @@ class DNAGenerator {
                 maxL: legacyDNA.maxL,
                 dynamicRange: legacyDNA.k,
                 dominantHue: legacyDNA.maxCHue,
-                chromaticCoverage: parseFloat((chromaticPixelCount / sampleCount).toFixed(2)),
-                neutralWeight: parseFloat((neutralPixelCount / sampleCount).toFixed(3)),
+                chromaticCoverage: chromaticCoverageValue,
+                neutralWeight: neutralWeightValue,
                 neutralLMean: neutralPixelCount > 0 ? parseFloat((neutralLSum / neutralPixelCount).toFixed(1)) : 0,
                 bitDepth: is16Bit ? 16 : 8
             },
@@ -256,6 +264,10 @@ class DNAGenerator {
 
             ...(spatial && { spatial })
         };
+
+        console.log(`🔬 DNAGenerator - Returning DNA with global.neutralWeight=${dna.global.neutralWeight}`);
+
+        return dna;
     }
 
     /**

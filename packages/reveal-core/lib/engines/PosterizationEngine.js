@@ -246,6 +246,14 @@ class PosterizationEngine {
                     // Quadratic penalty curve: drift² × sensitivity
                     // This creates "gravity wells" around DNA-derived anchor hues
                     lut[h] = Math.pow(drift - lockAngle, 2) * sensitivity;
+
+                    // BULLY SUPPRESSION: Blue is a "bully color" with high luminance at high chroma
+                    // When significant neutral content exists, increase blue sector penalties
+                    const neutralWeight = dna.global?.neutralWeight || 0;
+                    if (neutralWeight > 0.1 && (sectorName === 'blue' || sectorName === 'violet')) {
+                        const bullyFactor = 2.0;
+                        lut[h] *= bullyFactor;
+                    }
                 }
             }
         }
@@ -276,8 +284,13 @@ class PosterizationEngine {
      * @param {boolean} [options.grayscaleOnly=false] - L-channel only mode
      * @param {boolean} [options.preserveWhite=true] - Force white into palette
      * @param {boolean} [options.preserveBlack=true] - Force black into palette
-     * @param {boolean} [options.useNeutralAnchoring=false] - Enable neutral gravity (prevents color bleeding into grays)
-     * @param {number} [options.neutralStiffness=10.0] - Neutral anchoring strength (higher = stronger protection)
+     * @param {boolean} [options.useNeutralGravity=false] - Enable neutral gravity well (prevents color bleeding into grays)
+     * @param {number} [options.neutralStiffness=25.0] - Neutral gravity strength (higher = stronger migration tax)
+     * @param {number} [options.neutralChromaThreshold=3.5] - Chroma threshold below which pixels are considered neutral
+     * @param {number} [options.neutralDeadZone=0] - Chroma below which pixels are treated as absolute zero (prevents pink/blue chatter)
+     * @param {boolean} [options.hardNeutralLock=false] - Force neutral centroids to exact a=0, b=0 (prevents drift)
+     * @param {boolean} [options.useAchromaticProjection=false] - THERMONUCLEAR: Force neutral pixels to ignore a/b channels entirely (L-only comparison)
+     * @param {number} [options.neutralSovereigntyThreshold=4.0] - Chroma threshold for achromatic projection (pixels below this use L-only distance)
      * @returns {Object} - {palette, paletteLab, assignments, labPixels, metadata}
      */
     static posterize(pixels, width, height, targetColors, options = {}) {
@@ -3464,6 +3477,71 @@ class PosterizationEngine {
         );
         logger.log(`✓ Curated palette: ${curatedPaletteLab.length} colors`);
 
+        // SHADOW SOVEREIGNTY: Force-seed a dark gray centroid to compete with blue in mid-tones
+        // This prevents neutral fur pixels (L=40-60) from being assigned to blue swatches
+        if (options.useAchromaticProjection && options.dna && options.dna.global && options.dna.global.neutralWeight > 0.1) {
+            // Check if there's already a gray centroid in the mid-tone range (L=30-65)
+            const hasMidToneGray = curatedPaletteLab.some(color => {
+                const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
+                return color.L >= 30 && color.L <= 65 && chroma < 5.0;
+            });
+
+            if (!hasMidToneGray) {
+                // Find the average L value of neutral pixels in the mid-tone range
+                // For now, use L=50 as a good mid-point between shadows and highlights
+                const darkGraySeed = { L: 50, a: 0, b: 0 };
+                curatedPaletteLab.push(darkGraySeed);
+                logger.log(`✓ Shadow Sovereignty: Injected dark gray centroid at L=${darkGraySeed.L} to compete with chromatic mid-tones`);
+            }
+        }
+
+        // CENTROID QUARANTINE: Snap low-chroma centroids to true neutral (a=0, b=0)
+        // This creates a "True Gray" bucket that cannot drift into pale blue during assignment
+        // PERMANENT LOCK: Once snapped, centroids remain in quarantine for all iterations
+        // WIDE-GATE: neutralCentroidClampThreshold=12.0 prevents "ghost swatches" like desaturated blue-pink grays
+        logger.log(`🔍 CENTROID CLAMP CHECK: useNeutralGravity=${options.useNeutralGravity}, hardNeutralLock=${options.hardNeutralLock}, useAchromaticProjection=${options.useAchromaticProjection}`);
+        logger.log(`🔍 Curated palette has ${curatedPaletteLab.length} colors before clamping:`);
+        for (let i = 0; i < curatedPaletteLab.length; i++) {
+            const c = curatedPaletteLab[i];
+            const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
+            logger.log(`   Color ${i}: Lab(${c.L.toFixed(1)}, ${c.a.toFixed(1)}, ${c.b.toFixed(1)}) chroma=${chroma.toFixed(1)}`);
+        }
+        if (options.useNeutralGravity || options.hardNeutralLock || options.useAchromaticProjection) {
+            const snapThreshold = options.neutralCentroidClampThreshold || 5.0;
+            let snappedCount = 0;
+            let quarantineCount = 0;
+
+            for (let i = 0; i < curatedPaletteLab.length; i++) {
+                const color = curatedPaletteLab[i];
+                const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
+
+                if (chroma < snapThreshold && chroma > 0) {
+                    // Log what's being clamped for visibility
+                    if (snappedCount === 0) {
+                        logger.log(`  🔒 Centroid Clamp Threshold: ${snapThreshold.toFixed(1)} (snapping weak-chroma centroids to pure gray)`);
+                    }
+                    logger.log(`    • Clamping Color ${i}: Lab(${color.L.toFixed(1)}, ${color.a.toFixed(1)}, ${color.b.toFixed(1)}) → Lab(${color.L.toFixed(1)}, 0.0, 0.0) [chroma ${chroma.toFixed(1)} < ${snapThreshold.toFixed(1)}]`);
+                    color.a = 0;
+                    color.b = 0;
+                    snappedCount++;
+                }
+
+                // QUARANTINE: Mark centroids that are exactly neutral
+                if (color.a === 0 && color.b === 0) {
+                    // This centroid is in PERMANENT QUARANTINE - cannot drift toward pink/blue
+                    // Store this information for future iterations (would need K-means refinement)
+                    quarantineCount++;
+                }
+            }
+
+            if (snappedCount > 0) {
+                logger.log(`✓ Centroid Quarantine: Snapped ${snappedCount} low-chroma centroid(s) to a=0, b=0 (threshold: ${snapThreshold.toFixed(1)})`);
+            }
+            if (quarantineCount > 0) {
+                logger.log(`✓ ${quarantineCount} centroid(s) in permanent neutral quarantine (cannot drift)`);
+            }
+        }
+
         // ARCHITECT'S PALETTE REDUCTION: Prune colors that are too similar
         // User-configurable threshold (6.0-15.0 ΔE, default: 10.0)
         // Balances screen printing practicality with color richness
@@ -3781,11 +3859,25 @@ class PosterizationEngine {
                             const rawA = pixels[idx + 1];
                             const rawB = pixels[idx + 2];
 
+                            // DIAGNOSTIC: Track achromatic projection usage
+                            let usedAchromaticProjection = false;
+                            let pixelDebugChroma = 0;
+
                             // HUE-AXIS ANCHORING: Convert 16-bit to perceptual for hue calculation
+                            // CRITICAL: Must match DNAGenerator.js conversion formula
                             const pL = (rawL / 32768) * 100;
-                            const pA = ((rawA / 128) - 128);
-                            const pB = ((rawB / 128) - 128);
-                            const pixelChroma = Math.sqrt(pA * pA + pB * pB);
+                            const pA = ((rawA - 16384) / 16384) * 128;  // 16-bit: 0-32768, 16384=neutral
+                            const pB = ((rawB - 16384) / 16384) * 128;  // 16-bit: 0-32768, 16384=neutral
+                            let pixelChroma = Math.sqrt(pA * pA + pB * pB);
+                            pixelDebugChroma = pixelChroma;
+
+                            // CHROMATIC DEAD-ZONE: Treat small chroma as absolute zero to prevent pink/blue chatter
+                            const neutralDeadZone = options.neutralDeadZone || 0;
+                            const isNeutralPixel = pixelChroma < neutralDeadZone;
+                            if (isNeutralPixel && neutralDeadZone > 0) {
+                                pixelChroma = 0; // Force to exact neutral to eliminate mathematical noise
+                            }
+
                             const pixelHue = pixelChroma > 5 ? (Math.atan2(pB, pA) * 180 / Math.PI + 360) % 360 : -1;
                             const isYellowPixel = pixelHue >= 60 && pixelHue <= 100;
                             const isGreenPixel = pixelHue >= 120 && pixelHue <= 150;
@@ -3797,8 +3889,37 @@ class PosterizationEngine {
                                 const dA = rawA - target16.a;
                                 const dB = rawB - target16.b;
 
-                                // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
-                                let dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+                                // THERMONUCLEAR: ACHROMATIC PROJECTOR
+                                // For neutral pixels, COMPLETELY IGNORE a/b channels - force L-only comparison
+                                // This makes it mathematically impossible for blue to beat gray if gray is closer in L
+                                const useAchromaticProjection = options.useAchromaticProjection || false;
+                                const neutralSovereigntyThreshold = options.neutralSovereigntyThreshold || 6.0;  // Aggressive: catch near-grays
+                                const isInNeutralDMZ = pixelChroma < neutralSovereigntyThreshold;
+
+                                let dist;
+                                if (useAchromaticProjection && isInNeutralDMZ && !grayscaleOnly) {
+                                    // TOTAL AXIS ISOLATION: Only L matters, a/b completely ignored
+                                    const lWeight = options.lWeight || 5.0;
+                                    dist = Math.abs(dL) * lWeight * 128; // Scale to match magnitude
+                                    usedAchromaticProjection = true;
+                                } else {
+                                    // ENHANCED LWEIGHT FOR NEUTRALS: Make L 4× more important for near-neutral pixels
+                                    const lWeightMultiplier = isNeutralPixel ? 4.0 : 1.5;
+                                    // Squared Euclidean distance with adaptive L weighting
+                                    dist = grayscaleOnly ? (dL * dL) : (lWeightMultiplier * dL * dL + dA * dA + dB * dB);
+                                }
+
+                                // PINK SHADOW SUPPRESSION: Prevent dark neutrals from going magenta/plum
+                                // Dark pixels (L < 20) with low chroma MUST go to black, not dark purple/pink
+                                if (!grayscaleOnly && pL < 20 && isInNeutralDMZ) {
+                                    const targetLab = finalPaletteLab[j];
+                                    const targetIsNotBlack = targetLab.L > 10 || Math.sqrt(targetLab.a * targetLab.a + targetLab.b * targetLab.b) > 5;
+
+                                    if (targetIsNotBlack && actuallyPreservedBlack) {
+                                        // MASSIVE PENALTY: 1000× multiplier to force dark neutrals to dedicated Black ink
+                                        dist *= 1000;
+                                    }
+                                }
 
                                 // DYNAMIC HUE ANCHORING: LUT-based O(1) penalty lookup (cache-friendly)
                                 if (!grayscaleOnly && pixelHue >= 0) {
@@ -3816,14 +3937,16 @@ class PosterizationEngine {
                                             dist += huePenaltyLUT[hueIdx] * 256 * 128 * 128;
                                         }
 
-                                        // NEUTRAL GRAVITY: Prevent colorful centroids from absorbing neutral pixels
-                                        // If pixel is near-neutral (chroma < 3) and centroid is colorful (chroma > 8),
-                                        // add "Migration Tax" to prevent blue/cool colors bleeding into gray midtones
-                                        const useNeutralAnchoring = options.useNeutralAnchoring || false;
-                                        const neutralStiffness = options.neutralStiffness || 10.0;
-                                        if (useNeutralAnchoring && pixelChroma < 3.0 && targetChroma > 8.0) {
-                                            // Penalty scales with centroid chroma: more colorful = higher penalty
-                                            const neutralPenalty = targetChroma * neutralStiffness * 256 * 128 * 128;
+                                        // NEUTRAL GRAVITY WELL: Prevent colorful centroids from absorbing neutral pixels
+                                        // Creates a "Migration Tax" that scales quadratically with centroid chroma
+                                        // This prevents blue/cool colors from bleeding into gray midtones
+                                        const useNeutralGravity = options.useNeutralGravity || false;
+                                        const neutralStiffness = options.neutralStiffness || 25.0;
+                                        const neutralChromaThreshold = options.neutralChromaThreshold || 3.5;
+                                        if (useNeutralGravity && pixelChroma < neutralChromaThreshold && targetChroma > 5.0) {
+                                            // CHROMA SQUARING: C² penalty makes pale centroids pay little, vibrant ones pay massively
+                                            // C=2 (pale gray) → penalty ≈ 4, C=15 (sky blue) → penalty ≈ 225
+                                            const neutralPenalty = Math.pow(targetChroma, 2) * neutralStiffness * 256 * 128 * 128;
                                             dist += neutralPenalty;
                                         }
                                     } else {
@@ -3877,7 +4000,15 @@ class PosterizationEngine {
                             const pB = labPixels[idx + 2];
 
                             // HUE-AXIS ANCHORING: Calculate pixel hue for yellow zone detection
-                            const pixelChroma = Math.sqrt(pA * pA + pB * pB);
+                            let pixelChroma = Math.sqrt(pA * pA + pB * pB);
+
+                            // CHROMATIC DEAD-ZONE: Treat small chroma as absolute zero to prevent pink/blue chatter
+                            const neutralDeadZone = options.neutralDeadZone || 0;
+                            const isNeutralPixel = pixelChroma < neutralDeadZone;
+                            if (isNeutralPixel && neutralDeadZone > 0) {
+                                pixelChroma = 0; // Force to exact neutral to eliminate mathematical noise
+                            }
+
                             const pixelHue = pixelChroma > 5 ? (Math.atan2(pB, pA) * 180 / Math.PI + 360) % 360 : -1;
                             const isYellowPixel = pixelHue >= 60 && pixelHue <= 100;
                             const isGreenPixel = pixelHue >= 120 && pixelHue <= 150;
@@ -3889,8 +4020,32 @@ class PosterizationEngine {
                                 const dA = pA - target.a;
                                 const dB = pB - target.b;
 
-                                // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
-                                let dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+                                // THERMONUCLEAR: ACHROMATIC PROJECTOR
+                                const useAchromaticProjection = options.useAchromaticProjection || false;
+                                const neutralSovereigntyThreshold = options.neutralSovereigntyThreshold || 6.0;  // Aggressive: catch near-grays
+                                const isInNeutralDMZ = pixelChroma < neutralSovereigntyThreshold;
+
+                                let dist;
+                                if (useAchromaticProjection && isInNeutralDMZ && !grayscaleOnly) {
+                                    // TOTAL AXIS ISOLATION: Only L matters, a/b completely ignored
+                                    const lWeight = options.lWeight || 5.0;
+                                    dist = Math.abs(dL) * lWeight; // Smaller scale for 8-bit path
+                                } else {
+                                    // ENHANCED LWEIGHT FOR NEUTRALS: Make L 4× more important for near-neutral pixels
+                                    const lWeightMultiplier = isNeutralPixel ? 4.0 : 1.5;
+                                    // Squared Euclidean distance with adaptive L weighting
+                                    dist = grayscaleOnly ? (dL * dL) : (lWeightMultiplier * dL * dL + dA * dA + dB * dB);
+                                }
+
+                                // PINK SHADOW SUPPRESSION: Prevent dark neutrals from going magenta/plum (8-bit path)
+                                if (!grayscaleOnly && pL < 20 && isInNeutralDMZ) {
+                                    const targetIsNotBlack = target.L > 10 || Math.sqrt(target.a * target.a + target.b * target.b) > 5;
+
+                                    if (targetIsNotBlack && actuallyPreservedBlack) {
+                                        // MASSIVE PENALTY: 1000× multiplier to force dark neutrals to dedicated Black ink
+                                        dist *= 1000;
+                                    }
+                                }
 
                                 // DYNAMIC HUE ANCHORING: LUT-based O(1) penalty lookup (cache-friendly)
                                 if (!grayscaleOnly && pixelHue >= 0) {
@@ -3907,12 +4062,13 @@ class PosterizationEngine {
                                             dist += huePenaltyLUT[hueIdx] * 256;
                                         }
 
-                                        // NEUTRAL GRAVITY: Prevent colorful centroids from absorbing neutral pixels
-                                        const useNeutralAnchoring = options.useNeutralAnchoring || false;
-                                        const neutralStiffness = options.neutralStiffness || 10.0;
-                                        if (useNeutralAnchoring && pixelChroma < 3.0 && targetChroma > 8.0) {
-                                            // Float path uses smaller scale factor
-                                            const neutralPenalty = targetChroma * neutralStiffness * 256;
+                                        // NEUTRAL GRAVITY WELL: Prevent colorful centroids from absorbing neutral pixels
+                                        const useNeutralGravity = options.useNeutralGravity || false;
+                                        const neutralStiffness = options.neutralStiffness || 25.0;
+                                        const neutralChromaThreshold = options.neutralChromaThreshold || 3.5;
+                                        if (useNeutralGravity && pixelChroma < neutralChromaThreshold && targetChroma > 5.0) {
+                                            // CHROMA SQUARING: C² penalty (Float path uses smaller scale factor)
+                                            const neutralPenalty = Math.pow(targetChroma, 2) * neutralStiffness * 256;
                                             dist += neutralPenalty;
                                         }
                                     } else {

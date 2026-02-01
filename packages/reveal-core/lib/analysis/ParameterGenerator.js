@@ -200,13 +200,24 @@ class DynamicConfigurator {
 
     /**
      * Load archetype configurations from JSON files
-     * Only works in Node.js environment (not browser/UXP)
+     * Works in both UXP/Browser (bundled) and Node.js (file system)
      * @returns {Array|null} Array of archetype configs or null if unavailable
      */
     static loadArchetypes() {
-        // Check if fs/path are available (Node.js only)
+        // TRY 1: Load bundled archetypes (UXP/Browser)
+        try {
+            const bundledArchetypes = require('../../archetypes');
+            if (Array.isArray(bundledArchetypes) && bundledArchetypes.length > 0) {
+                console.log(`✅ Loaded ${bundledArchetypes.length} archetypes (bundled)`);
+                return bundledArchetypes;
+            }
+        } catch (err) {
+            // Bundled archetypes not available, try file system
+        }
+
+        // TRY 2: Load from file system (Node.js only)
         if (!fs || !path) {
-            return null;  // Silently fall back to legacy generation
+            return null;  // Neither bundled nor fs available
         }
 
         try {
@@ -230,7 +241,12 @@ class DynamicConfigurator {
                 }
             }
 
-            return archetypes.length > 0 ? archetypes : null;
+            if (archetypes.length > 0) {
+                console.log(`✅ Loaded ${archetypes.length} archetypes (file system)`);
+                return archetypes;
+            }
+
+            return null;
         } catch (err) {
             return null;  // Silently fall back to legacy
         }
@@ -427,7 +443,18 @@ class DynamicConfigurator {
             const originalLWeight = params.lWeight;
             const originalCWeight = params.cWeight;
 
-            if (thermonuclear) {
+            // ⚠️  CRITICAL: Check if Achromatic Projection is active (THERMONUCLEAR Neutral Protection)
+            // If neutrals are being protected, DO NOT override their weights
+            const hasAchromaticProtection = params.useAchromaticProjection || params.hardNeutralLock;
+
+            if (hasAchromaticProtection) {
+                console.log(`  🛡️  ACHROMATIC PROTECTION ACTIVE - Preserving neutral sovereignty weights`);
+                console.log(`     useAchromaticProjection: ${params.useAchromaticProjection}`);
+                console.log(`     hardNeutralLock: ${params.hardNeutralLock}`);
+                console.log(`     Current lWeight: ${params.lWeight}, cWeight: ${params.cWeight}`);
+                console.log(`     → Yellow Morph will NOT override weights (neutral protection takes priority)`);
+                morphs.push(`🛡️ Achromatic Protection preserved → lWeight=${params.lWeight}, cWeight=${params.cWeight} (neutral sovereignty over yellow)`);
+            } else if (thermonuclear) {
                 // THERMONUCLEAR: Strong L-bias but not extreme (preserve palette diversity)
                 params.lWeight = 5.0;   // Strong L-sensitivity for yellow/orange separation
                 params.cWeight = 2.5;   // Moderate chroma weight (allows vibrant colors to survive)
@@ -629,6 +656,17 @@ class DynamicConfigurator {
         // ================================================================
         if (selectedArchetype.dna_constraints) {
             console.log(`📋 Evaluating DNA constraints...`);
+            console.log(`🔍 DNA DEBUG: version=${dna.version}, has global=${!!dna.global}, has sectors=${!!dna.sectors}`);
+            if (dna.global) {
+                console.log(`🔍 global.neutralWeight=${dna.global.neutralWeight}, global.chromaticCoverage=${dna.global.chromaticCoverage}`);
+            }
+            if (dna.sectors) {
+                const sectorNames = Object.keys(dna.sectors);
+                console.log(`🔍 sectors: ${sectorNames.length} sectors (${sectorNames.slice(0, 5).join(', ')}...)`);
+                if (dna.sectors.blue) {
+                    console.log(`🔍 sectors.blue.weight=${dna.sectors.blue.weight}`);
+                }
+            }
             this.applyDNAConstraints(params, selectedArchetype.dna_constraints, dna);
         }
 

@@ -100,14 +100,17 @@
       }
     },
     {
-      "name": "Cool-to-Neutral Protection",
-      "priority": 950,
-      "if": "sectors.blue.weight > 0.15 && global.neutralWeight > 0.10",
+      "name": "Soft Neutral Axis Lock",
+      "priority": 980,
+      "if": "global.neutralWeight > 0.08",
       "then": {
-        "cWeight": 3.5,
-        "useNeutralAnchoring": true,
-        "neutralStiffness": 5.0,
-        "description": "Moderate neutral anchoring allows artistic color grading while preventing excessive blue bleeding"
+        "hardNeutralLock": true,
+        "useNeutralGravity": true,
+        "neutralStiffness": 15.0,
+        "neutralDeadZone": 2.5,
+        "neutralChromaThreshold": 4.0,
+        "cWeight": 3.0,
+        "description": "Moderate hard-lock allows artistic grading while preventing excessive chatter"
       }
     }
   ]

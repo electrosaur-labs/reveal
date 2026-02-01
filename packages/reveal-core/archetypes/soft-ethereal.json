@@ -79,14 +79,32 @@
       }
     },
     {
-      "name": "Cool-to-Neutral Protection",
-      "priority": 950,
-      "if": "sectors.blue.weight > 0.15 && global.neutralWeight > 0.10",
+      "name": "THERMONUCLEAR: Achromatic Axis Lock",
+      "priority": 1000,
+      "if": "global.neutralWeight > 0.10 && global.chromaticCoverage > 0.30",
       "then": {
-        "cWeight": 3.5,
-        "useNeutralAnchoring": true,
-        "neutralStiffness": 15.0,
-        "description": "Increases chroma weighting and enables neutral anchoring to prevent blue bleeding into gray midtones"
+        "useAchromaticProjection": true,
+        "hardNeutralLock": true,
+        "neutralSovereigntyThreshold": 12.0,
+        "neutralCentroidClampThreshold": 12.0,
+        "lWeight": 15.0,
+        "cWeight": 0.0,
+        "blackBias": 6.0,
+        "description": "Wide-Gate Isolation: Forces ALL low-saturation pixels (chroma < 12.0) to use L-only distance, preventing 'ghost swatches' like desaturated blue-pink grays from attracting fur pixels. Centroid clamping snaps weak-chroma clusters to pure gray."
+      }
+    },
+    {
+      "name": "Neutral Axis Hard-Lock (Fallback)",
+      "priority": 990,
+      "if": "global.neutralWeight > 0.05",
+      "then": {
+        "hardNeutralLock": true,
+        "useNeutralGravity": true,
+        "neutralStiffness": 35.0,
+        "neutralDeadZone": 3.0,
+        "neutralChromaThreshold": 3.5,
+        "cWeight": 4.0,
+        "description": "Hard-locks neutral centroids to a=0,b=0 and creates dead-zone to prevent pink/blue chatter"
       }
     }
   ]

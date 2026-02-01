@@ -18,13 +18,15 @@
 
 class ConstraintEvaluator {
     constructor() {
-        // Whitelist of allowed DNA properties (top-level legacy fields)
+        // Whitelist of allowed DNA properties (top-level legacy fields + v2.0 global fields)
         this.allowedTopLevelProperties = new Set([
             'l', 'c', 'k', 'l_std_dev',
             'maxC', 'maxCHue', 'minL', 'maxL',
             'yellowDominance', 'bitDepth',
             'dynamicRange', 'complexityScore', 'edgeDensity',
-            'dominantHue', 'chromaticCoverage'
+            'dominantHue', 'chromaticCoverage',
+            // v2.0 global fields
+            'neutralWeight', 'neutralLMean'
         ]);
 
         // Whitelist of allowed nested objects

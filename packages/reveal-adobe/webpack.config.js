@@ -52,7 +52,10 @@ module.exports = (env, argv) => {
             },
             fallback: {
                 // Provide buffer polyfill for browser-like environments (UXP)
-                buffer: require.resolve('buffer/')
+                buffer: require.resolve('buffer/'),
+                // Explicitly disable Node.js core modules (UXP doesn't have them)
+                fs: false,
+                path: false
             }
         },
         externals: {
