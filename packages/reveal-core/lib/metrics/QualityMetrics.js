@@ -19,9 +19,11 @@ class MetricsCalculator {
      * @param {Array} layers - Array of {name, color, mask} objects
      * @param {number} width - Image width
      * @param {number} height - Image height
+     * @param {Object} dna - DNA v2.0 object with global metrics (optional, for Rev Score v2.0)
+     * @param {Array} palette - Palette array with Lab colors (optional, for Rev Score v2.0)
      * @returns {Object} Complete metrics object
      */
-    static compute(originalLab, processedLab, layers, width, height) {
+    static compute(originalLab, processedLab, layers, width, height, dna = null, palette = null) {
         const pixelCount = width * height;
 
         // ==================================================================
@@ -61,9 +63,12 @@ class MetricsCalculator {
 
         const saliencyLoss = this._computeSaliencyWeightedError(deltaEMap, width, height);
 
-        // Revelation Score: Custom metric combining average error and feature loss
-        // Formula: 100 - (avgDeltaE × 1.5) - (saliencyLoss × 2)
-        const revScore = Math.max(0, 100 - (avgDeltaE * 1.5) - (saliencyLoss * 2));
+        // Revelation Score v2.0: Print-First Recalibration
+        // If DNA and palette are provided, use new printability-focused scoring
+        // Otherwise, fall back to legacy math-accuracy scoring
+        const revScore = (dna && palette)
+            ? this._calculateRevelationScoreV2(avgDeltaE, saliencyLoss, layers, dna, palette, pixelCount)
+            : Math.max(0, 100 - (avgDeltaE * 1.5) - (saliencyLoss * 2));
 
         // ==================================================================
         // 3. PHYSICAL FEASIBILITY - Ink Stack Analysis
@@ -205,6 +210,135 @@ class MetricsCalculator {
         const range = FAIL_LIMIT - GOOD_LIMIT;
         const progress = (noiseRatio - GOOD_LIMIT) / range;
         return (60 - (progress * 60)).toFixed(1);  // 60 → 0
+    }
+
+    /**
+     * REVELATION SCORE v2.0: Print-First Recalibration
+     *
+     * Paradigm shift from "Mathematical Accuracy" to "Printability and Intentionality"
+     *
+     * Scoring Pillars:
+     * 1. Trotter Amnesty - Stop penalizing harmonic drift (ΔE < 15)
+     * 2. Neutral Sovereignty - Reward successful gray capture, penalize blue colonization
+     * 3. Plate Efficiency - Reward printable color counts (7-8), penalize unwieldy (12+)
+     * 4. Shadow Integrity - Penalize chromatic shadows (no "plum blacks")
+     * 5. Saliency Retention - Ensure subject DNA's chromatic sectors are preserved
+     *
+     * @private
+     */
+    static _calculateRevelationScoreV2(avgDeltaE, saliencyLoss, layers, dna, palette, pixelCount) {
+        let score = 100;
+
+        // ==================================================================
+        // 1. THE "TROTTER" AMNESTY (DeltaE Neutralization)
+        // ==================================================================
+        // If avgDeltaE is harmonic (shifting grays to pure grays or warm tones),
+        // we stop the linear penalty. Treat anything under ΔE 15 as "Ideal."
+        const deltaEPenalty = Math.max(0, avgDeltaE - 15.0) * 1.5;
+        score -= deltaEPenalty;
+
+        // ==================================================================
+        // 2. NEUTRAL SOVEREIGNTY REWARD (The Jethro Fix)
+        // ==================================================================
+        // High points for keeping grays on the axis
+        const neutrals = palette.filter(c => Math.sqrt(c.a**2 + c.b**2) < 2.0);
+
+        if (dna.global && dna.global.neutralWeight > 0.1) {
+            // Count pixels assigned to neutral swatches
+            let neutralPixelCount = 0;
+            layers.forEach((layer, idx) => {
+                const paletteColor = palette[idx];
+                if (paletteColor && Math.sqrt(paletteColor.a**2 + paletteColor.b**2) < 2.0) {
+                    // This is a neutral layer - count its pixels
+                    for (let i = 0; i < layer.mask.length; i++) {
+                        if (layer.mask[i] > 0) neutralPixelCount++;
+                    }
+                }
+            });
+
+            const neutralCoverage = neutralPixelCount / pixelCount;
+            const expectedNeutralWeight = dna.global.neutralWeight;
+
+            if (neutralCoverage >= expectedNeutralWeight * 0.9) {
+                score += 15; // Bonus for successfully capturing the neutral axis
+            } else {
+                score -= 20; // Heavy penalty for "Blue Colonization" of grays
+            }
+        }
+
+        // ==================================================================
+        // 3. PLATE EFFICIENCY (Nazdar Workflow)
+        // ==================================================================
+        // A 7-color separation that looks good is superior to a 12-color one
+        if (palette.length <= 8) {
+            score += 10;
+        } else if (palette.length > 12) {
+            score -= 15; // Unprintable/Unwieldy complexity
+        }
+
+        // ==================================================================
+        // 4. SHADOW INTEGRITY (Shadow Sovereignty)
+        // ==================================================================
+        // Check if the deep shadows (L < 15) are handled by a dedicated clamp
+        const deepShadowInks = palette.filter(c => c.L < 15);
+        const chromaticShadows = deepShadowInks.filter(c => Math.sqrt(c.a**2 + c.b**2) > 5.0);
+
+        if (chromaticShadows.length > 0) {
+            score -= 25; // Penalty for "Plum Shadows" or muddy chromatic blacks
+        }
+
+        // ==================================================================
+        // 5. SALIENCY RETENTION
+        // ==================================================================
+        // Does the "Subject DNA" remain recognizable?
+        // Check if peak chromatic sectors in the DNA are represented in the palette
+        const hueGaps = this._checkHueCoverage(palette, dna);
+        score -= (hueGaps.length * 10);
+
+        return Math.min(100, Math.max(0, score));
+    }
+
+    /**
+     * Check if the palette covers the major hue sectors from the DNA
+     *
+     * Returns array of missing hue sectors (empty = good coverage)
+     *
+     * @private
+     */
+    static _checkHueCoverage(palette, dna) {
+        const hueGaps = [];
+
+        // If DNA has sector analysis, check if palette represents major chromatic sectors
+        if (dna.sectors && Array.isArray(dna.sectors)) {
+            // Find sectors with significant chromatic coverage (>5%)
+            const significantSectors = dna.sectors.filter(s =>
+                s.chromaticPixels > 0 &&
+                (s.chromaticPixels / (s.pixelCount || 1)) > 0.05
+            );
+
+            significantSectors.forEach(sector => {
+                // Check if any palette color represents this sector
+                // Sector hue is defined by its centroid
+                const sectorHue = Math.atan2(sector.avgB || 0, sector.avgA || 0) * (180 / Math.PI);
+
+                const hasRepresentation = palette.some(color => {
+                    const chroma = Math.sqrt(color.a**2 + color.b**2);
+                    if (chroma < 5.0) return false; // Skip achromatic colors
+
+                    const colorHue = Math.atan2(color.b, color.a) * (180 / Math.PI);
+                    const hueDiff = Math.abs(colorHue - sectorHue);
+                    const hueDist = Math.min(hueDiff, 360 - hueDiff);
+
+                    return hueDist < 30; // Within 30° = same hue sector
+                });
+
+                if (!hasRepresentation) {
+                    hueGaps.push(sector.name || `Hue ${sectorHue.toFixed(0)}°`);
+                }
+            });
+        }
+
+        return hueGaps;
     }
 }
 

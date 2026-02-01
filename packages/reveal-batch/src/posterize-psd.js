@@ -298,13 +298,21 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         ? lab8bit
         : new Uint8ClampedArray(lab8bit);
 
+    // Convert palette to format expected by v2.0 scoring (with L, a, b properties)
+    const paletteForScoring = filteredPaletteLab.map(color => ({
+        L: color.L,
+        a: color.a,
+        b: color.b
+    }));
+
     const metrics = MetricsCalculator.compute(
         originalLabClamped,
         processedLab,
         layersForMetrics,
         width,
         height,
-        { targetColors: config.targetColorsSlider }
+        dna,                  // DNA v2.0 for Revelation Score v2.0
+        paletteForScoring     // Palette for Revelation Score v2.0
     );
 
     console.log(`  DeltaE: avg=${metrics.global_fidelity.avgDeltaE}, max=${metrics.global_fidelity.maxDeltaE}`);
