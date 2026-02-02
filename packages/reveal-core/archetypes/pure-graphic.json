@@ -1,7 +1,7 @@
 {
   "id": "pure_graphic",
   "name": "Pure Graphic / Vector",
-  "description": "Ultra-flat colors, zero gradients, solid shapes (logos, flat vector art)",
+  "description": "Ultra-flat colors, zero gradients, solid shapes. Forces the highest Hue Lock to keep spot colors distinct.",
   "centroid": {
     "l": 50,
     "c": 40,
@@ -10,34 +10,36 @@
   },
   "weights": {
     "l": 0.5,
-    "c": 1.0,
+    "c": 2.0,
     "k": 1.0,
     "l_std_dev": 5.0
   },
   "parameters": {
-    "engineType": "balanced",
-    "centroidStrategy": "VOLUMETRIC",
+    "targetColorsSlider": 6,
+    "ditherType": "none",
+    "distanceMetric": "cie76",
     "lWeight": 0.5,
-    "cWeight": 1.5,
+    "cWeight": 2.0,
     "blackBias": 1.0,
-    "substrateMode": "auto",
-    "substrateTolerance": 1.5,
     "vibrancyMode": "linear",
     "vibrancyBoost": 1.0,
     "vibrancyThreshold": 0,
     "highlightThreshold": 98,
     "highlightBoost": 1.0,
     "enablePaletteReduction": true,
-    "paletteReduction": 3.0,
-    "hueLockAngle": 60,
+    "paletteReduction": 4.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 1.5,
     "shadowPoint": 2,
+    "enableHueGapAnalysis": false,
+    "hueLockAngle": 60,
     "colorMode": "color",
-    "targetColorsSlider": 4,
     "preserveWhite": true,
     "preserveBlack": true,
     "ignoreTransparent": true,
-    "enableHueGapAnalysis": false,
-    "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 10,
+    "neutralCentroidClampThreshold": 5.0,
+    "preprocessingIntensity": "none"
   }
 }

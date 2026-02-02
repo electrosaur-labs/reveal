@@ -1,43 +1,45 @@
 {
   "id": "soft_ethereal",
   "name": "Soft / Ethereal",
-  "description": "Mid-bright, low contrast, soft (dreamy photos)",
+  "description": "Maintains hazy mid-tones and prevents harsh edge artifacts in low-contrast, high-key photography.",
   "centroid": {
-    "l": 65,
-    "c": 20,
+    "l": 75,
+    "c": 15,
     "k": 40,
-    "l_std_dev": 18
+    "l_std_dev": 12
   },
   "weights": {
-    "l": 0.5,
+    "l": 1.0,
     "c": 1.0,
     "k": 0.5,
-    "l_std_dev": 1.0
+    "l_std_dev": 1.5
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "VOLUMETRIC",
+    "targetColorsSlider": 8,
+    "ditherType": "blue-noise",
+    "distanceMetric": "cie94",
     "lWeight": 1.2,
-    "cWeight": 1.0,
-    "blackBias": 3.0,
-    "substrateMode": "auto",
-    "substrateTolerance": 4.5,
+    "cWeight": 1.2,
+    "blackBias": 2.0,
     "vibrancyMode": "linear",
-    "vibrancyBoost": 1.1,
+    "vibrancyBoost": 1.0,
     "vibrancyThreshold": 15,
-    "highlightThreshold": 95,
-    "highlightBoost": 1.2,
+    "highlightThreshold": 94,
+    "highlightBoost": 1.1,
     "enablePaletteReduction": true,
     "paletteReduction": 9.0,
+    "substrateMode": "white",
+    "substrateTolerance": 4.5,
+    "shadowPoint": 20,
+    "enableHueGapAnalysis": true,
     "hueLockAngle": 15,
-    "shadowPoint": 10,
     "colorMode": "color",
-    "targetColorsSlider": 8,
-    "preserveWhite": false,
+    "preserveWhite": true,
     "preserveBlack": false,
     "ignoreTransparent": true,
-    "enableHueGapAnalysis": true,
-    "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 5,
+    "neutralCentroidClampThreshold": 1.5,
+    "preprocessingIntensity": "light"
   }
 }

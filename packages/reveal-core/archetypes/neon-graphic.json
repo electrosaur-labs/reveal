@@ -1,7 +1,7 @@
 {
   "id": "neon_graphic",
   "name": "Neon / Fluorescent Graphic",
-  "description": "Ultra-saturated flat vector art and high-vis spot color graphics.",
+  "description": "Aggressive hue-locking for ultra-saturated flat art. Prevents bleed between vibrant spot colors.",
   "centroid": {
     "l": 60,
     "c": 90,
@@ -15,29 +15,31 @@
     "l_std_dev": 4.0
   },
   "parameters": {
-    "engineType": "balanced",
-    "centroidStrategy": "VOLUMETRIC",
+    "targetColorsSlider": 6,
+    "ditherType": "none",
+    "distanceMetric": "cie76",
     "lWeight": 0.5,
-    "cWeight": 2.5,
+    "cWeight": 6.5,
     "blackBias": 1.0,
-    "substrateMode": "auto",
-    "substrateTolerance": 1.5,
     "vibrancyMode": "exponential",
-    "vibrancyBoost": 1.6,
+    "vibrancyBoost": 1.8,
     "vibrancyThreshold": 0,
     "highlightThreshold": 98,
     "highlightBoost": 1.0,
     "enablePaletteReduction": true,
     "paletteReduction": 3.0,
-    "hueLockAngle": 45,
+    "substrateMode": "auto",
+    "substrateTolerance": 1.5,
     "shadowPoint": 2,
+    "enableHueGapAnalysis": true,
+    "hueLockAngle": 45,
     "colorMode": "color",
-    "targetColorsSlider": 5,
     "preserveWhite": true,
     "preserveBlack": true,
     "ignoreTransparent": true,
-    "enableHueGapAnalysis": true,
-    "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 20,
+    "neutralCentroidClampThreshold": 15.0,
+    "preprocessingIntensity": "none"
   }
 }

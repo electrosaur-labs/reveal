@@ -1,7 +1,7 @@
 {
   "id": "vibrant_tonal",
   "name": "Vibrant Tonal / Neon-High-Chroma",
-  "description": "Traps high-chroma spikes (Yellows/Neons) in otherwise tonal or dark images.",
+  "description": "Designed to find vibrant details inside underexposed or moody frames.",
   "centroid": {
     "l": 50,
     "c": 45,
@@ -15,13 +15,12 @@
     "l_std_dev": 0.5
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "SALIENCY",
-    "lWeight": 0.2,
+    "targetColorsSlider": 10,
+    "ditherType": "blue-noise",
+    "distanceMetric": "cie94",
+    "lWeight": 1.2,
     "cWeight": 6.5,
     "blackBias": 4.0,
-    "substrateMode": "auto",
-    "substrateTolerance": 2.5,
     "vibrancyMode": "exponential",
     "vibrancyBoost": 1.8,
     "vibrancyThreshold": 5.0,
@@ -29,15 +28,18 @@
     "highlightBoost": 1.4,
     "enablePaletteReduction": true,
     "paletteReduction": 3.0,
-    "hueLockAngle": 45,
+    "substrateMode": "auto",
+    "substrateTolerance": 2.5,
     "shadowPoint": 10,
+    "enableHueGapAnalysis": true,
+    "hueLockAngle": 45,
     "colorMode": "color",
-    "targetColorsSlider": 10,
     "preserveWhite": false,
     "preserveBlack": false,
     "ignoreTransparent": true,
-    "enableHueGapAnalysis": true,
-    "ditherType": "BlueNoise",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 10,
+    "neutralCentroidClampThreshold": 2.5,
+    "preprocessingIntensity": "heavy"
   }
 }

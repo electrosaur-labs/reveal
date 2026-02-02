@@ -1,43 +1,45 @@
 {
   "id": "silver_gelatin",
   "name": "Silver Gelatin / Tonal B&W",
-  "description": "High-quality black-and-white photography with deep range and fine grain simulation.",
+  "description": "Hard-locks neutral centroids to a=0,b=0 and creates a dead-zone to prevent chromatic chatter in shadows.",
   "centroid": {
     "l": 50,
     "c": 2,
-    "k": 85,
-    "l_std_dev": 25
+    "k": 100,
+    "l_std_dev": 28
   },
   "weights": {
-    "l": 1.5,
-    "c": 2.0,
-    "k": 1.5,
-    "l_std_dev": 1.0
+    "l": 1.0,
+    "c": 0.1,
+    "k": 2.0,
+    "l_std_dev": 2.5
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "SALIENCY",
+    "targetColorsSlider": 10,
+    "ditherType": "atkinson",
+    "distanceMetric": "cie94",
     "lWeight": 2.0,
     "cWeight": 0.5,
-    "blackBias": 4.0,
-    "substrateMode": "white",
-    "substrateTolerance": 2.0,
-    "vibrancyMode": "subtle",
-    "vibrancyBoost": 0.5,
-    "vibrancyThreshold": 5,
-    "highlightThreshold": 92,
+    "blackBias": 5.0,
+    "vibrancyMode": "linear",
+    "vibrancyBoost": 1.0,
+    "vibrancyThreshold": 0,
+    "highlightThreshold": 94,
     "highlightBoost": 1.2,
     "enablePaletteReduction": true,
     "paletteReduction": 5.0,
-    "hueLockAngle": 10,
+    "substrateMode": "white",
+    "substrateTolerance": 2.0,
     "shadowPoint": 5,
+    "enableHueGapAnalysis": false,
+    "hueLockAngle": 10,
     "colorMode": "grayscale",
-    "targetColorsSlider": 6,
     "preserveWhite": true,
     "preserveBlack": true,
     "ignoreTransparent": true,
-    "enableHueGapAnalysis": false,
-    "ditherType": "Atkinson",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 35,
+    "neutralCentroidClampThreshold": 0.2,
+    "preprocessingIntensity": "medium"
   }
 }

@@ -1,7 +1,7 @@
 {
   "id": "warm_tonal_optimized",
   "name": "Warm Tonal / Yellow Protect",
-  "description": "Optimized for photographic images where yellows must remain sovereign from browns and earthy tones.",
+  "description": "Prevents earthy tones from muddying bright yellows or oranges.",
   "centroid": {
     "l": 55,
     "c": 35,
@@ -9,19 +9,18 @@
     "l_std_dev": 22
   },
   "weights": {
-    "l": 0.2,
-    "c": 4.5,
-    "k": 1.0,
+    "l": 0.3,
+    "c": 2.5,
+    "k": 1.5,
     "l_std_dev": 1.5
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "SALIENCY",
+    "targetColorsSlider": 10,
+    "ditherType": "none",
+    "distanceMetric": "cie94",
     "lWeight": 0.3,
     "cWeight": 5.0,
     "blackBias": 4.0,
-    "substrateMode": "auto",
-    "substrateTolerance": 3.0,
     "vibrancyMode": "exponential",
     "vibrancyBoost": 1.8,
     "vibrancyThreshold": 8.0,
@@ -29,15 +28,18 @@
     "highlightBoost": 1.6,
     "enablePaletteReduction": true,
     "paletteReduction": 4.0,
-    "hueLockAngle": 45,
+    "substrateMode": "auto",
+    "substrateTolerance": 3.0,
     "shadowPoint": 12,
+    "enableHueGapAnalysis": true,
+    "hueLockAngle": 45,
     "colorMode": "color",
-    "targetColorsSlider": 10,
     "preserveWhite": true,
     "preserveBlack": false,
     "ignoreTransparent": true,
-    "enableHueGapAnalysis": true,
-    "ditherType": "BlueNoise",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 25,
+    "neutralCentroidClampThreshold": 5.0,
+    "preprocessingIntensity": "medium"
   }
 }
