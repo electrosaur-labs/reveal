@@ -1,7 +1,7 @@
 {
   "id": "vibrant_hyper",
   "name": "Vibrant / Graphic",
-  "description": "Highly saturated, colorful (pop art, concert posters)",
+  "description": "Highly saturated, colorful aesthetics. Maximizes chroma over tonal precision.",
   "centroid": {
     "l": 50,
     "c": 60,
@@ -10,34 +10,36 @@
   },
   "weights": {
     "l": 0.5,
-    "c": 2.0,
-    "k": 1.0,
-    "l_std_dev": 1.0
+    "c": 2.5,
+    "k": 1.5,
+    "l_std_dev": 2.0
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "SALIENCY",
+    "targetColorsSlider": 8,
+    "ditherType": "none",
+    "distanceMetric": "cie76",
     "lWeight": 0.8,
-    "cWeight": 1.5,
+    "cWeight": 4.5,
     "blackBias": 2.0,
-    "substrateMode": "auto",
-    "substrateTolerance": 5.0,
-    "vibrancyMode": "linear",
-    "vibrancyBoost": 1.2,
+    "vibrancyMode": "aggressive",
+    "vibrancyBoost": 1.6,
     "vibrancyThreshold": 0,
     "highlightThreshold": 95,
     "highlightBoost": 1.0,
     "enablePaletteReduction": true,
     "paletteReduction": 12.0,
-    "hueLockAngle": 30,
+    "substrateMode": "auto",
+    "substrateTolerance": 5.0,
     "shadowPoint": 5,
+    "enableHueGapAnalysis": false,
+    "hueLockAngle": 30,
     "colorMode": "color",
-    "targetColorsSlider": 8,
     "preserveWhite": false,
     "preserveBlack": false,
     "ignoreTransparent": true,
-    "enableHueGapAnalysis": false,
-    "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 18,
+    "neutralCentroidClampThreshold": 10.0,
+    "preprocessingIntensity": "none"
   }
 }

@@ -57,6 +57,7 @@ let posterizationData = null;
  * Stores { maxC, l_std_dev, c, k, minL, maxL, archetype } from analysis
  */
 let lastImageDNA = null;
+let lastGeneratedConfig = null;  // Complete config from ParameterGenerator (includes all parameters)
 
 /**
  * Zoom preview state (tile managers, viewport tracker, renderer)
@@ -3464,12 +3465,23 @@ async function showDialog() {
                     return;
                 }
 
-                // Get form values
-                const params = getFormValues();
+                // Get form values and merge with stored config (includes parameters not in UI)
+                const formParams = getFormValues();
+                const params = {
+                    ...lastGeneratedConfig,  // Start with complete config from ParameterGenerator
+                    ...formParams            // Override with user-adjusted UI values
+                };
                 const grayscaleOnly = params.colorMode === 'bw';  // Determine from dropdown
 
                 // Log parameters for debugging
-                logger.log("Posterization parameters:", params);
+                logger.log("Posterization parameters (merged):", params);
+                if (lastGeneratedConfig) {
+                    logger.log("  Config-only parameters (not in UI):", {
+                        vibrancyThreshold: lastGeneratedConfig.vibrancyThreshold,
+                        neutralSovereigntyThreshold: lastGeneratedConfig.neutralSovereigntyThreshold,
+                        neutralCentroidClampThreshold: lastGeneratedConfig.neutralCentroidClampThreshold
+                    });
+                }
 
                 try {
                     // Validate document (includes Lab mode check)
@@ -4115,12 +4127,14 @@ async function showDialog() {
                             }
                         }
 
-                        // Store DNA globally for "Smart Reveal" auto mode resolution
+                        // Store DNA and complete config globally for "Smart Reveal" and posterization
                         lastImageDNA = {
                             ...dna,
                             archetype: config.meta?.archetype || null,
                             preprocessing: config.preprocessing  // Store preprocessing config for posterization
                         };
+                        // Store complete config including all parameters (even those not in UI)
+                        lastGeneratedConfig = config;
                         logger.log(`✓ Stored DNA for Smart Reveal: peakC=${dna.maxC?.toFixed(1)}, archetype=${lastImageDNA.archetype}`);
 
                         // Determine preprocessing dropdown value based on analysis
@@ -4137,12 +4151,13 @@ async function showDialog() {
                         }
 
                         // Map ALL parameters to UI elements from Expert System Configurator
-                        // ParameterGenerator v3.0 now provides full parameter mapping
+                        // ParameterGenerator now provides full parameter mapping
+                        // Parameters without UI elements will be logged and skipped by applyAnalyzedSettings()
                         const uiSettings = {
                             // Core posterization (DNA-driven)
                             targetColorsSlider: config.targetColors,
                             ditherType: config.ditherType,
-                            distanceMetric: 'auto',  // Keep on auto - will resolve at separation time
+                            distanceMetric: config.distanceMetric || 'auto',  // Use config value or auto
 
                             // Saliency weights (DNA-driven)
                             lWeight: config.lWeight,
@@ -4152,33 +4167,38 @@ async function showDialog() {
                             // Vibrancy settings (DNA-driven)
                             vibrancyMode: config.vibrancyMode,
                             vibrancyBoost: config.vibrancyBoost,
+                            vibrancyThreshold: config.vibrancyThreshold,  // May not have UI element
 
                             // Highlight protection (DNA-driven)
                             highlightThreshold: config.highlightThreshold,
                             highlightBoost: config.highlightBoost,
 
                             // Color merging (DNA-driven)
-                            enablePaletteReduction: true,
+                            enablePaletteReduction: config.enablePaletteReduction !== false,
                             paletteReduction: config.paletteReduction,
 
                             // Substrate (DNA-driven)
                             substrateMode: config.substrateMode,
-                            substrateTolerance: 3.5,  // Standard tolerance
+                            substrateTolerance: config.substrateTolerance || 3.5,
+
+                            // Neutral sovereignty (DNA-driven, may not have UI elements)
+                            neutralSovereigntyThreshold: config.neutralSovereigntyThreshold,
+                            neutralCentroidClampThreshold: config.neutralCentroidClampThreshold,
 
                             // Preprocessing (entropy-driven)
-                            preprocessingIntensity: preprocessingDropdownValue,
+                            preprocessingIntensity: config.preprocessingIntensity || preprocessingDropdownValue,
 
-                            // Fixed defaults (these don't need DNA tuning)
-                            engineType: 'reveal',
-                            centroidStrategy: 'SALIENCY',
-                            hueLockAngle: 20,
-                            shadowPoint: 15,
-                            colorMode: 'color',
-                            preserveWhite: true,
-                            preserveBlack: true,
-                            ignoreTransparent: true,
-                            enableHueGapAnalysis: true,
-                            maskProfile: 'Gray Gamma 2.2'
+                            // Additional parameters from config
+                            engineType: config.engineType || 'reveal',
+                            centroidStrategy: config.centroidStrategy || 'SALIENCY',
+                            hueLockAngle: config.hueLockAngle || 20,
+                            shadowPoint: config.shadowPoint || 15,
+                            colorMode: config.colorMode || 'color',
+                            preserveWhite: config.preserveWhite !== false,
+                            preserveBlack: config.preserveBlack !== false,
+                            ignoreTransparent: config.ignoreTransparent !== false,
+                            enableHueGapAnalysis: config.enableHueGapAnalysis !== false,
+                            maskProfile: config.maskProfile || 'Gray Gamma 2.2'
                         };
 
                         logger.log("  Setting ALL UI parameters from Expert System:");

@@ -1,0 +1,45 @@
+{
+  "id": "thermonuclear_yellow",
+  "name": "Thermonuclear Yellow",
+  "description": "Maximum aggression for high-chroma yellows. Locks warm hues and uses exponential vibrancy to keep yellows sovereign from earthy shadows.",
+  "centroid": {
+    "l": 60,
+    "c": 95,
+    "k": 50,
+    "l_std_dev": 15
+  },
+  "weights": {
+    "l": 0.3,
+    "c": 3.0,
+    "k": 1.0,
+    "l_std_dev": 5.0
+  },
+  "parameters": {
+    "targetColorsSlider": 12,
+    "ditherType": "none",
+    "distanceMetric": "cie76",
+    "lWeight": 0.5,
+    "cWeight": 6.5,
+    "blackBias": 4.0,
+    "vibrancyMode": "exponential",
+    "vibrancyBoost": 2.2,
+    "vibrancyThreshold": 0,
+    "highlightThreshold": 97,
+    "highlightBoost": 2.0,
+    "enablePaletteReduction": true,
+    "paletteReduction": 3.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 2.0,
+    "shadowPoint": 5,
+    "enableHueGapAnalysis": false,
+    "hueLockAngle": 45,
+    "colorMode": "color",
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 40,
+    "neutralCentroidClampThreshold": 15.0,
+    "preprocessingIntensity": "medium"
+  }
+}

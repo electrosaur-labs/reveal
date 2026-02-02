@@ -1,7 +1,7 @@
 {
   "id": "standard_balanced",
   "name": "Standard / Balanced",
-  "description": "Dead center - typical photos with balanced properties",
+  "description": "Baseline metrics for standard photographic scenes.",
   "centroid": {
     "l": 50,
     "c": 25,
@@ -15,13 +15,12 @@
     "l_std_dev": 2.0
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "VOLUMETRIC",
+    "targetColorsSlider": 8,
+    "ditherType": "none",
+    "distanceMetric": "cie94",
     "lWeight": 1.0,
     "cWeight": 1.0,
     "blackBias": 5.0,
-    "substrateMode": "auto",
-    "substrateTolerance": 3.5,
     "vibrancyMode": "linear",
     "vibrancyBoost": 1.0,
     "vibrancyThreshold": 8,
@@ -29,15 +28,18 @@
     "highlightBoost": 1.5,
     "enablePaletteReduction": true,
     "paletteReduction": 8.0,
-    "hueLockAngle": 15,
+    "substrateMode": "auto",
+    "substrateTolerance": 3.5,
     "shadowPoint": 15,
+    "enableHueGapAnalysis": true,
+    "hueLockAngle": 15,
     "colorMode": "color",
-    "targetColorsSlider": 8,
     "preserveWhite": false,
     "preserveBlack": false,
     "ignoreTransparent": true,
-    "enableHueGapAnalysis": true,
-    "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 10,
+    "neutralCentroidClampThreshold": 2.0,
+    "preprocessingIntensity": "auto"
   }
 }

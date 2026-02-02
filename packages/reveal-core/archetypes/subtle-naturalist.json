@@ -1,0 +1,45 @@
+{
+  "id": "subtle_naturalist",
+  "name": "Subtle Naturalist / Architectural",
+  "description": "Optimized for 16-bit scans with high neutral density and critical chromatic outliers like doors or specific flora.",
+  "centroid": {
+    "l": 50,
+    "c": 15,
+    "k": 70,
+    "l_std_dev": 25
+  },
+  "weights": {
+    "l": 0.5,
+    "c": 2.0,
+    "k": 1.5,
+    "l_std_dev": 2.0
+  },
+  "parameters": {
+    "targetColorsSlider": 14,
+    "ditherType": "blue-noise",
+    "distanceMetric": "cie2000",
+    "lWeight": 1.2,
+    "cWeight": 3.5,
+    "blackBias": 6.0,
+    "vibrancyMode": "subtle",
+    "vibrancyBoost": 1.1,
+    "vibrancyThreshold": 5,
+    "highlightThreshold": 96,
+    "highlightBoost": 1.0,
+    "enablePaletteReduction": true,
+    "paletteReduction": 4.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 2.5,
+    "shadowPoint": 12,
+    "enableHueGapAnalysis": true,
+    "hueLockAngle": 15,
+    "colorMode": "color",
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 0,
+    "neutralCentroidClampThreshold": 0.5,
+    "preprocessingIntensity": "light"
+  }
+}
