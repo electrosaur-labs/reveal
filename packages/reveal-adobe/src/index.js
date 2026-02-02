@@ -2848,6 +2848,35 @@ Object.keys(PARAMETER_PRESETS).forEach(id => {
 });
 
 /**
+ * ARCHETYPES - DNA-driven parameter baselines
+ * Each archetype contains complete 30-parameter specifications
+ * Note: Must be hardcoded for UXP/browser environment (no fs module)
+ */
+const ARCHETYPES = {
+    'standard-balanced': require('@reveal/core/archetypes/standard-balanced.json'),
+    'pure-graphic': require('@reveal/core/archetypes/pure-graphic.json'),
+    'soft-ethereal': require('@reveal/core/archetypes/soft-ethereal.json'),
+    'cinematic-moody': require('@reveal/core/archetypes/cinematic-moody.json'),
+    'neon-graphic': require('@reveal/core/archetypes/neon-graphic.json'),
+    'silver-gelatin': require('@reveal/core/archetypes/silver-gelatin.json'),
+    'vibrant-hyper': require('@reveal/core/archetypes/vibrant-hyper.json'),
+    'vibrant-tonal': require('@reveal/core/archetypes/vibrant-tonal.json'),
+    'warm-tonal-optimized': require('@reveal/core/archetypes/warm-tonal-optimized.json'),
+    'subtle-naturalist': require('@reveal/core/archetypes/subtle-naturalist.json'),
+    'blue-rescue': require('@reveal/core/archetypes/blue-rescue.json'),
+    'thermonuclear-yellow': require('@reveal/core/archetypes/thermonuclear-yellow.json')
+};
+
+// Validate archetypes on load
+Object.keys(ARCHETYPES).forEach(id => {
+    const archetype = ARCHETYPES[id];
+    if (!archetype.id || !archetype.name || !archetype.parameters) {
+        logger.error(`Invalid archetype: ${id} - missing required fields`);
+    }
+    logger.log(`✓ Loaded archetype: "${archetype.name}" (${id})`);
+});
+
+/**
  * Validate form inputs
  */
 function validateForm() {
@@ -3060,6 +3089,207 @@ function setupZoomPreviewControls() {
             btnClose?.click();
         }
     });
+}
+
+/**
+ * Handle Analyze Image - Extract DNA and configure parameters
+ * Used by both btnAnalyzeAndSet and archetype selector dropdown
+ */
+async function handleAnalyzeImage() {
+    logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    logger.log("ANALYSE IMAGE - Starting analysis...");
+    logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    try {
+        // Get Lab pixels from current document (800px for analysis)
+        const result = await core.executeAsModal(async () => {
+            const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
+            return {
+                pixels: pixelData.pixels,  // Lab bytes (Uint8ClampedArray, 3 bytes per pixel)
+                width: pixelData.width,
+                height: pixelData.height
+            };
+        }, { commandName: "Analyze Document DNA" });
+
+        logger.log(`✓ Retrieved ${result.pixels.length} bytes (${result.width}×${result.height})`);
+
+        // Generate DNA from Lab pixels
+        const startTime = Date.now();
+        const dna = DNAGenerator.generate(result.pixels, result.width, result.height, 40);
+        const dnaTime = Date.now() - startTime;
+
+        logger.log("✓ Image DNA extracted:", dna);
+        logger.log(`  DNA generation time: ${dnaTime.toFixed(2)}ms`);
+
+        // Run ParameterGenerator to get dynamic configuration (with entropy analysis)
+        const config = ParameterGenerator.generate(dna, {
+            imageData: result.pixels,
+            width: result.width,
+            height: result.height,
+            preprocessingIntensity: 'auto'  // Let entropy analysis decide
+        });
+        logger.log("✓ Generated dynamic config:", config);
+
+        // Log preprocessing decision from entropy analysis
+        if (config.preprocessing) {
+            const pp = config.preprocessing;
+            logger.log(`✓ Preprocessing analysis: ${pp.enabled ? pp.intensity : 'off'} (${pp.reason})`);
+            if (pp.entropyScore !== undefined) {
+                logger.log(`  Entropy score: ${pp.entropyScore.toFixed(1)}`);
+            }
+        }
+
+        // Store DNA and complete config globally for "Smart Reveal" and posterization
+        lastImageDNA = {
+            ...dna,
+            archetype: config.meta?.archetype || null,
+            preprocessing: config.preprocessing  // Store preprocessing config for posterization
+        };
+        // Store complete config including all parameters (even those not in UI)
+        lastGeneratedConfig = config;
+        logger.log(`✓ Stored DNA for Smart Reveal: peakC=${dna.maxC?.toFixed(1)}, archetype=${lastImageDNA.archetype}`);
+
+        // Determine preprocessing dropdown value based on analysis
+        // Show the actual decision so user knows what will happen
+        let preprocessingDropdownValue = 'off';  // Default if no config
+        if (config.preprocessing) {
+            if (config.preprocessing.enabled) {
+                // Show the actual intensity (light or heavy)
+                preprocessingDropdownValue = config.preprocessing.intensity || 'light';
+            } else {
+                // Analysis says no preprocessing needed
+                preprocessingDropdownValue = 'off';
+            }
+        }
+
+        // Map ALL parameters to UI elements from Expert System Configurator
+        // ParameterGenerator now provides full parameter mapping
+        // Parameters without UI elements will be logged and skipped by applyAnalyzedSettings()
+        const uiSettings = {
+            // Core posterization (DNA-driven)
+            targetColorsSlider: config.targetColors,
+            ditherType: config.ditherType,
+            distanceMetric: config.distanceMetric || 'auto',  // Use config value or auto
+
+            // Saliency weights (DNA-driven)
+            lWeight: config.lWeight,
+            cWeight: config.cWeight,
+            blackBias: config.blackBias,
+
+            // Vibrancy settings (DNA-driven)
+            vibrancyMode: config.vibrancyMode,
+            vibrancyBoost: config.vibrancyBoost,
+            vibrancyThreshold: config.vibrancyThreshold,  // May not have UI element
+
+            // Highlight protection (DNA-driven)
+            highlightThreshold: config.highlightThreshold,
+            highlightBoost: config.highlightBoost,
+
+            // Color merging (DNA-driven)
+            enablePaletteReduction: config.enablePaletteReduction !== false,
+            paletteReduction: config.paletteReduction,
+
+            // Substrate (DNA-driven)
+            substrateMode: config.substrateMode,
+            substrateTolerance: config.substrateTolerance || 3.5,
+
+            // Neutral sovereignty (DNA-driven, may not have UI elements)
+            neutralSovereigntyThreshold: config.neutralSovereigntyThreshold,
+            neutralCentroidClampThreshold: config.neutralCentroidClampThreshold,
+
+            // Preprocessing (entropy-driven)
+            preprocessingIntensity: config.preprocessingIntensity || preprocessingDropdownValue,
+
+            // Additional parameters from config
+            engineType: config.engineType || 'reveal',
+            centroidStrategy: config.centroidStrategy || 'SALIENCY',
+            hueLockAngle: config.hueLockAngle || 20,
+            shadowPoint: config.shadowPoint || 15,
+            colorMode: config.colorMode || 'color',
+            preserveWhite: config.preserveWhite !== false,
+            preserveBlack: config.preserveBlack !== false,
+            ignoreTransparent: config.ignoreTransparent !== false,
+            enableHueGapAnalysis: config.enableHueGapAnalysis !== false,
+            maskProfile: config.maskProfile || 'Gray Gamma 2.2'
+        };
+
+        logger.log("  Setting ALL UI parameters from Expert System:");
+        logger.log("  Core:", {
+            targetColors: config.targetColors,
+            ditherType: config.ditherType
+        });
+        logger.log("  Saliency:", {
+            lWeight: config.lWeight,
+            cWeight: config.cWeight,
+            blackBias: config.blackBias
+        });
+        logger.log("  Vibrancy:", {
+            mode: config.vibrancyMode,
+            boost: config.vibrancyBoost
+        });
+        logger.log("  Highlights:", {
+            threshold: config.highlightThreshold,
+            boost: config.highlightBoost
+        });
+        logger.log("  Merging:", {
+            paletteReduction: config.paletteReduction
+        });
+        logger.log("  Substrate:", config.substrateMode);
+
+        // Apply ALL DNA-based settings to UI
+        applyAnalyzedSettings(uiSettings);
+
+        // Compute what Smart Reveal would use
+        const smartMetric = resolveDistanceMetric('auto', lastImageDNA);
+        const smartMetricLabels = { 'cie76': 'Poster/Graphic', 'cie94': 'Photographic', 'cie2000': 'Museum Grade' };
+        const smartMetricLabel = smartMetricLabels[smartMetric] || smartMetric;
+
+        // Format preprocessing info for alert
+        let preprocessingInfo = 'Off';
+        if (config.preprocessing) {
+            if (config.preprocessing.enabled) {
+                const entropy = config.preprocessing.entropyScore?.toFixed(0) || '?';
+                preprocessingInfo = `${config.preprocessing.intensity} (entropy: ${entropy})`;
+            } else {
+                preprocessingInfo = `Skipped (${config.preprocessing.reason})`;
+            }
+        }
+
+        // Show simple alert to user
+        const alertMsg = `Image Analysis Complete\n\nProfile: ${config.name}\nArchetype: ${config.meta?.archetype || 'Unknown'}\nColors: ${config.targetColors}\nDither: ${config.ditherType}\nPreprocessing: ${preprocessingInfo}\n\nParameters have been configured.\nClick "Posterize" to generate separations.`;
+
+        // Log full details to console
+        logger.log(`\nDNA ANALYSIS COMPLETE`);
+        logger.log(`Image DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
+        logger.log(`Archetype: ${config.meta?.archetype || 'unknown'}`);
+        logger.log(`Config: ${config.name}`);
+        logger.log(`  Target Colors: ${config.targetColors}`);
+        logger.log(`  Black Bias: ${config.blackBias.toFixed(1)}`);
+        logger.log(`  Vibrancy Boost: ${config.saturationBoost.toFixed(2)}`);
+        logger.log(`  Dither Type: ${config.ditherType}`);
+        logger.log(`  Smart Reveal → ${smartMetricLabel} (${smartMetric})`);
+        logger.log(`  Preprocessing: ${preprocessingInfo}`);
+        logger.log(`Analysis Time: ${dnaTime.toFixed(2)}ms`);
+
+        alert(alertMsg);
+
+        logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        logger.log("✓ ANALYSE IMAGE - Complete");
+        logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+        // Update archetype selector to show "auto" since we just analyzed
+        const archetypeSelector = document.getElementById("archetypeSelector");
+        if (archetypeSelector) {
+            archetypeSelector.value = 'auto';
+        }
+
+    } catch (error) {
+        logger.error("Image analysis failed:", error);
+        alert(
+            `Image analysis failed:\n\n${error.message}\n\n` +
+            `Please ensure a document is open and try again.`
+        );
+    }
 }
 
 /**
@@ -4018,6 +4248,184 @@ async function showDialog() {
                 logger.log("✓ Reset to Defaults button attached");
             }
 
+            // Archetype Selector - populate dropdown and add event listener
+            const archetypeSelector = document.getElementById("archetypeSelector");
+            if (archetypeSelector) {
+                // Populate dropdown with all loaded archetypes
+                // First, clear any existing archetype options (keep "Analyze Image..." and "Manual Input")
+                const existingOptions = Array.from(archetypeSelector.options);
+                existingOptions.forEach(opt => {
+                    if (opt.value !== 'auto' && opt.value !== 'manual' && !opt.disabled) {
+                        archetypeSelector.removeChild(opt);
+                    }
+                });
+
+                // Add archetype options
+                Object.keys(ARCHETYPES).forEach(archetypeId => {
+                    const archetype = ARCHETYPES[archetypeId];
+                    const option = document.createElement('option');
+                    option.value = archetypeId;
+                    option.textContent = archetype.name;
+                    archetypeSelector.appendChild(option);
+                });
+
+                logger.log(`✓ Populated archetype selector with ${Object.keys(ARCHETYPES).length} archetypes`);
+
+                // Add change event listener
+                archetypeSelector.addEventListener('change', async () => {
+                    const selectedValue = archetypeSelector.value;
+                    logger.log(`Archetype selector changed to: ${selectedValue}`);
+
+                    if (selectedValue === 'auto') {
+                        // "Analyze Image..." - trigger DNA analysis
+                        logger.log("Triggering DNA analysis...");
+                        await handleAnalyzeImage();
+                    } else if (selectedValue === 'manual') {
+                        // "Manual Input" - reset to defaults
+                        logger.log("Resetting to manual input (defaults)...");
+
+                        // Use the same defaults as btnResetDefaults
+                        const defaults = {
+                            engineType: 'reveal',
+                            centroidStrategy: 'SALIENCY',
+                            substrateMode: 'white',
+                            substrateTolerance: 3.5,
+                            vibrancyMode: 'aggressive',
+                            vibrancyBoost: 1.6,
+                            highlightThreshold: 85,
+                            highlightBoost: 2.2,
+                            enablePaletteReduction: true,
+                            paletteReduction: 10.0,
+                            hueLockAngle: 18,
+                            shadowPoint: 15,
+                            lWeight: 1.1,
+                            cWeight: 2.0,
+                            blackBias: 5.0,
+                            colorMode: 'color',
+                            targetColors: 6,
+                            preserveWhite: false,
+                            preserveBlack: false,
+                            ignoreTransparent: true,
+                            enableHueGapAnalysis: true,
+                            maskProfile: 'Gray Gamma 2.2'
+                        };
+
+                        // Reset all form controls
+                        const resetDefaults = { ...defaults, targetColorsSlider: defaults.targetColors };
+                        delete resetDefaults.targetColors;
+
+                        Object.keys(resetDefaults).forEach(key => {
+                            const element = document.getElementById(key);
+                            if (!element) return;
+
+                            const value = resetDefaults[key];
+
+                            if (element.type === 'checkbox') {
+                                element.checked = value;
+                                element.dispatchEvent(new Event('change', { bubbles: true }));
+                            } else if (element.tagName === 'SELECT') {
+                                element.value = value;
+                                element.dispatchEvent(new Event('change', { bubbles: true }));
+                            } else if (element.tagName === 'SP-SLIDER') {
+                                element.value = value;
+                                const valueDisplay = document.getElementById(`${key}Value`);
+                                if (valueDisplay) {
+                                    const config = sliderConfigs.find(c => c.id === key);
+                                    if (config) {
+                                        valueDisplay.textContent = config.format(value);
+                                    } else {
+                                        valueDisplay.textContent = value.toString();
+                                    }
+                                }
+                                element.dispatchEvent(new Event('input', { bubbles: true }));
+                                element.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                        });
+
+                        // Clear stored config
+                        lastGeneratedConfig = null;
+                        lastImageDNA = null;
+
+                        logger.log("✓ Reset to manual input defaults");
+                    } else {
+                        // Archetype selected - load parameters from archetype
+                        const archetype = ARCHETYPES[selectedValue];
+                        if (archetype && archetype.parameters) {
+                            logger.log(`Loading parameters from archetype: ${archetype.name}`);
+
+                            const params = archetype.parameters;
+
+                            // Map archetype parameters to UI controls
+                            const paramMapping = {
+                                targetColorsSlider: params.targetColorsSlider,
+                                ditherType: params.ditherType,
+                                distanceMetric: params.distanceMetric,
+                                lWeight: params.lWeight,
+                                cWeight: params.cWeight,
+                                blackBias: params.blackBias,
+                                vibrancyMode: params.vibrancyMode,
+                                vibrancyBoost: params.vibrancyBoost,
+                                highlightThreshold: params.highlightThreshold,
+                                highlightBoost: params.highlightBoost,
+                                enablePaletteReduction: params.enablePaletteReduction,
+                                paletteReduction: params.paletteReduction,
+                                substrateMode: params.substrateMode,
+                                substrateTolerance: params.substrateTolerance,
+                                shadowPoint: params.shadowPoint,
+                                enableHueGapAnalysis: params.enableHueGapAnalysis,
+                                hueLockAngle: params.hueLockAngle,
+                                colorMode: params.colorMode,
+                                preserveWhite: params.preserveWhite,
+                                preserveBlack: params.preserveBlack,
+                                ignoreTransparent: params.ignoreTransparent,
+                                maskProfile: params.maskProfile
+                            };
+
+                            // Apply parameters to UI
+                            Object.keys(paramMapping).forEach(key => {
+                                const element = document.getElementById(key);
+                                if (!element) {
+                                    logger.log(`  Element not found for parameter: ${key}`);
+                                    return;
+                                }
+
+                                const value = paramMapping[key];
+
+                                if (element.type === 'checkbox') {
+                                    element.checked = value;
+                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                } else if (element.tagName === 'SELECT') {
+                                    element.value = value;
+                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                } else if (element.tagName === 'SP-SLIDER') {
+                                    element.value = value;
+                                    const valueDisplay = document.getElementById(`${key}Value`);
+                                    if (valueDisplay) {
+                                        const config = sliderConfigs.find(c => c.id === key);
+                                        if (config) {
+                                            valueDisplay.textContent = config.format(value);
+                                        } else {
+                                            valueDisplay.textContent = value.toString();
+                                        }
+                                    }
+                                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                            });
+
+                            // Store the complete config for posterization (includes parameters not in UI)
+                            lastGeneratedConfig = { ...params };
+
+                            logger.log(`✓ Loaded ${Object.keys(paramMapping).length} parameters from archetype: ${archetype.name}`);
+                        } else {
+                            logger.error(`Archetype not found or missing parameters: ${selectedValue}`);
+                        }
+                    }
+                });
+
+                logger.log("✓ Archetype selector event listener attached");
+            }
+
             // Preview Quality dropdown - reassign pixels with new stride (fit mode) or change resolution (zoom mode)
             // Clone element to remove any existing listeners from previous posterization
             const previewStrideSelect = document.getElementById('previewStride');
@@ -4078,10 +4486,6 @@ async function showDialog() {
             const btnAnalyzeAndSet = document.getElementById("btnAnalyzeAndSet");
             if (btnAnalyzeAndSet) {
                 btnAnalyzeAndSet.addEventListener("click", async () => {
-                    logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    logger.log("ANALYSE IMAGE - Starting analysis...");
-                    logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
                     // Disable button and show loading state
                     const originalText = btnAnalyzeAndSet.textContent;
                     btnAnalyzeAndSet.disabled = true;
@@ -4089,188 +4493,8 @@ async function showDialog() {
                     btnAnalyzeAndSet.style.opacity = "0.6";
 
                     try {
-                        // Get Lab pixels from current document (800px for analysis)
-                        const result = await core.executeAsModal(async () => {
-                            const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
-                            return {
-                                pixels: pixelData.pixels,  // Lab bytes (Uint8ClampedArray, 3 bytes per pixel)
-                                width: pixelData.width,
-                                height: pixelData.height
-                            };
-                        }, { commandName: "Analyze Document DNA" });
-
-                        logger.log(`✓ Retrieved ${result.pixels.length} bytes (${result.width}×${result.height})`);
-
-                        // Generate DNA from Lab pixels
-                        const startTime = Date.now();
-                        const dna = DNAGenerator.generate(result.pixels, result.width, result.height, 40);
-                        const dnaTime = Date.now() - startTime;
-
-                        logger.log("✓ Image DNA extracted:", dna);
-                        logger.log(`  DNA generation time: ${dnaTime.toFixed(2)}ms`);
-
-                        // Run ParameterGenerator to get dynamic configuration (with entropy analysis)
-                        const config = ParameterGenerator.generate(dna, {
-                            imageData: result.pixels,
-                            width: result.width,
-                            height: result.height,
-                            preprocessingIntensity: 'auto'  // Let entropy analysis decide
-                        });
-                        logger.log("✓ Generated dynamic config:", config);
-
-                        // Log preprocessing decision from entropy analysis
-                        if (config.preprocessing) {
-                            const pp = config.preprocessing;
-                            logger.log(`✓ Preprocessing analysis: ${pp.enabled ? pp.intensity : 'off'} (${pp.reason})`);
-                            if (pp.entropyScore !== undefined) {
-                                logger.log(`  Entropy score: ${pp.entropyScore.toFixed(1)}`);
-                            }
-                        }
-
-                        // Store DNA and complete config globally for "Smart Reveal" and posterization
-                        lastImageDNA = {
-                            ...dna,
-                            archetype: config.meta?.archetype || null,
-                            preprocessing: config.preprocessing  // Store preprocessing config for posterization
-                        };
-                        // Store complete config including all parameters (even those not in UI)
-                        lastGeneratedConfig = config;
-                        logger.log(`✓ Stored DNA for Smart Reveal: peakC=${dna.maxC?.toFixed(1)}, archetype=${lastImageDNA.archetype}`);
-
-                        // Determine preprocessing dropdown value based on analysis
-                        // Show the actual decision so user knows what will happen
-                        let preprocessingDropdownValue = 'off';  // Default if no config
-                        if (config.preprocessing) {
-                            if (config.preprocessing.enabled) {
-                                // Show the actual intensity (light or heavy)
-                                preprocessingDropdownValue = config.preprocessing.intensity || 'light';
-                            } else {
-                                // Analysis says no preprocessing needed
-                                preprocessingDropdownValue = 'off';
-                            }
-                        }
-
-                        // Map ALL parameters to UI elements from Expert System Configurator
-                        // ParameterGenerator now provides full parameter mapping
-                        // Parameters without UI elements will be logged and skipped by applyAnalyzedSettings()
-                        const uiSettings = {
-                            // Core posterization (DNA-driven)
-                            targetColorsSlider: config.targetColors,
-                            ditherType: config.ditherType,
-                            distanceMetric: config.distanceMetric || 'auto',  // Use config value or auto
-
-                            // Saliency weights (DNA-driven)
-                            lWeight: config.lWeight,
-                            cWeight: config.cWeight,
-                            blackBias: config.blackBias,
-
-                            // Vibrancy settings (DNA-driven)
-                            vibrancyMode: config.vibrancyMode,
-                            vibrancyBoost: config.vibrancyBoost,
-                            vibrancyThreshold: config.vibrancyThreshold,  // May not have UI element
-
-                            // Highlight protection (DNA-driven)
-                            highlightThreshold: config.highlightThreshold,
-                            highlightBoost: config.highlightBoost,
-
-                            // Color merging (DNA-driven)
-                            enablePaletteReduction: config.enablePaletteReduction !== false,
-                            paletteReduction: config.paletteReduction,
-
-                            // Substrate (DNA-driven)
-                            substrateMode: config.substrateMode,
-                            substrateTolerance: config.substrateTolerance || 3.5,
-
-                            // Neutral sovereignty (DNA-driven, may not have UI elements)
-                            neutralSovereigntyThreshold: config.neutralSovereigntyThreshold,
-                            neutralCentroidClampThreshold: config.neutralCentroidClampThreshold,
-
-                            // Preprocessing (entropy-driven)
-                            preprocessingIntensity: config.preprocessingIntensity || preprocessingDropdownValue,
-
-                            // Additional parameters from config
-                            engineType: config.engineType || 'reveal',
-                            centroidStrategy: config.centroidStrategy || 'SALIENCY',
-                            hueLockAngle: config.hueLockAngle || 20,
-                            shadowPoint: config.shadowPoint || 15,
-                            colorMode: config.colorMode || 'color',
-                            preserveWhite: config.preserveWhite !== false,
-                            preserveBlack: config.preserveBlack !== false,
-                            ignoreTransparent: config.ignoreTransparent !== false,
-                            enableHueGapAnalysis: config.enableHueGapAnalysis !== false,
-                            maskProfile: config.maskProfile || 'Gray Gamma 2.2'
-                        };
-
-                        logger.log("  Setting ALL UI parameters from Expert System:");
-                        logger.log("  Core:", {
-                            targetColors: config.targetColors,
-                            ditherType: config.ditherType
-                        });
-                        logger.log("  Saliency:", {
-                            lWeight: config.lWeight,
-                            cWeight: config.cWeight,
-                            blackBias: config.blackBias
-                        });
-                        logger.log("  Vibrancy:", {
-                            mode: config.vibrancyMode,
-                            boost: config.vibrancyBoost
-                        });
-                        logger.log("  Highlights:", {
-                            threshold: config.highlightThreshold,
-                            boost: config.highlightBoost
-                        });
-                        logger.log("  Merging:", {
-                            paletteReduction: config.paletteReduction
-                        });
-                        logger.log("  Substrate:", config.substrateMode);
-
-                        // Apply ALL DNA-based settings to UI
-                        applyAnalyzedSettings(uiSettings);
-
-                        // Compute what Smart Reveal would use
-                        const smartMetric = resolveDistanceMetric('auto', lastImageDNA);
-                        const smartMetricLabels = { 'cie76': 'Poster/Graphic', 'cie94': 'Photographic', 'cie2000': 'Museum Grade' };
-                        const smartMetricLabel = smartMetricLabels[smartMetric] || smartMetric;
-
-                        // Format preprocessing info for alert
-                        let preprocessingInfo = 'Off';
-                        if (config.preprocessing) {
-                            if (config.preprocessing.enabled) {
-                                const entropy = config.preprocessing.entropyScore?.toFixed(0) || '?';
-                                preprocessingInfo = `${config.preprocessing.intensity} (entropy: ${entropy})`;
-                            } else {
-                                preprocessingInfo = `Skipped (${config.preprocessing.reason})`;
-                            }
-                        }
-
-                        // Show simple alert to user
-                        const alertMsg = `Image Analysis Complete\n\nProfile: ${config.name}\nArchetype: ${config.meta?.archetype || 'Unknown'}\nColors: ${config.targetColors}\nDither: ${config.ditherType}\nPreprocessing: ${preprocessingInfo}\n\nParameters have been configured.\nClick "Posterize" to generate separations.`;
-
-                        // Log full details to console
-                        logger.log(`\nDNA ANALYSIS COMPLETE`);
-                        logger.log(`Image DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
-                        logger.log(`Archetype: ${config.meta?.archetype || 'unknown'}`);
-                        logger.log(`Config: ${config.name}`);
-                        logger.log(`  Target Colors: ${config.targetColors}`);
-                        logger.log(`  Black Bias: ${config.blackBias.toFixed(1)}`);
-                        logger.log(`  Vibrancy Boost: ${config.saturationBoost.toFixed(2)}`);
-                        logger.log(`  Dither Type: ${config.ditherType}`);
-                        logger.log(`  Smart Reveal → ${smartMetricLabel} (${smartMetric})`);
-                        logger.log(`  Preprocessing: ${preprocessingInfo}`);
-                        logger.log(`Analysis Time: ${dnaTime.toFixed(2)}ms`);
-
-                        alert(alertMsg);
-
-                        logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                        logger.log("✓ ANALYSE IMAGE - Complete");
-                        logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-                    } catch (error) {
-                        logger.error("Image analysis failed:", error);
-                        alert(
-                            `Image analysis failed:\n\n${error.message}\n\n` +
-                            `Please ensure a document is open and try again.`
-                        );
+                        // Call shared analysis function
+                        await handleAnalyzeImage();
                     } finally {
                         // Restore button state
                         btnAnalyzeAndSet.disabled = false;
@@ -4280,6 +4504,7 @@ async function showDialog() {
                 });
                 logger.log("✓ Analyse Image button handler attached");
             }
+
 
             // Preset selector change handler
             // Preset selector handler (DEPRECATED - DNA analysis now used)

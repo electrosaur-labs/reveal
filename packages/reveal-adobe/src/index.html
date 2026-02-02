@@ -960,11 +960,19 @@
                 Reduce your image to a limited color palette for screen printing. Choose your engine, color mode, and target palette size.
             </div>
 
-            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
-                <button id="btnAnalyzeAndSet" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;" title="Analyze image and automatically configure parameters">
-                    Analyse Image
-                </button>
-                <button id="btnResetDefaults" class="btn-secondary" style="padding: 6px 16px; font-size: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 16px;">
+                <div style="flex: 1;">
+                    <label for="archetypeSelector" style="display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; color: #323232;">
+                        Archetype / Configuration:
+                    </label>
+                    <select id="archetypeSelector" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; font-weight: 500;">
+                        <option value="auto">🔬 Analyze Image...</option>
+                        <option value="manual">✏️ Manual Input</option>
+                        <option disabled>────────────</option>
+                        <!-- Archetypes populated by JS -->
+                    </select>
+                </div>
+                <button id="btnResetDefaults" class="btn-secondary" style="padding: 6px 16px; font-size: 12px; white-space: nowrap;">
                     Reset to Defaults
                 </button>
             </div>
