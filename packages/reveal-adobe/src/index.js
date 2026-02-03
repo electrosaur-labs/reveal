@@ -4197,7 +4197,7 @@ async function showDialog() {
                         cWeight: 2.0,
                         blackBias: 5.0,
                         colorMode: 'color',
-                        targetColors: 6,
+                        targetColors: 8,
                         preserveWhite: false,
                         preserveBlack: false,
                         ignoreTransparent: true,

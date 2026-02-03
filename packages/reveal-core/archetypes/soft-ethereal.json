@@ -1,18 +1,18 @@
 {
   "id": "soft_ethereal",
   "name": "Soft / Ethereal",
-  "description": "Maintains hazy mid-tones and prevents harsh edge artifacts in low-contrast, high-key photography.",
+  "description": "Mid-bright, low contrast. Protects gradients in pastel and high-key photography.",
   "centroid": {
-    "l": 75,
-    "c": 15,
+    "l": 65,
+    "c": 20,
     "k": 40,
-    "l_std_dev": 12
+    "l_std_dev": 18
   },
   "weights": {
-    "l": 1.0,
-    "c": 1.0,
-    "k": 0.5,
-    "l_std_dev": 1.5
+    "l": 0.5,
+    "c": 1.5,
+    "k": 1.0,
+    "l_std_dev": 2.0
   },
   "parameters": {
     "targetColorsSlider": 8,
@@ -20,17 +20,17 @@
     "distanceMetric": "cie94",
     "lWeight": 1.2,
     "cWeight": 1.2,
-    "blackBias": 2.0,
+    "blackBias": 3.0,
     "vibrancyMode": "linear",
-    "vibrancyBoost": 1.0,
+    "vibrancyBoost": 1.1,
     "vibrancyThreshold": 15,
-    "highlightThreshold": 94,
-    "highlightBoost": 1.1,
+    "highlightThreshold": 95,
+    "highlightBoost": 1.2,
     "enablePaletteReduction": true,
     "paletteReduction": 9.0,
-    "substrateMode": "white",
-    "substrateTolerance": 4.5,
-    "shadowPoint": 20,
+    "substrateMode": "auto",
+    "substrateTolerance": 2.0,
+    "shadowPoint": 10,
     "enableHueGapAnalysis": true,
     "hueLockAngle": 15,
     "colorMode": "color",

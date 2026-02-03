@@ -1,7 +1,7 @@
 {
   "id": "warm_tonal_optimized",
   "name": "Warm Tonal / Yellow Protect",
-  "description": "Prevents earthy tones from muddying bright yellows or oranges.",
+  "description": "Ensures yellows remain sovereign from browns and earthy tones in complex landscapes.",
   "centroid": {
     "l": 55,
     "c": 35,
@@ -9,10 +9,10 @@
     "l_std_dev": 22
   },
   "weights": {
-    "l": 0.3,
-    "c": 2.5,
-    "k": 1.5,
-    "l_std_dev": 1.5
+    "l": 0.5,
+    "c": 1.5,
+    "k": 1.0,
+    "l_std_dev": 2.0
   },
   "parameters": {
     "targetColorsSlider": 10,

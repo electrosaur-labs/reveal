@@ -1383,12 +1383,12 @@
                         <div class="form-group">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                                 <sp-label>Target Colors</sp-label>
-                                <sp-label id="targetColorsValue" style="font-weight: 600;">6</sp-label>
+                                <sp-label id="targetColorsValue" style="font-weight: 600;">8</sp-label>
                             </div>
                             <sp-slider id="targetColorsSlider"
                                        min="2"
                                        max="20"
-                                       value="6"
+                                       value="8"
                                        step="1"
                                        variant="filled">
                             </sp-slider>
@@ -1450,9 +1450,9 @@
                                 <span class="hint">(gradient smoothing)</span>
                             </label>
                             <select id="ditherType" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
-                                <option value="none" selected>None (Posterized)</option>
+                                <option value="none">None (Posterized)</option>
                                 <option value="floyd-steinberg">Floyd-Steinberg</option>
-                                <option value="blue-noise">Blue Noise</option>
+                                <option value="blue-noise" selected>Blue Noise</option>
                                 <option value="bayer">Bayer 8x8</option>
                                 <option value="atkinson">Atkinson</option>
                                 <option value="stucki">Stucki</option>
