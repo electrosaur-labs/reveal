@@ -18,9 +18,10 @@ const path = require('path');
 
 // CONFIGURATION
 const SP100_OUTPUT = path.join(__dirname, '../data/SP100/output');
-const OUTPUT_REPORT = path.join(SP100_OUTPUT, 'sp100_meta_analysis.json');
-const OUTPUT_CSV = path.join(SP100_OUTPUT, 'sp100_summary.csv');
-const SUBDIRS = ['met', 'rijks']; // SP100 sources: Metropolitan Museum, Rijksmuseum
+const OUTPUT_REPORT = path.join(SP100_OUTPUT, 'sp100_meta_analysis_16bit.json');
+const OUTPUT_CSV = path.join(SP100_OUTPUT, 'sp100_summary_16bit.csv');
+const SUBDIRS = ['aic', 'met', 'minkler', 'rijks']; // SP100 sources: AIC, MET, Minkler, Rijksmuseum
+const BIT_DEPTH = '16bit'; // Change to '8bit' for 8-bit analysis
 
 // --- CALIBRATED THRESHOLDS ---
 const THRESHOLD_INTEGRITY = 60;   // Must be physically printable
@@ -32,16 +33,16 @@ class SP100MetaAnalyzer {
         console.log(`🔍 Scanning SP100 dataset...`);
 
         // Collect JSON files from subdirectories
-        // SP100 structure: output/{met,rijks}/psd/8bit/*.json
+        // SP100 structure: output/{aic,met,minkler,rijks}/psd/{8bit,16bit}/*.json
         const allFiles = [];
         SUBDIRS.forEach(subdir => {
-            const sourceDir = path.join(SP100_OUTPUT, subdir, 'psd', '8bit');
+            const sourceDir = path.join(SP100_OUTPUT, subdir, 'psd', BIT_DEPTH);
             if (fs.existsSync(sourceDir)) {
                 const files = fs.readdirSync(sourceDir).filter(f => f.endsWith('.json') && f !== 'batch-report.json');
                 files.forEach(f => {
                     allFiles.push({ file: f, fullPath: path.join(sourceDir, f), source: subdir });
                 });
-                console.log(`  Found ${files.length} JSONs in ${subdir}/psd/8bit/`);
+                console.log(`  Found ${files.length} JSONs in ${subdir}/psd/${BIT_DEPTH}/`);
             }
         });
 
