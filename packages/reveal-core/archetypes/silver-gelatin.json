@@ -1,7 +1,7 @@
 {
   "id": "silver_gelatin",
   "name": "Silver Gelatin / Tonal B&W",
-  "description": "Hard-locks neutral centroids to a=0,b=0 and creates a dead-zone to prevent chromatic chatter in shadows.",
+  "description": "Hard-locks neutral centroids to a=0,b=0 to prevent chromatic noise in deep 16-bit shadows.",
   "centroid": {
     "l": 50,
     "c": 2,
@@ -9,10 +9,10 @@
     "l_std_dev": 28
   },
   "weights": {
-    "l": 1.0,
-    "c": 0.1,
-    "k": 2.0,
-    "l_std_dev": 2.5
+    "l": 0.5,
+    "c": 1.5,
+    "k": 1.0,
+    "l_std_dev": 2.0
   },
   "parameters": {
     "targetColorsSlider": 10,

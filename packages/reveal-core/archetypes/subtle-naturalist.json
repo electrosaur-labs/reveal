@@ -1,12 +1,12 @@
 {
   "id": "subtle_naturalist",
   "name": "Subtle Naturalist / Architectural",
-  "description": "Optimized for 16-bit scans with high neutral density and critical chromatic outliers like doors or specific flora.",
+  "description": "Baseline for 16-bit scans. Targets high neutral density but respects chromatic outliers through clinical measurement.",
   "centroid": {
-    "l": 50,
-    "c": 15,
-    "k": 70,
-    "l_std_dev": 25
+    "l": 52.3,
+    "c": 18.7,
+    "k": 94.2,
+    "l_std_dev": 28.6
   },
   "weights": {
     "l": 0.5,

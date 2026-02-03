@@ -219,7 +219,8 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 
     // 5. Prepare params
     const params = {
-        targetColorsSlider: config.targetColors,
+        targetColorsSlider: 8, // OVERRIDE: Force 8 colors for all images
+        // targetColorsSlider: config.targetColors,
         blackBias: config.blackBias,
         ditherType: config.ditherType,
         format: 'lab',
@@ -416,12 +417,13 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     }
 
     // Set Reveal metadata (Resource 4000) for filtering and analysis
-    writer.setRevealMetadata({
-        revScore: metrics.feature_preservation.revelationScore,
-        archetype: config.meta?.archetype || 'unknown',
-        colors: filteredPaletteLab.length, // Use filtered count (after removing empty layers)
-        preset: config.id
-    });
+    // TODO: Implement setRevealMetadata() in PSDWriter or use alternative approach
+    // writer.setRevealMetadata({
+    //     revScore: metrics.feature_preservation.revelationScore,
+    //     archetype: config.meta?.archetype || 'unknown',
+    //     colors: filteredPaletteLab.length, // Use filtered count (after removing empty layers)
+    //     preset: config.id
+    // });
 
     const psdBuffer = writer.write();
     fs.writeFileSync(outputPsdPath, psdBuffer);
@@ -451,7 +453,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     // 14. Explicit resource cleanup
     // Release all large arrays to free memory immediately
     lab8bit = null;
-    masks.length = 0;
+    // masks.length = 0; // TODO: masks not defined, cleanup if needed
     layersToWrite.length = 0;
     // psdBuffer is already written and goes out of scope
 

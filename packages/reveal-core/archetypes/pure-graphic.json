@@ -1,7 +1,7 @@
 {
   "id": "pure_graphic",
   "name": "Pure Graphic / Vector",
-  "description": "Ultra-flat colors, zero gradients, solid shapes. Forces the highest Hue Lock to keep spot colors distinct.",
+  "description": "Ultra-flat colors, zero gradients. High Hue Lock to keep ink plates surgically distinct.",
   "centroid": {
     "l": 50,
     "c": 40,
@@ -10,16 +10,16 @@
   },
   "weights": {
     "l": 0.5,
-    "c": 2.0,
+    "c": 1.5,
     "k": 1.0,
-    "l_std_dev": 5.0
+    "l_std_dev": 2.0
   },
   "parameters": {
     "targetColorsSlider": 6,
     "ditherType": "none",
     "distanceMetric": "cie76",
     "lWeight": 0.5,
-    "cWeight": 2.0,
+    "cWeight": 1.5,
     "blackBias": 1.0,
     "vibrancyMode": "linear",
     "vibrancyBoost": 1.0,
@@ -27,11 +27,11 @@
     "highlightThreshold": 98,
     "highlightBoost": 1.0,
     "enablePaletteReduction": true,
-    "paletteReduction": 4.0,
+    "paletteReduction": 3.0,
     "substrateMode": "auto",
-    "substrateTolerance": 1.5,
+    "substrateTolerance": 2.0,
     "shadowPoint": 2,
-    "enableHueGapAnalysis": false,
+    "enableHueGapAnalysis": true,
     "hueLockAngle": 60,
     "colorMode": "color",
     "preserveWhite": true,

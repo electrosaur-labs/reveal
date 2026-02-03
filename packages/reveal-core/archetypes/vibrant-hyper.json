@@ -1,7 +1,7 @@
 {
   "id": "vibrant_hyper",
   "name": "Vibrant / Graphic",
-  "description": "Highly saturated, colorful aesthetics. Maximizes chroma over tonal precision.",
+  "description": "Maximizes chroma over tonal precision. Ideal for pop art and bright concert posters.",
   "centroid": {
     "l": 50,
     "c": 60,
@@ -10,8 +10,8 @@
   },
   "weights": {
     "l": 0.5,
-    "c": 2.5,
-    "k": 1.5,
+    "c": 1.5,
+    "k": 1.0,
     "l_std_dev": 2.0
   },
   "parameters": {
@@ -29,9 +29,9 @@
     "enablePaletteReduction": true,
     "paletteReduction": 12.0,
     "substrateMode": "auto",
-    "substrateTolerance": 5.0,
+    "substrateTolerance": 2.0,
     "shadowPoint": 5,
-    "enableHueGapAnalysis": false,
+    "enableHueGapAnalysis": true,
     "hueLockAngle": 30,
     "colorMode": "color",
     "preserveWhite": false,
