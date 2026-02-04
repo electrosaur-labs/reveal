@@ -43,6 +43,12 @@ class DynamicConfigurator {
         // 2. Clone archetype parameters (deep copy to avoid mutations)
         const params = JSON.parse(JSON.stringify(archetype.parameters));
 
+        // 2.5. DNA v2.0 CONDITIONAL OVERRIDES
+        // Apply chromatic fingerprint-based adjustments for specific scenarios
+        if (dna.version === "2.0" && dna.sectors) {
+            this._applyDNAv2Overrides(params, dna, archetype);
+        }
+
         // 3. Set bit depth metadata for distance metric selection
         const bitDepth = dna.bitDepth || 8;
 
@@ -149,6 +155,173 @@ class DynamicConfigurator {
      * DEPRECATED: Legacy archetype classification (kept for backward compatibility)
      * Use ArchetypeLoader.matchArchetype() instead
      */
+    /**
+     * DOMINANT SECTOR TRAIT LOOKUP TABLE
+     * Maps each of the 12 hue sectors to surgical parameter overrides
+     *
+     * This is the "brain" of the Parameter Generator - it applies specific
+     * protections based on the image's dominant color personality
+     */
+    static getDominantSectorTrait(sector) {
+        const TRAIT_TABLE = {
+            red: {
+                name: 'Crimson Guard',
+                overrides: { lWeight: 1.0, cWeight: 4.5 },
+                purpose: 'Protects deep reds from shifting toward brown in shadows'
+            },
+            orange: {
+                name: 'Amber Lock',
+                overrides: { lWeight: 1.0, paletteReduction: 3.0 },
+                purpose: 'Lowers L-priority to preserve texture details in orange-dominant images'
+            },
+            yellow: {
+                name: 'Yellow Protect',
+                overrides: { hueLockAngle: 30, substrateTolerance: 1.2 },
+                purpose: 'Tighter tolerance to save highlight detail; prevents Thermonuclear merging'
+            },
+            chartreuse: {
+                name: 'Neon Bloom',
+                overrides: { enableHueGapAnalysis: true, targetColors: 10 },
+                purpose: 'Allows +2 screen expansion for high-vis greens to prevent collapse'
+            },
+            green: {
+                name: 'Forest Depth',
+                overrides: { lWeight: 1.4, blackBias: 7.0 },
+                purpose: 'Maintains structural detail in dark foliage and green gradients'
+            },
+            cyan: {
+                name: 'Ice/Sky Focus',
+                overrides: { neutralSovereigntyThreshold: 0, cWeight: 3.5 },
+                purpose: 'Ensures sky and water outliers aren\'t locked out by neutral axis'
+            },
+            azure: {
+                name: 'Spring Clarity',
+                overrides: { paletteReduction: 4.0, cWeight: 3.5 },
+                purpose: 'Keeps spring-green/teal distinct from pure green to avoid mucking'
+            },
+            blue: {
+                name: 'Blue Rescue',
+                overrides: { neutralSovereigntyThreshold: 0, enableHueGapAnalysis: true },
+                purpose: 'The Waterloo fix; forces engine to find blue even in neutral scans'
+            },
+            purple: {
+                name: 'Shadow Hue',
+                overrides: { blackBias: 8.0, lWeight: 1.2 },
+                purpose: 'Prevents purples from disappearing into black ink plate'
+            },
+            magenta: {
+                name: 'Punch Recovery',
+                overrides: { paletteReduction: 2.5, vibrancyThreshold: 2 },
+                purpose: 'Prevents merging of high-frequency pinks/magentas to preserve saliency'
+            },
+            pink: {
+                name: 'Skin/Petal Soft',
+                overrides: { lWeight: 1.6, paletteReduction: 6.0 },
+                purpose: 'Prioritizes tonal smoothness over raw chroma for skin tones and flowers'
+            },
+            rose: {
+                name: 'Deep Garnet',
+                overrides: { lWeight: 1.1, cWeight: 4.0 },
+                purpose: 'Keeps dark reds from becoming muddy or black'
+            }
+        };
+
+        return TRAIT_TABLE[sector] || null;
+    }
+
+    /**
+     * DNA v2.0 CONDITIONAL OVERRIDES - THREE-LEVEL TRAIT STACK
+     * Apply chromatic fingerprint-based parameter adjustments
+     *
+     * HIERARCHY (Specific Wins):
+     * Level 1: Archetype baseline (from JSON)
+     * Level 2: Dominant Sector Trait (surgical overrides for specific hues)
+     * Level 3: Entropy Delta (diversity adjustments)
+     *
+     * @private
+     */
+    static _applyDNAv2Overrides(params, dna, archetype) {
+        // Only apply overrides to certain archetypes that benefit from refinement
+        const refinableArchetypes = [
+            'subtle_naturalist',
+            'bright_desaturated',
+            'warm_tonal_optimized',
+            'structural_outlier_rescue',
+            'vibrant_tonal',          // Add vibrant tonal
+            'vibrant_hyper',          // Add vibrant graphic
+            'neon_graphic'            // Add neon graphic
+        ];
+
+        if (!refinableArchetypes.includes(archetype.id)) {
+            return; // Skip overrides for specialized archetypes
+        }
+
+        console.log(`\n🧬 DNA v2.0 Trait Stack:`);
+        console.log(`   Archetype: ${archetype.name}`);
+        console.log(`   Dominant: ${dna.dominant_sector} (${((dna.sectors[dna.dominant_sector]?.weight || 0) * 100).toFixed(1)}%)`);
+        console.log(`   Hue Entropy: ${dna.hue_entropy.toFixed(3)}`);
+        console.log(`   Temperature: ${dna.temperature_bias.toFixed(3)} (${dna.temperature_bias > 0 ? 'warm' : 'cool'})`);
+
+        // LEVEL 2: DOMINANT SECTOR TRAIT (Surgical Overrides)
+        // Apply hue-specific protections based on dominant color personality
+        if (dna.dominant_sector && dna.dominant_sector !== 'none') {
+            const dominantWeight = dna.sectors[dna.dominant_sector]?.weight || 0;
+
+            // Only apply trait if sector is truly dominant (> 20%)
+            if (dominantWeight > 0.2) {
+                const trait = this.getDominantSectorTrait(dna.dominant_sector);
+                if (trait) {
+                    console.log(`   🎯 Trait: ${trait.name}`);
+                    console.log(`      ${trait.purpose}`);
+
+                    // Apply trait overrides (merge, don't replace)
+                    Object.keys(trait.overrides).forEach(key => {
+                        const value = trait.overrides[key];
+                        if (typeof value === 'number') {
+                            // For numeric values, use the trait value if it's stronger
+                            params[key] = value;
+                        } else {
+                            // For booleans/strings, trait wins
+                            params[key] = value;
+                        }
+                    });
+                }
+            }
+        }
+
+        // LEVEL 3: ENTROPY DELTA (Diversity Adjustments)
+        // Adjust merging behavior based on color diversity
+
+        // Low Entropy (< 0.3): Limited Palette - Focus on tonal ramps
+        if (dna.hue_entropy < 0.3) {
+            console.log(`   🎨 Limited Palette (entropy ${dna.hue_entropy.toFixed(3)})`);
+            params.lWeight = Math.max(params.lWeight || 1.2, 1.8);  // Prioritize lightness
+            params.paletteReduction = Math.max(params.paletteReduction || 6.0, 8.0);  // Aggressive merging
+            params.enableHueGapAnalysis = false;  // Don't force hue diversity
+        }
+
+        // High Entropy (> 0.8): Rainbow Protection - Preserve diversity
+        else if (dna.hue_entropy > 0.8) {
+            console.log(`   🌈 High Diversity (entropy ${dna.hue_entropy.toFixed(3)})`);
+            params.enableHueGapAnalysis = true;  // Force hue gap detection
+            params.paletteReduction = Math.min(params.paletteReduction || 6.0, 4.0);  // Gentler merging
+        }
+
+        // SPECIAL CASE: Cool Outlier Protection (Blue Door Fix)
+        // Protect minority cool colors in warm-dominant images
+        const coolPresence = (dna.sectors.blue?.weight || 0) +
+                            (dna.sectors.cyan?.weight || 0) +
+                            (dna.sectors.azure?.weight || 0);
+
+        if (coolPresence > 0.05 && dna.temperature_bias > 0.5) {
+            console.log(`   ❄️ Cool Outlier Protection (${(coolPresence * 100).toFixed(1)}% cool in warm image)`);
+            params.neutralSovereigntyThreshold = 0;  // Don't neutralize cool colors
+            params.enableHueGapAnalysis = true;      // Force cool color slots
+        }
+
+        console.log(''); // Blank line for readability
+    }
+
     static getArchetype(dna) {
         console.warn('⚠️ getArchetype() is deprecated. Use ArchetypeLoader.matchArchetype() instead.');
         const archetype = ArchetypeLoader.matchArchetype(dna);

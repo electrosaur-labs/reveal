@@ -2863,6 +2863,7 @@ const ARCHETYPES = {
     'vibrant-tonal': require('@reveal/core/archetypes/vibrant-tonal.json'),
     'warm-tonal-optimized': require('@reveal/core/archetypes/warm-tonal-optimized.json'),
     'subtle-naturalist': require('@reveal/core/archetypes/subtle-naturalist.json'),
+    'structural_outlier_rescue': require('@reveal/core/archetypes/structural-outlier-rescue.json'),
     'blue-rescue': require('@reveal/core/archetypes/blue-rescue.json'),
     'thermonuclear-yellow': require('@reveal/core/archetypes/thermonuclear-yellow.json')
 };
