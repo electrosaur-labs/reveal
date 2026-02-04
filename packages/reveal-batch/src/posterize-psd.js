@@ -255,29 +255,43 @@ function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
         ? parseFloat(((warmCount - coolCount) / (warmCount + coolCount)).toFixed(3))
         : 0;
 
-    // Return DNA v2.0 structure
+    // Return DNA v2.0 structure with global object (matches ArchetypeLoader expectations)
     return {
         // Version marker
         version: "2.0",
 
-        // Global metrics (enhanced)
+        // Global metrics (7D core + extended)
+        global: {
+            l: parseFloat(avgL.toFixed(1)),
+            c: parseFloat(avgC.toFixed(1)),
+            k: parseFloat((maxL - minL).toFixed(1)),
+            l_std_dev: parseFloat(lStdDev.toFixed(1)),
+            hue_entropy: parseFloat(hueEntropy.toFixed(3)),
+            temperature_bias: temperatureBias,
+            primary_sector_weight: parseFloat(dominantWeight.toFixed(4)),
+
+            // Extended metrics (for backward compatibility and analysis)
+            minL: parseFloat(minL.toFixed(1)),
+            maxL: parseFloat(maxL.toFixed(1)),
+            maxC: parseFloat(maxC.toFixed(1)),
+            lowChromaDensity: parseFloat(lowChromaDensity.toFixed(3)),
+            warm_cool_ratio: warmCoolRatio
+        },
+
+        // Dominant hue sector
+        dominant_sector: dominantSector || 'none',
+
+        // Per-sector chromatic fingerprint (12 hue sectors)
+        sectors: sectors,
+
+        // Legacy fields (for backward compatibility with DNA v1.0 code)
         l: parseFloat(avgL.toFixed(1)),
         c: parseFloat(avgC.toFixed(1)),
         k: parseFloat((maxL - minL).toFixed(1)),
+        l_std_dev: parseFloat(lStdDev.toFixed(1)),
         minL: parseFloat(minL.toFixed(1)),
         maxL: parseFloat(maxL.toFixed(1)),
-        maxC: parseFloat(maxC.toFixed(1)),
-        l_std_dev: parseFloat(lStdDev.toFixed(1)),
-        lowChromaDensity: parseFloat(lowChromaDensity.toFixed(3)),
-
-        // New v2.0 hue analysis
-        hue_entropy: parseFloat(hueEntropy.toFixed(3)),
-        dominant_sector: dominantSector || 'none',
-        warm_cool_ratio: warmCoolRatio,           // 0-1 scale (0=cool, 1=warm)
-        temperature_bias: temperatureBias,        // -1 to +1 scale (-1=cool, 0=neutral, +1=warm)
-
-        // Per-sector chromatic fingerprint
-        sectors: sectors
+        maxC: parseFloat(maxC.toFixed(1))
     };
 }
 

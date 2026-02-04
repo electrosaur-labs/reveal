@@ -134,7 +134,12 @@ class DynamicConfigurator {
                 isGraphic: archetype.name.includes('Graphic') || archetype.name.includes('Neon'),
                 isArchive: bitDepth === 16,
                 bitDepth: bitDepth,
-                matchDistance: dna.matchDistance || 0  // Set by ArchetypeLoader
+
+                // Archetype matching details (DNA v1.0 or v2.0)
+                matchVersion: archetype.matchVersion || '1.0',
+                matchDistance: archetype.matchDistance || 0,  // DNA v1.0 legacy
+                matchScore: archetype.matchScore,              // DNA v2.0 total score
+                matchBreakdown: archetype.matchBreakdown       // DNA v2.0 score components
             },
 
             // Preprocessing
@@ -259,8 +264,17 @@ class DynamicConfigurator {
         console.log(`\n🧬 DNA v2.0 Trait Stack:`);
         console.log(`   Archetype: ${archetype.name}`);
         console.log(`   Dominant: ${dna.dominant_sector} (${((dna.sectors[dna.dominant_sector]?.weight || 0) * 100).toFixed(1)}%)`);
-        console.log(`   Hue Entropy: ${dna.hue_entropy.toFixed(3)}`);
-        console.log(`   Temperature: ${dna.temperature_bias.toFixed(3)} (${dna.temperature_bias > 0 ? 'warm' : 'cool'})`);
+
+        // Access DNA v2.0 fields from global object if available, fallback to top-level
+        const hue_entropy = dna.global?.hue_entropy ?? dna.hue_entropy;
+        const temperature_bias = dna.global?.temperature_bias ?? dna.temperature_bias;
+
+        if (hue_entropy !== undefined) {
+            console.log(`   Hue Entropy: ${hue_entropy.toFixed(3)}`);
+        }
+        if (temperature_bias !== undefined) {
+            console.log(`   Temperature: ${temperature_bias.toFixed(3)} (${temperature_bias > 0 ? 'warm' : 'cool'})`);
+        }
 
         // LEVEL 2: DOMINANT SECTOR TRAIT (Surgical Overrides)
         // Apply hue-specific protections based on dominant color personality
@@ -293,27 +307,27 @@ class DynamicConfigurator {
         // Adjust merging behavior based on color diversity
 
         // Low Entropy (< 0.3): Limited Palette - Focus on tonal ramps
-        if (dna.hue_entropy < 0.3) {
-            console.log(`   🎨 Limited Palette (entropy ${dna.hue_entropy.toFixed(3)})`);
+        if (hue_entropy !== undefined && hue_entropy < 0.3) {
+            console.log(`   🎨 Limited Palette (entropy ${hue_entropy.toFixed(3)})`);
             params.lWeight = Math.max(params.lWeight || 1.2, 1.8);  // Prioritize lightness
             params.paletteReduction = Math.max(params.paletteReduction || 6.0, 8.0);  // Aggressive merging
             params.enableHueGapAnalysis = false;  // Don't force hue diversity
         }
 
         // High Entropy (> 0.8): Rainbow Protection - Preserve diversity
-        else if (dna.hue_entropy > 0.8) {
-            console.log(`   🌈 High Diversity (entropy ${dna.hue_entropy.toFixed(3)})`);
+        else if (hue_entropy !== undefined && hue_entropy > 0.8) {
+            console.log(`   🌈 High Diversity (entropy ${hue_entropy.toFixed(3)})`);
             params.enableHueGapAnalysis = true;  // Force hue gap detection
             params.paletteReduction = Math.min(params.paletteReduction || 6.0, 4.0);  // Gentler merging
         }
 
         // SPECIAL CASE: Cool Outlier Protection (Blue Door Fix)
         // Protect minority cool colors in warm-dominant images
-        const coolPresence = (dna.sectors.blue?.weight || 0) +
-                            (dna.sectors.cyan?.weight || 0) +
-                            (dna.sectors.azure?.weight || 0);
+        const coolPresence = (dna.sectors?.blue?.weight || 0) +
+                            (dna.sectors?.cyan?.weight || 0) +
+                            (dna.sectors?.azure?.weight || 0);
 
-        if (coolPresence > 0.05 && dna.temperature_bias > 0.5) {
+        if (coolPresence > 0.05 && temperature_bias !== undefined && temperature_bias > 0.5) {
             console.log(`   ❄️ Cool Outlier Protection (${(coolPresence * 100).toFixed(1)}% cool in warm image)`);
             params.neutralSovereigntyThreshold = 0;  // Don't neutralize cool colors
             params.enableHueGapAnalysis = true;      // Force cool color slots

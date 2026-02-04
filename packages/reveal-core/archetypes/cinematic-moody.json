@@ -1,21 +1,26 @@
 {
   "id": "cinematic_moody",
   "name": "Cinematic / Moody",
-  "description": "Deep tones and heavy shadows. Prevents dark colors from fusing into the black plate in low-exposure shots.",
+  "description": "Deep tones and heavy shadows. Prevents shadow fusion in low-exposure shots.",
+  "preferred_sectors": ["blue", "cyan", "purple"],
   "centroid": {
     "l": 40,
     "c": 25,
     "k": 65,
-    "l_std_dev": 22
+    "l_std_dev": 22,
+    "hue_entropy": 0.55,
+    "temperature_bias": -0.2,
+    "primary_sector_weight": 0.25
   },
   "weights": {
-    "l": 0.5,
+    "l": 2.0,
     "c": 1.5,
     "k": 1.0,
-    "l_std_dev": 2.0
+    "l_std_dev": 2.0,
+    "temperature_bias": 1.5
   },
   "parameters": {
-    "targetColorsSlider": 12,
+    "targetColorsSlider": 8,
     "ditherType": "blue-noise",
     "distanceMetric": "cie94",
     "lWeight": 1.5,

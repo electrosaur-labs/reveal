@@ -1,22 +1,18 @@
 {
   "id": "subtle_naturalist",
   "name": "Subtle Naturalist / Architectural",
-  "description": "Baseline for 16-bit photographic scans. High entropy target protects clinical color diversity.",
+  "description": "Baseline for 16-bit scans. Targets high neutral density but respects chromatic outliers through clinical measurement.",
   "centroid": {
     "l": 52.3,
     "c": 18.7,
     "k": 94.2,
-    "l_std_dev": 28.6,
-    "hue_entropy": 0.75,
-    "temperature_bias": 0.0,
-    "primary_sector_weight": 0.15
+    "l_std_dev": 28.6
   },
   "weights": {
     "l": 0.5,
     "c": 2.0,
     "k": 1.5,
-    "l_std_dev": 2.0,
-    "hue_entropy": 2.0
+    "l_std_dev": 2.0
   },
   "parameters": {
     "targetColorsSlider": 8,

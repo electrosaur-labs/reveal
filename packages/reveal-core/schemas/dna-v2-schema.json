@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DNA v2.0 Schema",
+  "description": "Schema for validating DNA v2.0 objects with 12-sector hue analysis",
+  "type": "object",
+  "required": ["version", "global", "sectors", "metadata"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "2.0",
+      "description": "DNA version identifier"
+    },
+    "global": {
+      "type": "object",
+      "description": "Global image DNA metrics (7D feature space)",
+      "required": ["l", "c", "k", "l_std_dev", "hue_entropy", "temperature_bias", "primary_sector_weight"],
+      "properties": {
+        "l": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Average lightness (0-100)"
+        },
+        "c": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 150,
+          "description": "Average chroma (0-150)"
+        },
+        "k": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Contrast / dynamic range (max L - min L)"
+        },
+        "l_std_dev": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 50,
+          "description": "Lightness standard deviation (0-50)"
+        },
+        "hue_entropy": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Normalized Shannon entropy of hue distribution (0=monochrome, 1=rainbow)"
+        },
+        "temperature_bias": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1,
+          "description": "Color temperature bias (-1=cool, 0=neutral, 1=warm)"
+        },
+        "primary_sector_weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Weight of the dominant 30° hue sector (0-1)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dominant_sector": {
+      "type": ["string", "null"],
+      "enum": ["red", "orange", "yellow", "chartreuse", "green", "cyan", "azure", "blue", "purple", "magenta", "pink", "rose", null],
+      "description": "Name of the dominant hue sector, or null if achromatic"
+    },
+    "sectors": {
+      "type": "object",
+      "description": "12 hue sectors at 30° intervals (0-360°)",
+      "properties": {
+        "red": { "$ref": "#/definitions/sector" },
+        "orange": { "$ref": "#/definitions/sector" },
+        "yellow": { "$ref": "#/definitions/sector" },
+        "chartreuse": { "$ref": "#/definitions/sector" },
+        "green": { "$ref": "#/definitions/sector" },
+        "cyan": { "$ref": "#/definitions/sector" },
+        "azure": { "$ref": "#/definitions/sector" },
+        "blue": { "$ref": "#/definitions/sector" },
+        "purple": { "$ref": "#/definitions/sector" },
+        "magenta": { "$ref": "#/definitions/sector" },
+        "pink": { "$ref": "#/definitions/sector" },
+        "rose": { "$ref": "#/definitions/sector" }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Image metadata",
+      "required": ["width", "height", "totalPixels"],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Image width in pixels"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Image height in pixels"
+        },
+        "totalPixels": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total pixel count (width × height)"
+        },
+        "bitDepth": {
+          "type": "integer",
+          "enum": [8, 16],
+          "description": "Lab encoding bit depth (8 or 16)"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "sector": {
+      "type": "object",
+      "description": "Statistics for a 30° hue sector",
+      "required": ["weight", "lMean", "cMean", "cMax"],
+      "properties": {
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Proportion of image pixels in this sector (0-1)"
+        },
+        "lMean": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Average lightness of pixels in this sector"
+        },
+        "cMean": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 150,
+          "description": "Average chroma of pixels in this sector"
+        },
+        "cMax": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 150,
+          "description": "Maximum chroma in this sector"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

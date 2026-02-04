@@ -1,22 +1,27 @@
 {
   "id": "pastel_high_key",
   "name": "Pastel / High-Key",
-  "description": "Very bright, soft colors, low contrast",
+  "description": "Very bright, soft colors. Protects gradients in high-key photography.",
   "centroid": {
     "l": 85,
     "c": 20,
     "k": 30,
-    "l_std_dev": 15
+    "l_std_dev": 15,
+    "hue_entropy": 0.60,
+    "temperature_bias": 0.1,
+    "primary_sector_weight": 0.20
   },
   "weights": {
-    "l": 1.0,
+    "l": 3.0,
     "c": 1.0,
     "k": 0.5,
-    "l_std_dev": 1.5
+    "l_std_dev": 1.5,
+    "hue_entropy": 1.0
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "SALIENCY",
+    "targetColorsSlider": 8,
+    "ditherType": "none",
+    "distanceMetric": "cie94",
     "lWeight": 1.0,
     "cWeight": 1.8,
     "blackBias": 0.0,
@@ -32,12 +37,13 @@
     "hueLockAngle": 12,
     "shadowPoint": 20,
     "colorMode": "color",
-    "targetColorsSlider": 8,
     "preserveWhite": true,
     "preserveBlack": false,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
-    "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 5,
+    "neutralCentroidClampThreshold": 1.0,
+    "preprocessingIntensity": "light"
   }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Archetype Definition",
-  "description": "Schema for defining image archetypes with their target DNA characteristics and processing parameters",
+  "title": "Archetype Definition v2.0",
+  "description": "Schema for defining image archetypes with target DNA v2.0 characteristics including 12-sector hue analysis.",
   "type": "object",
   "required": ["id", "name", "centroid", "parameters"],
   "properties": {
@@ -16,203 +16,80 @@
     },
     "description": {
       "type": "string",
-      "description": "Description of what types of images this archetype targets"
+      "description": "Target image characteristics"
+    },
+    "preferred_sectors": {
+      "type": "array",
+      "description": "Optional: Hue sectors this archetype favors (e.g., ['blue', 'cyan'] for Blue Rescue)",
+      "items": {
+        "type": "string",
+        "enum": ["red", "orange", "yellow", "chartreuse", "green", "cyan", "azure", "blue", "purple", "magenta", "pink", "rose"]
+      }
     },
     "centroid": {
       "type": "object",
-      "description": "Target DNA values that define the archetype's 4D centroid in feature space",
-      "required": ["l", "c", "k", "l_std_dev"],
+      "description": "Target DNA values defining the archetype's position in 7D feature space",
+      "required": ["l", "c", "k", "l_std_dev", "hue_entropy", "temperature_bias", "primary_sector_weight"],
       "properties": {
-        "l": {
+        "l": { "type": "number", "minimum": 0, "maximum": 100, "description": "Target lightness" },
+        "c": { "type": "number", "minimum": 0, "maximum": 150, "description": "Target chroma" },
+        "k": { "type": "number", "minimum": 0, "maximum": 100, "description": "Target contrast" },
+        "l_std_dev": { "type": "number", "minimum": 0, "maximum": 50, "description": "Target lightness variance" },
+        "hue_entropy": {
           "type": "number",
           "minimum": 0,
-          "maximum": 100,
-          "description": "Target lightness (0=black, 100=white)"
+          "maximum": 1,
+          "description": "Target spectrum diversity (0=mono, 1=rainbow)"
         },
-        "c": {
+        "temperature_bias": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 150,
-          "description": "Target chroma/saturation (0=grayscale, 150=highly saturated)"
+          "minimum": -1,
+          "maximum": 1,
+          "description": "Target color temp (-1=cool, 1=warm)"
         },
-        "k": {
+        "primary_sector_weight": {
           "type": "number",
           "minimum": 0,
-          "maximum": 100,
-          "description": "Target contrast/dynamic range (0=flat, 100=high contrast)"
-        },
-        "l_std_dev": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 50,
-          "description": "Target lightness standard deviation (0=flat vector art, 50=complex photograph)"
+          "maximum": 1,
+          "description": "Target weight of the dominant 30° sector"
         }
       }
     },
     "weights": {
       "type": "object",
-      "description": "Per-dimension weights for distance calculation (optional, defaults provided)",
+      "description": "Per-dimension weights for compatibility scoring",
       "properties": {
-        "l": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Weight for lightness dimension (default: 1.0)"
-        },
-        "c": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Weight for chroma dimension (default: 1.5)"
-        },
-        "k": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Weight for contrast dimension (default: 2.0)"
-        },
-        "l_std_dev": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Weight for flatness dimension (default: 1.0)"
-        }
+        "l": { "type": "number", "default": 1.0 },
+        "c": { "type": "number", "default": 1.5 },
+        "k": { "type": "number", "default": 2.0 },
+        "l_std_dev": { "type": "number", "default": 1.0 },
+        "hue_entropy": { "type": "number", "default": 2.0 },
+        "temperature_bias": { "type": "number", "default": 1.5 },
+        "primary_sector_weight": { "type": "number", "default": 2.5 }
       }
     },
     "parameters": {
       "type": "object",
-      "description": "Processing parameters to apply when this archetype is matched",
+      "description": "Processing parameters applied upon match",
       "required": [
-        "engineType", "centroidStrategy", "lWeight", "cWeight", "blackBias",
-        "substrateMode", "substrateTolerance", "vibrancyMode", "vibrancyBoost",
-        "vibrancyThreshold", "highlightThreshold", "highlightBoost", "enablePaletteReduction",
-        "paletteReduction", "hueLockAngle", "shadowPoint", "colorMode", "targetColorsSlider",
-        "preserveWhite", "preserveBlack", "ignoreTransparent", "enableHueGapAnalysis",
-        "ditherType", "maskProfile"
+        "targetColorsSlider", "lWeight", "cWeight", "blackBias",
+        "vibrancyMode", "vibrancyBoost", "vibrancyThreshold",
+        "enablePaletteReduction", "paletteReduction", "hueLockAngle",
+        "enableHueGapAnalysis", "ditherType", "neutralSovereigntyThreshold"
       ],
       "properties": {
-        "engineType": {
-          "type": "string",
-          "enum": ["reveal", "balanced"],
-          "description": "Color separation engine type"
-        },
-        "centroidStrategy": {
-          "type": "string",
-          "enum": ["SALIENCY", "VOLUMETRIC"],
-          "description": "Centroid selection strategy for color quantization"
-        },
-        "lWeight": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 5.0,
-          "description": "Lightness weight in color distance calculation"
-        },
-        "cWeight": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 5.0,
-          "description": "Chroma weight in color distance calculation"
-        },
-        "blackBias": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 10.0,
-          "description": "Black deepening strength (0=no bias, 10=maximum deepening)"
-        },
-        "substrateMode": {
-          "type": "string",
-          "enum": ["auto", "white", "black", "none"],
-          "description": "Substrate handling mode"
-        },
-        "substrateTolerance": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 10.0,
-          "description": "Tolerance for substrate detection"
-        },
-        "vibrancyMode": {
-          "type": "string",
-          "enum": ["linear", "moderate", "subtle", "exponential"],
-          "description": "Vibrancy processing mode"
-        },
-        "vibrancyBoost": {
-          "type": "number",
-          "minimum": 0.5,
-          "maximum": 2.0,
-          "description": "Vibrancy boost multiplier"
-        },
-        "vibrancyThreshold": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 100,
-          "description": "Chroma floor below which vibrancy logic is bypassed (preserves desaturated tones)"
-        },
-        "highlightThreshold": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 100,
-          "description": "Lightness threshold for highlight detection"
-        },
-        "highlightBoost": {
-          "type": "number",
-          "minimum": 0.5,
-          "maximum": 5.0,
-          "description": "Highlight boost multiplier"
-        },
-        "enablePaletteReduction": {
-          "type": "boolean",
-          "description": "Enable palette reduction/merging"
-        },
-        "paletteReduction": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 20.0,
-          "description": "Palette reduction strength"
-        },
-        "hueLockAngle": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 90,
-          "description": "Hue lock angle in degrees"
-        },
-        "shadowPoint": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 50,
-          "description": "Shadow point threshold"
-        },
-        "colorMode": {
-          "type": "string",
-          "enum": ["color", "grayscale"],
-          "description": "Color processing mode"
-        },
-        "targetColorsSlider": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 10,
-          "description": "Target number of colors for quantization"
-        },
-        "preserveWhite": {
-          "type": "boolean",
-          "description": "Preserve pure white as substrate"
-        },
-        "preserveBlack": {
-          "type": "boolean",
-          "description": "Preserve pure black"
-        },
-        "ignoreTransparent": {
-          "type": "boolean",
-          "description": "Ignore transparent pixels in analysis"
-        },
-        "enableHueGapAnalysis": {
-          "type": "boolean",
-          "description": "Enable hue gap analysis for palette optimization"
-        },
-        "ditherType": {
-          "type": "string",
-          "enum": ["BlueNoise", "Atkinson", "Bayer", "none"],
-          "description": "Halftone dithering algorithm"
-        },
-        "maskProfile": {
-          "type": "string",
-          "description": "Color profile for mask generation"
-        }
+        "targetColorsSlider": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "lWeight": { "type": "number", "minimum": 0, "maximum": 5 },
+        "cWeight": { "type": "number", "minimum": 0, "maximum": 10 },
+        "blackBias": { "type": "number", "minimum": 0, "maximum": 10 },
+        "vibrancyMode": { "type": "string", "enum": ["linear", "subtle", "moderate", "aggressive", "exponential"] },
+        "vibrancyBoost": { "type": "number", "minimum": 0, "maximum": 3 },
+        "vibrancyThreshold": { "type": "number", "minimum": 0, "maximum": 100 },
+        "paletteReduction": { "type": "number", "minimum": 0, "maximum": 20 },
+        "hueLockAngle": { "type": "number", "minimum": 0, "maximum": 90 },
+        "neutralSovereigntyThreshold": { "type": "number", "minimum": 0, "maximum": 100 },
+        "neutralCentroidClampThreshold": { "type": "number", "minimum": 0, "maximum": 20 },
+        "ditherType": { "type": "string", "enum": ["BlueNoise", "Atkinson", "none"] }
       }
     }
   }
