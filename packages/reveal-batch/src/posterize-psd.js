@@ -119,17 +119,50 @@ function reconstructProcessedLab(colorIndices, paletteLab, pixelCount) {
 }
 
 /**
- * Calculate image DNA from 8-bit Lab data
- * Returns comprehensive DNA metrics for the Expert System Configurator
+ * Calculate image DNA v2.0 from 8-bit Lab data
+ * Returns comprehensive DNA metrics including 12-sector hue analysis
+ *
+ * DNA v2.0 Structure:
+ * - version: "2.0"
+ * - global: L/C/K metrics + derived hue values
+ * - sectors: Per-sector weight, cMean, cMax, lMean for all 12 hue sectors
+ * - legacy fields: Preserved for backward compatibility
  */
 function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
     const pixelCount = width * height;
+    const CHROMA_THRESHOLD = 5; // Minimum chroma to count for hue analysis
+
+    // 12 hue sectors (30° each)
+    const SECTORS = [
+        'red', 'orange', 'yellow', 'chartreuse',
+        'green', 'cyan', 'azure', 'blue',
+        'purple', 'magenta', 'pink', 'rose'
+    ];
+
+    // Global metrics
     let sumL = 0, sumC = 0;
     let minL = 100, maxL = 0, maxC = 0;
     let sampleCount = 0;
-    let lowChromaCount = 0;  // Pixels with C < 15 (muted)
+    let lowChromaCount = 0;
     const lValues = [];
 
+    // Per-sector data
+    const sectorData = {};
+    SECTORS.forEach(sector => {
+        sectorData[sector] = {
+            count: 0,
+            sumC: 0,
+            sumL: 0,
+            maxC: 0,
+            pixels: []
+        };
+    });
+
+    let warmCount = 0;  // Red, orange, yellow (0-90°)
+    let coolCount = 0;  // Cyan, azure, blue, purple (150-270°)
+    let chromaPixelCount = 0;  // Pixels with C > threshold
+
+    // Sample pixels
     for (let i = 0; i < pixelCount; i += sampleStep) {
         // Convert 8-bit to perceptual
         const L = (lab8bit[i * 3] / 255) * 100;
@@ -137,27 +170,97 @@ function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
         const b = lab8bit[i * 3 + 2] - 128;
         const C = Math.sqrt(a * a + b * b);
 
+        // Global metrics
         sumL += L;
         sumC += C;
         lValues.push(L);
         if (L < minL) minL = L;
         if (L > maxL) maxL = L;
         if (C > maxC) maxC = C;
-        if (C < 15) lowChromaCount++;  // Track muted pixels
+        if (C < 15) lowChromaCount++;
         sampleCount++;
+
+        // Hue sector analysis (only for chromatic pixels)
+        if (C > CHROMA_THRESHOLD) {
+            chromaPixelCount++;
+
+            // Calculate hue angle (0-360°)
+            let hue = Math.atan2(b, a) * (180 / Math.PI);
+            if (hue < 0) hue += 360;
+
+            // Determine sector (12 sectors of 30° each)
+            const sectorIndex = Math.floor(hue / 30) % 12;
+            const sector = SECTORS[sectorIndex];
+
+            // Update sector data
+            sectorData[sector].count++;
+            sectorData[sector].sumC += C;
+            sectorData[sector].sumL += L;
+            if (C > sectorData[sector].maxC) sectorData[sector].maxC = C;
+
+            // Warm/cool classification
+            if (hue >= 0 && hue < 90) warmCount++;        // Red, orange, yellow
+            else if (hue >= 150 && hue < 270) coolCount++; // Cyan, azure, blue, purple
+        }
     }
 
+    // Calculate global averages
     const avgL = sumL / sampleCount;
     const avgC = sumC / sampleCount;
-
-    // Calculate L standard deviation
     const lVariance = lValues.reduce((sum, l) => sum + Math.pow(l - avgL, 2), 0) / sampleCount;
     const lStdDev = Math.sqrt(lVariance);
-
-    // Calculate low chroma density (ratio of muted pixels)
     const lowChromaDensity = lowChromaCount / sampleCount;
 
+    // Process sector data into final structure
+    const sectors = {};
+    let dominantSector = null;
+    let dominantWeight = 0;
+    let hueWeights = [];
+
+    SECTORS.forEach(sector => {
+        const data = sectorData[sector];
+        const weight = chromaPixelCount > 0 ? data.count / chromaPixelCount : 0;
+
+        sectors[sector] = {
+            weight: parseFloat(weight.toFixed(4)),
+            cMean: data.count > 0 ? parseFloat((data.sumC / data.count).toFixed(1)) : 0,
+            cMax: parseFloat(data.maxC.toFixed(1)),
+            lMean: data.count > 0 ? parseFloat((data.sumL / data.count).toFixed(1)) : 0
+        };
+
+        // Track dominant sector
+        if (weight > dominantWeight) {
+            dominantWeight = weight;
+            dominantSector = sector;
+        }
+
+        // Collect weights for entropy calculation
+        if (weight > 0) hueWeights.push(weight);
+    });
+
+    // Calculate hue entropy (Shannon entropy normalized 0-1)
+    let hueEntropy = 0;
+    if (hueWeights.length > 0) {
+        const maxEntropy = Math.log2(12); // Maximum entropy for 12 sectors
+        hueEntropy = -hueWeights.reduce((sum, w) => sum + w * Math.log2(w), 0) / maxEntropy;
+    }
+
+    // Calculate warm/cool metrics
+    const warmCoolRatio = chromaPixelCount > 0
+        ? parseFloat((warmCount / (warmCount + coolCount)).toFixed(3))
+        : 0.5;
+
+    // Temperature bias: (W-C)/(W+C) scale from -1 (pure cool) to +1 (pure warm)
+    const temperatureBias = (warmCount + coolCount) > 0
+        ? parseFloat(((warmCount - coolCount) / (warmCount + coolCount)).toFixed(3))
+        : 0;
+
+    // Return DNA v2.0 structure
     return {
+        // Version marker
+        version: "2.0",
+
+        // Global metrics (enhanced)
         l: parseFloat(avgL.toFixed(1)),
         c: parseFloat(avgC.toFixed(1)),
         k: parseFloat((maxL - minL).toFixed(1)),
@@ -165,7 +268,16 @@ function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
         maxL: parseFloat(maxL.toFixed(1)),
         maxC: parseFloat(maxC.toFixed(1)),
         l_std_dev: parseFloat(lStdDev.toFixed(1)),
-        lowChromaDensity: parseFloat(lowChromaDensity.toFixed(3))  // 0.0 - 1.0
+        lowChromaDensity: parseFloat(lowChromaDensity.toFixed(3)),
+
+        // New v2.0 hue analysis
+        hue_entropy: parseFloat(hueEntropy.toFixed(3)),
+        dominant_sector: dominantSector || 'none',
+        warm_cool_ratio: warmCoolRatio,           // 0-1 scale (0=cool, 1=warm)
+        temperature_bias: temperatureBias,        // -1 to +1 scale (-1=cool, 0=neutral, +1=warm)
+
+        // Per-sector chromatic fingerprint
+        sectors: sectors
     };
 }
 

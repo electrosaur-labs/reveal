@@ -1,0 +1,45 @@
+{
+  "id": "structural_outlier_rescue",
+  "name": "Subtle Naturalist / Structural Rescue",
+  "description": "Surgical recovery for low-chroma, high-detail images like cards or fine mechanical parts.",
+  "centroid": {
+    "l": 60,
+    "c": 11,
+    "k": 100,
+    "l_std_dev": 26
+  },
+  "weights": {
+    "l": 0.3,
+    "c": 3.0,
+    "k": 1.5,
+    "l_std_dev": 1.5
+  },
+  "parameters": {
+    "targetColorsSlider": 8,
+    "ditherType": "atkinson",
+    "distanceMetric": "cie2000",
+    "lWeight": 2.0,
+    "cWeight": 4.5,
+    "blackBias": 8.0,
+    "vibrancyMode": "subtle",
+    "vibrancyBoost": 1.05,
+    "vibrancyThreshold": 18,
+    "highlightThreshold": 97,
+    "highlightBoost": 2.0,
+    "enablePaletteReduction": true,
+    "paletteReduction": 3.0,
+    "substrateMode": "auto",
+    "substrateTolerance": 1.0,
+    "shadowPoint": 8,
+    "enableHueGapAnalysis": true,
+    "hueLockAngle": 15,
+    "colorMode": "color",
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 0,
+    "neutralCentroidClampThreshold": 0.2,
+    "preprocessingIntensity": "light"
+  }
+}
