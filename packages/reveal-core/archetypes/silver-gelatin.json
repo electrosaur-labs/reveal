@@ -43,7 +43,7 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 35,
-    "neutralCentroidClampThreshold": 0.2,
+    "neutralCentroidClampThreshold": 1.0,
     "preprocessingIntensity": "medium"
   }
 }

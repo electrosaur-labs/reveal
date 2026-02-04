@@ -259,6 +259,8 @@ class DNAGenerator {
         // v2.0: Process sector data
         const sectors = {};
         const totalPixels = width * height;
+        let dominantSector = null;
+        let maxSectorWeight = 0;
 
         for (const sector of sectorData) {
             if (sector.count === 0) {
@@ -268,9 +270,10 @@ class DNAGenerator {
             const lMean = sector.sumL / sector.count;
             const lVariance = (sector.sumLSquared / sector.count) - (lMean * lMean);
             const lStdDev = Math.sqrt(Math.max(0, lVariance));
+            const weight = parseFloat((sector.totalWeight / Math.max(totalColorWeightSum, 1)).toFixed(3));
 
             sectors[sector.name] = {
-                weight: parseFloat((sector.totalWeight / Math.max(totalColorWeightSum, 1)).toFixed(3)),
+                weight: weight,
                 coverage: parseFloat((sector.count * sampleStep / totalPixels).toFixed(3)),
                 lMean: parseFloat(lMean.toFixed(1)),
                 lStdDev: parseFloat(lStdDev.toFixed(1)),
@@ -278,7 +281,34 @@ class DNAGenerator {
                 cMax: parseFloat(sector.maxC.toFixed(1)),
                 hMean: parseFloat((sector.sumH / sector.count).toFixed(1))
             };
+
+            // Track dominant sector
+            if (weight > maxSectorWeight) {
+                maxSectorWeight = weight;
+                dominantSector = sector.name;
+            }
         }
+
+        // Calculate hue entropy (Shannon entropy)
+        const sectorWeights = Object.values(sectors).map(s => s.weight);
+        let hueEntropy = 0;
+        if (sectorWeights.length > 0) {
+            const maxEntropy = Math.log2(12); // 12 possible sectors
+            for (const w of sectorWeights) {
+                if (w > 0) {
+                    hueEntropy -= w * Math.log2(w);
+                }
+            }
+            hueEntropy = hueEntropy / maxEntropy; // Normalize to 0-1
+        }
+
+        // Calculate temperature bias (-1 = cool, +1 = warm)
+        const warmPixels = warmPixelWeightSum;
+        const coolPixels = coolPixelWeightSum;
+        const totalTempPixels = warmPixels + coolPixels;
+        const temperatureBias = totalTempPixels > 0
+            ? (warmPixels - coolPixels) / totalTempPixels
+            : 0;
 
         // v2.0: Return hierarchical structure
         return {
@@ -309,9 +339,15 @@ class DNAGenerator {
                 chromaticCoverage: parseFloat((totalColorWeightSum / sampleCount).toFixed(3)),
                 neutralWeight: parseFloat((neutralPixelCount / sampleCount).toFixed(3)),
                 neutralLMean: neutralPixelCount > 0 ? parseFloat((neutralLSum / neutralPixelCount).toFixed(1)) : 0,
-                bitDepth: is16Bit ? 16 : 8
+                bitDepth: is16Bit ? 16 : 8,
+
+                // DNA v2.0 archetype matching fields
+                hue_entropy: parseFloat(hueEntropy.toFixed(3)),
+                temperature_bias: parseFloat(temperatureBias.toFixed(2)),
+                primary_sector_weight: parseFloat(maxSectorWeight.toFixed(3))
             },
 
+            dominant_sector: dominantSector || 'none',
             sectors
         };
     }
