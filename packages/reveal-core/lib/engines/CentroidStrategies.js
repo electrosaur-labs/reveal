@@ -137,6 +137,21 @@ function SALIENCY(bucket, weights) {
         finalLab.b = 0;
     }
 
+    // ACHROMATIC SHADOW LOCKDOWN (JethroAsMonroe Fix)
+    // Force low-chroma blue centroids (cool shadows in fur) to pure gray
+    // Prevents "accidental blue" plates from tiny cool pixel clusters
+    // Only applies to 16-bit sources where shadows contain chromatic noise
+    if (!isEightBit && finalChroma > 0 && finalChroma < 5.0) {
+        const hue = Math.atan2(finalLab.b, finalLab.a) * (180 / Math.PI);
+        const normalizedHue = hue < 0 ? hue + 360 : hue;
+        // Blue sector: 195-270° (blue, purple range)
+        if (normalizedHue >= 195 && normalizedHue <= 270) {
+            finalLab.a = 0;
+            finalLab.b = 0;
+            // Note: Preserves L value - converts to "rich gray" or "cool black"
+        }
+    }
+
     return finalLab;
 }
 

@@ -333,6 +333,22 @@ class DynamicConfigurator {
             params.enableHueGapAnalysis = true;      // Force cool color slots
         }
 
+        // SPECIAL CASE: Muddy Hybrid Prevention (The Horse Fix)
+        // Prevent transitional colors when there's high contrast between warm and cool sectors
+        // Targets images with dominant warm sector + minority green/foliage creating muddy border centroids
+        const warmPresence = (dna.sectors?.orange?.weight || 0) +
+                            (dna.sectors?.yellow?.weight || 0) +
+                            (dna.sectors?.red?.weight || 0);
+        const greenPresence = (dna.sectors?.green?.weight || 0) +
+                             (dna.sectors?.chartreuse?.weight || 0);
+
+        // If dominant warm with minority green, tighten hue lock and increase merging
+        if (warmPresence > 0.4 && greenPresence > 0.05 && greenPresence < 0.2) {
+            console.log(`   🎨 Hybrid Prevention (${(warmPresence * 100).toFixed(1)}% warm, ${(greenPresence * 100).toFixed(1)}% green)`);
+            params.hueLockAngle = Math.min(params.hueLockAngle || 45, 15);  // Tighten hue lock
+            params.paletteReduction = Math.max(params.paletteReduction || 6.0, 10.0);  // Aggressive merging
+        }
+
         console.log(''); // Blank line for readability
     }
 
