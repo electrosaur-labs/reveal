@@ -2,7 +2,11 @@
   "id": "warm_tonal_optimized",
   "name": "Warm Tonal / Yellow Protect",
   "description": "Landscape-optimized. Uses high hue-locking and temperature bias to protect yellows from muddying.",
-  "preferred_sectors": ["yellow", "orange", "chartreuse"],
+  "preferred_sectors": [
+    "yellow",
+    "orange",
+    "chartreuse"
+  ],
   "centroid": {
     "l": 55,
     "c": 35,
@@ -32,7 +36,7 @@
     "highlightThreshold": 96,
     "highlightBoost": 1.6,
     "enablePaletteReduction": true,
-    "paletteReduction": 4.0,
+    "paletteReduction": 6.0,
     "substrateMode": "auto",
     "substrateTolerance": 3.0,
     "shadowPoint": 12,

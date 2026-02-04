@@ -31,7 +31,7 @@
     "highlightThreshold": 95,
     "highlightBoost": 1.4,
     "enablePaletteReduction": true,
-    "paletteReduction": 3.0,
+    "paletteReduction": 6.0,
     "substrateMode": "auto",
     "substrateTolerance": 2.5,
     "shadowPoint": 10,
