@@ -1,18 +1,22 @@
 {
   "id": "vibrant_tonal",
   "name": "Vibrant Tonal / Neon-High-Chroma",
-  "description": "Designed to find vibrant details inside underexposed or moody frames.",
+  "description": "Finds vibrant details inside underexposed frames. High c-weight prioritizes chroma spikes over volume.",
   "centroid": {
     "l": 50,
     "c": 45,
     "k": 95,
-    "l_std_dev": 25
+    "l_std_dev": 25,
+    "hue_entropy": 0.40,
+    "temperature_bias": 0.0,
+    "primary_sector_weight": 0.30
   },
   "weights": {
     "l": 0.2,
     "c": 6.0,
     "k": 1.0,
-    "l_std_dev": 0.5
+    "l_std_dev": 0.5,
+    "primary_sector_weight": 2.5
   },
   "parameters": {
     "targetColorsSlider": 10,

@@ -1,22 +1,28 @@
 {
   "id": "muted_vintage",
   "name": "Muted / Vintage",
-  "description": "Mid-bright, desaturated, flat (faded posters, WPA prints)",
+  "description": "Mid-bright, desaturated. Ideal for faded posters and WPA aesthetics.",
+  "preferred_sectors": ["orange", "chartreuse", "rose"],
   "centroid": {
     "l": 60,
     "c": 10,
     "k": 40,
-    "l_std_dev": 10
+    "l_std_dev": 10,
+    "hue_entropy": 0.35,
+    "temperature_bias": 0.3,
+    "primary_sector_weight": 0.45
   },
   "weights": {
     "l": 0.5,
     "c": 1.0,
     "k": 1.0,
-    "l_std_dev": 3.0
+    "l_std_dev": 3.0,
+    "hue_entropy": 1.5
   },
   "parameters": {
-    "engineType": "balanced",
-    "centroidStrategy": "VOLUMETRIC",
+    "targetColorsSlider": 8,
+    "ditherType": "BlueNoise",
+    "distanceMetric": "cie94",
     "lWeight": 0.8,
     "cWeight": 1.0,
     "blackBias": 2.0,
@@ -32,12 +38,13 @@
     "hueLockAngle": 18,
     "shadowPoint": 12,
     "colorMode": "color",
-    "targetColorsSlider": 8,
     "preserveWhite": false,
     "preserveBlack": false,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
-    "ditherType": "BlueNoise",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 15,
+    "neutralCentroidClampThreshold": 3.0,
+    "preprocessingIntensity": "light"
   }
 }

@@ -1,18 +1,23 @@
 {
   "id": "warm_tonal_optimized",
   "name": "Warm Tonal / Yellow Protect",
-  "description": "Ensures yellows remain sovereign from browns and earthy tones in complex landscapes.",
+  "description": "Landscape-optimized. Uses high hue-locking and temperature bias to protect yellows from muddying.",
+  "preferred_sectors": ["yellow", "orange", "chartreuse"],
   "centroid": {
     "l": 55,
     "c": 35,
     "k": 70,
-    "l_std_dev": 22
+    "l_std_dev": 22,
+    "hue_entropy": 0.45,
+    "temperature_bias": 0.65,
+    "primary_sector_weight": 0.30
   },
   "weights": {
     "l": 0.5,
     "c": 1.5,
     "k": 1.0,
-    "l_std_dev": 2.0
+    "l_std_dev": 2.0,
+    "temperature_bias": 3.0
   },
   "parameters": {
     "targetColorsSlider": 10,

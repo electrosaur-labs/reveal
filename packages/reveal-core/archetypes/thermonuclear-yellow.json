@@ -1,18 +1,23 @@
 {
   "id": "thermonuclear_yellow",
   "name": "Thermonuclear Yellow",
-  "description": "Maximum aggression for high-chroma yellows. Locks warm hues and uses exponential vibrancy to keep yellows sovereign from earthy shadows.",
+  "description": "Maximum aggression for high-chroma yellows. Uses a high primary-sector trigger to keep yellows sovereign.",
+  "preferred_sectors": ["yellow"],
   "centroid": {
     "l": 60,
     "c": 95,
     "k": 50,
-    "l_std_dev": 15
+    "l_std_dev": 15,
+    "hue_entropy": 0.20,
+    "temperature_bias": 0.90,
+    "primary_sector_weight": 0.60
   },
   "weights": {
     "l": 0.3,
     "c": 3.0,
     "k": 1.0,
-    "l_std_dev": 5.0
+    "l_std_dev": 5.0,
+    "primary_sector_weight": 5.0
   },
   "parameters": {
     "targetColorsSlider": 12,

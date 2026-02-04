@@ -1,22 +1,27 @@
 {
   "id": "hard_commercial",
   "name": "Punchy / Commercial",
-  "description": "Standard brightness, high contrast, saturated (advertising)",
+  "description": "High contrast, saturated commercial photography. Optimized for edge-sharpness and vibrant results.",
   "centroid": {
     "l": 50,
     "c": 30,
     "k": 75,
-    "l_std_dev": 20
+    "l_std_dev": 20,
+    "hue_entropy": 0.70,
+    "temperature_bias": 0.0,
+    "primary_sector_weight": 0.20
   },
   "weights": {
     "l": 0.5,
     "c": 1.0,
     "k": 2.0,
-    "l_std_dev": 1.0
+    "l_std_dev": 1.0,
+    "hue_entropy": 1.0
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "SALIENCY",
+    "targetColorsSlider": 8,
+    "ditherType": "Atkinson",
+    "distanceMetric": "cie94",
     "lWeight": 1.0,
     "cWeight": 1.5,
     "blackBias": 4.0,
@@ -32,12 +37,13 @@
     "hueLockAngle": 25,
     "shadowPoint": 15,
     "colorMode": "color",
-    "targetColorsSlider": 8,
     "preserveWhite": true,
     "preserveBlack": true,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
-    "ditherType": "Atkinson",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 10,
+    "neutralCentroidClampThreshold": 2.5,
+    "preprocessingIntensity": "medium"
   }
 }

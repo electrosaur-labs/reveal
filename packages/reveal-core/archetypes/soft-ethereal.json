@@ -1,18 +1,22 @@
 {
   "id": "soft_ethereal",
   "name": "Soft / Ethereal",
-  "description": "Mid-bright, low contrast. Protects gradients in pastel and high-key photography.",
+  "description": "Mid-bright, low contrast. Protects soft gradients in high-key photography.",
   "centroid": {
     "l": 65,
     "c": 20,
     "k": 40,
-    "l_std_dev": 18
+    "l_std_dev": 18,
+    "hue_entropy": 0.50,
+    "temperature_bias": 0.0,
+    "primary_sector_weight": 0.20
   },
   "weights": {
-    "l": 0.5,
+    "l": 1.0,
     "c": 1.5,
     "k": 1.0,
-    "l_std_dev": 2.0
+    "l_std_dev": 2.0,
+    "hue_entropy": 1.0
   },
   "parameters": {
     "targetColorsSlider": 8,

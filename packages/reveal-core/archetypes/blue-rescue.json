@@ -1,21 +1,26 @@
 {
   "id": "blue_rescue",
   "name": "Blue Rescue / Outlier Recovery",
-  "description": "Forces the engine to find cool-spectrum outliers (like blue doors) in otherwise warm or neutral images. Zeroes out warm-locking logic.",
+  "description": "Forces engine to find cool-spectrum outliers in warm or neutral images.",
+  "preferred_sectors": ["blue", "cyan", "azure"],
   "centroid": {
     "l": 40,
     "c": 35,
     "k": 80,
-    "l_std_dev": 22
+    "l_std_dev": 22,
+    "hue_entropy": 0.45,
+    "temperature_bias": -0.6,
+    "primary_sector_weight": 0.35
   },
   "weights": {
     "l": 1.0,
     "c": 2.0,
     "k": 2.0,
-    "l_std_dev": 1.5
+    "l_std_dev": 1.5,
+    "temperature_bias": 2.5
   },
   "parameters": {
-    "targetColorsSlider": 14,
+    "targetColorsSlider": 10,
     "ditherType": "blue-noise",
     "distanceMetric": "cie2000",
     "lWeight": 1.5,

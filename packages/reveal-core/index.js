@@ -14,10 +14,14 @@ const PosterizationEngine = require('./lib/engines/PosterizationEngine');
 const SeparationEngine = require('./lib/engines/SeparationEngine');
 const PreviewEngine = require('./lib/engines/PreviewEngine');
 const DocumentValidator = require('./lib/validation/DocumentValidator');
+const DNAValidator = require('./lib/validation/DNAValidator');
 const ImageHeuristicAnalyzer = require('./lib/analysis/ImageHeuristicAnalyzer');
 const LabDistance = require('./lib/color/LabDistance');
 const BilateralFilter = require('./lib/preprocessing/BilateralFilter');
 const ParameterGenerator = require('./lib/analysis/ParameterGenerator');
+const DNAGenerator = require('./lib/analysis/DNAGenerator');
+const ArchetypeMapper = require('./lib/analysis/ArchetypeMapper');
+const ArchetypeLoader = require('./lib/analysis/ArchetypeLoader');
 const logger = require('./lib/utils/logger');
 
 /**
@@ -369,6 +373,9 @@ module.exports = {
     rgbToLab,
     labToRgb,
 
+    // DNA validation (v2.2)
+    validateDNA: DNAValidator.validate.bind(DNAValidator),
+
     // Metadata
     version: '2.0.0',
     logger
@@ -380,6 +387,7 @@ module.exports.engines = {
     SeparationEngine,
     PreviewEngine,
     DocumentValidator,
+    DNAValidator,
     ImageHeuristicAnalyzer,
 
     // Modular components (v2.0)
@@ -393,7 +401,12 @@ module.exports.engines = {
 
     // Preprocessing (v2.0)
     BilateralFilter: BilateralFilter,
-    ParameterGenerator: ParameterGenerator
+    ParameterGenerator: ParameterGenerator,
+
+    // DNA v2.0 Archetype System (v2.2)
+    DNAGenerator: DNAGenerator,
+    ArchetypeMapper: ArchetypeMapper,
+    ArchetypeLoader: ArchetypeLoader
 };
 
 // Export LabDistance at top level for convenient access
@@ -404,3 +417,9 @@ module.exports.BilateralFilter = BilateralFilter;
 
 // Export ParameterGenerator at top level for convenient access
 module.exports.ParameterGenerator = ParameterGenerator;
+
+// Export DNA v2.0 components at top level for convenient access
+module.exports.DNAGenerator = DNAGenerator;
+module.exports.ArchetypeMapper = ArchetypeMapper;
+module.exports.ArchetypeLoader = ArchetypeLoader;
+module.exports.DNAValidator = DNAValidator;

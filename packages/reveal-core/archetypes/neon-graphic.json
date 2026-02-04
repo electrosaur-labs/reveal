@@ -1,18 +1,23 @@
 {
   "id": "neon_graphic",
   "name": "Neon / Fluorescent Graphic",
-  "description": "Aggressive hue-locking for ultra-saturated flat art. Prevents bleed between vibrant spot colors.",
+  "description": "Aggressive hue-locking for saturated flat art. Prevents bleed between vibrant spot colors.",
+  "preferred_sectors": ["yellow", "orange", "red", "magenta"],
   "centroid": {
     "l": 60,
     "c": 90,
     "k": 50,
-    "l_std_dev": 4
+    "l_std_dev": 4,
+    "hue_entropy": 0.50,
+    "temperature_bias": 0.0,
+    "primary_sector_weight": 0.40
   },
   "weights": {
     "l": 0.5,
     "c": 2.0,
     "k": 1.0,
-    "l_std_dev": 4.0
+    "l_std_dev": 4.0,
+    "primary_sector_weight": 3.0
   },
   "parameters": {
     "targetColorsSlider": 6,

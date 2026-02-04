@@ -3,7 +3,10 @@
  * Loads and matches archetype definitions from JSON files
  *
  * Works in both Node.js (batch processing) and browser/UXP (Adobe plugin) environments
+ * Supports both DNA v1.0 (4D) and DNA v2.0 (7D + 12-sector hue analysis)
  */
+
+const ArchetypeMapper = require('./ArchetypeMapper');
 
 // Conditional imports for Node.js environment only
 let fs, path;
@@ -75,15 +78,20 @@ class ArchetypeLoader {
         // Import archetypes directly for browser/UXP builds
         return [
             require('../../archetypes/subtle-naturalist.json'),
-            require('../../archetypes/standard-balanced.json'),
-            require('../../archetypes/noir-shadow.json'),
-            require('../../archetypes/muted-vintage.json'),
-            require('../../archetypes/vibrant-hyper.json'),
+            require('../../archetypes/structural-outlier-rescue.json'),
             require('../../archetypes/blue-rescue.json'),
+            require('../../archetypes/silver-gelatin.json'),
+            require('../../archetypes/neon-graphic.json'),
             require('../../archetypes/cinematic-moody.json'),
-            require('../../archetypes/neon-graphic.json')
+            require('../../archetypes/muted-vintage.json'),
+            require('../../archetypes/pastel-high-key.json'),
+            require('../../archetypes/noir-shadow.json'),
+            require('../../archetypes/pure-graphic.json'),
+            require('../../archetypes/vibrant-tonal.json'),
+            require('../../archetypes/warm-tonal-optimized.json'),
+            require('../../archetypes/thermonuclear-yellow.json')
         ].map(archetype => {
-            // Set default weights if not specified
+            // Set default weights if not specified (DNA v1.0 backward compatibility)
             if (!archetype.weights) {
                 archetype.weights = {
                     l: 0.5,
@@ -97,8 +105,9 @@ class ArchetypeLoader {
     }
 
     /**
-     * Match DNA to nearest archetype using 4D weighted Euclidean distance
-     * @param {Object} dna - DNA object with l, c, k, l_std_dev
+     * Match DNA to nearest archetype
+     * Supports both DNA v1.0 (4D: L/C/K/σL) and DNA v2.0 (7D + 12-sector hue analysis)
+     * @param {Object} dna - DNA object (v1.0 or v2.0)
      * @returns {Object} Matched archetype
      */
     static matchArchetype(dna) {
@@ -109,6 +118,53 @@ class ArchetypeLoader {
             return this.getFallbackArchetype();
         }
 
+        // Detect DNA version
+        const isDnaV2 = dna.version === '2.0' && dna.global && dna.sectors;
+
+        if (isDnaV2) {
+            // DNA v2.0: Use sophisticated multi-factor scoring
+            return this._matchDnaV2(dna, archetypes);
+        } else {
+            // DNA v1.0: Use legacy 4D weighted Euclidean distance
+            return this._matchDnaV1(dna, archetypes);
+        }
+    }
+
+    /**
+     * Match DNA v2.0 using ArchetypeMapper (40/45/15 scoring)
+     * @private
+     */
+    static _matchDnaV2(dna, archetypes) {
+        const mapper = new ArchetypeMapper(archetypes);
+        const result = mapper.getBestMatch(dna);
+
+        const archetype = archetypes.find(a => a.id === result.id);
+
+        // Enhanced logging for DNA v2.0
+        console.log(`🎯 Matched archetype: ${archetype.name} (score: ${result.score})`);
+        console.log(`   DNA v2.0 Breakdown:`);
+        console.log(`   • Structural:     ${result.breakdown.structural.toFixed(1)}/100 (40% weight)`);
+        console.log(`   • Sector Affinity: ${result.breakdown.sectorAffinity.toFixed(1)}/100 (45% weight)`);
+        console.log(`   • Pattern Match:   ${result.breakdown.pattern.toFixed(1)}/100 (15% weight)`);
+        console.log(`   DNA Signature: L=${dna.global.l.toFixed(1)} C=${dna.global.c.toFixed(1)} ` +
+                    `K=${dna.global.k.toFixed(1)} σL=${dna.global.l_std_dev.toFixed(1)}`);
+        console.log(`   Entropy=${dna.global.hue_entropy.toFixed(3)} ` +
+                    `Temp=${dna.global.temperature_bias.toFixed(2)} ` +
+                    `Dominant=${dna.dominant_sector || 'none'}`);
+
+        // Attach matching details to archetype for validation JSON
+        archetype.matchScore = result.score;
+        archetype.matchBreakdown = result.breakdown;
+        archetype.matchVersion = '2.0';
+
+        return archetype;
+    }
+
+    /**
+     * Match DNA v1.0 using legacy 4D weighted Euclidean distance
+     * @private
+     */
+    static _matchDnaV1(dna, archetypes) {
         const l = dna.l || 50;
         const c = dna.c || 20;
         const k = dna.k || 50;
@@ -136,7 +192,12 @@ class ArchetypeLoader {
             }
         }
 
-        console.log(`🎯 Matched archetype: ${bestMatch.name} (distance: ${minDistance.toFixed(2)})`);
+        console.log(`🎯 Matched archetype: ${bestMatch.name} (DNA v1.0, distance: ${minDistance.toFixed(2)})`);
+
+        // Attach matching details to archetype for validation JSON
+        bestMatch.matchDistance = minDistance;
+        bestMatch.matchVersion = '1.0';
+
         return bestMatch;
     }
 

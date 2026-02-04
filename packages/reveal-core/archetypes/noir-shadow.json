@@ -1,22 +1,27 @@
 {
   "id": "noir_shadow",
   "name": "Deep Shadow / Noir",
-  "description": "Dark, low color, high contrast (film noir, woodcuts, ink drawings)",
+  "description": "Dark, high contrast. Optimized for woodcuts and film noir aesthetics.",
   "centroid": {
     "l": 25,
     "c": 10,
     "k": 80,
-    "l_std_dev": 30
+    "l_std_dev": 30,
+    "hue_entropy": 0.15,
+    "temperature_bias": 0.0,
+    "primary_sector_weight": 0.80
   },
   "weights": {
-    "l": 0.5,
+    "l": 1.0,
     "c": 1.0,
-    "k": 1.5,
-    "l_std_dev": 1.0
+    "k": 2.5,
+    "l_std_dev": 1.0,
+    "hue_entropy": 2.0
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "SALIENCY",
+    "targetColorsSlider": 6,
+    "ditherType": "none",
+    "distanceMetric": "cie94",
     "lWeight": 1.5,
     "cWeight": 1.2,
     "blackBias": 8.0,
@@ -32,12 +37,13 @@
     "hueLockAngle": 12,
     "shadowPoint": 2,
     "colorMode": "color",
-    "targetColorsSlider": 6,
     "preserveWhite": false,
     "preserveBlack": true,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
-    "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 10,
+    "neutralCentroidClampThreshold": 2.0,
+    "preprocessingIntensity": "medium"
   }
 }

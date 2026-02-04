@@ -1,22 +1,27 @@
 {
   "id": "bright_desaturated",
   "name": "Bright Desaturated / High-Key Contrast",
-  "description": "Bright, washed-out photographic images with extreme contrast and minimal color (overexposed look, bleached aesthetics)",
+  "description": "Bright, washed-out photographic images with extreme contrast and minimal color.",
   "centroid": {
     "l": 75,
     "c": 12,
     "k": 95,
-    "l_std_dev": 24
+    "l_std_dev": 24,
+    "hue_entropy": 0.30,
+    "temperature_bias": 0.0,
+    "primary_sector_weight": 0.50
   },
   "weights": {
-    "l": 1.0,
+    "l": 1.5,
     "c": 2.0,
     "k": 2.5,
-    "l_std_dev": 1.0
+    "l_std_dev": 1.0,
+    "hue_entropy": 1.5
   },
   "parameters": {
-    "engineType": "reveal",
-    "centroidStrategy": "SALIENCY",
+    "targetColorsSlider": 7,
+    "ditherType": "none",
+    "distanceMetric": "cie2000",
     "lWeight": 1.2,
     "cWeight": 0.8,
     "blackBias": 3.0,
@@ -32,12 +37,13 @@
     "hueLockAngle": 20,
     "shadowPoint": 8,
     "colorMode": "color",
-    "targetColorsSlider": 7,
     "preserveWhite": true,
     "preserveBlack": true,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
-    "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 20,
+    "neutralCentroidClampThreshold": 4.0,
+    "preprocessingIntensity": "light"
   }
 }

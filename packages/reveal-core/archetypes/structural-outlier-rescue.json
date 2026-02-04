@@ -1,18 +1,22 @@
 {
   "id": "structural_outlier_rescue",
   "name": "Subtle Naturalist / Structural Rescue",
-  "description": "Surgical recovery for low-chroma, high-detail images like cards or fine mechanical parts.",
+  "description": "Surgical recovery for monochromatic, high-detail images. Prevents saliency shadow.",
   "centroid": {
     "l": 60,
     "c": 11,
     "k": 100,
-    "l_std_dev": 26
+    "l_std_dev": 26,
+    "hue_entropy": 0.25,
+    "temperature_bias": 0.0,
+    "primary_sector_weight": 0.60
   },
   "weights": {
-    "l": 0.3,
+    "l": 1.0,
     "c": 3.0,
     "k": 1.5,
-    "l_std_dev": 1.5
+    "l_std_dev": 1.5,
+    "hue_entropy": 3.0
   },
   "parameters": {
     "targetColorsSlider": 8,
