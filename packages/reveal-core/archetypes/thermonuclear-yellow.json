@@ -20,7 +20,7 @@
     "primary_sector_weight": 5.0
   },
   "parameters": {
-    "targetColorsSlider": 12,
+    "targetColorsSlider": 8,
     "ditherType": "none",
     "distanceMetric": "cie76",
     "lWeight": 0.5,
@@ -32,7 +32,7 @@
     "highlightThreshold": 97,
     "highlightBoost": 2.0,
     "enablePaletteReduction": true,
-    "paletteReduction": 3.0,
+    "paletteReduction": 6.0,
     "substrateMode": "auto",
     "substrateTolerance": 2.0,
     "shadowPoint": 5,

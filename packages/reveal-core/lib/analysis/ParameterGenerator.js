@@ -176,18 +176,18 @@ class DynamicConfigurator {
             },
             orange: {
                 name: 'Amber Lock',
-                overrides: { lWeight: 1.0, paletteReduction: 3.0 },
-                purpose: 'Lowers L-priority to preserve texture details in orange-dominant images'
+                overrides: { lWeight: 1.0, paletteReduction: 6.5 },
+                purpose: 'Lowers L-priority to preserve texture while maintaining 8-screen efficiency'
             },
             yellow: {
                 name: 'Yellow Protect',
-                overrides: { hueLockAngle: 30, substrateTolerance: 1.2 },
-                purpose: 'Tighter tolerance to save highlight detail; prevents Thermonuclear merging'
+                overrides: { hueLockAngle: 30, substrateTolerance: 1.2, paletteReduction: 6.0 },
+                purpose: 'Tighter tolerance to save highlight detail; safeguards yellow sovereignty within 8-color budget'
             },
             chartreuse: {
                 name: 'Neon Bloom',
-                overrides: { enableHueGapAnalysis: true, targetColors: 10 },
-                purpose: 'Allows +2 screen expansion for high-vis greens to prevent collapse'
+                overrides: { enableHueGapAnalysis: true, paletteReduction: 6.0 },
+                purpose: 'Ensures chartreuse outliers don\'t trigger screen bloat while preserving high-vis greens'
             },
             green: {
                 name: 'Forest Depth',
@@ -201,8 +201,8 @@ class DynamicConfigurator {
             },
             azure: {
                 name: 'Spring Clarity',
-                overrides: { paletteReduction: 4.0, cWeight: 3.5 },
-                purpose: 'Keeps spring-green/teal distinct from pure green to avoid mucking'
+                overrides: { paletteReduction: 6.0, cWeight: 3.5 },
+                purpose: 'Keeps spring-green/teal distinct from pure green while maintaining efficiency'
             },
             blue: {
                 name: 'Blue Rescue',
@@ -216,8 +216,8 @@ class DynamicConfigurator {
             },
             magenta: {
                 name: 'Punch Recovery',
-                overrides: { paletteReduction: 2.5, vibrancyThreshold: 2 },
-                purpose: 'Prevents merging of high-frequency pinks/magentas to preserve saliency'
+                overrides: { paletteReduction: 6.0, vibrancyThreshold: 2 },
+                purpose: 'Maintains micro-detail in magentas without wasting screens'
             },
             pink: {
                 name: 'Skin/Petal Soft',
