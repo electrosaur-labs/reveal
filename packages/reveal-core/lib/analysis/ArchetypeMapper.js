@@ -61,6 +61,50 @@ class ArchetypeMapper {
     }
 
     getBestMatch(dna) {
+        // PRODUCTION OVERRIDE 1: Achromatic Lock (Jethro/Grays Issue)
+        // Force Silver Gelatin for low-chroma, low-entropy images to prevent neutral drift
+        const isAchromatic = (dna.global?.hue_entropy || 0) < 0.3 && (dna.global?.c || 0) < 10;
+        if (isAchromatic) {
+            const silverGelatin = this.archetypes.find(a => a.id === 'silver_gelatin');
+            if (silverGelatin) {
+                console.log('🔒 Achromatic Override: Forcing Silver Gelatin (entropy < 0.3, c < 10)');
+                return {
+                    id: silverGelatin.id,
+                    score: 95.0, // High confidence for override
+                    breakdown: {
+                        structural: 95.0,
+                        sectorAffinity: 95.0,
+                        pattern: 95.0
+                    }
+                };
+            }
+        }
+
+        // PRODUCTION OVERRIDE 2: Blue Outlier Rescue (Horse/Sky Issue)
+        // Force Blue Rescue if blue sector is significant but dominated by warm tones
+        const blueWeight = (dna.sectors?.blue?.weight || 0) +
+                          (dna.sectors?.cyan?.weight || 0) +
+                          (dna.sectors?.azure?.weight || 0);
+        const dominantIsWarm = ['orange', 'yellow', 'red', 'chartreuse'].includes(dna.dominant_sector);
+        const isBlueOutlier = blueWeight > 0.05 && dominantIsWarm;
+
+        if (isBlueOutlier) {
+            const blueRescue = this.archetypes.find(a => a.id === 'blue_rescue');
+            if (blueRescue) {
+                console.log(`🔵 Blue Outlier Override: Forcing Blue Rescue (${(blueWeight * 100).toFixed(1)}% cool in ${dna.dominant_sector} image)`);
+                return {
+                    id: blueRescue.id,
+                    score: 90.0, // High confidence for override
+                    breakdown: {
+                        structural: 85.0,
+                        sectorAffinity: 95.0,
+                        pattern: 90.0
+                    }
+                };
+            }
+        }
+
+        // Normal scoring path
         const results = this.archetypes.map(archetype => {
             const structuralScore = this.calculateStructuralScore(dna, archetype);
             const sectorScore = this.calculateSectorAffinity(dna, archetype);
