@@ -3801,7 +3801,8 @@ class PosterizationEngine {
             maxPeaks: 3
         });
 
-        const detectedPeaks = peakFinder.findIdentityPeaks(labPixels);
+        // Pass bitDepth for adaptive thresholds (8.0 for 16-bit, 15.0 for 8-bit)
+        const detectedPeaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: sourceBitDepth });
 
         // Convert peaks to forcedCentroids format
         const forcedCentroids = detectedPeaks.map(peak => ({
