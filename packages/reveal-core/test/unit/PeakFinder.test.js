@@ -186,6 +186,96 @@ describe('PeakFinder - Identity Peak Detection', () => {
     });
 });
 
+describe('PeakFinder - Perceptual Isolation (Stage 2b)', () => {
+    it('should filter peaks too close to dominant colors (ΔE < 15)', () => {
+        const peakFinder = new PeakFinder({ chromaThreshold: 30, volumeThreshold: 0.05, minDeltaE: 15 });
+
+        // Simulate "Pink Shadow Hijack" scenario:
+        // - 80% pink shadow (dominant, C=35, L=50, a=30, b=-10)
+        // - 2% magenta detail (candidate, C=38, L=52, a=32, b=-12) - TOO CLOSE to pink
+        // - 18% white background
+        const totalPixels = 1000;
+        const pinkCount = 800;    // 80% dominant pink shadow
+        const magentaCount = 20;  // 2% magenta detail (ΔE ~3 from pink)
+        const whiteCount = 180;   // 18% white
+
+        const labPixels = new Float32Array(totalPixels * 3);
+        let idx = 0;
+
+        // Pink shadow (dominant, high volume, C=35)
+        for (let i = 0; i < pinkCount; i++) {
+            labPixels[idx++] = 50;  // L
+            labPixels[idx++] = 30;  // a
+            labPixels[idx++] = -10; // b (C ≈ 31.6)
+        }
+
+        // Magenta detail (candidate, low volume, C=38, but ΔE ~3 from pink)
+        for (let i = 0; i < magentaCount; i++) {
+            labPixels[idx++] = 52;  // L (close to pink L)
+            labPixels[idx++] = 32;  // a (close to pink a)
+            labPixels[idx++] = -12; // b (close to pink b)
+        }
+
+        // White background (C=0)
+        for (let i = 0; i < whiteCount; i++) {
+            labPixels[idx++] = 100;
+            labPixels[idx++] = 0;
+            labPixels[idx++] = 0;
+        }
+
+        const peaks = peakFinder.findIdentityPeaks(labPixels);
+
+        // Should NOT detect magenta as identity peak (too close to pink shadow)
+        // ΔE between pink (50,30,-10) and magenta (52,32,-12) ≈ 3.46 < 15
+        expect(peaks.length).toBe(0);
+    });
+
+    it('should keep peaks far from dominant colors (ΔE > 15)', () => {
+        const peakFinder = new PeakFinder({ chromaThreshold: 30, volumeThreshold: 0.05, minDeltaE: 15 });
+
+        // Simulate proper blue anchor scenario:
+        // - 80% pink shadow (dominant, C=35, L=50, a=30, b=-10)
+        // - 2% blue detail (candidate, C=50, L=45, a=10, b=-48) - FAR from pink
+        // - 18% white background
+        const totalPixels = 1000;
+        const pinkCount = 800;
+        const blueCount = 20;
+        const whiteCount = 180;
+
+        const labPixels = new Float32Array(totalPixels * 3);
+        let idx = 0;
+
+        // Pink shadow (dominant, C=35)
+        for (let i = 0; i < pinkCount; i++) {
+            labPixels[idx++] = 50;
+            labPixels[idx++] = 30;
+            labPixels[idx++] = -10;
+        }
+
+        // Blue detail (candidate, C=50, ΔE ~50 from pink)
+        for (let i = 0; i < blueCount; i++) {
+            labPixels[idx++] = 45;  // L
+            labPixels[idx++] = 10;  // a
+            labPixels[idx++] = -48; // b (C ≈ 49)
+        }
+
+        // White background
+        for (let i = 0; i < whiteCount; i++) {
+            labPixels[idx++] = 100;
+            labPixels[idx++] = 0;
+            labPixels[idx++] = 0;
+        }
+
+        const peaks = peakFinder.findIdentityPeaks(labPixels);
+
+        // SHOULD detect blue as identity peak (far from pink shadow)
+        // ΔE between pink (50,30,-10) and blue (45,10,-48) ≈ 42 > 15
+        expect(peaks.length).toBeGreaterThan(0);
+        expect(peaks[0].chroma).toBeGreaterThan(30);
+        expect(peaks[0].volume).toBeLessThan(0.05);
+    });
+});
+
 describe('PeakFinder - Jethro Monroe Test Case', () => {
     it('should detect Monroe blue as identity peak', () => {
         const peakFinder = new PeakFinder({ chromaThreshold: 30, volumeThreshold: 0.05 });
