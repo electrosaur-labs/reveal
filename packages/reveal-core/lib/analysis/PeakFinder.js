@@ -8,10 +8,10 @@
  *
  * ALGORITHM:
  * 1. Spatial/Chromatic Perceptual Bucketing - Group similar pixels in Lab space
- * 2. High Chroma Filter - Keep only buckets with C > threshold
- * 3. Low Volume Filter - Keep only buckets with volume < threshold
- * 4. Sort by Chroma - Highest intent wins
- * 5. Return Top N - Maximum 3 peaks
+ * 2a. Separate Candidates (low volume) from Dominants (high volume)
+ * 2b. Perceptual Isolation - Filter peaks too close to dominants (ΔE < 15)
+ * 3. Sort by Chroma - Highest intent wins
+ * 4. Return Top N - Maximum 3 peaks
  *
  * CRITERIA (All Must Pass):
  * - Saliency: Chroma > 30 (saturated rarity)
@@ -81,29 +81,49 @@ class PeakFinder {
 
         logger.log(`  Found ${buckets.size} high-chroma buckets`);
 
-        // Stage 2: Evaluate Buckets against "Identity Peak" criteria
-        logger.log(`  Stage 2: Filtering by volume threshold`);
+        // Stage 2a: Separate candidates (low volume) from dominants (high volume)
+        logger.log(`  Stage 2a: Separating candidates from dominant colors`);
         const candidates = [];
+        const dominantColors = [];
+
         for (const [key, data] of buckets) {
             const volume = data.count / totalPixels;
+            const centroid = {
+                L: data.L / data.count,
+                a: data.a / data.count,
+                b: data.b / data.count,
+                chroma: data.maxC,
+                volume: volume
+            };
 
             // Criteria: Low volume detail, not a dominant mass
             if (volume < volumeThreshold) {
                 candidates.push({
-                    L: data.L / data.count,
-                    a: data.a / data.count,
-                    b: data.b / data.count,
-                    chroma: data.maxC,
-                    volume: volume,
+                    ...centroid,
                     name: `IDENTITY_PEAK_${candidates.length + 1}`
                 });
+            } else {
+                // High-volume buckets are "dominant" - potential pink shadows
+                dominantColors.push(centroid);
             }
         }
 
-        logger.log(`  Found ${candidates.length} low-volume candidates`);
+        logger.log(`  Found ${candidates.length} low-volume candidates, ${dominantColors.length} dominant colors`);
+
+        // Stage 2b: Perceptual Isolation - Filter peaks too close to dominant tonal ramps
+        // This prevents "Pink Shadow" noise from hijacking the blue anchor
+        logger.log(`  Stage 2b: Filtering by perceptual isolation (ΔE > ${this.minDeltaE})`);
+        const isolatedCandidates = this._filterByIsolation(candidates, dominantColors);
+
+        if (isolatedCandidates.length < candidates.length) {
+            const filtered = candidates.length - isolatedCandidates.length;
+            logger.log(`  ✗ Filtered ${filtered} candidate(s) too close to dominant colors (ΔE < ${this.minDeltaE})`);
+        } else {
+            logger.log(`  ✓ All candidates are perceptually isolated from dominants`);
+        }
 
         // Stage 3: Sort by "Intent" (Chroma) and return top outliers
-        const topPeaks = candidates
+        const topPeaks = isolatedCandidates
             .sort((a, b) => b.chroma - a.chroma)
             .slice(0, maxPeaks);
 
@@ -128,6 +148,61 @@ class PeakFinder {
         const qa = Math.floor(a / this.gridSize);
         const qb = Math.floor(b / this.gridSize);
         return `${qL},${qa},${qb}`;
+    }
+
+    /**
+     * Stage 2b: Perceptual Isolation
+     * Filters peaks that are too close to the predicted dominant tonal ramps.
+     *
+     * This is CRITICAL for preventing "Pink Shadow" hijacking in 16-bit scans.
+     * If a blue anchor is ΔE < 15 from the magenta noise plate, it gets absorbed.
+     *
+     * By requiring ΔE > 15, we ensure the blue detail is "Sovereign" and must
+     * be protected with its own ink slot.
+     *
+     * @param {Array} candidates - Low-volume high-chroma peaks
+     * @param {Array} dominantColors - High-volume color masses (potential hijackers)
+     * @returns {Array} Filtered candidates that are perceptually isolated
+     * @private
+     */
+    _filterByIsolation(candidates, dominantColors) {
+        // If no dominant colors, all candidates are isolated by definition
+        if (dominantColors.length === 0) {
+            return candidates;
+        }
+
+        return candidates.filter(peak => {
+            // Find the distance to the closest dominant plate (e.g., the Pink Shadow)
+            const minDistance = dominantColors.reduce((min, dom) => {
+                const deltaE = this._calculateDeltaE(peak, dom);
+                return Math.min(min, deltaE);
+            }, Infinity);
+
+            // If ΔE > 15, the blue is "Sovereign" and must be protected
+            const isIsolated = minDistance > this.minDeltaE;
+
+            if (!isIsolated) {
+                logger.log(`    ✗ Peak L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)} too close to dominant (ΔE=${minDistance.toFixed(1)})`);
+            }
+
+            return isIsolated;
+        });
+    }
+
+    /**
+     * Calculate CIE76 ΔE distance between two Lab colors.
+     * Simple Euclidean distance in Lab space.
+     *
+     * @param {Object} p1 - First color {L, a, b}
+     * @param {Object} p2 - Second color {L, a, b}
+     * @returns {number} ΔE distance
+     * @private
+     */
+    _calculateDeltaE(p1, p2) {
+        const dL = p1.L - p2.L;
+        const da = p1.a - p2.a;
+        const db = p1.b - p2.b;
+        return Math.sqrt(dL * dL + da * da + db * db);
     }
 }
 
