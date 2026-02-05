@@ -1,7 +1,7 @@
 {
   "id": "jethro_monroe_clinical",
-  "name": "Jethro Monroe / Clinical 16-bit v3.0",
-  "description": "Surgical Crowbar: Extreme deterministic separation for monochromatic 16-bit scans. Wedges fur to pure L* axis (C<8 forced to gray), prioritizes chroma over volume for outlier detection (C>75 = vibrant). Disables density floor to preserve all anchors. 10:1 L:C weighting ratio. Blacklists green/yellow-green noise traps (sectors 3-4).",
+  "name": "Jethro Monroe / Clinical 16-bit v4.0",
+  "description": "COMPLETE CLINICAL SEPARATION SYSTEM: All 5 surgical fixes working together to stretch phase space. (1) Membership Crowbar: 100:1 L:C ratio makes engine colorblind to fur noise. (2) Neutral Dead-Zone: C<20 forced to gray (exclusion zone around gray axis). (3) Deterministic Anchor: PeakFinder reserves blue slot. (4) Sector Exclusion: Blacklist green, prefer blue, prevent hallucinated plates. (5) Density Floor Override: Preserve all anchors. Result: Slot 1 hard-locked to blue, remaining slots forced to pure grayscale tonal ramps.",
   "preferred_sectors": ["blue", "cyan"],
   "centroid": {
     "l": 45,
@@ -13,8 +13,8 @@
     "primary_sector_weight": 0.85
   },
   "weights": {
-    "l": 5.0,
-    "c": 0.5,
+    "l": 10.0,
+    "c": 0.1,
     "k": 1.0,
     "l_std_dev": 2.0,
     "temperature_bias": 1.0
@@ -24,8 +24,8 @@
     "targetColorsSlider": 8,
     "ditherType": "none",
     "distanceMetric": "cie94",
-    "lWeight": 5.0,
-    "cWeight": 0.5,
+    "lWeight": 10.0,
+    "cWeight": 0.1,
     "blackBias": 8.0,
     "vibrancyMode": "aggressive",
     "vibrancyBoost": 2.2,
@@ -45,7 +45,7 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 0,
-    "neutralCentroidClampThreshold": 8.0,
+    "neutralCentroidClampThreshold": 20.0,
     "densityFloor": 0.0,
     "preprocessingIntensity": "off",
     "peakFinderMaxPeaks": 1,
