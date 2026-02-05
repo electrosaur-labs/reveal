@@ -1,7 +1,7 @@
 {
   "id": "jethro_monroe_clinical",
-  "name": "Jethro Monroe / Clinical 16-bit v4.0",
-  "description": "COMPLETE CLINICAL SEPARATION SYSTEM: All 5 surgical fixes working together to stretch phase space. (1) Membership Crowbar: 100:1 L:C ratio makes engine colorblind to fur noise. (2) Neutral Dead-Zone: C<20 forced to gray (exclusion zone around gray axis). (3) Deterministic Anchor: PeakFinder reserves blue slot. (4) Sector Exclusion: Blacklist green, prefer blue, prevent hallucinated plates. (5) Density Floor Override: Preserve all anchors. Result: Slot 1 hard-locked to blue, remaining slots forced to pure grayscale tonal ramps.",
+  "name": "Jethro Monroe / Clinical 16-bit v4.1",
+  "description": "COORDINATE DESCENT: High-Constraint Clamp (20.0) + High Noise Gate (80). Fixed dimensions: lWeight=10.0 (Tonal Anchor), cWeight=0.1 (Identity Boost), PeakFinder=1 (Deterministic Anchor). Sliding dimensions: neutralCentroidClampThreshold=20.0 (Gray Dead-Zone), vibrancyThreshold=80 (Noise Gate). Goal: Move fur shadows out of Blue Members bucket entirely by raising noise gate. Binary search on neutral axis to physically separate fur from ink in 16-bit scan.",
   "preferred_sectors": ["blue", "cyan"],
   "centroid": {
     "l": 45,
@@ -29,7 +29,7 @@
     "blackBias": 8.0,
     "vibrancyMode": "aggressive",
     "vibrancyBoost": 2.2,
-    "vibrancyThreshold": 75,
+    "vibrancyThreshold": 80,
     "highlightThreshold": 95,
     "highlightBoost": 1.5,
     "enablePaletteReduction": true,
