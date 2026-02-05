@@ -1,7 +1,7 @@
 {
   "id": "jethro_monroe_clinical",
-  "name": "Jethro Monroe / Clinical 16-bit v5.0",
-  "description": "STRATEGIC PIVOT: Chroma-Sensitive Separation (2:1 C:L ratio). Previous strategy (colorblind with 100:1 L:C) replaced with chroma-prioritization. lWeight=5.0, cWeight=10.0 makes engine HIGHLY sensitive to chroma differences - blue rectangles (C≈49) clearly distinguished from fur (C<15). Explicit forced_centroids anchor (L=40, a=5, b=-45) ensures deterministic blue slot reservation. Moderate neutralCentroidClampThreshold=15.0 (relaxed from 20.0) with higher vibrancyThreshold=85 (noise gate). Tighter hueLockAngle=2 prevents hue drift. Goal: Let chroma do the heavy lifting to separate blue from gray.",
+  "name": "Jethro Monroe / Clinical 16-bit v6.0",
+  "description": "EXTREME COLORBLIND STRATEGY: Return to 100:1 L:C ratio with MAXIMUM constraints. v5.0 chroma-sensitive approach replaced with extreme colorblind separation. lWeight=10.0, cWeight=0.1 makes engine completely colorblind to fur noise. NUCLEAR vibrancyThreshold=95 (only C>95 qualifies as vibrant). EXTREME neutralCentroidClampThreshold=25.0 (C<25 forced to gray - widest dead-zone yet). Explicit forced_centroids anchor (L=40, a=5, b=-45) ensures blue slot reservation. Tighter hueLockAngle=2 prevents hue drift. Goal: Maximum tonal grouping with nuclear noise gate - turn everything up to 11.",
   "preferred_sectors": ["blue", "cyan"],
   "centroid": {
     "l": 45,
@@ -13,8 +13,8 @@
     "primary_sector_weight": 0.85
   },
   "weights": {
-    "l": 5.0,
-    "c": 10.0,
+    "l": 10.0,
+    "c": 0.1,
     "k": 1.0,
     "l_std_dev": 2.0,
     "temperature_bias": 1.0
@@ -24,12 +24,12 @@
     "targetColorsSlider": 8,
     "ditherType": "none",
     "distanceMetric": "cie94",
-    "lWeight": 5.0,
-    "cWeight": 10.0,
+    "lWeight": 10.0,
+    "cWeight": 0.1,
     "blackBias": 8.0,
     "vibrancyMode": "aggressive",
     "vibrancyBoost": 2.2,
-    "vibrancyThreshold": 85,
+    "vibrancyThreshold": 95,
     "highlightThreshold": 95,
     "highlightBoost": 1.5,
     "enablePaletteReduction": true,
@@ -45,7 +45,7 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 0,
-    "neutralCentroidClampThreshold": 15.0,
+    "neutralCentroidClampThreshold": 25.0,
     "densityFloor": 0.0,
     "preprocessingIntensity": "off",
     "peakFinderMaxPeaks": 1,
