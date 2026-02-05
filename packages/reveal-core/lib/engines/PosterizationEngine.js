@@ -18,6 +18,7 @@ const logger = require("../utils/logger");
 const ColorSpace = require('./ColorSpace');
 const HueAnalysis = require('./HueAnalysis');
 const { CentroidStrategies } = require('./CentroidStrategies');
+const PeakFinder = require('../analysis/PeakFinder');
 
 class PosterizationEngine {
     /**
@@ -198,6 +199,39 @@ class PosterizationEngine {
                     ...options,
                     enableGridOptimization,
                     grayscaleOnly: true // Force L-only
+                });
+
+            case 'lab-native':
+                return this._posterizeLabNative(pixels, width, height, targetColors, {
+                    ...options,
+                    enableGridOptimization,
+                    enableHueGapAnalysis: false, // Keep it simple initially
+                    strategy,
+                    strategyName,
+                    tuning
+                });
+
+            case 'forced-centroid':
+                return this._posterizeForcedCentroid(pixels, width, height, targetColors, {
+                    ...options,
+                    enableGridOptimization,
+                    enableHueGapAnalysis: false,  // Disable for clinical mode
+                    snapThreshold,
+                    strategy,
+                    strategyName,
+                    tuning,
+                    forcedCentroids: options.forcedCentroids || []  // NEW: anchor array
+                });
+
+            case 'reveal-mk1.5':
+                return this._posterizeRevealMk1_5(pixels, width, height, targetColors, {
+                    ...options,
+                    enableGridOptimization,
+                    enableHueGapAnalysis: false,  // Disable for Mk 1.5
+                    snapThreshold,
+                    strategy,
+                    strategyName,
+                    tuning
                 });
 
             default:
@@ -3664,6 +3698,444 @@ class PosterizationEngine {
             }
         };
 
+    }
+
+    /**
+     * Reveal Mk 1.5 Engine: Deterministic Auto-Quantizer
+     *
+     * Pre-scans for "Identity Peaks" (high chroma + low volume + distinct from neighbors)
+     * and automatically reserves palette slots for them before median cut runs.
+     *
+     * PURPOSE: Solves the "low-volume important color" problem without user input.
+     * Auto-detects colors like Monroe blue (0.1% coverage) that would be lost in
+     * probabilistic median cut.
+     *
+     * ALGORITHM:
+     * 1. Convert to perceptual Lab space
+     * 2. [NEW] Scan for identity peaks (C>30, vol<5%, ΔE>15)
+     * 3. [NEW] Reserve N slots for detected peaks
+     * 4. Run median cut on remaining budget
+     * 5. Apply perceptual snap + palette reduction
+     * 6. [NEW] Inject peaks into final palette
+     * 7. [NEW] Protect peaks from density floor
+     * 8. Standard pixel assignment
+     *
+     * @param {Uint16Array} pixels - 16-bit Lab pixel data (MUST be Lab format)
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @param {number} targetColors - Total palette size
+     * @param {Object} options - Engine options
+     * @returns {Object} Standard posterization result with auto-anchor metadata
+     */
+    static _posterizeRevealMk1_5(pixels, width, height, targetColors, options = {}) {
+        const snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
+        const grayscaleOnly = options.grayscaleOnly !== undefined ? options.grayscaleOnly : false;
+        const preserveWhite = options.preserveWhite !== undefined ? options.preserveWhite : false;
+        const preserveBlack = options.preserveBlack !== undefined ? options.preserveBlack : false;
+        const vibrancyMode = options.vibrancyMode !== undefined ? options.vibrancyMode : 'aggressive';
+        const vibrancyBoost = options.vibrancyBoost !== undefined ? options.vibrancyBoost : 2.0;
+        const highlightThreshold = options.highlightThreshold !== undefined ? options.highlightThreshold : 92;
+        const highlightBoost = options.highlightBoost !== undefined ? options.highlightBoost : 3.0;
+        const enablePaletteReduction = options.enablePaletteReduction !== undefined ? options.enablePaletteReduction : true;
+        const paletteReduction = options.paletteReduction !== undefined ? options.paletteReduction : 8.0;
+
+        logger.log(`\n[Reveal Mk 1.5] Starting deterministic auto-quantizer: ${targetColors} target colors`);
+        logger.log(`  Mode: Automatic outlier detection + median cut`);
+
+        const preserveList = [];
+        if (preserveWhite) preserveList.push('white');
+        if (preserveBlack) preserveList.push('black');
+        if (preserveList.length > 0) {
+            logger.log(`  Preserve colors: ${preserveList.join(', ')}`);
+        }
+
+        const startTime = performance.now();
+
+        const isLabInput = options.format === 'lab';
+        if (!isLabInput) {
+            throw new Error('[Reveal Mk 1.5] Requires Lab input format (RGB not supported)');
+        }
+
+        const sourceBitDepth = options.bitDepth || 16;
+        const isEightBitSource = sourceBitDepth <= 8;
+
+        // Step 1: Convert to perceptual Lab space (reuse _posterizeReveal logic)
+        logger.log(`✓ Using 16-bit Lab pixels (original source: ${sourceBitDepth}-bit → Float32 perceptual ranges)`);
+        const labPixels = new Float32Array(pixels.length);
+
+        const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
+        const highlightThresholdGate = isEightBitSource ? 97.5 : 98.0;
+
+        if (isEightBitSource) {
+            logger.log(`  8-bit source: Using expanded gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThresholdGate})`);
+        } else {
+            logger.log(`  16-bit source: Using standard gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThresholdGate})`);
+        }
+
+        const maxValue = 32768;
+        const neutralAB = 16384;
+        const abScale = 128 / 16384;
+
+        for (let i = 0; i < pixels.length; i += 3) {
+            labPixels[i] = (pixels[i] / maxValue) * 100;
+            labPixels[i + 1] = (pixels[i + 1] - neutralAB) * abScale;
+            labPixels[i + 2] = (pixels[i + 2] - neutralAB) * abScale;
+
+            if (labPixels[i] < shadowThreshold) {
+                labPixels[i] = 0;
+                labPixels[i + 1] = 0;
+                labPixels[i + 2] = 0;
+            } else if (labPixels[i] > highlightThresholdGate) {
+                labPixels[i] = 100;
+                labPixels[i + 1] = 0;
+                labPixels[i + 2] = 0;
+            }
+        }
+
+        logger.log(`✓ Converted ${pixels.length / 3} Lab pixels to perceptual ranges`);
+
+        // ========== [NEW] Mk 1.5: Auto-detect identity peaks ==========
+        const peakFinder = new PeakFinder({
+            chromaThreshold: 30,
+            volumeThreshold: 0.05,
+            maxPeaks: 3
+        });
+
+        const detectedPeaks = peakFinder.findIdentityPeaks(labPixels);
+
+        // Convert peaks to forcedCentroids format
+        const forcedCentroids = detectedPeaks.map(peak => ({
+            L: peak.L,
+            a: peak.a,
+            b: peak.b
+        }));
+
+        logger.log(`\n[Reveal Mk 1.5] Auto-detected ${forcedCentroids.length} identity peaks`);
+        // =============================================================
+
+        // Step 1.5: Handle preserved colors (white/black)
+        let preservedPixelMap = new Map();
+        let nonPreservedIndices = [];
+
+        const WHITE_L_MIN = 95;
+        const BLACK_L_MAX = 10;
+        const AB_THRESHOLD = isEightBitSource ? 5 : 0.01;
+
+        for (let i = 0; i < labPixels.length; i += 3) {
+            const L = labPixels[i];
+            const a = labPixels[i + 1];
+            const b = labPixels[i + 2];
+            const pixelIndex = i / 3;
+
+            let isPreserved = false;
+
+            if (preserveWhite && L > WHITE_L_MIN && Math.abs(a) < AB_THRESHOLD && Math.abs(b) < AB_THRESHOLD) {
+                if (!preservedPixelMap.has('white')) {
+                    preservedPixelMap.set('white', new Set());
+                }
+                preservedPixelMap.get('white').add(pixelIndex);
+                isPreserved = true;
+            } else if (preserveBlack && L < BLACK_L_MAX && Math.abs(a) < AB_THRESHOLD && Math.abs(b) < AB_THRESHOLD) {
+                if (!preservedPixelMap.has('black')) {
+                    preservedPixelMap.set('black', new Set());
+                }
+                preservedPixelMap.get('black').add(pixelIndex);
+                isPreserved = true;
+            }
+
+            if (!isPreserved) {
+                nonPreservedIndices.push(pixelIndex);
+            }
+        }
+
+        const totalPixels = labPixels.length / 3;
+        preservedPixelMap.forEach((indices, colorName) => {
+            const percent = ((indices.size / totalPixels) * 100).toFixed(1);
+            logger.log(`✓ Preserved ${indices.size} ${colorName} pixels (${percent}%)`);
+        });
+
+        // ========== [NEW] Slot reservation logic ==========
+        let numPreserved = 0;
+        if (preserveWhite) numPreserved++;
+        if (preserveBlack) numPreserved++;
+
+        const numForced = forcedCentroids.length;
+        const medianCutTarget = Math.max(1, targetColors - numForced - numPreserved);
+
+        logger.log(`\n[Slot Reservation]`);
+        logger.log(`  Total budget:      ${targetColors} colors`);
+        logger.log(`  Auto-anchors:      ${numForced} slots (identity peaks)`);
+        logger.log(`  Preserved colors:  ${numPreserved} slots`);
+        logger.log(`  Median cut budget: ${medianCutTarget} slots`);
+        // ==================================================
+
+        // Extract non-preserved pixels for quantization
+        let nonPreservedLabPixels = labPixels;
+        if (nonPreservedIndices.length < labPixels.length / 3) {
+            nonPreservedLabPixels = new Float32Array(nonPreservedIndices.length * 3);
+            for (let i = 0; i < nonPreservedIndices.length; i++) {
+                const srcIdx = nonPreservedIndices[i] * 3;
+                nonPreservedLabPixels[i * 3] = labPixels[srcIdx];
+                nonPreservedLabPixels[i * 3 + 1] = labPixels[srcIdx + 1];
+                nonPreservedLabPixels[i * 3 + 2] = labPixels[srcIdx + 2];
+            }
+        }
+
+        // Step 2: Run median cut with reduced target
+        logger.log(`\nRunning median cut in Lab space (${medianCutTarget} colors)...`);
+        const initialPaletteLab = this.medianCutInLabSpace(
+            nonPreservedLabPixels,
+            medianCutTarget,
+            grayscaleOnly,
+            width,
+            height,
+            null, // No substrate for Mk 1.5
+            3.5,
+            vibrancyMode,
+            vibrancyBoost,
+            highlightThreshold,
+            highlightBoost,
+            options.strategy || null,
+            options.tuning || null
+        );
+        logger.log(`✓ Initial palette: ${initialPaletteLab.length} colors`);
+
+        // Step 3: Apply perceptual snap
+        const colorSpaceAnalysis = this._analyzeColorSpace(labPixels);
+        const isGrayscale = grayscaleOnly || colorSpaceAnalysis.chromaRange < 10;
+
+        let lRange = 0;
+        let colorSpaceExtent = null;
+
+        if (isGrayscale) {
+            let minL = Infinity, maxL = -Infinity;
+            for (let i = 0; i < labPixels.length; i += 3) {
+                minL = Math.min(minL, labPixels[i]);
+                maxL = Math.max(maxL, labPixels[i]);
+            }
+            lRange = maxL - minL;
+        } else {
+            let minL = Infinity, maxL = -Infinity;
+            let minA = Infinity, maxA = -Infinity;
+            let minB = Infinity, maxB = -Infinity;
+
+            for (let i = 0; i < labPixels.length; i += 3) {
+                minL = Math.min(minL, labPixels[i]);
+                maxL = Math.max(maxL, labPixels[i]);
+                minA = Math.min(minA, labPixels[i + 1]);
+                maxA = Math.max(maxA, labPixels[i + 1]);
+                minB = Math.min(minB, labPixels[i + 2]);
+                maxB = Math.max(maxB, labPixels[i + 2]);
+            }
+
+            colorSpaceExtent = {
+                lRange: maxL - minL,
+                aRange: maxA - minA,
+                bRange: maxB - minB
+            };
+        }
+
+        const adaptiveThreshold = this._getAdaptiveSnapThreshold(
+            snapThreshold,
+            targetColors,
+            isGrayscale,
+            lRange,
+            colorSpaceExtent
+        );
+
+        logger.log(`  Adaptive snap threshold: ΔE ${adaptiveThreshold.toFixed(1)}`);
+
+        let snappedPaletteLab = this.applyPerceptualSnap(
+            initialPaletteLab,
+            adaptiveThreshold,
+            isGrayscale,
+            vibrancyBoost,
+            options.strategy || null,
+            options.tuning || null
+        );
+        logger.log(`✓ Snapped palette: ${snappedPaletteLab.length} colors`);
+
+        // Step 4: Palette reduction (if over budget after snap)
+        if (enablePaletteReduction && snappedPaletteLab.length > medianCutTarget) {
+            const prunedPaletteLab = this._prunePalette(snappedPaletteLab, paletteReduction, highlightThreshold, medianCutTarget, options.tuning || null);
+            if (prunedPaletteLab.length < snappedPaletteLab.length) {
+                logger.log(`✓ Palette pruned: ${snappedPaletteLab.length} → ${prunedPaletteLab.length} colors`);
+                snappedPaletteLab = prunedPaletteLab;
+            }
+        }
+
+        // ========== [NEW] Anchor injection (after perceptual snap) ==========
+        logger.log(`\n[Anchor Injection]`);
+        const mergedPalette = [...snappedPaletteLab];
+        let addedCount = 0;
+        let skippedCount = 0;
+        const anchorDuplicateThreshold = 3.0;
+
+        for (const forced of forcedCentroids) {
+            const isDuplicate = mergedPalette.some(color =>
+                this._labDistance(color, forced) < anchorDuplicateThreshold
+            );
+
+            if (isDuplicate) {
+                logger.log(`  ✗ Skipped peak (duplicate within ΔE ${anchorDuplicateThreshold})`);
+                skippedCount++;
+            } else {
+                mergedPalette.push(forced);
+                logger.log(`  ✓ Added peak: L=${forced.L.toFixed(1)} a=${forced.a.toFixed(1)} b=${forced.b.toFixed(1)}`);
+                addedCount++;
+            }
+        }
+        logger.log(`  Summary: ${addedCount} peaks added, ${skippedCount} skipped (duplicates)`);
+        // ====================================================================
+
+        // Step 5: Add preserved colors (white/black)
+        const preservedColors = [];
+        let actuallyPreservedWhite = false;
+        let actuallyPreservedBlack = false;
+        let whiteIndex = -1;
+        let blackIndex = -1;
+
+        if (preserveWhite) {
+            const whitePixels = preservedPixelMap.get('white');
+            if (whitePixels && whitePixels.size >= totalPixels * PosterizationEngine.MIN_PRESERVED_COVERAGE) {
+                preservedColors.push({ L: 100, a: 0, b: 0 });
+                whiteIndex = mergedPalette.length + preservedColors.length - 1;
+                actuallyPreservedWhite = true;
+                logger.log(`✓ Added white to palette (index ${whiteIndex})`);
+            }
+        }
+
+        if (preserveBlack) {
+            const blackPixels = preservedPixelMap.get('black');
+            if (blackPixels && blackPixels.size >= totalPixels * PosterizationEngine.MIN_PRESERVED_COVERAGE) {
+                preservedColors.push({ L: 0, a: 0, b: 0 });
+                blackIndex = mergedPalette.length + preservedColors.length - 1;
+                actuallyPreservedBlack = true;
+                logger.log(`✓ Added black to palette (index ${blackIndex})`);
+            }
+        }
+
+        const finalPaletteLab = [...mergedPalette, ...preservedColors];
+        logger.log(`\n✓ Final palette before density floor: ${finalPaletteLab.length} colors`);
+
+        // Step 6: Pixel assignment (same as _posterizeReveal)
+        const paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
+        const assignments = new Uint8Array(width * height);
+
+        const ASSIGNMENT_STRIDE = 8;
+        const paletteLength = finalPaletteLab.length;
+
+        for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
+            for (let x = 0; x < width; x += ASSIGNMENT_STRIDE) {
+                let anchorAssignment = 0;
+
+                for (let bY = 0; bY < ASSIGNMENT_STRIDE && (y + bY) < height; bY += 2) {
+                    for (let bX = 0; bX < ASSIGNMENT_STRIDE && (x + bX) < width; bX += 2) {
+                        const pixelIndex = (y + bY) * width + (x + bX);
+                        const preservedColorKey = [...preservedPixelMap.entries()].find(([_, indices]) => indices.has(pixelIndex));
+
+                        if (preservedColorKey) {
+                            const colorName = preservedColorKey[0];
+                            if (colorName === 'white' && actuallyPreservedWhite) {
+                                anchorAssignment = whiteIndex;
+                            } else if (colorName === 'black' && actuallyPreservedBlack) {
+                                anchorAssignment = blackIndex;
+                            }
+                        } else {
+                            let minDistance = Infinity;
+                            const idx = pixelIndex * 3;
+
+                            const pL = labPixels[idx];
+                            const pA = labPixels[idx + 1];
+                            const pB = labPixels[idx + 2];
+
+                            for (let j = 0; j < paletteLength; j++) {
+                                const target = finalPaletteLab[j];
+                                const dL = pL - target.L;
+                                const dA = pA - target.a;
+                                const dB = pB - target.b;
+
+                                const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+
+                                if (dist < minDistance) {
+                                    minDistance = dist;
+                                    anchorAssignment = j;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for (let bY = 0; bY < ASSIGNMENT_STRIDE && (y + bY) < height; bY++) {
+                    const fillRow = (y + bY) * width;
+                    for (let bX = 0; bX < ASSIGNMENT_STRIDE && (x + bX) < width; bX++) {
+                        assignments[fillRow + (x + bX)] = anchorAssignment;
+                    }
+                }
+            }
+        }
+
+        const endTime = performance.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(3);
+        logger.log(`\n✓ Reveal Mk 1.5 complete in ${duration}s`);
+
+        // ========== [NEW] Protect anchors from density floor ==========
+        const protectedIndices = new Set();
+        if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
+        if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
+
+        // Protect auto-detected peaks from density floor removal
+        for (let i = snappedPaletteLab.length; i < mergedPalette.length; i++) {
+            protectedIndices.add(i);
+            logger.log(`  Protected auto-anchor at index ${i} from density floor`);
+        }
+        // ==============================================================
+
+        const densityResult = this._applyDensityFloor(
+            assignments,
+            finalPaletteLab,
+            0.005,
+            protectedIndices
+        );
+
+        let finalPaletteLabFiltered = finalPaletteLab;
+        let assignmentsFiltered = assignments;
+
+        if (densityResult.actualCount < finalPaletteLab.length) {
+            const removed = finalPaletteLab.length - densityResult.actualCount;
+            logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < 0.5% coverage`);
+            logger.log(`  Final palette: ${densityResult.actualCount} colors`);
+
+            finalPaletteLabFiltered = densityResult.palette;
+            assignmentsFiltered = densityResult.assignments;
+        }
+
+        const paletteRgbFiltered = finalPaletteLabFiltered.map(lab => this.labToRgb(lab));
+
+        return {
+            palette: paletteRgbFiltered,
+            paletteLab: finalPaletteLabFiltered,
+            assignments: assignmentsFiltered,
+            labPixels,
+            substrateLab: null,
+            substrateIndex: null,
+            metadata: {
+                targetColors,
+                finalColors: finalPaletteLabFiltered.length,
+                autoAnchors: addedCount,
+                skippedAnchors: skippedCount,
+                detectedPeaks: detectedPeaks.map(p => ({
+                    L: p.L.toFixed(1),
+                    a: p.a.toFixed(1),
+                    b: p.b.toFixed(1),
+                    chroma: p.chroma.toFixed(1),
+                    volume: (p.volume * 100).toFixed(2) + '%'
+                })),
+                snapThreshold,
+                duration: parseFloat(duration),
+                engineType: 'reveal-mk1.5'
+            }
+        };
     }
 
     /**
