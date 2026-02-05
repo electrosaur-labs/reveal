@@ -2852,7 +2852,7 @@ Object.keys(PARAMETER_PRESETS).forEach(id => {
  * Each archetype contains complete 30-parameter specifications
  * Note: Must be hardcoded for UXP/browser environment (no fs module)
  *
- * ALL 18 DNA v2.0 ARCHETYPES (Updated 2026-02-04)
+ * ALL 19 DNA v2.0 ARCHETYPES (Updated 2026-02-05 - Added Jethro Monroe Clinical)
  */
 const ARCHETYPES = {
     // Core archetypes (DNA v2.0 optimized)
@@ -2872,6 +2872,7 @@ const ARCHETYPES = {
     'soft-ethereal': require('@reveal/core/archetypes/soft-ethereal.json'),
     'hard-commercial': require('@reveal/core/archetypes/hard-commercial.json'),
     'bright-desaturated': require('@reveal/core/archetypes/bright-desaturated.json'),
+    'jethro-monroe-clinical': require('@reveal/core/archetypes/jethro-monroe-clinical.json'),
 
     // Legacy archetypes (backward compatibility)
     'vibrant-hyper': require('@reveal/core/archetypes/vibrant-hyper.json'),

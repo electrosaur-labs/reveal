@@ -10,9 +10,11 @@
  * 1. Spatial/Chromatic Perceptual Bucketing - Group similar pixels in Lab space
  * 2a. Separate Candidates (low volume) from Dominants (high volume)
  * 2b. Perceptual Isolation - Filter peaks too close to dominants (adaptive ΔE)
+ * 2c. Sector Sanitization - Eliminate blacklisted sectors (green noise traps)
+ * 2d. Sector Preference - Enforce allowed sectors only (blue/cyan for clinical)
  * 3. Sector-Weighted Saliency - 2× boost for blue spectrum (sectors 8-9)
  * 4. Sort by Boosted Score - Blue priority over pink noise
- * 5. Return Top N - Maximum 3 peaks
+ * 5. Return Top N - Default 1 peak (Monroe blue only)
  *
  * CRITERIA (All Must Pass):
  * - Saliency: Chroma > 30 (saturated rarity)
@@ -36,7 +38,15 @@ class PeakFinder {
         this.volumeThreshold = options.volumeThreshold || 0.05; // < 5% volume
         this.minDeltaE = options.minDeltaE || 15; // ΔE > 15 from dominant
         this.gridSize = options.gridSize || 5; // Perceptual bucketing grid (5 = L/5, a/5, b/5)
-        this.maxPeaks = options.maxPeaks || 3; // Top 3 anchors max
+        this.maxPeaks = options.maxPeaks || 1; // SURGICAL: Default to 1 peak (Monroe blue only)
+
+        // SECTOR SANITIZATION: Blacklist known 16-bit noise traps
+        // Sectors 3-4 (green/yellow-green) are quantization artifacts in monochrome scans
+        this.blacklistedSectors = options.blacklistedSectors || [3, 4];
+
+        // SECTOR PREFERENCE: Only allow blue spectrum for clinical scans
+        // Sectors 8-9 (blue/cyan) are "Truth", others are "Lies" (noise)
+        this.preferredSectors = options.preferredSectors || null; // null = all sectors allowed
     }
 
     /**
@@ -135,12 +145,34 @@ class PeakFinder {
             logger.log(`  ✓ All candidates are perceptually isolated from dominants`);
         }
 
+        // Stage 2c: Sector Sanitization - Eliminate known 16-bit noise traps
+        // Sectors 3-4 (green/yellow-green) are quantization artifacts in monochrome scans
+        logger.log(`  Stage 2c: Sector sanitization (blacklist: [${this.blacklistedSectors.join(', ')}])`);
+        const sanitizedCandidates = this._filterByBlacklist(isolatedCandidates);
+
+        if (sanitizedCandidates.length < isolatedCandidates.length) {
+            const filtered = isolatedCandidates.length - sanitizedCandidates.length;
+            logger.log(`  ✗ Filtered ${filtered} candidate(s) in blacklisted sectors`);
+        }
+
+        // Stage 2d: Sector Preference - Enforce preferred sectors if specified
+        let finalCandidates = sanitizedCandidates;
+        if (this.preferredSectors && this.preferredSectors.length > 0) {
+            logger.log(`  Stage 2d: Applying sector preference (allow only: [${this.preferredSectors.join(', ')}])`);
+            finalCandidates = this._filterByPreference(sanitizedCandidates);
+
+            if (finalCandidates.length < sanitizedCandidates.length) {
+                const filtered = sanitizedCandidates.length - finalCandidates.length;
+                logger.log(`  ✗ Filtered ${filtered} candidate(s) not in preferred sectors`);
+            }
+        }
+
         // Stage 3: Sector-Weighted Saliency + Sort by boosted score
         logger.log(`  Stage 3: Applying sector-weighted saliency (blue priority)`);
 
         // Apply "Interest Boost" to blue sectors (8-9) to outrank noise
         // This ensures blue details (Monroe eyes) win even if pink has higher chroma
-        const scoredCandidates = isolatedCandidates.map(peak => {
+        const scoredCandidates = finalCandidates.map(peak => {
             const isBlueSpectrum = peak.sector === 8 || peak.sector === 9;
             const interestBoost = isBlueSpectrum ? 2.0 : 1.0;
             const score = peak.chroma * interestBoost;
@@ -239,6 +271,60 @@ class PeakFinder {
         const da = p1.a - p2.a;
         const db = p1.b - p2.b;
         return Math.sqrt(dL * dL + da * da + db * db);
+    }
+
+    /**
+     * Stage 2c: Sector Sanitization - Filter blacklisted sectors
+     * Eliminates known 16-bit noise traps (green/yellow-green quantization artifacts).
+     *
+     * CRITICAL for monochromatic scans where green "peaks" are actually noise.
+     * Sectors 3-4 are "Lies" (noise), sectors 8-9 are "Truth" (real ink).
+     *
+     * @param {Array} candidates - Isolated candidates
+     * @returns {Array} Filtered candidates (blacklisted sectors removed)
+     * @private
+     */
+    _filterByBlacklist(candidates) {
+        if (this.blacklistedSectors.length === 0) {
+            return candidates;
+        }
+
+        return candidates.filter(peak => {
+            const isBlacklisted = this.blacklistedSectors.includes(peak.sector);
+
+            if (isBlacklisted) {
+                logger.log(`    ✗ Skipping sector ${peak.sector} (Noise Blacklist) - L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)}`);
+            }
+
+            return !isBlacklisted;
+        });
+    }
+
+    /**
+     * Stage 2d: Sector Preference - Enforce allowed sectors
+     * Only keeps peaks in preferred sectors (e.g., blue/cyan only for clinical scans).
+     *
+     * This is the "hard filter" - if specified, ONLY these sectors are allowed.
+     * Blacklist removes specific bad sectors, preference ONLY allows specific good sectors.
+     *
+     * @param {Array} candidates - Sanitized candidates
+     * @returns {Array} Filtered candidates (only preferred sectors)
+     * @private
+     */
+    _filterByPreference(candidates) {
+        if (!this.preferredSectors || this.preferredSectors.length === 0) {
+            return candidates;
+        }
+
+        return candidates.filter(peak => {
+            const isPreferred = this.preferredSectors.includes(peak.sector);
+
+            if (!isPreferred) {
+                logger.log(`    ✗ Skipping sector ${peak.sector} (Not in preference list) - L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)}`);
+            }
+
+            return isPreferred;
+        });
     }
 
     /**
