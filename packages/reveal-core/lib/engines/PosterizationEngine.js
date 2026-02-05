@@ -3795,11 +3795,20 @@ class PosterizationEngine {
         logger.log(`✓ Converted ${pixels.length / 3} Lab pixels to perceptual ranges`);
 
         // ========== [NEW] Mk 1.5: Auto-detect identity peaks ==========
+        // Extract PeakFinder parameters from options (set by archetype)
+        const peakFinderMaxPeaks = options.peakFinderMaxPeaks !== undefined ? options.peakFinderMaxPeaks : 1;
+        const peakFinderPreferredSectors = options.peakFinderPreferredSectors || null;
+        const peakFinderBlacklistedSectors = options.peakFinderBlacklistedSectors || [3, 4]; // Default: blacklist green
+
         const peakFinder = new PeakFinder({
             chromaThreshold: 30,
             volumeThreshold: 0.05,
-            maxPeaks: 3
+            maxPeaks: peakFinderMaxPeaks,
+            preferredSectors: peakFinderPreferredSectors,
+            blacklistedSectors: peakFinderBlacklistedSectors
         });
+
+        logger.log(`  PeakFinder config: maxPeaks=${peakFinderMaxPeaks}, blacklist=[${peakFinderBlacklistedSectors.join(',')}], preferred=${peakFinderPreferredSectors ? '[' + peakFinderPreferredSectors.join(',') + ']' : 'none'}`);
 
         // Pass bitDepth for adaptive thresholds (8.0 for 16-bit, 15.0 for 8-bit)
         const detectedPeaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: sourceBitDepth });
