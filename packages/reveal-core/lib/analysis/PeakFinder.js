@@ -9,15 +9,16 @@
  * ALGORITHM:
  * 1. Spatial/Chromatic Perceptual Bucketing - Group similar pixels in Lab space
  * 2a. Separate Candidates (low volume) from Dominants (high volume)
- * 2b. Perceptual Isolation - Filter peaks too close to dominants (ΔE < 15)
- * 3. Sort by Chroma - Highest intent wins
- * 4. Return Top N - Maximum 3 peaks
+ * 2b. Perceptual Isolation - Filter peaks too close to dominants (adaptive ΔE)
+ * 3. Sector-Weighted Saliency - 2× boost for blue spectrum (sectors 8-9)
+ * 4. Sort by Boosted Score - Blue priority over pink noise
+ * 5. Return Top N - Maximum 3 peaks
  *
  * CRITERIA (All Must Pass):
  * - Saliency: Chroma > 30 (saturated rarity)
- * - Perceptual Isolation: ΔE > 15 from dominant (true outlier)
+ * - Perceptual Isolation: ΔE > threshold from dominant (8.0 for 16-bit, 15.0 for 8-bit)
  * - Spatial Concentration: Clustered in small regions (real detail vs noise)
- * - Local Peak: High chroma vs neighborhood (relative vibrancy)
+ * - Sector Priority: Blue spectrum (negative b) favored in monochromatic scans
  *
  * DESIGN:
  * - Pure function - no state, no I/O
@@ -43,15 +44,23 @@ class PeakFinder {
      *
      * @param {Float32Array} labPixels - Perceptual Lab pixels [L, a, b, L, a, b...]
      * @param {Object} [options] - Override options for this run
+     * @param {number} [options.bitDepth] - Source bit depth (8 or 16) for adaptive thresholds
      * @returns {Array<{L, a, b, chroma, volume, name}>} List of identity peaks
      */
     findIdentityPeaks(labPixels, options = {}) {
         const chromaThreshold = options.chromaThreshold || this.chromaThreshold;
         const volumeThreshold = options.volumeThreshold || this.volumeThreshold;
         const maxPeaks = options.maxPeaks || this.maxPeaks;
+        const bitDepth = options.bitDepth || 16;
+
+        // SURGICAL FIX: Relax isolation for 16-bit clinical scans
+        // 16-bit data is signal, not noise - use tighter threshold (8.0)
+        // 8-bit data has quantization noise - use standard threshold (15.0)
+        const adaptiveMinDeltaE = bitDepth === 16 ? 8.0 : this.minDeltaE;
 
         logger.log(`\n[PeakFinder] Scanning for identity peaks...`);
         logger.log(`  Criteria: C > ${chromaThreshold}, volume < ${(volumeThreshold * 100).toFixed(1)}%`);
+        logger.log(`  Isolation threshold: ΔE > ${adaptiveMinDeltaE} (${bitDepth}-bit source)`);
 
         const buckets = new Map();
         const totalPixels = labPixels.length / 3;
@@ -98,8 +107,12 @@ class PeakFinder {
 
             // Criteria: Low volume detail, not a dominant mass
             if (volume < volumeThreshold) {
+                // Calculate hue sector for sector-weighted saliency
+                const sector = this._getHueSector(centroid.a, centroid.b);
+
                 candidates.push({
                     ...centroid,
+                    sector: sector,
                     name: `IDENTITY_PEAK_${candidates.length + 1}`
                 });
             } else {
@@ -112,25 +125,43 @@ class PeakFinder {
 
         // Stage 2b: Perceptual Isolation - Filter peaks too close to dominant tonal ramps
         // This prevents "Pink Shadow" noise from hijacking the blue anchor
-        logger.log(`  Stage 2b: Filtering by perceptual isolation (ΔE > ${this.minDeltaE})`);
-        const isolatedCandidates = this._filterByIsolation(candidates, dominantColors);
+        logger.log(`  Stage 2b: Filtering by perceptual isolation (ΔE > ${adaptiveMinDeltaE})`);
+        const isolatedCandidates = this._filterByIsolation(candidates, dominantColors, adaptiveMinDeltaE);
 
         if (isolatedCandidates.length < candidates.length) {
             const filtered = candidates.length - isolatedCandidates.length;
-            logger.log(`  ✗ Filtered ${filtered} candidate(s) too close to dominant colors (ΔE < ${this.minDeltaE})`);
+            logger.log(`  ✗ Filtered ${filtered} candidate(s) too close to dominant colors (ΔE < ${adaptiveMinDeltaE})`);
         } else {
             logger.log(`  ✓ All candidates are perceptually isolated from dominants`);
         }
 
-        // Stage 3: Sort by "Intent" (Chroma) and return top outliers
-        const topPeaks = isolatedCandidates
-            .sort((a, b) => b.chroma - a.chroma)
+        // Stage 3: Sector-Weighted Saliency + Sort by boosted score
+        logger.log(`  Stage 3: Applying sector-weighted saliency (blue priority)`);
+
+        // Apply "Interest Boost" to blue sectors (8-9) to outrank noise
+        // This ensures blue details (Monroe eyes) win even if pink has higher chroma
+        const scoredCandidates = isolatedCandidates.map(peak => {
+            const isBlueSpectrum = peak.sector === 8 || peak.sector === 9;
+            const interestBoost = isBlueSpectrum ? 2.0 : 1.0;
+            const score = peak.chroma * interestBoost;
+
+            if (isBlueSpectrum) {
+                logger.log(`    ⭐ Blue sector boost (sector ${peak.sector}): C=${peak.chroma.toFixed(1)} × ${interestBoost} = ${score.toFixed(1)}`);
+            }
+
+            return { ...peak, score };
+        });
+
+        // Sort by boosted score (not raw chroma)
+        const topPeaks = scoredCandidates
+            .sort((a, b) => b.score - a.score)
             .slice(0, maxPeaks);
 
-        logger.log(`  Stage 3: Selected top ${topPeaks.length} identity peaks by chroma`);
+        logger.log(`  Selected top ${topPeaks.length} identity peaks by saliency score`);
 
         topPeaks.forEach((peak, i) => {
-            logger.log(`    Peak ${i + 1}: L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)}, C=${peak.chroma.toFixed(1)}, vol=${(peak.volume * 100).toFixed(2)}%`);
+            const boost = (peak.sector === 8 || peak.sector === 9) ? ' [BLUE BOOST]' : '';
+            logger.log(`    Peak ${i + 1}: L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)}, C=${peak.chroma.toFixed(1)}, score=${peak.score.toFixed(1)}, vol=${(peak.volume * 100).toFixed(2)}%${boost}`);
         });
 
         return topPeaks;
@@ -155,17 +186,22 @@ class PeakFinder {
      * Filters peaks that are too close to the predicted dominant tonal ramps.
      *
      * This is CRITICAL for preventing "Pink Shadow" hijacking in 16-bit scans.
-     * If a blue anchor is ΔE < 15 from the magenta noise plate, it gets absorbed.
+     * If a blue anchor is ΔE < threshold from the magenta noise plate, it gets absorbed.
      *
-     * By requiring ΔE > 15, we ensure the blue detail is "Sovereign" and must
+     * By requiring ΔE > threshold, we ensure the blue detail is "Sovereign" and must
      * be protected with its own ink slot.
+     *
+     * ADAPTIVE THRESHOLD:
+     * - 16-bit: ΔE > 8.0 (signal, not noise - tighter threshold)
+     * - 8-bit: ΔE > 15.0 (quantization noise - standard threshold)
      *
      * @param {Array} candidates - Low-volume high-chroma peaks
      * @param {Array} dominantColors - High-volume color masses (potential hijackers)
+     * @param {number} minDeltaE - Adaptive isolation threshold
      * @returns {Array} Filtered candidates that are perceptually isolated
      * @private
      */
-    _filterByIsolation(candidates, dominantColors) {
+    _filterByIsolation(candidates, dominantColors, minDeltaE) {
         // If no dominant colors, all candidates are isolated by definition
         if (dominantColors.length === 0) {
             return candidates;
@@ -178,8 +214,8 @@ class PeakFinder {
                 return Math.min(min, deltaE);
             }, Infinity);
 
-            // If ΔE > 15, the blue is "Sovereign" and must be protected
-            const isIsolated = minDistance > this.minDeltaE;
+            // If ΔE > threshold, the blue is "Sovereign" and must be protected
+            const isIsolated = minDistance > minDeltaE;
 
             if (!isIsolated) {
                 logger.log(`    ✗ Peak L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)} too close to dominant (ΔE=${minDistance.toFixed(1)})`);
@@ -203,6 +239,31 @@ class PeakFinder {
         const da = p1.a - p2.a;
         const db = p1.b - p2.b;
         return Math.sqrt(dL * dL + da * da + db * db);
+    }
+
+    /**
+     * Calculate hue sector (0-11) from Lab color.
+     * Used for sector-weighted saliency (blue priority).
+     *
+     * Sectors 8-9 represent the blue/cyan range (negative b values).
+     * In monochromatic 16-bit scans, blue details often have lower chroma
+     * than stray pink pixels but are more perceptually important.
+     *
+     * @param {number} a - Green-red axis
+     * @param {number} b - Blue-yellow axis
+     * @returns {number} Hue sector (0-11)
+     * @private
+     */
+    _getHueSector(a, b) {
+        // Calculate hue angle in degrees (0-360)
+        const hue = Math.atan2(b, a) * (180 / Math.PI);
+        const normalizedHue = hue < 0 ? hue + 360 : hue;
+
+        // Map to 12 sectors (30° each)
+        // Sector 8: 240-270° (blue)
+        // Sector 9: 270-300° (cyan-blue)
+        const sector = Math.floor(normalizedHue / 30);
+        return sector % 12;
     }
 }
 

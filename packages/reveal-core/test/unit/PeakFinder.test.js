@@ -186,8 +186,119 @@ describe('PeakFinder - Identity Peak Detection', () => {
     });
 });
 
+describe('PeakFinder - Sector-Weighted Saliency (Blue Priority)', () => {
+    it('should boost blue sector peaks (sectors 8-9) with 2× score', () => {
+        const peakFinder = new PeakFinder({ chromaThreshold: 30, volumeThreshold: 1.0, maxPeaks: 3 });
+
+        // Scenario: Monroe with pink noise and blue eyes
+        // - 50% gray fur (C=10)
+        // - 25% pink noise (C=38, higher raw chroma)
+        // - 25% blue eyes (C=35, lower chroma but blue spectrum → 2× boost)
+        const totalPixels = 100;
+        const labPixels = new Float32Array(totalPixels * 3);
+        let idx = 0;
+
+        // Gray fur (C=10, not detected)
+        for (let i = 0; i < 50; i++) {
+            labPixels[idx++] = 50;
+            labPixels[idx++] = 5;
+            labPixels[idx++] = 8;
+        }
+
+        // Pink noise (C=40, sector 0: 0-30°)
+        for (let i = 0; i < 25; i++) {
+            labPixels[idx++] = 50;
+            labPixels[idx++] = 35;  // a > 0
+            labPixels[idx++] = 15;  // b > 0 (yellow-red), C = sqrt(1225 + 225) ≈ 38.1
+        }
+
+        // Blue eyes (C=35, sector 9: 270-300°)
+        for (let i = 0; i < 25; i++) {
+            labPixels[idx++] = 45;
+            labPixels[idx++] = 5;   // a > 0 (small)
+            labPixels[idx++] = -35; // b < 0 (blue), C = sqrt(25 + 1225) ≈ 35.4
+        }
+
+        const peaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: 16 });
+
+        // Blue should rank #1 despite lower raw chroma (35 × 2.0 = 70 > 38)
+        expect(peaks.length).toBeGreaterThan(0);
+        expect(peaks[0].sector).toBeGreaterThanOrEqual(8);
+        expect(peaks[0].sector).toBeLessThanOrEqual(9);
+    });
+
+    it('should prefer blue over pink noise in monochromatic scans', () => {
+        const peakFinder = new PeakFinder({ chromaThreshold: 25, volumeThreshold: 1.0 });
+
+        // Lower chroma threshold to catch both
+        const totalPixels = 100;
+        const labPixels = new Float32Array(totalPixels * 3);
+        let idx = 0;
+
+        // Pink noise (C=28)
+        for (let i = 0; i < 50; i++) {
+            labPixels[idx++] = 50;
+            labPixels[idx++] = 25;
+            labPixels[idx++] = 10;
+        }
+
+        // Blue detail (C=26, lower than pink)
+        for (let i = 0; i < 50; i++) {
+            labPixels[idx++] = 45;
+            labPixels[idx++] = 8;
+            labPixels[idx++] = -25;
+        }
+
+        const peaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: 16 });
+
+        // Blue should rank #1 due to 2× boost (26 × 2 = 52 > 28)
+        expect(peaks.length).toBeGreaterThan(0);
+        expect(peaks[0].b).toBeLessThan(0); // Negative b = blue
+    });
+});
+
+describe('PeakFinder - Adaptive Thresholds', () => {
+    it('should use ΔE > 8.0 for 16-bit sources', () => {
+        const peakFinder = new PeakFinder({ chromaThreshold: 30, volumeThreshold: 0.05 });
+
+        // 80% pink shadow + 2% blue (ΔE=10 from pink)
+        const totalPixels = 1000;
+        const labPixels = new Float32Array(totalPixels * 3);
+        let idx = 0;
+
+        // Pink shadow (dominant)
+        for (let i = 0; i < 800; i++) {
+            labPixels[idx++] = 50;
+            labPixels[idx++] = 30;
+            labPixels[idx++] = -10;
+        }
+
+        // Blue detail (ΔE ≈ 10 from pink)
+        for (let i = 0; i < 20; i++) {
+            labPixels[idx++] = 50;
+            labPixels[idx++] = 25;
+            labPixels[idx++] = -20;
+        }
+
+        // White
+        for (let i = 0; i < 180; i++) {
+            labPixels[idx++] = 100;
+            labPixels[idx++] = 0;
+            labPixels[idx++] = 0;
+        }
+
+        // 16-bit: ΔE > 8.0 → blue should pass (ΔE=10 > 8)
+        const peaks16 = peakFinder.findIdentityPeaks(labPixels, { bitDepth: 16 });
+        expect(peaks16.length).toBeGreaterThan(0);
+
+        // 8-bit: ΔE > 15.0 → blue should fail (ΔE=10 < 15)
+        const peaks8 = peakFinder.findIdentityPeaks(labPixels, { bitDepth: 8 });
+        expect(peaks8.length).toBe(0);
+    });
+});
+
 describe('PeakFinder - Perceptual Isolation (Stage 2b)', () => {
-    it('should filter peaks too close to dominant colors (ΔE < 15)', () => {
+    it('should filter peaks too close to dominant colors (8-bit: ΔE < 15)', () => {
         const peakFinder = new PeakFinder({ chromaThreshold: 30, volumeThreshold: 0.05, minDeltaE: 15 });
 
         // Simulate "Pink Shadow Hijack" scenario:
@@ -223,14 +334,15 @@ describe('PeakFinder - Perceptual Isolation (Stage 2b)', () => {
             labPixels[idx++] = 0;
         }
 
-        const peaks = peakFinder.findIdentityPeaks(labPixels);
+        // Use 8-bit to get ΔE > 15 threshold
+        const peaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: 8 });
 
         // Should NOT detect magenta as identity peak (too close to pink shadow)
         // ΔE between pink (50,30,-10) and magenta (52,32,-12) ≈ 3.46 < 15
         expect(peaks.length).toBe(0);
     });
 
-    it('should keep peaks far from dominant colors (ΔE > 15)', () => {
+    it('should keep peaks far from dominant colors (8-bit: ΔE > 15)', () => {
         const peakFinder = new PeakFinder({ chromaThreshold: 30, volumeThreshold: 0.05, minDeltaE: 15 });
 
         // Simulate proper blue anchor scenario:
@@ -266,7 +378,8 @@ describe('PeakFinder - Perceptual Isolation (Stage 2b)', () => {
             labPixels[idx++] = 0;
         }
 
-        const peaks = peakFinder.findIdentityPeaks(labPixels);
+        // Use 8-bit to get ΔE > 15 threshold
+        const peaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: 8 });
 
         // SHOULD detect blue as identity peak (far from pink shadow)
         // ΔE between pink (50,30,-10) and blue (45,10,-48) ≈ 42 > 15
