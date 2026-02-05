@@ -1,7 +1,7 @@
 {
   "id": "jethro_monroe_clinical",
-  "name": "Jethro Monroe / Clinical 16-bit v6.0",
-  "description": "EXTREME COLORBLIND STRATEGY: Return to 100:1 L:C ratio with MAXIMUM constraints. v5.0 chroma-sensitive approach replaced with extreme colorblind separation. lWeight=10.0, cWeight=0.1 makes engine completely colorblind to fur noise. NUCLEAR vibrancyThreshold=95 (only C>95 qualifies as vibrant). EXTREME neutralCentroidClampThreshold=25.0 (C<25 forced to gray - widest dead-zone yet). Explicit forced_centroids anchor (L=40, a=5, b=-45) ensures blue slot reservation. Tighter hueLockAngle=2 prevents hue drift. Goal: Maximum tonal grouping with nuclear noise gate - turn everything up to 11.",
+  "name": "Jethro Monroe / Clinical 16-bit v6.1",
+  "description": "SURGICAL FIX: Forced Centroid Displacement. Three hard-coded overrides to stretch Lab phase space: (1) Deterministic Blue Anchor at L=40, a=5, b=-45 (hard-locked slot for rectangle). (2) EXTREME Lightness Priority lWeight=20.0 (Halftone Killer - forces halftone dots onto tonal plates, declares 'I don't care if fur is blue-ish, it is DARK and belongs on Gray/Black plate'). (3) Neutral Kill Zone neutralCentroidClampThreshold=15.0 (physically deletes a*b* color data from non-vibrant pixels - turns halftone fur to pure grayscale BEFORE engine starts). Goal: Stretch distance between fur (dark halftone) and blue (solid rectangle) to force distinct membership.",
   "preferred_sectors": ["blue", "cyan"],
   "centroid": {
     "l": 45,
@@ -13,7 +13,7 @@
     "primary_sector_weight": 0.85
   },
   "weights": {
-    "l": 10.0,
+    "l": 20.0,
     "c": 0.1,
     "k": 1.0,
     "l_std_dev": 2.0,
@@ -24,7 +24,7 @@
     "targetColorsSlider": 8,
     "ditherType": "none",
     "distanceMetric": "cie94",
-    "lWeight": 10.0,
+    "lWeight": 20.0,
     "cWeight": 0.1,
     "blackBias": 8.0,
     "vibrancyMode": "aggressive",
@@ -45,7 +45,7 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 0,
-    "neutralCentroidClampThreshold": 25.0,
+    "neutralCentroidClampThreshold": 15.0,
     "densityFloor": 0.0,
     "preprocessingIntensity": "off",
     "peakFinderMaxPeaks": 1,
