@@ -2562,7 +2562,7 @@ class PosterizationEngine {
 
             // Split the largest box
             const box = boxes.shift();
-            const [box1, box2] = this._splitBoxLab(box, grayscaleOnly);
+            const [box1, box2] = this._splitBoxLab(box, grayscaleOnly, tuning);
 
             if (box1 && box2) {
                 boxes.push(box1, box2);
@@ -2665,12 +2665,17 @@ class PosterizationEngine {
      * Split a box in Lab space by finding channel with highest variance
      * @private
      */
-    static _splitBoxLab(box, grayscaleOnly = false) {
+    static _splitBoxLab(box, grayscaleOnly = false, tuning = null) {
         const { colors } = box;
 
         if (colors.length < 2) {
             return [null, null];
         }
+
+        // Extract weights from tuning (default: lWeight=1.0, cWeight=1.0)
+        // V1 LEGACY: cWeight=2.5 makes chroma the "absolute king" of splits
+        const lWeight = tuning?.centroid?.lWeight ?? 1.0;
+        const cWeight = tuning?.centroid?.cWeight ?? 1.0;
 
         if (grayscaleOnly) {
             // Grayscale mode: Only split on L channel
@@ -2695,16 +2700,18 @@ class PosterizationEngine {
                 { colors: colors2, depth: box.depth + 1, grayscaleOnly }
             ];
         } else {
-            // Color mode: Calculate variance in each Lab channel
+            // Color mode: Calculate WEIGHTED variance in each Lab channel
+            // V1 LEGACY: cWeight amplifies chroma (a, b) importance vs lightness
             const avgL = colors.reduce((sum, c) => sum + c.L, 0) / colors.length;
             const avgA = colors.reduce((sum, c) => sum + c.a, 0) / colors.length;
             const avgB = colors.reduce((sum, c) => sum + c.b, 0) / colors.length;
 
-            const varL = colors.reduce((sum, c) => sum + (c.L - avgL) ** 2, 0);
-            const varA = colors.reduce((sum, c) => sum + (c.a - avgA) ** 2, 0);
-            const varB = colors.reduce((sum, c) => sum + (c.b - avgB) ** 2, 0);
+            // Apply weights to variance - cWeight makes chroma dominate
+            const varL = colors.reduce((sum, c) => sum + (c.L - avgL) ** 2, 0) * lWeight;
+            const varA = colors.reduce((sum, c) => sum + (c.a - avgA) ** 2, 0) * cWeight;
+            const varB = colors.reduce((sum, c) => sum + (c.b - avgB) ** 2, 0) * cWeight;
 
-            // Choose channel with highest variance
+            // Choose channel with highest WEIGHTED variance
             let splitChannel = 'L';
             let maxVar = varL;
             if (varA > maxVar) {
@@ -2851,7 +2858,38 @@ class PosterizationEngine {
      * @returns {Object} {palette, paletteLab, assignments, labPixels, metadata}
      */
     static _posterizeReveal(pixels, width, height, targetColors, options = {}) {
-        const snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
+        // 🔧 LEGACY V1 MODE: CIE76 = "Dumb" Euclidean math, no smart features
+        // When distanceMetric is cie76, force legacy v1 behavior:
+        // - No perceptual snap (threshold = 0.0)
+        // - No palette reduction merging
+        // - No preserved color unification (threshold = 0.5)
+        // - No density floor removal (threshold = 0.0)
+        const distanceMetric = options.distanceMetric || 'cie76';
+        const isLegacyV1Mode = distanceMetric === 'cie76';
+
+        let snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
+        let enablePaletteReduction = options.enablePaletteReduction !== undefined ? options.enablePaletteReduction : true;
+        let paletteReduction = options.paletteReduction !== undefined ? options.paletteReduction : 8.0;
+        let preservedUnifyThreshold = options.preservedUnifyThreshold !== undefined ? options.preservedUnifyThreshold : 12.0;
+        let densityFloor = options.densityFloor !== undefined ? options.densityFloor : 0.005;
+
+        if (isLegacyV1Mode) {
+            logger.log(`🔧 LEGACY V1 MODE: CIE76 detected → Disabling Mk 1.5 "smart" features`);
+            snapThreshold = 0.0;              // Kill perceptual snap
+            enablePaletteReduction = false;   // Kill palette reduction
+            preservedUnifyThreshold = 0.5;    // Kill white/black unification
+            densityFloor = 0.0;               // Kill density floor removal
+
+            // Update options object so these values are used throughout the function
+            options.preservedUnifyThreshold = preservedUnifyThreshold;
+            options.densityFloor = densityFloor;
+
+            logger.log(`   snapThreshold: ${snapThreshold} (no merging)`);
+            logger.log(`   enablePaletteReduction: ${enablePaletteReduction}`);
+            logger.log(`   preservedUnifyThreshold: ${preservedUnifyThreshold} ΔE`);
+            logger.log(`   densityFloor: ${densityFloor} (disabled)`);
+        }
+
         const enableHueGapAnalysis = options.enableHueGapAnalysis !== undefined ? options.enableHueGapAnalysis : false;
         const grayscaleOnly = options.grayscaleOnly !== undefined ? options.grayscaleOnly : false;
         const preserveWhite = options.preserveWhite !== undefined ? options.preserveWhite : false;
@@ -2860,8 +2898,6 @@ class PosterizationEngine {
         const vibrancyBoost = options.vibrancyBoost !== undefined ? options.vibrancyBoost : 2.0;
         const highlightThreshold = options.highlightThreshold !== undefined ? options.highlightThreshold : 92;
         const highlightBoost = options.highlightBoost !== undefined ? options.highlightBoost : 3.0;
-        const enablePaletteReduction = options.enablePaletteReduction !== undefined ? options.enablePaletteReduction : true;
-        const paletteReduction = options.paletteReduction !== undefined ? options.paletteReduction : 8.0;
 
         if (grayscaleOnly) {
             logger.log(`Starting Lab-space posterization: ${targetColors} target colors (GRAYSCALE ONLY)`);
