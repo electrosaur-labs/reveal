@@ -35,7 +35,7 @@ class PosterizationEngine {
      * CENTRALIZED TUNING PARAMETERS
      *
      * Balanced preset for complex images with skin tones, hair textures,
-     * and dark backgrounds (e.g., JethroAsMonroe.tif).
+     * and dark backgrounds.
      *
      * Prevents "washout" by using Soft Peak centroid (top 5%) and Logic-Gated pruning.
      */
@@ -2061,12 +2061,6 @@ class PosterizationEngine {
                         continue;
                     }
 
-                    // SHADOW PROTECTION: Prevent merging deep shadows (L<15) with lighter colors
-                    // Critical for JethroAsMonroe halftones - keeps neutral black dots from merging with skin/background
-                    if ((p1.L < shadowProtect && p2.L >= shadowProtect) || (p1.L >= shadowProtect && p2.L < shadowProtect)) {
-                        continue;
-                    }
-
                     // MERGE: Keep the one with higher Saliency score
                     const s1 = (p1.L * 1.5) + (chroma1 * 2.5);
                     const s2 = (p2.L * 1.5) + (chroma2 * 2.5);
@@ -3291,11 +3285,19 @@ class PosterizationEngine {
         );
         logger.log(`✓ Curated palette: ${curatedPaletteLab.length} colors`);
 
+        // 🛑 SOVEREIGN LOCK: Skip palette reduction for Jethro Monroe Clinical
+        // Clinical precision requires EXACT color count without merging
+        const isSovereignLock = options.archetypeId === 'jethro_monroe_clinical';
+
         // ARCHITECT'S PALETTE REDUCTION: Prune colors that are too similar
         // User-configurable threshold (6.0-15.0 ΔE, default: 10.0)
         // Balances screen printing practicality with color richness
         // ONLY prune if enabled AND we're over the target color count (don't reduce below user's request)
-        if (enablePaletteReduction && curatedPaletteLab.length > targetColors) {
+        // 🛑 SOVEREIGN LOCK: Never prune for Jethro Monroe archetype
+        if (isSovereignLock) {
+            logger.log(`🛑 SOVEREIGN LOCK: Skipping palette reduction (Jethro Monroe Clinical archetype)`);
+            logger.log(`   Preserving all ${curatedPaletteLab.length} colors for clinical precision`);
+        } else if (enablePaletteReduction && curatedPaletteLab.length > targetColors) {
             const prunedPaletteLab = this._prunePalette(curatedPaletteLab, paletteReduction, highlightThreshold, targetColors, options.tuning || null);
             if (prunedPaletteLab.length < curatedPaletteLab.length) {
                 logger.log(`✓ Palette pruned: ${curatedPaletteLab.length} → ${prunedPaletteLab.length} colors (merged similar colors for screen printing)`);
@@ -4024,7 +4026,12 @@ class PosterizationEngine {
         logger.log(`✓ Snapped palette: ${snappedPaletteLab.length} colors`);
 
         // Step 4: Palette reduction (if over budget after snap)
-        if (enablePaletteReduction && snappedPaletteLab.length > medianCutTarget) {
+        // 🛑 SOVEREIGN LOCK: Skip palette reduction for Jethro Monroe Clinical
+        const isSovereignLock = options.archetypeId === 'jethro_monroe_clinical';
+
+        if (isSovereignLock) {
+            logger.log(`🛑 SOVEREIGN LOCK: Skipping palette reduction (Jethro Monroe Clinical archetype)`);
+        } else if (enablePaletteReduction && snappedPaletteLab.length > medianCutTarget) {
             const prunedPaletteLab = this._prunePalette(snappedPaletteLab, paletteReduction, highlightThreshold, medianCutTarget, options.tuning || null);
             if (prunedPaletteLab.length < snappedPaletteLab.length) {
                 logger.log(`✓ Palette pruned: ${snappedPaletteLab.length} → ${prunedPaletteLab.length} colors`);
