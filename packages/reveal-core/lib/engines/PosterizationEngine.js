@@ -172,7 +172,7 @@ class PosterizationEngine {
         // Dispatch to appropriate engine with strategy injection
         switch (engineType) {
             case 'reveal':
-                return this._posterizeReveal(pixels, width, height, targetColors, {
+                return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
                     ...options,
                     enableGridOptimization,
                     enableHueGapAnalysis, // Respect user setting (default: false)
@@ -202,7 +202,7 @@ class PosterizationEngine {
 
             default:
                 logger.warn(`⚠️ Unknown engine type '${engineType}', falling back to 'reveal'`);
-                return this._posterizeReveal(pixels, width, height, targetColors, {
+                return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
                     ...options,
                     enableGridOptimization,
                     enableHueGapAnalysis, // Respect user setting (default: false)
@@ -2822,7 +2822,7 @@ class PosterizationEngine {
      * @param {boolean} [options.preserveBlack=true] - Force black into palette
      * @returns {Object} {palette, paletteLab, assignments, labPixels, metadata}
      */
-    static _posterizeReveal(pixels, width, height, targetColors, options = {}) {
+    static _posterizeRevealMk1_0(pixels, width, height, targetColors, options = {}) {
         const snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
         const enableHueGapAnalysis = options.enableHueGapAnalysis !== undefined ? options.enableHueGapAnalysis : false;
         const grayscaleOnly = options.grayscaleOnly !== undefined ? options.grayscaleOnly : false;
@@ -3679,7 +3679,7 @@ class PosterizationEngine {
      */
     static _posterizeBalanced(pixels, width, height, targetColors, options = {}) {
         // Same as _posterizeReveal but with enableHueGapAnalysis forced to false
-        return this._posterizeReveal(pixels, width, height, targetColors, {
+        return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
             ...options,
             enableHueGapAnalysis: false
         });
@@ -3830,7 +3830,7 @@ class PosterizationEngine {
     static _posterizeStencil(pixels, width, height, targetColors, options = {}) {
         logger.log('Stencil engine: Quantizing L-channel only (a=b=0)');
 
-        return this._posterizeReveal(pixels, width, height, targetColors, {
+        return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
             ...options,
             grayscaleOnly: true,
             enableHueGapAnalysis: false
