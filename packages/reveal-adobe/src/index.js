@@ -2576,6 +2576,13 @@ function resetPreviewAndSwatches() {
         previewSection.classList.remove('visible');
     }
 
+    // CRITICAL: Reset global preview state (includes deletedIndices)
+    // This prevents deleted swatch state from persisting between runs
+    if (window.previewState) {
+        logger.log("  Clearing window.previewState (deleted indices, solo mode, etc.)");
+        window.previewState = null;
+    }
+
     logger.log("✓ Preview/zoom containers and swatches reset complete");
 }
 
