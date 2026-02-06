@@ -4327,35 +4327,35 @@ class PosterizationEngine {
         const duration = ((endTime - startTime) / 1000).toFixed(3);
         logger.log(`\n✓ Reveal Mk 1.5 complete in ${duration}s`);
 
-        // ========== [NEW] Protect anchors from density floor ==========
-        const protectedIndices = new Set();
-        if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
-        if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
-
-        // Protect auto-detected peaks from density floor removal
-        for (let i = snappedPaletteLab.length; i < mergedPalette.length; i++) {
-            protectedIndices.add(i);
-            logger.log(`  Protected auto-anchor at index ${i} from density floor`);
-        }
-        // ==============================================================
-
-        const densityResult = this._applyDensityFloor(
-            assignments,
-            finalPaletteLab,
-            0.005,
-            protectedIndices
-        );
-
+        // Apply density floor to remove ghost colors (<0.5% coverage by default)
+        // Read densityFloor from options (default: 0.005 = 0.5%, Legacy V1: 0.0 = disabled)
         let finalPaletteLabFiltered = finalPaletteLab;
         let assignmentsFiltered = assignments;
 
-        if (densityResult.actualCount < finalPaletteLab.length) {
-            const removed = finalPaletteLab.length - densityResult.actualCount;
-            logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < 0.5% coverage`);
-            logger.log(`  Final palette: ${densityResult.actualCount} colors`);
+        if (densityFloor > 0) {
+            // Only protect preserved colors (white/black) from density floor
+            // Auto-anchors are NOT protected - they must meet the coverage threshold
+            const protectedIndices = new Set();
+            if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
+            if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
 
-            finalPaletteLabFiltered = densityResult.palette;
-            assignmentsFiltered = densityResult.assignments;
+            const densityResult = this._applyDensityFloor(
+                assignments,
+                finalPaletteLab,
+                densityFloor,
+                protectedIndices
+            );
+
+            if (densityResult.actualCount < finalPaletteLab.length) {
+                const removed = finalPaletteLab.length - densityResult.actualCount;
+                logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < ${(densityFloor * 100).toFixed(1)}% coverage`);
+                logger.log(`  Final palette: ${densityResult.actualCount} colors`);
+
+                finalPaletteLabFiltered = densityResult.palette;
+                assignmentsFiltered = densityResult.assignments;
+            }
+        } else {
+            logger.log(`✓ Density floor disabled (threshold: ${densityFloor})`);
         }
 
         const paletteRgbFiltered = finalPaletteLabFiltered.map(lab => this.labToRgb(lab));
