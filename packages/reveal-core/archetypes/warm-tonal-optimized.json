@@ -24,7 +24,7 @@
     "temperature_bias": 3.0
   },
   "parameters": {
-    "targetColorsSlider": 10,
+    "targetColorsSlider": 8,
     "ditherType": "none",
     "distanceMetric": "cie94",
     "lWeight": 0.3,

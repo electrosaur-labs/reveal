@@ -19,7 +19,7 @@
     "hue_entropy": 2.0
   },
   "parameters": {
-    "targetColorsSlider": 6,
+    "targetColorsSlider": 8,
     "ditherType": "none",
     "distanceMetric": "cie94",
     "lWeight": 1.5,
