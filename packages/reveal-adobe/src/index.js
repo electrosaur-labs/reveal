@@ -3913,17 +3913,6 @@ async function showDialog() {
                         }
                     };
 
-                    // 🛑 SOVEREIGN LOCK: Detect Jethro Monroe archetype and adjust snap threshold
-                    // For clinical precision work, disable perceptual snapping completely
-                    const isSovereignLock = params.id === 'jethro_monroe_clinical';
-                    const snapThreshold = isSovereignLock ? 0.5 : 8.0;  // Nearly disable snapping for Jethro
-
-                    if (isSovereignLock) {
-                        logger.log(`🛑 SOVEREIGN LOCK DETECTED: ${params.id}`);
-                        logger.log(`   Perceptual snap threshold reduced: 8.0 → ${snapThreshold} ΔE`);
-                        logger.log(`   This prevents color merging and ensures 10-color fidelity`);
-                    }
-
                     const result = PosterizationEngine.posterize(
                         pixelData.pixels,
                         pixelData.width,
@@ -3934,7 +3923,7 @@ async function showDialog() {
                             centroidStrategy: params.centroidStrategy,  // NEW: User-selected strategy (SALIENCY or VOLUMETRIC)
                             enableGridOptimization: true,            // NEW: Default ON (Architect's requirement)
                             enableHueGapAnalysis: params.enableHueGapAnalysis,  // USER-CONTROLLED: Force hue diversity (default: ON, may exceed target count)
-                            snapThreshold: snapThreshold,            // 🛑 SOVEREIGN LOCK: 0.5 for Jethro, 8.0 for others
+                            distanceMetric: params.distanceMetric,   // CIE76/CIE94/CIE2000 (cie76 = legacy v1 behavior)
                             format: pixelData.format,                // Pass Lab format flag for optimization
                             bitDepth: pixelData.bitDepth,            // Source bit depth (8 or 16) for Shadow Gate calibration
                             grayscaleOnly,                           // User-selected mode: grayscale (L-only) or color (full Lab)
