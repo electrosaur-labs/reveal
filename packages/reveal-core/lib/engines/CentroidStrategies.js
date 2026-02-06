@@ -55,6 +55,30 @@ function SALIENCY(bucket, weights) {
     const isEightBit = !is16Bit;
     const vibrancyMode = weights.vibrancyMode || 'aggressive';
     const vibrancyBoost = weights.vibrancyBoost || 2.2;
+    const lWeight = weights.lWeight || 1.0;
+    const cWeight = weights.cWeight || 1.0;
+
+    // 🔧 ACHROMATIC EXCLUSION WALL (V1 LEGACY MODE)
+    // Filter out near-neutral pixels (chroma < 15.0) from saliency consideration
+    // This prevents halftone gray backgrounds from competing for color slots
+    // Activated when cWeight is high (≥ 2.5), indicating precision color work
+    const achromaticFloor = cWeight >= 2.5 ? 15.0 : 0.0;
+    const eligibleBucket = achromaticFloor > 0
+        ? bucket.filter(p => Math.sqrt(p.a * p.a + p.b * p.b) >= achromaticFloor)
+        : bucket;
+
+    // If all pixels filtered out (achromatic bucket), fall back to volumetric average
+    if (eligibleBucket.length === 0) {
+        let sumL = 0, sumA = 0, sumB = 0, totalWeight = 0;
+        bucket.forEach(p => {
+            const weight = p.count || 1;
+            sumL += p.L * weight;
+            sumA += p.a * weight;
+            sumB += p.b * weight;
+            totalWeight += weight;
+        });
+        return { L: sumL / totalWeight, a: sumA / totalWeight, b: sumB / totalWeight };
+    }
 
     // Helper: Get hue sector (0-11) from Lab a/b coordinates
     // Sectors 0 (Red) and 1 (Orange) are the "warm/brown" sectors
@@ -64,7 +88,7 @@ function SALIENCY(bucket, weights) {
         return Math.floor(normalizedHue / 30);
     };
 
-    const scored = bucket.map(p => {
+    const scored = eligibleBucket.map(p => {
         const chroma = Math.sqrt(p.a * p.a + p.b * p.b);
         const sector = getHueSector(p.a, p.b);
 
@@ -85,8 +109,8 @@ function SALIENCY(bucket, weights) {
         // Penalize the chroma weight to prevent these from stealing centroid attention.
         // Only active for 8-bit sources - 16-bit data is SIGNAL.
         const chromaWeight = (isEightBit && chroma < 8 && (sector === 0 || sector === 1))
-            ? weights.cWeight * 0.5  // Halve chroma weight for suspected brown noise
-            : weights.cWeight;
+            ? cWeight * 0.5  // Halve chroma weight for suspected brown noise
+            : cWeight;
 
         // BLACK PROTECTION: If the pixel is very dark, give it a massive score
         // to ensure the centroid snaps to Black rather than Grey.
@@ -94,9 +118,12 @@ function SALIENCY(bucket, weights) {
         // Uses configurable blackBias multiplier for tuning intensity
         const blackBoost = p.L < 10 ? (10 - p.L) * blackBias : 0;
 
+        // 🔧 CHROMA DOMINANCE (V1 LEGACY MODE)
+        // When cWeight ≥ 2.5, make chroma the primary factor in saliency scoring
+        // This ensures vibrant colors win over neutral tones regardless of volume
         return {
             p,
-            score: (p.L * weights.lWeight) + (chromaValue * chromaWeight) + blackBoost
+            score: (p.L * lWeight) + (chromaValue * chromaWeight) + blackBoost
         };
     }).sort((a, b) => b.score - a.score);
 

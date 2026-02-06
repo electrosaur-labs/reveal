@@ -152,7 +152,8 @@ class PosterizationEngine {
                 threshold: options.paletteReduction !== undefined ? options.paletteReduction : this.TUNING.prune.threshold,
                 hueLockAngle: options.hueLockAngle !== undefined ? options.hueLockAngle : this.TUNING.prune.hueLockAngle,
                 whitePoint: options.highlightThreshold !== undefined ? options.highlightThreshold : this.TUNING.prune.whitePoint,
-                shadowPoint: options.shadowPoint !== undefined ? options.shadowPoint : this.TUNING.prune.shadowPoint
+                shadowPoint: options.shadowPoint !== undefined ? options.shadowPoint : this.TUNING.prune.shadowPoint,
+                isolationThreshold: options.isolationThreshold !== undefined ? options.isolationThreshold : 0.0
             },
             centroid: {
                 lWeight: options.lWeight !== undefined ? options.lWeight : this.TUNING.centroid.lWeight,
@@ -2628,6 +2629,29 @@ class PosterizationEngine {
             }
         }
 
+        // 🔧 PEAK ELIGIBILITY FLOOR (V1 LEGACY MODE)
+        // Filter out boxes that are too small (< isolationThreshold % of total pixels)
+        // This prevents 16-bit sensor noise and tiny clusters from becoming "identity peaks"
+        // isolationThreshold: 25.0 = 1.0% minimum cluster size
+        const isolationThreshold = tuning?.prune?.isolationThreshold || 0.0;
+        if (isolationThreshold > 0) {
+            const minPixels = totalPixels * (isolationThreshold / 2500);  // 25.0 → 1.0% of image
+            const originalBoxCount = boxes.length;
+            const filteredBoxes = boxes.filter(box => box.colors.length >= minPixels);
+
+            // SAFETY: Only apply filter if we have at least targetColors boxes remaining
+            // If isolation threshold is too aggressive, keep all boxes to avoid empty palette
+            if (filteredBoxes.length >= targetColors) {
+                boxes = filteredBoxes;
+                const filtered = originalBoxCount - boxes.length;
+                logger.log(`🔧 Isolation threshold: Filtered ${filtered} small clusters (< ${(isolationThreshold / 2500 * 100).toFixed(1)}% of pixels)`);
+                logger.log(`   Remaining boxes: ${boxes.length} (down from ${originalBoxCount})`);
+            } else {
+                logger.log(`⚠️ Isolation threshold too aggressive: Would reduce ${originalBoxCount} boxes to ${filteredBoxes.length} (need ${targetColors})`);
+                logger.log(`   Keeping all ${originalBoxCount} boxes to ensure minimum palette size`);
+            }
+        }
+
         // Calculate representative color for each box (centroid in Lab space)
         // Use injected strategy or fallback to VOLUMETRIC
         const palette = boxes.map((box, idx) => {
@@ -3772,7 +3796,48 @@ class PosterizationEngine {
      * @returns {Object} Standard posterization result with auto-anchor metadata
      */
     static _posterizeRevealMk1_5(pixels, width, height, targetColors, options = {}) {
-        const snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_entry');
+        logger.log(`🔵 CHECKPOINT 1: Entering _posterizeRevealMk1_5`);
+
+        // CIE76 LEGACY V1 MODE DETECTION (same as _posterizeReveal)
+        const distanceMetric = options.distanceMetric || 'cie76';
+        const isLegacyV1Mode = distanceMetric === 'cie76';
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_metric_parsed');
+        logger.log(`🔵 CHECKPOINT 2: distanceMetric=${distanceMetric}, isLegacyV1Mode=${isLegacyV1Mode}`);
+
+        let snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
+        let enablePaletteReduction = options.enablePaletteReduction !== undefined ? options.enablePaletteReduction : true;
+        let paletteReduction = options.paletteReduction !== undefined ? options.paletteReduction : 8.0;
+        let preservedUnifyThreshold = options.preservedUnifyThreshold !== undefined ? options.preservedUnifyThreshold : 12.0;
+        let densityFloor = options.densityFloor !== undefined ? options.densityFloor : 0.005;
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_thresholds_set');
+        logger.log(`🔵 CHECKPOINT 3: Initial thresholds set`);
+
+        if (isLegacyV1Mode) {
+            logger.log(`🔧 LEGACY V1 MODE (Mk 1.5): CIE76 detected → Disabling Mk 1.5 "smart" features`);
+            snapThreshold = 0.0;              // Kill perceptual snap
+            enablePaletteReduction = false;   // Kill palette reduction
+            preservedUnifyThreshold = 0.5;    // Kill white/black unification
+            densityFloor = 0.0;               // Kill density floor removal
+
+            // Update options object so these values are used throughout the function
+            options.snapThreshold = snapThreshold;
+            options.enablePaletteReduction = enablePaletteReduction;
+            options.paletteReduction = paletteReduction;
+            options.preservedUnifyThreshold = preservedUnifyThreshold;
+            options.densityFloor = densityFloor;
+
+            logger.log(`   snapThreshold: ${snapThreshold} (no merging)`);
+            logger.log(`   enablePaletteReduction: ${enablePaletteReduction} (no pruning)`);
+            logger.log(`   preservedUnifyThreshold: ${preservedUnifyThreshold} (no white/black unification)`);
+            logger.log(`   densityFloor: ${densityFloor} (no ghost removal)`);
+        }
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_legacy_mode_done');
+        logger.log(`🔵 CHECKPOINT 4: Legacy V1 mode processing complete`);
+
         const grayscaleOnly = options.grayscaleOnly !== undefined ? options.grayscaleOnly : false;
         const preserveWhite = options.preserveWhite !== undefined ? options.preserveWhite : false;
         const preserveBlack = options.preserveBlack !== undefined ? options.preserveBlack : false;
@@ -3780,8 +3845,9 @@ class PosterizationEngine {
         const vibrancyBoost = options.vibrancyBoost !== undefined ? options.vibrancyBoost : 2.0;
         const highlightThreshold = options.highlightThreshold !== undefined ? options.highlightThreshold : 92;
         const highlightBoost = options.highlightBoost !== undefined ? options.highlightBoost : 3.0;
-        const enablePaletteReduction = options.enablePaletteReduction !== undefined ? options.enablePaletteReduction : true;
-        const paletteReduction = options.paletteReduction !== undefined ? options.paletteReduction : 8.0;
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_options_parsed');
+        logger.log(`🔵 CHECKPOINT 5: Options parsed`);
 
         logger.log(`\n[Reveal Mk 1.5] Starting deterministic auto-quantizer: ${targetColors} target colors`);
         logger.log(`  Mode: Automatic outlier detection + median cut`);
@@ -3795,17 +3861,28 @@ class PosterizationEngine {
 
         const startTime = performance.now();
 
+        logger.log(`🔵 CHECKPOINT 6: Starting performance timer`);
+
         const isLabInput = options.format === 'lab';
         if (!isLabInput) {
             throw new Error('[Reveal Mk 1.5] Requires Lab input format (RGB not supported)');
         }
 
+        logger.log(`🔵 CHECKPOINT 7: Validated Lab input format`);
+
         const sourceBitDepth = options.bitDepth || 16;
         const isEightBitSource = sourceBitDepth <= 8;
 
+        logger.log(`🔵 CHECKPOINT 8: Bit depth=${sourceBitDepth}`);
+
         // Step 1: Convert to perceptual Lab space (reuse _posterizeReveal logic)
         logger.log(`✓ Using 16-bit Lab pixels (original source: ${sourceBitDepth}-bit → Float32 perceptual ranges)`);
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_float32array');
+        logger.log(`🔵 CHECKPOINT 9: About to allocate Float32Array(${pixels.length})`);
         const labPixels = new Float32Array(pixels.length);
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_float32array_allocated');
+        logger.log(`🔵 CHECKPOINT 10: Float32Array allocated successfully`);
 
         const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
         const highlightThresholdGate = isEightBitSource ? 97.5 : 98.0;
@@ -3819,6 +3896,9 @@ class PosterizationEngine {
         const maxValue = 32768;
         const neutralAB = 16384;
         const abScale = 128 / 16384;
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_pixel_loop');
+        logger.log(`🔵 CHECKPOINT 11: Starting pixel conversion loop (${pixels.length / 3} pixels)`);
 
         for (let i = 0; i < pixels.length; i += 3) {
             labPixels[i] = (pixels[i] / maxValue) * 100;
@@ -3836,6 +3916,8 @@ class PosterizationEngine {
             }
         }
 
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_pixel_loop_done');
+        logger.log(`🔵 CHECKPOINT 12: Pixel conversion loop complete`);
         logger.log(`✓ Converted ${pixels.length / 3} Lab pixels to perceptual ranges`);
 
         // ========== [NEW] Hard Chromance Gate: Achromatic Purge ==========
@@ -3865,6 +3947,8 @@ class PosterizationEngine {
         }
         // =================================================================
 
+        logger.log(`🔵 CHECKPOINT 13: Starting peak detection setup`);
+
         // ========== [NEW] Mk 1.5: Auto-detect OR use pre-defined anchors ==========
         // Extract PeakFinder parameters from options (set by archetype)
         const peakFinderMaxPeaks = options.peakFinderMaxPeaks !== undefined ? options.peakFinderMaxPeaks : 1;
@@ -3878,6 +3962,8 @@ class PosterizationEngine {
 
         // Support both forcedCentroids (camelCase) and forced_centroids (snake_case)
         const forcedCentroidsInput = options.forcedCentroids || options.forced_centroids;
+
+        logger.log(`🔵 CHECKPOINT 14: forcedCentroidsInput=${forcedCentroidsInput ? forcedCentroidsInput.length : 'none'}`);
 
         if (forcedCentroidsInput && Array.isArray(forcedCentroidsInput) && forcedCentroidsInput.length > 0) {
             // Use pre-defined anchors from archetype (Golden Master mode)
@@ -3925,9 +4011,15 @@ class PosterizationEngine {
         }
         // =============================================================
 
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_peak_detection_done');
+        logger.log(`🔵 CHECKPOINT 15: Peak detection complete, forcedCentroids=${forcedCentroids.length}`);
+
         // Step 1.5: Handle preserved colors (white/black)
         let preservedPixelMap = new Map();
         let nonPreservedIndices = [];
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_preserved_detection');
+        logger.log(`🔵 CHECKPOINT 16: Starting preserved colors detection`);
 
         const WHITE_L_MIN = 95;
         const BLACK_L_MAX = 10;
@@ -3981,6 +4073,8 @@ class PosterizationEngine {
         logger.log(`  Median cut budget: ${medianCutTarget} slots`);
         // ==================================================
 
+        logger.log(`🔵 CHECKPOINT 17: Extracting non-preserved pixels`);
+
         // Extract non-preserved pixels for quantization
         let nonPreservedLabPixels = labPixels;
         if (nonPreservedIndices.length < labPixels.length / 3) {
@@ -3992,6 +4086,9 @@ class PosterizationEngine {
                 nonPreservedLabPixels[i * 3 + 2] = labPixels[srcIdx + 2];
             }
         }
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_median_cut');
+        logger.log(`🔵 CHECKPOINT 18: About to call medianCutInLabSpace with ${medianCutTarget} colors`);
 
         // Step 2: Run median cut with reduced target
         logger.log(`\nRunning median cut in Lab space (${medianCutTarget} colors)...`);
@@ -4010,6 +4107,8 @@ class PosterizationEngine {
             options.strategy || null,
             options.tuning || null
         );
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_median_cut_done');
+        logger.log(`🔵 CHECKPOINT 19: medianCutInLabSpace completed`);
         logger.log(`✓ Initial palette: ${initialPaletteLab.length} colors`);
 
         // Step 3: Apply perceptual snap
