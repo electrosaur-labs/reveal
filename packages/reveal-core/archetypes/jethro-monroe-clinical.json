@@ -1,7 +1,7 @@
 {
   "id": "jethro_monroe_clinical",
-  "name": "Jethro Monroe / Clinical 16-bit v6.1",
-  "description": "SURGICAL FIX: Forced Centroid Displacement. Three hard-coded overrides to stretch Lab phase space: (1) Deterministic Blue Anchor at L=40, a=5, b=-45 (hard-locked slot for rectangle). (2) EXTREME Lightness Priority lWeight=20.0 (Halftone Killer - forces halftone dots onto tonal plates, declares 'I don't care if fur is blue-ish, it is DARK and belongs on Gray/Black plate'). (3) Neutral Kill Zone neutralCentroidClampThreshold=15.0 (physically deletes a*b* color data from non-vibrant pixels - turns halftone fur to pure grayscale BEFORE engine starts). Goal: Stretch distance between fur (dark halftone) and blue (solid rectangle) to force distinct membership.",
+  "name": "Jethro Monroe / Clinical 16-bit v8.1",
+  "description": "SURGICAL HARD-LOCK: Deterministic Anchoring + Tighter Achromatic Purge. (1) THREE DETERMINISTIC ANCHORS: Yellow L=88,a=-6,b=85 / Pink L=70,a=60,b=-30 / Blue L=40,a=5,b=-45 (hard-locked production inks, no averaging). (2) TIGHTER Achromatic Purge chromaGateThreshold=15.0 (if C<15, physically set a=b=0 - turns Jethro's head to pure B/W BEFORE quantization, mathematically impossible to recruit yellow/pink pixels). (3) Lightness Crowbar lWeight=200.0 (forces halftone head to Gray/Black plates). (4) Identity Pruning densityFloor=0.05 (kills noise plates <5%). (5) CIE76 blunt metric. Deterministic anchoring keeps cat out of rectangles AND keeps colors clinical.",
   "preferred_sectors": ["blue", "cyan"],
   "centroid": {
     "l": 45,
@@ -13,19 +13,20 @@
     "primary_sector_weight": 0.85
   },
   "weights": {
-    "l": 20.0,
-    "c": 0.1,
+    "l": 200.0,
+    "c": 1.0,
     "k": 1.0,
     "l_std_dev": 2.0,
     "temperature_bias": 1.0
   },
   "parameters": {
-    "engineType": "reveal-mk1.5",
+    "engineType": "forced-centroid",
+    "centroidStrategy": "VOLUMETRIC",
     "targetColorsSlider": 8,
     "ditherType": "none",
-    "distanceMetric": "cie94",
-    "lWeight": 20.0,
-    "cWeight": 0.1,
+    "distanceMetric": "cie76",
+    "lWeight": 200.0,
+    "cWeight": 1.0,
     "blackBias": 8.0,
     "vibrancyMode": "aggressive",
     "vibrancyBoost": 2.2,
@@ -45,14 +46,14 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 0,
-    "neutralCentroidClampThreshold": 15.0,
-    "densityFloor": 0.0,
+    "neutralCentroidClampThreshold": 0,
+    "chromaGateThreshold": 15.0,
+    "densityFloor": 0.05,
     "preprocessingIntensity": "off",
-    "peakFinderMaxPeaks": 1,
-    "peakFinderPreferredSectors": [8, 9],
-    "peakFinderBlacklistedSectors": [3, 4],
-    "forced_centroids": [
-      { "l": 40, "a": 5, "b": -45, "name": "RECTANGLE_BLUE_ANCHOR" }
+    "forcedCentroids": [
+      { "L": 70, "a": 60, "b": -30 },
+      { "L": 88, "a": -6, "b": 85 },
+      { "L": 40, "a": 5, "b": -45 }
     ]
   }
 }
