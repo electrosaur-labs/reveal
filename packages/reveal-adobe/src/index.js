@@ -4369,6 +4369,8 @@ async function showDialog() {
 
                             // Map archetype parameters to UI controls
                             const paramMapping = {
+                                engineType: params.engineType,
+                                centroidStrategy: params.centroidStrategy,
                                 targetColorsSlider: params.targetColorsSlider,
                                 ditherType: params.ditherType,
                                 distanceMetric: params.distanceMetric,

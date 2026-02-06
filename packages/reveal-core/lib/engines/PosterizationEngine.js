@@ -3794,33 +3794,91 @@ class PosterizationEngine {
 
         logger.log(`✓ Converted ${pixels.length / 3} Lab pixels to perceptual ranges`);
 
-        // ========== [NEW] Mk 1.5: Auto-detect identity peaks ==========
+        // ========== [NEW] Hard Chromance Gate: Achromatic Purge ==========
+        // Delete color data from low-chroma pixels (halftone noise suppression)
+        const chromaGateThreshold = options.chromaGateThreshold !== undefined ? options.chromaGateThreshold : 0;
+
+        if (chromaGateThreshold > 0) {
+            let purgedCount = 0;
+            logger.log(`\n[Hard Chromance Gate] Applying achromatic purge (C < ${chromaGateThreshold})`);
+
+            for (let i = 0; i < labPixels.length; i += 3) {
+                const a = labPixels[i + 1];
+                const b = labPixels[i + 2];
+                const chroma = Math.sqrt(a * a + b * b);
+
+                // If chroma below threshold, physically delete color data (pure gray)
+                if (chroma < chromaGateThreshold) {
+                    labPixels[i + 1] = 0;  // a* = 0
+                    labPixels[i + 2] = 0;  // b* = 0
+                    purgedCount++;
+                }
+            }
+
+            const purgedPercent = (purgedCount / (labPixels.length / 3)) * 100;
+            logger.log(`✓ Achromatic purge complete: ${purgedCount} pixels (${purgedPercent.toFixed(1)}%) converted to pure gray`);
+            logger.log(`  Goal: Make low-chroma halftone noise mathematically unable to join chromatic plates`);
+        }
+        // =================================================================
+
+        // ========== [NEW] Mk 1.5: Auto-detect OR use pre-defined anchors ==========
         // Extract PeakFinder parameters from options (set by archetype)
         const peakFinderMaxPeaks = options.peakFinderMaxPeaks !== undefined ? options.peakFinderMaxPeaks : 1;
         const peakFinderPreferredSectors = options.peakFinderPreferredSectors || null;
         const peakFinderBlacklistedSectors = options.peakFinderBlacklistedSectors || [3, 4]; // Default: blacklist green
 
-        const peakFinder = new PeakFinder({
-            chromaThreshold: 30,
-            volumeThreshold: 0.05,
-            maxPeaks: peakFinderMaxPeaks,
-            preferredSectors: peakFinderPreferredSectors,
-            blacklistedSectors: peakFinderBlacklistedSectors
-        });
+        // Check if archetype provides pre-defined forced centroids
+        let forcedCentroids = [];
+        let usedPredefinedAnchors = false;
+        let detectedPeaks = []; // Initialize outside to avoid scoping issues
 
-        logger.log(`  PeakFinder config: maxPeaks=${peakFinderMaxPeaks}, blacklist=[${peakFinderBlacklistedSectors.join(',')}], preferred=${peakFinderPreferredSectors ? '[' + peakFinderPreferredSectors.join(',') + ']' : 'none'}`);
+        // Support both forcedCentroids (camelCase) and forced_centroids (snake_case)
+        const forcedCentroidsInput = options.forcedCentroids || options.forced_centroids;
 
-        // Pass bitDepth for adaptive thresholds (8.0 for 16-bit, 15.0 for 8-bit)
-        const detectedPeaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: sourceBitDepth });
+        if (forcedCentroidsInput && Array.isArray(forcedCentroidsInput) && forcedCentroidsInput.length > 0) {
+            // Use pre-defined anchors from archetype (Golden Master mode)
+            logger.log(`\n[Reveal Mk 1.5] Using ${forcedCentroidsInput.length} pre-defined forced centroids from archetype`);
+            try {
+                forcedCentroids = forcedCentroidsInput.map(anchor => {
+                    const centroid = {
+                        L: Number(anchor.L || anchor.l),
+                        a: Number(anchor.a),
+                        b: Number(anchor.b)
+                    };
+                    logger.log(`  Anchor: L=${centroid.L.toFixed(1)} a=${centroid.a.toFixed(1)} b=${centroid.b.toFixed(1)} (${anchor.name || 'UNNAMED'})`);
+                    return centroid;
+                });
+                usedPredefinedAnchors = true;
+            } catch (error) {
+                logger.error(`  ✗ Error parsing forcedCentroids: ${error.message}`);
+                logger.log(`  Falling back to auto-detection`);
+            }
+        }
 
-        // Convert peaks to forcedCentroids format
-        const forcedCentroids = detectedPeaks.map(peak => ({
-            L: peak.L,
-            a: peak.a,
-            b: peak.b
-        }));
+        // Fall back to auto-detection if no valid pre-defined anchors
+        if (!usedPredefinedAnchors) {
+            const peakFinder = new PeakFinder({
+                chromaThreshold: 30,
+                volumeThreshold: 0.05,
+                maxPeaks: peakFinderMaxPeaks,
+                preferredSectors: peakFinderPreferredSectors,
+                blacklistedSectors: peakFinderBlacklistedSectors
+            });
 
-        logger.log(`\n[Reveal Mk 1.5] Auto-detected ${forcedCentroids.length} identity peaks`);
+            logger.log(`  PeakFinder config: maxPeaks=${peakFinderMaxPeaks}, blacklist=[${peakFinderBlacklistedSectors.join(',')}], preferred=${peakFinderPreferredSectors ? '[' + peakFinderPreferredSectors.join(',') + ']' : 'none'}`);
+
+            // Pass bitDepth for adaptive thresholds (8.0 for 16-bit, 15.0 for 8-bit)
+            detectedPeaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: sourceBitDepth });
+
+            // Convert peaks to forcedCentroids format
+            forcedCentroids = detectedPeaks.map(peak => ({
+                L: peak.L,
+                a: peak.a,
+                b: peak.b
+            }));
+
+            logger.log(`\n[Reveal Mk 1.5] Auto-detected ${forcedCentroids.length} identity peaks`);
+        }
         // =============================================================
 
         // Step 1.5: Handle preserved colors (white/black)
