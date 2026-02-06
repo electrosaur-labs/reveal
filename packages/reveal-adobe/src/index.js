@@ -3335,7 +3335,7 @@ async function handleAnalyzeImage() {
             preprocessingIntensity: config.preprocessingIntensity || preprocessingDropdownValue,
 
             // Additional parameters from config
-            engineType: config.engineType || 'reveal-mk1.5',
+            // Note: engineType is NOT set here - it's UI-only, not from archetypes
             centroidStrategy: config.centroidStrategy || 'SALIENCY',
             hueLockAngle: config.hueLockAngle || 20,
             shadowPoint: config.shadowPoint || 15,
