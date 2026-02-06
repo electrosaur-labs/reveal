@@ -3285,19 +3285,11 @@ class PosterizationEngine {
         );
         logger.log(`✓ Curated palette: ${curatedPaletteLab.length} colors`);
 
-        // 🛑 SOVEREIGN LOCK: Skip palette reduction for Jethro Monroe Clinical
-        // Clinical precision requires EXACT color count without merging
-        const isSovereignLock = options.archetypeId === 'jethro_monroe_clinical';
-
         // ARCHITECT'S PALETTE REDUCTION: Prune colors that are too similar
         // User-configurable threshold (6.0-15.0 ΔE, default: 10.0)
         // Balances screen printing practicality with color richness
         // ONLY prune if enabled AND we're over the target color count (don't reduce below user's request)
-        // 🛑 SOVEREIGN LOCK: Never prune for Jethro Monroe archetype
-        if (isSovereignLock) {
-            logger.log(`🛑 SOVEREIGN LOCK: Skipping palette reduction (Jethro Monroe Clinical archetype)`);
-            logger.log(`   Preserving all ${curatedPaletteLab.length} colors for clinical precision`);
-        } else if (enablePaletteReduction && curatedPaletteLab.length > targetColors) {
+        if (enablePaletteReduction && curatedPaletteLab.length > targetColors) {
             const prunedPaletteLab = this._prunePalette(curatedPaletteLab, paletteReduction, highlightThreshold, targetColors, options.tuning || null);
             if (prunedPaletteLab.length < curatedPaletteLab.length) {
                 logger.log(`✓ Palette pruned: ${curatedPaletteLab.length} → ${prunedPaletteLab.length} colors (merged similar colors for screen printing)`);
@@ -3423,7 +3415,10 @@ class PosterizationEngine {
 
             if (coverage >= MIN_PRESERVED_COVERAGE) {
                 const absoluteWhite = { L: 100, a: 0, b: 0 };
-                const UNIFY_THRESHOLD = PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
+                // Read preservedUnifyThreshold from options (default: 12.0, Jethro: 0.5)
+                const UNIFY_THRESHOLD = options.preservedUnifyThreshold !== undefined
+                    ? options.preservedUnifyThreshold
+                    : PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
 
                 // Check if palette already has a highlight color close to white
                 const existingMatch = curatedPaletteLab.find(color =>
@@ -3432,7 +3427,7 @@ class PosterizationEngine {
 
                 if (existingMatch) {
                     const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteWhite);
-                    logger.log(`  🔗 White unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)})`);
+                    logger.log(`  🔗 White unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)}, threshold=${UNIFY_THRESHOLD})`);
                 } else {
                     preservedColors.push(absoluteWhite);
                     actuallyPreservedWhite = true;
@@ -3448,7 +3443,10 @@ class PosterizationEngine {
 
             if (coverage >= MIN_PRESERVED_COVERAGE) {
                 const absoluteBlack = { L: 0, a: 0, b: 0 };
-                const UNIFY_THRESHOLD = PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
+                // Read preservedUnifyThreshold from options (default: 12.0, Jethro: 0.5)
+                const UNIFY_THRESHOLD = options.preservedUnifyThreshold !== undefined
+                    ? options.preservedUnifyThreshold
+                    : PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
 
                 // Check if palette already has a deep shadow color close to black
                 const existingMatch = curatedPaletteLab.find(color =>
@@ -3457,7 +3455,7 @@ class PosterizationEngine {
 
                 if (existingMatch) {
                     const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteBlack);
-                    logger.log(`  🔗 Black unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)})`);
+                    logger.log(`  🔗 Black unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)}, threshold=${UNIFY_THRESHOLD})`);
                 } else {
                     preservedColors.push(absoluteBlack);
                     actuallyPreservedBlack = true;
@@ -3654,32 +3652,39 @@ class PosterizationEngine {
             logger.log(`ℹ Final palette: ${finalPaletteLab.length} colors (requested: ${targetColors})`);
         }
 
-        // Apply density floor to remove ghost colors (<0.5% coverage)
+        // Apply density floor to remove ghost colors (<0.5% coverage by default)
         // IMPORTANT: Never remove preserved colors (white/black) or substrate
         // Use actuallyPreserved flags - if a color was skipped by viability threshold, don't protect it
-        const protectedIndices = new Set();
-        if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
-        if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
-        if (substrateLab) protectedIndices.add(finalPaletteLab.length - 1);  // Substrate is always last
+        // Read densityFloor from options (default: 0.005 = 0.5%, Jethro: 0.0 = disabled)
+        const densityFloorThreshold = options.densityFloor !== undefined ? options.densityFloor : 0.005;
 
-        const densityResult = this._applyDensityFloor(
-            assignments,
-            finalPaletteLab,
-            0.005,  // 0.5% threshold
-            protectedIndices
-        );
+        if (densityFloorThreshold > 0) {
+            const protectedIndices = new Set();
+            if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
+            if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
+            if (substrateLab) protectedIndices.add(finalPaletteLab.length - 1);  // Substrate is always last
 
-        if (densityResult.actualCount < finalPaletteLab.length) {
-            const removed = finalPaletteLab.length - densityResult.actualCount;
-            logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < 0.5% coverage`);
-            logger.log(`  Final palette: ${densityResult.actualCount} colors (down from ${finalPaletteLab.length})`);
+            const densityResult = this._applyDensityFloor(
+                assignments,
+                finalPaletteLab,
+                densityFloorThreshold,
+                protectedIndices
+            );
 
-            // Use the cleaned palette and remapped assignments
-            finalPaletteLab = densityResult.palette;
-            assignments = densityResult.assignments;
+            if (densityResult.actualCount < finalPaletteLab.length) {
+                const removed = finalPaletteLab.length - densityResult.actualCount;
+                logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < ${(densityFloorThreshold * 100).toFixed(1)}% coverage`);
+                logger.log(`  Final palette: ${densityResult.actualCount} colors (down from ${finalPaletteLab.length})`);
 
-            // CRITICAL: Regenerate RGB palette to match filtered Lab palette
-            paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
+                // Use the cleaned palette and remapped assignments
+                finalPaletteLab = densityResult.palette;
+                assignments = densityResult.assignments;
+
+                // CRITICAL: Regenerate RGB palette to match filtered Lab palette
+                paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
+            }
+        } else {
+            logger.log(`✓ Density floor disabled (threshold: ${densityFloorThreshold})`);
         }
 
         // Track substrate index for UI filtering and layer identification
@@ -4026,12 +4031,7 @@ class PosterizationEngine {
         logger.log(`✓ Snapped palette: ${snappedPaletteLab.length} colors`);
 
         // Step 4: Palette reduction (if over budget after snap)
-        // 🛑 SOVEREIGN LOCK: Skip palette reduction for Jethro Monroe Clinical
-        const isSovereignLock = options.archetypeId === 'jethro_monroe_clinical';
-
-        if (isSovereignLock) {
-            logger.log(`🛑 SOVEREIGN LOCK: Skipping palette reduction (Jethro Monroe Clinical archetype)`);
-        } else if (enablePaletteReduction && snappedPaletteLab.length > medianCutTarget) {
+        if (enablePaletteReduction && snappedPaletteLab.length > medianCutTarget) {
             const prunedPaletteLab = this._prunePalette(snappedPaletteLab, paletteReduction, highlightThreshold, medianCutTarget, options.tuning || null);
             if (prunedPaletteLab.length < snappedPaletteLab.length) {
                 logger.log(`✓ Palette pruned: ${snappedPaletteLab.length} → ${prunedPaletteLab.length} colors`);
