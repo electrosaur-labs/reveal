@@ -2988,7 +2988,6 @@ const ARCHETYPES = {
     'pure-graphic': require('@reveal/core/archetypes/pure-graphic.json'),
     'vibrant-tonal': require('@reveal/core/archetypes/vibrant-tonal.json'),
     'warm-tonal-optimized': require('@reveal/core/archetypes/warm-tonal-optimized.json'),
-    'thermonuclear-yellow': require('@reveal/core/archetypes/thermonuclear-yellow.json'),
     'soft-ethereal': require('@reveal/core/archetypes/soft-ethereal.json'),
     'hard-commercial': require('@reveal/core/archetypes/hard-commercial.json'),
     'bright-desaturated': require('@reveal/core/archetypes/bright-desaturated.json'),
