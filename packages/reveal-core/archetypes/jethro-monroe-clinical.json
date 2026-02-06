@@ -20,7 +20,6 @@
     "temperature_bias": 1.0
   },
   "parameters": {
-    "engineType": "reveal-mk1.5",
     "centroidStrategy": "SALIENCY",
     "targetColorsSlider": 10,
     "distanceMetric": "cie76",
