@@ -58,6 +58,7 @@ let posterizationData = null;
  */
 let lastImageDNA = null;
 let lastGeneratedConfig = null;  // Complete config from ParameterGenerator (includes all parameters)
+let lastSelectedArchetypeId = null;  // Manually selected archetype ID (bypasses DNA matching)
 
 /**
  * Zoom preview state (tile managers, viewport tracker, renderer)
@@ -3134,11 +3135,13 @@ async function handleAnalyzeImage() {
         logger.log(`  DNA generation time: ${dnaTime.toFixed(2)}ms`);
 
         // Run ParameterGenerator to get dynamic configuration (with entropy analysis)
+        // Pass manualArchetypeId if user has manually selected an archetype
         const config = ParameterGenerator.generate(dna, {
             imageData: result.pixels,
             width: result.width,
             height: result.height,
-            preprocessingIntensity: 'auto'  // Let entropy analysis decide
+            preprocessingIntensity: 'auto',  // Let entropy analysis decide
+            manualArchetypeId: lastSelectedArchetypeId  // Bypass DNA matching if manual selection
         });
         logger.log("✓ Generated dynamic config:", config);
 
@@ -3709,14 +3712,34 @@ async function showDialog() {
 
                 // Get form values and merge with stored config (includes parameters not in UI)
                 const formParams = getFormValues();
+
+                // DIAGNOSTIC: Log what we're merging
+                logger.log("📋 Config merge diagnostic:");
+                logger.log("  lastGeneratedConfig exists:", !!lastGeneratedConfig);
+                if (lastGeneratedConfig) {
+                    logger.log("  lastGeneratedConfig.id:", lastGeneratedConfig.id);
+                    logger.log("  lastGeneratedConfig.distanceMetric:", lastGeneratedConfig.distanceMetric);
+                    logger.log("  lastGeneratedConfig.cWeight:", lastGeneratedConfig.cWeight);
+                    logger.log("  lastGeneratedConfig.vibrancyBoost:", lastGeneratedConfig.vibrancyBoost);
+                }
+                logger.log("  formParams.distanceMetric:", formParams.distanceMetric);
+                logger.log("  formParams.cWeight:", formParams.cWeight);
+                logger.log("  formParams.vibrancyBoost:", formParams.vibrancyBoost);
+
                 const params = {
                     ...lastGeneratedConfig,  // Start with complete config from ParameterGenerator
                     ...formParams            // Override with user-adjusted UI values
                 };
                 const grayscaleOnly = params.colorMode === 'bw';  // Determine from dropdown
 
-                // Log parameters for debugging
-                logger.log("Posterization parameters (merged):", params);
+                // Log final merged parameters
+                logger.log("📦 Final merged parameters:");
+                logger.log("  id:", params.id);
+                logger.log("  distanceMetric:", params.distanceMetric);
+                logger.log("  cWeight:", params.cWeight);
+                logger.log("  vibrancyBoost:", params.vibrancyBoost);
+                logger.log("  targetColors:", params.targetColors);
+                logger.log("  paletteReduction:", params.paletteReduction);
                 if (lastGeneratedConfig) {
                     logger.log("  Config-only parameters (not in UI):", {
                         vibrancyThreshold: lastGeneratedConfig.vibrancyThreshold,
@@ -3890,6 +3913,17 @@ async function showDialog() {
                         }
                     };
 
+                    // 🛑 SOVEREIGN LOCK: Detect Jethro Monroe archetype and adjust snap threshold
+                    // For clinical precision work, disable perceptual snapping completely
+                    const isSovereignLock = params.id === 'jethro_monroe_clinical';
+                    const snapThreshold = isSovereignLock ? 0.5 : 8.0;  // Nearly disable snapping for Jethro
+
+                    if (isSovereignLock) {
+                        logger.log(`🛑 SOVEREIGN LOCK DETECTED: ${params.id}`);
+                        logger.log(`   Perceptual snap threshold reduced: 8.0 → ${snapThreshold} ΔE`);
+                        logger.log(`   This prevents color merging and ensures 10-color fidelity`);
+                    }
+
                     const result = PosterizationEngine.posterize(
                         pixelData.pixels,
                         pixelData.width,
@@ -3900,7 +3934,7 @@ async function showDialog() {
                             centroidStrategy: params.centroidStrategy,  // NEW: User-selected strategy (SALIENCY or VOLUMETRIC)
                             enableGridOptimization: true,            // NEW: Default ON (Architect's requirement)
                             enableHueGapAnalysis: params.enableHueGapAnalysis,  // USER-CONTROLLED: Force hue diversity (default: ON, may exceed target count)
-                            snapThreshold: 8.0,                      // Perceptual snap threshold (ΔE < 8 = noise)
+                            snapThreshold: snapThreshold,            // 🛑 SOVEREIGN LOCK: 0.5 for Jethro, 8.0 for others
                             format: pixelData.format,                // Pass Lab format flag for optimization
                             bitDepth: pixelData.bitDepth,            // Source bit depth (8 or 16) for Shadow Gate calibration
                             grayscaleOnly,                           // User-selected mode: grayscale (L-only) or color (full Lab)
@@ -3915,6 +3949,7 @@ async function showDialog() {
                             enablePaletteReduction: params.enablePaletteReduction,  // Enable/disable palette reduction (default: true)
                             paletteReduction: params.paletteReduction,  // Color merging threshold (prune.threshold)
                             tuning: tuning,                          // NEW: Centralized tuning configuration
+                            archetypeId: params.id,                  // 🛑 Pass archetype ID for Sovereign Lock checks
                             // ignoreTransparent is handled during RGB→Lab conversion (alpha channel check)
                             isPreview: true,                          // Enable stride optimization for preview speed
                             previewStride: parseInt(document.getElementById('previewStride')?.value || '4', 10)  // User-selected stride (4=Standard, 2=Fine, 1=Finest)
@@ -4291,10 +4326,12 @@ async function showDialog() {
                     if (selectedValue === 'auto') {
                         // "Analyze Image..." - trigger DNA analysis
                         logger.log("Triggering DNA analysis...");
+                        lastSelectedArchetypeId = null;  // Clear manual selection
                         await handleAnalyzeImage();
                     } else if (selectedValue === 'manual') {
                         // "Manual Input" - reset to defaults
                         logger.log("Resetting to manual input (defaults)...");
+                        lastSelectedArchetypeId = null;  // Clear manual selection
 
                         // Use the same defaults as btnResetDefaults
                         const defaults = {
@@ -4361,11 +4398,18 @@ async function showDialog() {
                         logger.log("✓ Reset to manual input defaults");
                     } else {
                         // Archetype selected - load parameters from archetype
+                        logger.log(`🔍 TRACE: Entering archetype selection for: ${selectedValue}`);
                         const archetype = ARCHETYPES[selectedValue];
+                        logger.log(`🔍 TRACE: Archetype found:`, archetype ? 'YES' : 'NO');
+                        logger.log(`🔍 TRACE: Has parameters:`, archetype?.parameters ? 'YES' : 'NO');
+
                         if (archetype && archetype.parameters) {
                             logger.log(`Loading parameters from archetype: ${archetype.name}`);
+                            lastSelectedArchetypeId = selectedValue;  // Store manual selection ID
+                            logger.log(`🔍 TRACE: Set lastSelectedArchetypeId to: ${lastSelectedArchetypeId}`);
 
                             const params = archetype.parameters;
+                            logger.log(`🔍 TRACE: params object:`, params);
 
                             // Map archetype parameters to UI controls
                             const paramMapping = {
@@ -4396,7 +4440,11 @@ async function showDialog() {
                             };
 
                             // Apply parameters to UI
-                            Object.keys(paramMapping).forEach(key => {
+                            logger.log(`🔍 TRACE: Starting UI application loop for ${Object.keys(paramMapping).length} parameters`);
+
+                            try {
+                                Object.keys(paramMapping).forEach(key => {
+                                    logger.log(`🔍 TRACE: Processing parameter: ${key}`);
                                 const element = document.getElementById(key);
                                 if (!element) {
                                     logger.log(`  Element not found for parameter: ${key}`);
@@ -4405,12 +4453,20 @@ async function showDialog() {
 
                                 const value = paramMapping[key];
 
+                                // Special diagnostic for paletteReduction
+                                if (key === 'paletteReduction') {
+                                    logger.log(`🔍 PALETTE REDUCTION TRACE:`);
+                                    logger.log(`  Value from archetype: ${value}`);
+                                    logger.log(`  Element type: ${element.tagName}`);
+                                    logger.log(`  Current element value BEFORE: ${element.value}`);
+                                }
+
                                 if (element.type === 'checkbox') {
                                     element.checked = value;
-                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                    // Don't dispatch events - we're loading programmatically, not responding to user input
                                 } else if (element.tagName === 'SELECT') {
                                     element.value = value;
-                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                    // Don't dispatch events - we're loading programmatically
                                 } else if (element.tagName === 'SP-SLIDER') {
                                     element.value = value;
                                     const valueDisplay = document.getElementById(`${key}Value`);
@@ -4422,15 +4478,51 @@ async function showDialog() {
                                             valueDisplay.textContent = value.toString();
                                         }
                                     }
-                                    element.dispatchEvent(new Event('input', { bubbles: true }));
-                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                    // Don't dispatch events - we're loading programmatically
+
+                                    // Special diagnostic for paletteReduction AFTER setting
+                                    if (key === 'paletteReduction') {
+                                        logger.log(`  Element value AFTER setting: ${element.value}`);
+                                        logger.log(`  Display value: ${valueDisplay ? valueDisplay.textContent : 'N/A'}`);
+                                    }
                                 }
-                            });
+
+                                    // Log if paletteReduction wasn't handled by any branch
+                                    if (key === 'paletteReduction' && element.tagName !== 'SP-SLIDER' && element.tagName !== 'SELECT' && element.type !== 'checkbox') {
+                                        logger.log(`  ⚠️ WARNING: paletteReduction element is ${element.tagName} with type ${element.type}, not handled!`);
+                                    }
+                                });
+
+                                logger.log(`🔍 TRACE: Finished UI application loop successfully`);
+                            } catch (error) {
+                                logger.error(`❌ ERROR in UI application loop:`, error);
+                                logger.error(`   Error message: ${error.message}`);
+                                logger.error(`   Error stack:`, error.stack);
+                            }
+
+                            logger.log(`🔍 TRACE: Finished applying ${Object.keys(paramMapping).length} parameters to UI`);
 
                             // Store the complete config for posterization (includes parameters not in UI)
-                            lastGeneratedConfig = { ...params };
+                            // CRITICAL: Must include archetype ID and metadata to prevent parameter dilution
+                            logger.log(`🔍 TRACE: About to set lastGeneratedConfig...`);
+                            lastGeneratedConfig = {
+                                // Identity (prevents DNA hijacking)
+                                id: archetype.id,
+                                name: archetype.name,
+
+                                // All parameters from archetype JSON
+                                ...params,
+
+                                // Metadata
+                                meta: {
+                                    archetype: archetype.name,
+                                    archetypeId: archetype.id,
+                                    manualSelection: true  // Flag to indicate this was manually chosen
+                                }
+                            };
 
                             logger.log(`✓ Loaded ${Object.keys(paramMapping).length} parameters from archetype: ${archetype.name}`);
+                            logger.log(`✓ Stored complete config: id=${lastGeneratedConfig.id}, distanceMetric=${lastGeneratedConfig.distanceMetric}, cWeight=${lastGeneratedConfig.cWeight}`);
                         } else {
                             logger.error(`Archetype not found or missing parameters: ${selectedValue}`);
                         }

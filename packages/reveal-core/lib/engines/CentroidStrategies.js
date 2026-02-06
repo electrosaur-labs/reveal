@@ -21,7 +21,7 @@
  *
  * BLACK PROTECTION: Adds massive boost for very dark pixels (L<10) to ensure
  * the centroid snaps to Black rather than averaging it into Grey.
- * Critical for halftone-heavy images like JethroAsMonroe.tif.
+ * Critical for halftone-heavy images.
  *
  * 8-BIT PARITY FIXES:
  * - BROWN-DAMPENER: Penalizes low-chroma warm pixels (sectors 0,1) to prevent
@@ -135,21 +135,6 @@ function SALIENCY(bucket, weights) {
     if (finalChroma < neutralityThreshold) {
         finalLab.a = 0;
         finalLab.b = 0;
-    }
-
-    // ACHROMATIC SHADOW LOCKDOWN (JethroAsMonroe Fix)
-    // Force low-chroma blue centroids (cool shadows in fur) to pure gray
-    // Prevents "accidental blue" plates from tiny cool pixel clusters
-    // Only applies to 16-bit sources where shadows contain chromatic noise
-    if (!isEightBit && finalChroma > 0 && finalChroma < 5.0) {
-        const hue = Math.atan2(finalLab.b, finalLab.a) * (180 / Math.PI);
-        const normalizedHue = hue < 0 ? hue + 360 : hue;
-        // Blue sector: 195-270° (blue, purple range)
-        if (normalizedHue >= 195 && normalizedHue <= 270) {
-            finalLab.a = 0;
-            finalLab.b = 0;
-            // Note: Preserves L value - converts to "rich gray" or "cool black"
-        }
     }
 
     return finalLab;

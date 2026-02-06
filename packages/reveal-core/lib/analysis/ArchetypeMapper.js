@@ -61,15 +61,17 @@ class ArchetypeMapper {
     }
 
     getBestMatch(dna) {
-        // PRODUCTION OVERRIDE 1: Achromatic Lock (Jethro/Grays Issue)
-        // Force Silver Gelatin for low-chroma, low-entropy images to prevent neutral drift
-        const isAchromatic = (dna.global?.hue_entropy || 0) < 0.3 && (dna.global?.c || 0) < 10;
-        if (isAchromatic) {
-            const silverGelatin = this.archetypes.find(a => a.id === 'silver_gelatin');
-            if (silverGelatin) {
-                console.log('🔒 Achromatic Override: Forcing Silver Gelatin (entropy < 0.3, c < 10)');
+        // HIGH-CHROMA PRIORITY GATE: Clinical Graphic Override
+        // Force Sovereign 10-Color Lock for images with extreme peak chroma.
+        // Catches graphics with halftone backgrounds where average chroma is artificially
+        // low due to neutral grays, but peak chroma reveals vibrant outliers.
+        // Example: Jethro Monroe scan with maxC=91.3 but avgC=16.1 (gray halftone dilution)
+        if (dna.maxC !== undefined && dna.maxC > 90.0) {
+            const jethroArchetype = this.archetypes.find(a => a.id === 'jethro_monroe_clinical');
+            if (jethroArchetype) {
+                console.log(`🎯 High-Chroma Peak Override: maxC=${dna.maxC.toFixed(1)} > 90.0 → Forcing Sovereign Lock`);
                 return {
-                    id: silverGelatin.id,
+                    id: jethroArchetype.id,
                     score: 95.0, // High confidence for override
                     breakdown: {
                         structural: 95.0,
@@ -80,7 +82,7 @@ class ArchetypeMapper {
             }
         }
 
-        // PRODUCTION OVERRIDE 2: Blue Outlier Rescue (Horse/Sky Issue)
+        // PRODUCTION OVERRIDE: Blue Outlier Rescue (Horse/Sky Issue)
         // Force Blue Rescue if blue sector is significant but dominated by warm tones
         const blueWeight = (dna.sectors?.blue?.weight || 0) +
                           (dna.sectors?.cyan?.weight || 0) +
