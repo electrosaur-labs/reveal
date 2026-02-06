@@ -3940,6 +3940,7 @@ async function showDialog() {
                             grayscaleOnly,                           // User-selected mode: grayscale (L-only) or color (full Lab)
                             preserveWhite: params.preserveWhite,
                             preserveBlack: params.preserveBlack,
+                            preservedUnifyThreshold: params.preservedUnifyThreshold,  // ΔE threshold for white/black unification (default: 12.0, Jethro: 0.5)
                             substrateMode: params.substrateMode,     // Substrate awareness mode (auto, white, black, none)
                             substrateTolerance: params.substrateTolerance,  // ΔE threshold for substrate culling
                             vibrancyMode: params.vibrancyMode,       // Vibrancy algorithm (linear, aggressive, exponential)
@@ -3948,8 +3949,8 @@ async function showDialog() {
                             highlightBoost: params.highlightBoost,   // Highlight boost (split.highlightBoost)
                             enablePaletteReduction: params.enablePaletteReduction,  // Enable/disable palette reduction (default: true)
                             paletteReduction: params.paletteReduction,  // Color merging threshold (prune.threshold)
+                            densityFloor: params.densityFloor,       // Density floor threshold (default: 0.005 = 0.5%, Jethro: 0.0 = disabled)
                             tuning: tuning,                          // NEW: Centralized tuning configuration
-                            archetypeId: params.id,                  // 🛑 Pass archetype ID for Sovereign Lock checks
                             // ignoreTransparent is handled during RGB→Lab conversion (alpha channel check)
                             isPreview: true,                          // Enable stride optimization for preview speed
                             previewStride: parseInt(document.getElementById('previewStride')?.value || '4', 10)  // User-selected stride (4=Standard, 2=Fine, 1=Finest)

@@ -42,23 +42,12 @@ class DynamicConfigurator {
         // If manualArchetypeId is provided, bypass DNA matching
         const archetype = ArchetypeLoader.matchArchetype(dna, options.manualArchetypeId);
 
-        // 🛑 SOVEREIGN LOCK: Jethro Monroe Clinical Override
-        // When user manually selects this archetype, SKIP ALL DNA OVERRIDES
-        // This ensures stable, predictable parameters for high-precision work
-        const isSovereignLock = options.manualArchetypeId === 'jethro_monroe_clinical';
-        if (isSovereignLock) {
-            console.log(`🛑 SOVEREIGN LOCK ENGAGED: Jethro Monroe Clinical`);
-            console.log(`   Bypassing ALL DNA v2.0 overrides and dynamic adjustments`);
-            console.log(`   Using archetype parameters as absolute truth`);
-        }
-
         // 2. Clone archetype parameters (deep copy to avoid mutations)
         const params = JSON.parse(JSON.stringify(archetype.parameters));
 
         // 2.5. DNA v2.0 CONDITIONAL OVERRIDES
         // Apply chromatic fingerprint-based adjustments for specific scenarios
-        // SKIP if Sovereign Lock is engaged (manual Jethro selection)
-        if (dna.version === "2.0" && dna.sectors && !isSovereignLock) {
+        if (dna.version === "2.0" && dna.sectors) {
             this._applyDNAv2Overrides(params, dna, archetype);
         }
 
