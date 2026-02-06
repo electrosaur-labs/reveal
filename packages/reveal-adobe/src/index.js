@@ -2466,6 +2466,118 @@ function showPaletteEditor(selectedPalette) {
     // Note: Diagnostic dimension checks removed - palette editor is now in separate dialog
 }
 
+/**
+ * Reset preview/zoom containers and swatches to fresh state
+ * Completely tears down stale state from previous posterization runs
+ */
+function resetPreviewAndSwatches() {
+    logger.log("🧹 Resetting preview/zoom containers and swatches...");
+
+    // Reset previewContainer - remove all state classes
+    const previewContainer = document.getElementById('previewContainer');
+    if (previewContainer) {
+        previewContainer.className = '';  // Remove all classes (solo-mode, zoom-mode, panning, etc.)
+        delete previewContainer._clickHandlerAttached;  // Clear event listener flag
+    }
+
+    // Reset preview images
+    const previewImg = document.getElementById('previewImg');
+    const previewImgBuffer2 = document.getElementById('previewImgBuffer2');
+
+    if (previewImg) {
+        previewImg.src = '';
+        previewImg.style.cssText = `
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            cursor: crosshair;
+            display: block;
+            border: 2px solid #666;
+            box-sizing: border-box;
+        `;
+        previewImg.className = 'preview-buffer';
+    }
+
+    if (previewImgBuffer2) {
+        previewImgBuffer2.src = '';
+        previewImgBuffer2.style.cssText = `
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            cursor: crosshair;
+            opacity: 0;
+            pointer-events: none;
+            border: 2px solid #666;
+            box-sizing: border-box;
+        `;
+        previewImgBuffer2.className = 'preview-buffer';
+    }
+
+    // Reset preview status text
+    const previewStatus = document.getElementById('previewStatus');
+    if (previewStatus) {
+        previewStatus.textContent = 'Click swatch to highlight';
+        previewStatus.style.display = '';
+    }
+
+    // Reset HQ badge
+    const previewHqBadge = document.getElementById('previewHqBadge');
+    if (previewHqBadge) {
+        previewHqBadge.style.display = 'none';
+    }
+
+    // Clear all palette swatches
+    const paletteIds = ['palette3', 'palette5', 'palette7'];
+    paletteIds.forEach(id => {
+        const paletteDiv = document.getElementById(id);
+        if (paletteDiv) {
+            paletteDiv.innerHTML = '';  // Completely clear swatches
+        }
+    });
+
+    // Reset view mode dropdown to Fit
+    const viewModeSelect = document.getElementById('viewMode');
+    if (viewModeSelect) {
+        viewModeSelect.value = 'fit';
+    }
+
+    // Reset quality dropdowns to Standard
+    const previewStrideSelect = document.getElementById('previewStrideSelect');
+    const previewZoomStrideSelect = document.getElementById('previewZoomStrideSelect');
+
+    if (previewStrideSelect) {
+        previewStrideSelect.value = '1';
+        // Recreate dropdown options to ensure they're not corrupted
+        previewStrideSelect.innerHTML = `
+            <option value="1" selected>Standard</option>
+            <option value="2">Fine (2×)</option>
+            <option value="4">Finest (4×)</option>
+        `;
+    }
+
+    if (previewZoomStrideSelect) {
+        previewZoomStrideSelect.value = '1';
+        // Recreate dropdown options to ensure they're not corrupted
+        previewZoomStrideSelect.innerHTML = `
+            <option value="1" selected>Standard</option>
+            <option value="2">Fine (2×)</option>
+            <option value="4">Finest (4×)</option>
+        `;
+    }
+
+    // Hide preview section (will be shown again by showPreviewSection)
+    const previewSection = document.getElementById('previewSection');
+    if (previewSection) {
+        previewSection.style.display = 'none';
+        previewSection.classList.remove('visible');
+    }
+
+    logger.log("✓ Preview/zoom containers and swatches reset complete");
+}
 
 /**
  * Show preview section and hide parameter entry
@@ -3709,6 +3821,10 @@ async function showDialog() {
                     showError("Validation Error", "Please correct the following errors:", errors);
                     return;
                 }
+
+                // CRITICAL: Reset preview/zoom UI to fresh state before processing
+                // This prevents stale state from previous posterization runs
+                resetPreviewAndSwatches();
 
                 // Get form values and merge with stored config (includes parameters not in UI)
                 const formParams = getFormValues();
