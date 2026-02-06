@@ -3901,7 +3901,8 @@ async function showDialog() {
                             threshold: params.paletteReduction,         // Delta-E merge distance (default: 9.0)
                             hueLockAngle: params.hueLockAngle,          // Hue protection angle (default: 18°)
                             whitePoint: params.highlightThreshold,      // L-value floor for white protection (default: 85)
-                            shadowPoint: params.shadowPoint             // L-value ceiling for shadow protection (default: 15)
+                            shadowPoint: params.shadowPoint,            // L-value ceiling for shadow protection (default: 15)
+                            isolationThreshold: params.isolationThreshold !== undefined ? params.isolationThreshold : 0.0  // Peak eligibility floor (25.0 = 1% minimum)
                         },
                         centroid: {
                             lWeight: params.lWeight,                    // Saliency lightness priority (default: 1.1)
@@ -3939,6 +3940,7 @@ async function showDialog() {
                             enablePaletteReduction: params.enablePaletteReduction,  // Enable/disable palette reduction (default: true)
                             paletteReduction: params.paletteReduction,  // Color merging threshold (prune.threshold)
                             densityFloor: params.densityFloor,       // Density floor threshold (default: 0.005 = 0.5%, Jethro: 0.0 = disabled)
+                            isolationThreshold: params.isolationThreshold,  // Peak eligibility floor (25.0 = 1% minimum cluster size)
                             tuning: tuning,                          // NEW: Centralized tuning configuration
                             // ignoreTransparent is handled during RGB→Lab conversion (alpha channel check)
                             isPreview: true,                          // Enable stride optimization for preview speed
