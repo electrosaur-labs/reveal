@@ -19,6 +19,7 @@ const ColorSpace = require('./ColorSpace');
 const HueAnalysis = require('./HueAnalysis');
 const { CentroidStrategies } = require('./CentroidStrategies');
 const PeakFinder = require('../analysis/PeakFinder');
+const LabDistance = require('../color/LabDistance');
 
 class PosterizationEngine {
     /**
@@ -4229,12 +4230,30 @@ class PosterizationEngine {
         const finalPaletteLab = [...mergedPalette, ...preservedColors];
         logger.log(`\n✓ Final palette before density floor: ${finalPaletteLab.length} colors`);
 
-        // Step 6: Pixel assignment (same as _posterizeReveal)
+        // Step 6: Pixel assignment (with preview stride support)
         const paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
         const assignments = new Uint8Array(width * height);
 
-        const ASSIGNMENT_STRIDE = 8;
+        // PERFORMANCE OPTIMIZATION: Preview mode uses stride sampling
+        // This reduces distance calculations (4× stride = 1/16 pixels computed)
+        // User-selectable: Standard=4 (fast), Fine=2 (slow), Finest=1 (slower)
+        const isPreview = options.isPreview === true;
+        const useStride = isPreview && options.optimizePreview !== false;
+        const ASSIGNMENT_STRIDE = useStride ? (options.previewStride || 4) : 1;
+
+        if (useStride) {
+            const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
+            logger.log(`Assigning pixels to palette (preview mode with ${ASSIGNMENT_STRIDE}× stride)...`);
+        } else {
+            logger.log(`Assigning pixels to palette...`);
+        }
+
         const paletteLength = finalPaletteLab.length;
+
+        // Extract distance options for accurate assignment
+        const assignDistanceMetric = options.distanceMetric || 'squared';
+        const lWeight = options.lWeight !== undefined ? options.lWeight : 1.0;
+        const cWeight = options.cWeight !== undefined ? options.cWeight : 1.0;
 
         for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
             for (let x = 0; x < width; x += ASSIGNMENT_STRIDE) {
@@ -4262,11 +4281,29 @@ class PosterizationEngine {
 
                             for (let j = 0; j < paletteLength; j++) {
                                 const target = finalPaletteLab[j];
-                                const dL = pL - target.L;
-                                const dA = pA - target.a;
-                                const dB = pB - target.b;
 
-                                const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+                                let dist;
+                                if (grayscaleOnly) {
+                                    const dL = pL - target.L;
+                                    dist = dL * dL;
+                                } else {
+                                    // Use proper distance metric from options
+                                    if (assignDistanceMetric === 'cie76') {
+                                        dist = LabDistance.cie76SquaredInline(pL, pA, pB, target.L, target.a, target.b);
+                                    } else if (assignDistanceMetric === 'cie94') {
+                                        const C1 = Math.sqrt(pA * pA + pB * pB);
+                                        dist = LabDistance.cie94SquaredInline(pL, pA, pB, target.L, target.a, target.b, C1);
+                                    } else if (assignDistanceMetric === 'cie2000') {
+                                        dist = LabDistance.cie2000SquaredInline(pL, pA, pB, target.L, target.a, target.b);
+                                    } else {
+                                        // Squared Euclidean with weights
+                                        const dL = pL - target.L;
+                                        const dA = pA - target.a;
+                                        const dB = pB - target.b;
+                                        const dC = Math.sqrt(dA * dA + dB * dB);
+                                        dist = (lWeight * dL * dL) + (cWeight * dC * dC);
+                                    }
+                                }
 
                                 if (dist < minDistance) {
                                     minDistance = dist;
@@ -4554,11 +4591,20 @@ class PosterizationEngine {
      * @param {number} height - Image height
      * @param {number} stride - Assignment stride (4=Standard, 2=Fine, 1=Finest)
      * @param {number} bitDepth - Original source bit depth (for logging only; data is always 16-bit)
+     * @param {Object} options - Distance metric and weight options
+     * @param {string} options.distanceMetric - Distance metric (cie76, cie94, cie2000, or squared)
+     * @param {number} options.lWeight - Lightness weight for distance calculation
+     * @param {number} options.cWeight - Chroma weight for distance calculation
      * @returns {Uint16Array} - Pixel-to-palette assignments
      */
-    static reassignWithStride(labPixels, paletteLab, width, height, stride = 1, bitDepth = 16) {
+    static reassignWithStride(labPixels, paletteLab, width, height, stride = 1, bitDepth = 16, options = {}) {
         const assignments = new Uint16Array(width * height);
         const paletteLen = paletteLab.length;
+
+        // Extract distance options with defaults
+        const distanceMetric = options.distanceMetric || 'squared';
+        const lWeight = options.lWeight !== undefined ? options.lWeight : 1.0;
+        const cWeight = options.cWeight !== undefined ? options.cWeight : 1.0;
 
         // 16-BIT INTEGER PRECISION FIX:
         // Pre-convert palette to 16-bit integer space ONCE to preserve precision.
@@ -4570,6 +4616,13 @@ class PosterizationEngine {
             b: (p.b + 128) * 128
         }));
 
+        // Also keep Float32 Lab values for proper distance calculations
+        const paletteFloat = paletteLab.map(p => ({
+            L: p.L,
+            a: p.a,
+            b: p.b
+        }));
+
         for (let y = 0; y < height; y += stride) {
             const rowOffset = y * width;
 
@@ -4577,19 +4630,40 @@ class PosterizationEngine {
                 const anchorI = rowOffset + x;
                 const idx = anchorI * 3;
 
-                // Read raw 16-bit values directly (no normalization)
+                // Read raw 16-bit values and convert to Float32 Lab for accurate distance
                 const rawL = labPixels[idx];
                 const rawA = labPixels[idx + 1];
                 const rawB = labPixels[idx + 2];
 
-                // Find nearest palette color using integer 16-bit distance
+                // Convert to perceptual Lab (Float32)
+                const pixelLab = {
+                    L: (rawL / 32768) * 100,
+                    a: (rawA / 128) - 128,
+                    b: (rawB / 128) - 128
+                };
+
+                // Find nearest palette color using proper distance metric and weights
                 let minDist = Infinity, anchorAssignment = 0;
                 for (let j = 0; j < paletteLen; j++) {
-                    const target16 = palette16[j];
-                    const dL = rawL - target16.L;
-                    const dA = rawA - target16.a;
-                    const dB = rawB - target16.b;
-                    const dist = 1.5 * dL * dL + dA * dA + dB * dB;
+                    const target = paletteFloat[j];
+
+                    let dist;
+                    if (distanceMetric === 'cie76') {
+                        dist = LabDistance.cie76SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b);
+                    } else if (distanceMetric === 'cie94') {
+                        const C1 = Math.sqrt(pixelLab.a * pixelLab.a + pixelLab.b * pixelLab.b);
+                        dist = LabDistance.cie94SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b, C1);
+                    } else if (distanceMetric === 'cie2000') {
+                        dist = LabDistance.cie2000SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b);
+                    } else {
+                        // Squared Euclidean with weights (default)
+                        const dL = pixelLab.L - target.L;
+                        const dA = pixelLab.a - target.a;
+                        const dB = pixelLab.b - target.b;
+                        const chromaDist = Math.sqrt(dA * dA + dB * dB);
+                        dist = (lWeight * dL * dL) + (cWeight * chromaDist * chromaDist);
+                    }
+
                     if (dist < minDist) { minDist = dist; anchorAssignment = j; }
                 }
 

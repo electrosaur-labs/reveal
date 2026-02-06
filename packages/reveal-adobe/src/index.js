@@ -4675,10 +4675,21 @@ async function showDialog() {
                         // Use setTimeout with enough delay for UXP to repaint cursor
                         setTimeout(() => {
                             try {
-                                // Delegate to PosterizationEngine
+                                // Delegate to PosterizationEngine with proper distance options
                                 const bitDepth = posterizationData.bitDepth || 8;
+                                const params = posterizationData.params || {};
+
+                                // Pass distance metric and weights for accurate preview
+                                const distanceOptions = {
+                                    distanceMetric: params.distanceMetric || 'squared',
+                                    lWeight: params.lWeight !== undefined ? params.lWeight : 1.0,
+                                    cWeight: params.cWeight !== undefined ? params.cWeight : 1.0
+                                };
+
+                                logger.log(`  Distance options: metric=${distanceOptions.distanceMetric}, lWeight=${distanceOptions.lWeight}, cWeight=${distanceOptions.cWeight}`);
+
                                 const assignments = PosterizationEngine.reassignWithStride(
-                                    pixels, paletteLab, width, height, stride, bitDepth
+                                    pixels, paletteLab, width, height, stride, bitDepth, distanceOptions
                                 );
 
                                 window.previewState.assignments = assignments;
