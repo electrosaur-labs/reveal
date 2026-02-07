@@ -461,6 +461,86 @@ class SeparationEngine {
     }
 
     /**
+     * Morphological despeckle: Remove isolated pixel clusters below threshold
+     * Uses iterative flood-fill (8-way connectivity) to identify connected components
+     *
+     * @param {Uint8Array} mask - Layer mask to despeckle (modified in-place)
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @param {number} threshold - Minimum cluster size (clusters < threshold are removed)
+     * @returns {Object} { clustersRemoved, pixelsRemoved }
+     * @private
+     */
+    static _despeckleMask(mask, width, height, threshold) {
+        const pixelCount = width * height;
+        const visited = new Uint8Array(pixelCount);
+        const stack = new Uint32Array(pixelCount);
+
+        let clustersRemoved = 0;
+        let pixelsRemoved = 0;
+        const clustersToRemove = []; // Store small clusters for removal
+
+        // Find all connected components using flood-fill
+        for (let i = 0; i < pixelCount; i++) {
+            // Skip empty pixels or already visited
+            if (mask[i] === 0 || visited[i] === 1) continue;
+
+            // Start new connected component with iterative flood fill
+            const clusterPixels = [];
+            let stackPtr = 0;
+
+            stack[stackPtr++] = i;
+            visited[i] = 1;
+
+            // Iterative flood fill using explicit stack
+            while (stackPtr > 0) {
+                const idx = stack[--stackPtr];
+                clusterPixels.push(idx);
+
+                const x = idx % width;
+                const y = Math.floor(idx / width);
+
+                // Check 8 neighbors (diagonal connectivity counts)
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue; // Skip center pixel
+
+                        const nx = x + dx;
+                        const ny = y + dy;
+
+                        // Bounds check
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+
+                        const nIdx = ny * width + nx;
+
+                        // Add unvisited non-zero neighbors to stack
+                        if (mask[nIdx] > 0 && visited[nIdx] === 0) {
+                            stack[stackPtr++] = nIdx;
+                            visited[nIdx] = 1;
+                        }
+                    }
+                }
+            }
+
+            // If cluster is below threshold, mark for removal
+            if (clusterPixels.length < threshold) {
+                clustersToRemove.push(clusterPixels);
+                clustersRemoved++;
+                pixelsRemoved += clusterPixels.length;
+            }
+        }
+
+        // Remove small clusters (set pixels to 0)
+        for (const cluster of clustersToRemove) {
+            for (const pixelIdx of cluster) {
+                mask[pixelIdx] = 0;
+            }
+        }
+
+        return { clustersRemoved, pixelsRemoved };
+    }
+
+    /**
      * Main separation workflow (ASYNC with progress reporting).
      *
      * REWRITE NOTE: Removed generateLayerPixels (RGBA) to prevent RGB Ghosting.
@@ -488,11 +568,10 @@ class SeparationEngine {
             `L:${c.L.toFixed(1)} a:${c.a.toFixed(1)} b:${c.b.toFixed(1)}`
         ));
 
-        // Generate the pixel-to-color mapping (Async with progress)
+        // Extract options (pass full options object to preserve all parameters)
         const onProgress = options.onProgress || null;
         const ditherType = options.ditherType || 'none';
         const distanceMetric = options.distanceMetric || 'cie76';
-        const cie94Params = options.cie94Params;
         logger.log(`Dithering type: ${ditherType}, Distance metric: ${distanceMetric}`);
 
         const colorIndices = await this.mapPixelsToPaletteAsync(
@@ -501,7 +580,7 @@ class SeparationEngine {
             onProgress,
             width,
             height,
-            { ditherType, distanceMetric, cie94Params }
+            options  // Pass full options object to preserve all parameters
         );
 
         const layers = [];
@@ -511,6 +590,36 @@ class SeparationEngine {
             logger.log(`Processing Layer ${index + 1}: L:${labColor.L.toFixed(1)}`);
 
             const mask = this.generateLayerMask(colorIndices, index, width, height);
+
+            // Apply shadowClamp: Clamp barely-visible pixels to printable minimum
+            if (options.shadowClamp !== undefined && options.shadowClamp > 0) {
+                const clampThreshold = Math.round(options.shadowClamp * 255 / 100); // Convert % to 0-255
+                let clampedCount = 0;
+
+                for (let i = 0; i < mask.length; i++) {
+                    const density = mask[i];
+
+                    // If barely visible (0 < density < threshold), clamp to threshold
+                    if (density > 0 && density < clampThreshold) {
+                        mask[i] = clampThreshold;
+                        clampedCount++;
+                    }
+                }
+
+                if (clampedCount > 0) {
+                    logger.log(`  🔒 shadowClamp: Clamped ${clampedCount} pixels to ${options.shadowClamp}% minimum`);
+                }
+            }
+
+            // Apply speckleRescue: Remove isolated clusters below threshold (morphological despeckle)
+            if (options.speckleRescue !== undefined && options.speckleRescue > 0) {
+                const threshold = Math.round(options.speckleRescue); // Minimum cluster size (default: 4 pixels)
+                const pruned = this._despeckleMask(mask, width, height, threshold);
+
+                if (pruned.clustersRemoved > 0) {
+                    logger.log(`  🧹 speckleRescue: Removed ${pruned.clustersRemoved} clusters (${pruned.pixelsRemoved} pixels) below ${threshold}px threshold`);
+                }
+            }
 
             // Count opaque pixels in this layer
             let opaquePixelCount = 0;

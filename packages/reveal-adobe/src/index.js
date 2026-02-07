@@ -2001,6 +2001,7 @@ function showPaletteEditor(selectedPalette) {
                     originalHexColors,  // Assignment palette (original discovery, filtered)
                     paletteLab,         // Lab palette (NO RGB→Lab conversion, filtered)
                     {
+                        ...posterizationData.params,  // Include all archetype params (shadowClamp, chromaGate, detailRescue)
                         onProgress: (percent) => {
                             // Throttle logging to 25% intervals
                             if (percent % 25 === 0) {
@@ -2035,6 +2036,7 @@ function showPaletteEditor(selectedPalette) {
                     originalHexColors,  // Assignment palette (original discovery, filtered)
                     paletteLab,         // Lab palette (NO RGB→Lab conversion, filtered)
                     {
+                        ...posterizationData.params,  // Include all archetype params (shadowClamp, chromaGate, detailRescue)
                         onProgress: (percent) => {
                             // Throttle logging to 25% intervals
                             if (percent % 25 === 0) {

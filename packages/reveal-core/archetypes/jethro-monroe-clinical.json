@@ -49,6 +49,9 @@
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 0,
     "densityFloor": 0.0,
-    "preprocessingIntensity": "off"
+    "preprocessingIntensity": "off",
+    "shadowClamp": 6.0,
+    "speckleRescue": 4,
+    "chromaGate": 1.5
   }
 }

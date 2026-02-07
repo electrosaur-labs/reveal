@@ -51,13 +51,24 @@ class DynamicConfigurator {
             this._applyDNAv2Overrides(params, dna, archetype);
         }
 
+        // 2.6. Apply chromaGate: Boost cWeight for high-chroma images
+        this._applyChromaGate(params, dna);
+
         // 3. Set bit depth metadata for distance metric selection
         const bitDepth = dna.bitDepth || 8;
 
         // 4. Configure preprocessing (conditional based on image entropy)
         const preprocessingIntensity = options.preprocessingIntensity || params.preprocessingIntensity || 'auto';
+
+        // Apply detailRescue: Pass it to BilateralFilter via dna object
+        const dnaWithOverrides = {
+            ...dna,
+            archetype: archetype.name,
+            detailRescue: params.detailRescue  // Lower entropy threshold to preserve details
+        };
+
         const preprocessing = BilateralFilter.createPreprocessingConfig(
-            { ...dna, archetype: archetype.name },
+            dnaWithOverrides,
             options.imageData || null,
             options.width || 0,
             options.height || 0,
@@ -123,6 +134,12 @@ class DynamicConfigurator {
             // Neutral clamping (DNA v2.0 feature)
             neutralCentroidClampThreshold: params.neutralCentroidClampThreshold || 0.5,
             neutralSovereigntyThreshold: params.neutralSovereigntyThreshold || 0,
+
+            // Conditional overrides (DNA v2.0 surgical fixes)
+            shadowClamp: params.shadowClamp,
+            chromaGate: params.chromaGate,
+            detailRescue: params.detailRescue,
+            speckleRescue: params.speckleRescue,
 
             // Legacy fields
             rangeClamp: [dna.minL || 0, dna.maxL || 100],
@@ -336,6 +353,25 @@ class DynamicConfigurator {
         }
 
         console.log(''); // Blank line for readability
+    }
+
+    /**
+     * Apply chromaGate: Boost cWeight for high-chroma images
+     * Fixes ΔE > 20 failures in vibrant images (snails, ducks, sweets)
+     */
+    static _applyChromaGate(params, dna) {
+        if (!params.chromaGate || dna.maxC === undefined) {
+            return;
+        }
+
+        const highChromaThreshold = 60; // Images with maxC > 60 are considered high-chroma
+
+        if (dna.maxC > highChromaThreshold) {
+            const originalCWeight = params.cWeight || 1.0;
+            params.cWeight = originalCWeight * params.chromaGate;
+
+            console.log(`🎨 chromaGate: maxC=${dna.maxC.toFixed(1)} > ${highChromaThreshold}, cWeight: ${originalCWeight.toFixed(2)} → ${params.cWeight.toFixed(2)}`);
+        }
     }
 
     static getArchetype(dna) {

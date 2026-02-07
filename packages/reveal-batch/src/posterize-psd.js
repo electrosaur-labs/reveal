@@ -369,7 +369,12 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         preserveWhite: true,
         preserveBlack: true,
         ignoreTransparent: true,
-        enableHueGapAnalysis: true
+        enableHueGapAnalysis: true,
+        // Conditional overrides from archetype
+        shadowClamp: config.shadowClamp,
+        chromaGate: config.chromaGate,
+        detailRescue: config.detailRescue,
+        speckleRescue: config.speckleRescue
     };
 
     // 6. Posterize
@@ -404,10 +409,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         hexColors,                    // Hex colors for display
         null,                         // Unused parameter
         posterizeResult.paletteLab,   // Lab palette
-        {
-            ditherType: params.ditherType,
-            distanceMetric: 'cie76'   // Match default behavior
-        }
+        params                        // Pass full config with conditional overrides (shadowClamp, chromaGate, detailRescue, speckleRescue)
     );
 
     console.log(`  Generated ${layers.length} layers (${posterizeResult.paletteLab.length - layers.length} empty layers filtered out)`);

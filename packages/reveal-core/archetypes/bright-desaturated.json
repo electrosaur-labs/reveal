@@ -44,6 +44,7 @@
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 20,
     "neutralCentroidClampThreshold": 4.0,
-    "preprocessingIntensity": "light"
+    "preprocessingIntensity": "light",
+    "speckleRescue": 4
   }
 }
