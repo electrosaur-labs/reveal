@@ -608,6 +608,30 @@ class SeparationEngine {
             };
         }
 
+        // SAFETY CHECK: Prevent over-pruning below minimum viable palette
+        const MIN_COLORS = 4; // Never prune below 4 colors (printmaker minimum)
+        const finalColorCount = strongIndices.length;
+
+        if (finalColorCount < MIN_COLORS) {
+            const needed = MIN_COLORS - finalColorCount;
+            console.log(`⚠️ minVolume=${minVolume}%: Would prune to ${finalColorCount} colors (below ${MIN_COLORS} minimum)`);
+            console.log(`   Keeping ${needed} largest weak colors to maintain ${MIN_COLORS}-color minimum`);
+
+            // Sort weak colors by volume (descending) and promote the largest ones
+            const sortedWeak = weakIndices
+                .map(idx => ({ idx, volume: volumes[idx], count: colorCounts[idx] }))
+                .sort((a, b) => b.count - a.count);
+
+            // Move the largest N weak colors to strong list
+            for (let i = 0; i < needed && i < sortedWeak.length; i++) {
+                const promotedIdx = sortedWeak[i].idx;
+                strongIndices.push(promotedIdx);
+                const weakPos = weakIndices.indexOf(promotedIdx);
+                weakIndices.splice(weakPos, 1);
+                console.log(`   Promoted color ${promotedIdx} (${sortedWeak[i].volume.toFixed(2)}%) to preserve minimum`);
+            }
+        }
+
         console.log(`🗑️ minVolume=${minVolume}%: Pruning ${weakIndices.length} weak colors from ${labPalette.length}`);
 
         // 3. Create remapping table: weakIndex → strongIndex
