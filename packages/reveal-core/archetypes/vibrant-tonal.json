@@ -47,6 +47,7 @@
     "preprocessingIntensity": "heavy",
     "shadowClamp": 6.0,
     "chromaGate": 1.5,
-    "speckleRescue": 4
+    "speckleRescue": 4,
+    "minVolume": 1.0
   }
 }

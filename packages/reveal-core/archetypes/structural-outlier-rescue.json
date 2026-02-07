@@ -45,6 +45,8 @@
     "neutralSovereigntyThreshold": 0,
     "neutralCentroidClampThreshold": 0.2,
     "preprocessingIntensity": "light",
-    "speckleRescue": 4
+    "shadowClamp": 6.0,
+    "speckleRescue": 4,
+    "minVolume": 1.0
   }
 }
