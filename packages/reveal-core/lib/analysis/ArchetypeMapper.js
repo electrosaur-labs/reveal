@@ -84,16 +84,27 @@ class ArchetypeMapper {
 
         // PRODUCTION OVERRIDE: Blue Outlier Rescue (Horse/Sky Issue)
         // Force Blue Rescue if blue sector is significant but dominated by warm tones
+        // CHROMA-AWARE GATING: Distinguish intentional blue (sky) from sensor noise (salt)
         const blueWeight = (dna.sectors?.blue?.weight || 0) +
                           (dna.sectors?.cyan?.weight || 0) +
                           (dna.sectors?.azure?.weight || 0);
         const dominantIsWarm = ['orange', 'yellow', 'red', 'chartreuse'].includes(dna.dominant_sector);
-        const isBlueOutlier = blueWeight > 0.05 && dominantIsWarm;
+
+        // Clinical Fix: Check chroma to distinguish sky (high-chroma) from salt (low-chroma)
+        const blueChroma = Math.max(
+            dna.sectors?.blue?.cMax || 0,
+            dna.sectors?.cyan?.cMax || 0,
+            dna.sectors?.azure?.cMax || 0
+        );
+        const intentionalBlue = blueChroma > 25; // Noise is rarely this vibrant
+
+        // Hybrid Gate: Require BOTH weight AND chroma
+        const isBlueOutlier = blueWeight > 0.10 && dominantIsWarm && intentionalBlue;
 
         if (isBlueOutlier) {
             const blueRescue = this.archetypes.find(a => a.id === 'blue_rescue');
             if (blueRescue) {
-                console.log(`🔵 Blue Outlier Override: Forcing Blue Rescue (${(blueWeight * 100).toFixed(1)}% cool in ${dna.dominant_sector} image)`);
+                console.log(`🔵 Blue Outlier Override: Forcing Blue Rescue (${(blueWeight * 100).toFixed(1)}% cool @ ${blueChroma.toFixed(1)}C in ${dna.dominant_sector} image)`);
                 return {
                     id: blueRescue.id,
                     score: 90.0, // High confidence for override

@@ -396,47 +396,95 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 
     console.log(`  Generated ${posterizeResult.paletteLab.length} colors`);
 
-    // 7. Separate into layers (using high-level API that handles mask generation and filtering)
-    // This matches the UI flow which calls SeparationEngine.separateImage() directly
-    console.log(`  Separating layers...`);
-
-    // Import SeparationEngine for the high-level API
+    // 7. Map pixels to palette (initial assignment)
+    console.log(`  Mapping pixels to palette...`);
     const SeparationEngine = Reveal.engines.SeparationEngine;
 
-    // Generate hex colors for display
-    const hexColors = posterizeResult.palette.map(rgb =>
-        rgbToHex(rgb.r, rgb.g, rgb.b)
-    );
-
-    // Call the same high-level API as the UI
-    // This automatically generates masks AND filters out layers with < 0.1% coverage
-    const layers = await SeparationEngine.separateImage(
+    let colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
         lab16bit,
+        posterizeResult.paletteLab,
+        null,  // onProgress
         width,
         height,
-        hexColors,                    // Hex colors for display
-        null,                         // Unused parameter
-        posterizeResult.paletteLab,   // Lab palette
-        params                        // Pass full config with conditional overrides (shadowClamp, chromaGate, detailRescue, speckleRescue)
+        {
+            ditherType: config.ditherType,
+            distanceMetric: config.distanceMetric
+        }
     );
 
-    console.log(`  Generated ${layers.length} layers (${posterizeResult.paletteLab.length - layers.length} empty layers filtered out)`);
+    let finalPaletteLab = posterizeResult.paletteLab;
+    let finalPaletteRgb = posterizeResult.palette;
 
-    // Extract filtered data from layer objects
+    // 7.5. Palette Post-Pruning (Sovereign Solution)
+    if (config.minVolume !== undefined && config.minVolume > 0) {
+        console.log(chalk.yellow(`  🗑️ Palette pruning: minVolume=${config.minVolume}%`));
+        const pruneResult = SeparationEngine.pruneWeakColors(
+            finalPaletteLab,
+            colorIndices,
+            width,
+            height,
+            config.minVolume,
+            { distanceMetric: config.distanceMetric }
+        );
+
+        if (pruneResult.mergedCount > 0) {
+            finalPaletteLab = pruneResult.prunedPalette;
+            colorIndices = pruneResult.remappedIndices;
+
+            // Build pruned RGB palette by filtering original palette using strong indices
+            const ColorSpace = require('../../reveal-core/lib/engines/ColorSpace');
+            finalPaletteRgb = finalPaletteLab.map(lab => ColorSpace.labToRgb(lab));
+
+            console.log(chalk.green(`  ✅ Pruned: ${posterizeResult.paletteLab.length} → ${finalPaletteLab.length} colors`));
+        }
+    }
+
+    // 8. Create masks from color indices
+    console.log(`  Creating layer masks...`);
+    const masks = [];
+    for (let colorIdx = 0; colorIdx < finalPaletteLab.length; colorIdx++) {
+        const mask = new Uint8ClampedArray(pixelCount);
+        for (let i = 0; i < colorIndices.length; i++) {
+            mask[i] = (colorIndices[i] === colorIdx) ? 255 : 0;
+        }
+        masks.push(mask);
+    }
+
+    // Apply shadowClamp and speckleRescue to masks
+    if (config.shadowClamp !== undefined && config.shadowClamp > 0) {
+        const clampThreshold = Math.round(config.shadowClamp * 255 / 100);
+        for (const mask of masks) {
+            for (let i = 0; i < mask.length; i++) {
+                if (mask[i] > 0 && mask[i] < clampThreshold) {
+                    mask[i] = clampThreshold;
+                }
+            }
+        }
+    }
+
+    if (config.speckleRescue !== undefined && config.speckleRescue > 0) {
+        for (const mask of masks) {
+            SeparationEngine._despeckleMask(mask, width, height, config.speckleRescue);
+        }
+    }
+
+    // Generate hex colors for display
+    const hexColors = finalPaletteRgb.map(rgb => rgbToHex(rgb.r, rgb.g, rgb.b));
+
+    // Build layer objects (mimicking separateImage output)
+    const layers = hexColors.map((hex, idx) => ({
+        name: `Ink ${idx + 1} (${hex})`,
+        labColor: finalPaletteLab[idx],
+        hex: hex,
+        mask: masks[idx]
+    }));
+
+    console.log(`  Generated ${layers.length} layers`);
+
+    // Extract data for compatibility with existing code
     const filteredMasks = layers.map(layer => layer.mask);
     const filteredPaletteLab = layers.map(layer => layer.labColor);
-    const filteredPaletteRgb = layers.map(layer => {
-        // Parse hex back to RGB (layers only have hex, not RGB objects)
-        const hex = layer.hex;
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
-        return { r, g, b };
-    });
-
-    // Reconstruct colorIndices from layer masks (for metrics calculation)
-    // Each mask tells us which pixels belong to that color
-    const colorIndices = new Uint8Array(pixelCount);
+    const filteredPaletteRgb = finalPaletteRgb;
     for (let layerIdx = 0; layerIdx < layers.length; layerIdx++) {
         const mask = layers[layerIdx].mask;
         for (let pixelIdx = 0; pixelIdx < pixelCount; pixelIdx++) {

@@ -141,6 +141,7 @@ class DynamicConfigurator {
             detailRescue: params.detailRescue,
             speckleRescue: params.speckleRescue,
             medianPass: params.medianPass,
+            minVolume: params.minVolume,
 
             // Legacy fields
             rangeClamp: [dna.minL || 0, dna.maxL || 100],

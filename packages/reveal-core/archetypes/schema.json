@@ -117,6 +117,12 @@
         "medianPass": {
           "type": "boolean",
           "description": "Pre-posterization median filter (3×3): removes salt & pepper noise before palette generation. Essential for organic/sensor photos to prevent noise from becoming distinct colors. Disable for intentional halftone patterns."
+        },
+        "minVolume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Palette post-pruning: merge colors with pixel coverage below N%. Resource allocation - weak colors (<minVolume) are merged to nearest neighbors. Prevents outlier/noise colors from claiming screens."
         }
       }
     }

@@ -541,6 +541,153 @@ class SeparationEngine {
     }
 
     /**
+     * Palette Post-Pruning: Merge colors below minVolume threshold
+     *
+     * SOVEREIGN SOLUTION: Treats color selection as resource allocation.
+     * If a color doesn't have the "Volume" to justify a screen, it must be evicted.
+     *
+     * ALGORITHM:
+     * 1. Count pixels per color (volume = pixelCount / totalPixels)
+     * 2. Identify "weak" colors (volume < minVolume)
+     * 3. Find nearest "strong" neighbor using Lab distance
+     * 4. Reassign all weak pixels to strong neighbor
+     * 5. Remove weak colors from palette
+     *
+     * @param {Array<Object>} labPalette - Original Lab palette [{L, a, b}, ...]
+     * @param {Uint8ClampedArray} colorIndices - Pixel-to-color mapping
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @param {number} minVolume - Minimum coverage percentage (e.g., 1.5 = 1.5%)
+     * @param {Object} options - {distanceMetric: 'cie76'|'cie94'|'cie2000'}
+     * @returns {Object} {prunedPalette, remappedIndices, mergedCount, details}
+     */
+    static pruneWeakColors(labPalette, colorIndices, width, height, minVolume, options = {}) {
+        const pixelCount = width * height;
+        const minPixels = Math.ceil((minVolume / 100) * pixelCount);
+        const distanceMetric = options.distanceMetric || 'cie76';
+
+        // 1. Count pixels per color
+        const colorCounts = new Array(labPalette.length).fill(0);
+        for (let i = 0; i < colorIndices.length; i++) {
+            colorCounts[colorIndices[i]]++;
+        }
+
+        // Calculate volumes (percentages)
+        const volumes = colorCounts.map(count => (count / pixelCount) * 100);
+
+        // 2. Identify weak and strong colors
+        const weakIndices = [];
+        const strongIndices = [];
+        for (let i = 0; i < labPalette.length; i++) {
+            if (colorCounts[i] < minPixels) {
+                weakIndices.push(i);
+            } else {
+                strongIndices.push(i);
+            }
+        }
+
+        // No weak colors to prune
+        if (weakIndices.length === 0) {
+            console.log(`✅ minVolume=${minVolume}%: All ${labPalette.length} colors above threshold`);
+            return {
+                prunedPalette: labPalette,
+                remappedIndices: colorIndices,
+                mergedCount: 0,
+                details: []
+            };
+        }
+
+        // No strong colors to merge into (shouldn't happen, but safety check)
+        if (strongIndices.length === 0) {
+            console.log(`⚠️ minVolume=${minVolume}%: ALL colors below threshold! Skipping pruning.`);
+            return {
+                prunedPalette: labPalette,
+                remappedIndices: colorIndices,
+                mergedCount: 0,
+                details: []
+            };
+        }
+
+        console.log(`🗑️ minVolume=${minVolume}%: Pruning ${weakIndices.length} weak colors from ${labPalette.length}`);
+
+        // 3. Create remapping table: weakIndex → strongIndex
+        const remapTable = new Array(labPalette.length);
+        const mergeDetails = [];
+
+        for (const weakIdx of weakIndices) {
+            const weakColor = labPalette[weakIdx];
+            let bestStrongIdx = strongIndices[0];
+            let bestDistSq = Infinity;
+
+            // Find nearest strong neighbor using Lab distance
+            for (const strongIdx of strongIndices) {
+                const strongColor = labPalette[strongIdx];
+                const dL = weakColor.L - strongColor.L;
+                const da = weakColor.a - strongColor.a;
+                const db = weakColor.b - strongColor.b;
+
+                // Use CIE76 (Euclidean) for speed and simplicity
+                const distSq = dL * dL + da * da + db * db;
+
+                if (distSq < bestDistSq) {
+                    bestDistSq = distSq;
+                    bestStrongIdx = strongIdx;
+                }
+            }
+
+            remapTable[weakIdx] = bestStrongIdx;
+
+            mergeDetails.push({
+                weakIndex: weakIdx,
+                strongIndex: bestStrongIdx,
+                weakColor: weakColor,
+                strongColor: labPalette[bestStrongIdx],
+                volume: volumes[weakIdx],
+                pixelCount: colorCounts[weakIdx],
+                deltaE: Math.sqrt(bestDistSq)
+            });
+
+            console.log(`  • Color ${weakIdx} (${volumes[weakIdx].toFixed(2)}%) → Color ${bestStrongIdx} (ΔE=${Math.sqrt(bestDistSq).toFixed(1)})`);
+        }
+
+        // Keep strong colors unchanged
+        for (const strongIdx of strongIndices) {
+            remapTable[strongIdx] = strongIdx;
+        }
+
+        // 4. Reassign all pixels using remapTable
+        const remappedIndices = new Uint8ClampedArray(colorIndices.length);
+        for (let i = 0; i < colorIndices.length; i++) {
+            const oldIdx = colorIndices[i];
+            remappedIndices[i] = remapTable[oldIdx];
+        }
+
+        // 5. Build pruned palette (strong colors only) and create compact index mapping
+        const prunedPalette = [];
+        const compactMapping = new Array(labPalette.length); // oldIndex → newIndex
+
+        for (let i = 0; i < strongIndices.length; i++) {
+            const strongIdx = strongIndices[i];
+            prunedPalette.push(labPalette[strongIdx]);
+            compactMapping[strongIdx] = i;
+        }
+
+        // 6. Compact remapped indices to use new palette indices
+        for (let i = 0; i < remappedIndices.length; i++) {
+            remappedIndices[i] = compactMapping[remappedIndices[i]];
+        }
+
+        console.log(`✅ Palette pruned: ${labPalette.length} → ${prunedPalette.length} colors`);
+
+        return {
+            prunedPalette,
+            remappedIndices,
+            mergedCount: weakIndices.length,
+            details: mergeDetails
+        };
+    }
+
+    /**
      * Main separation workflow (ASYNC with progress reporting).
      *
      * REWRITE NOTE: Removed generateLayerPixels (RGBA) to prevent RGB Ghosting.

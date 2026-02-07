@@ -21,7 +21,7 @@
   },
   "parameters": {
     "centroidStrategy": "SALIENCY",
-    "targetColorsSlider": 8,
+    "targetColorsSlider": 10,
     "distanceMetric": "cie76",
     "lWeight": 1.0,
     "cWeight": 2.5,
@@ -52,6 +52,7 @@
     "preprocessingIntensity": "off",
     "shadowClamp": 6.0,
     "speckleRescue": 4,
-    "chromaGate": 1.5
+    "chromaGate": 1.5,
+    "minVolume": 0.8
   }
 }
