@@ -47,6 +47,7 @@
     "preprocessingIntensity": "light",
     "shadowClamp": 6.0,
     "detailRescue": 5.0,
-    "speckleRescue": 4
+    "speckleRescue": 4,
+    "medianPass": true
   }
 }

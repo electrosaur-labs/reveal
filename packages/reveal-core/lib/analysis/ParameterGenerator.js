@@ -140,6 +140,7 @@ class DynamicConfigurator {
             chromaGate: params.chromaGate,
             detailRescue: params.detailRescue,
             speckleRescue: params.speckleRescue,
+            medianPass: params.medianPass,
 
             // Legacy fields
             rangeClamp: [dna.minL || 0, dna.maxL || 100],

@@ -113,6 +113,10 @@
           "minimum": 0,
           "maximum": 8,
           "description": "Morphological despeckle: removes isolated clusters below N pixels. Eliminates unprintable digital lint. Standard: 4 pixels for 230-mesh screens."
+        },
+        "medianPass": {
+          "type": "boolean",
+          "description": "Pre-posterization median filter (3×3): removes salt & pepper noise before palette generation. Essential for organic/sensor photos to prevent noise from becoming distinct colors. Disable for intentional halftone patterns."
         }
       }
     }

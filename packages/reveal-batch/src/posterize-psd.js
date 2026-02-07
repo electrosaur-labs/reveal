@@ -343,6 +343,13 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     console.log(chalk.green(`  Archetype: ${config.meta?.archetype || 'unknown'}`));
     console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
+    // 4.5. Pre-posterization median filter (salt & pepper noise removal)
+    const MedianFilter = require('../../reveal-core/lib/preprocessing/MedianFilter');
+    if (MedianFilter.shouldApply(dna, config)) {
+        console.log(chalk.yellow(`  🧂 Median filter: removing sensor salt before posterization`));
+        lab16bit = MedianFilter.apply3x3(lab16bit, width, height);
+    }
+
     // 5. Prepare params
     const params = {
         targetColorsSlider: 8, // OVERRIDE: Force 8 colors for all images
@@ -374,7 +381,8 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         shadowClamp: config.shadowClamp,
         chromaGate: config.chromaGate,
         detailRescue: config.detailRescue,
-        speckleRescue: config.speckleRescue
+        speckleRescue: config.speckleRescue,
+        medianPass: config.medianPass
     };
 
     // 6. Posterize
