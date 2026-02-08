@@ -895,19 +895,21 @@ async function render1to1Preview() {
 
         logger.log(`[1:1] ✓ Fetched high-res crop: ${cropData.width}x${cropData.height}`);
 
-        // Get the posterization palette from stored results
-        const state = window.previewState;
-        if (!state || !state.paletteLab) {
-            logger.error('[1:1] No palette available');
+        // Get the posterization palette from posterizationData
+        if (!posterizationData.paletteLab || !posterizationData.palette) {
+            logger.error('[1:1] No palette available in posterizationData');
             return;
         }
 
+        const labPalette = posterizationData.paletteLab;
+        const rgbPalette = posterizationData.palette;
+
         // Map high-res crop pixels to existing palette
-        logger.log(`[1:1] Mapping ${cropData.width}x${cropData.height} pixels to ${state.paletteLab.length} color palette...`);
+        logger.log(`[1:1] Mapping ${cropData.width}x${cropData.height} pixels to ${labPalette.length} color palette...`);
 
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
             cropData.pixels,
-            state.paletteLab,
+            labPalette,
             null, // onProgress
             cropData.width,
             cropData.height,
@@ -922,7 +924,7 @@ async function render1to1Preview() {
         const previewBuffer = new Uint8ClampedArray(cropData.width * cropData.height * 4);
         for (let i = 0; i < colorIndices.length; i++) {
             const colorIdx = colorIndices[i];
-            const color = state.paletteRGB[colorIdx];
+            const color = rgbPalette[colorIdx];
             const idx = i * 4;
             previewBuffer[idx] = color.r;
             previewBuffer[idx + 1] = color.g;
