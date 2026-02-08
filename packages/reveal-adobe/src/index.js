@@ -799,6 +799,88 @@ function renderPreview() {
 }
 
 /**
+ * Render Navigator Map thumbnail (Phase 2)
+ * Shows compositional overview with red viewport rectangle
+ */
+function renderNavigatorMap() {
+    logger.log('[Navigator] Rendering Navigator Map...');
+
+    if (!window.viewportManager) {
+        logger.error('[Navigator] ViewportManager not initialized');
+        return;
+    }
+
+    try {
+        // Get thumbnail data from ViewportManager
+        const navData = window.viewportManager.getNavigatorMap(160); // 160px thumbnail
+
+        if (!navData || !navData.thumbnailBuffer) {
+            logger.error('[Navigator] No thumbnail data returned');
+            return;
+        }
+
+        // Get canvas and render thumbnail
+        const canvas = document.getElementById('navigatorCanvas');
+        if (!canvas) {
+            logger.error('[Navigator] Canvas not found');
+            return;
+        }
+
+        const ctx = canvas.getContext('2d');
+        const { thumbnailBuffer, thumbnailWidth, thumbnailHeight } = navData;
+
+        // Create ImageData and render to canvas
+        const imageData = new ImageData(
+            new Uint8ClampedArray(thumbnailBuffer),
+            thumbnailWidth,
+            thumbnailHeight
+        );
+
+        // Scale to fit 160x160 canvas if needed
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.putImageData(imageData, 0, 0);
+
+        logger.log(`[Navigator] ✓ Thumbnail rendered: ${thumbnailWidth}x${thumbnailHeight}`);
+
+        // Update viewport rectangle
+        updateNavigatorViewport();
+
+    } catch (error) {
+        logger.error('[Navigator] Failed to render:', error);
+    }
+}
+
+/**
+ * Update red viewport rectangle position on Navigator Map
+ */
+function updateNavigatorViewport() {
+    if (!window.viewportManager) return;
+
+    const viewportDiv = document.getElementById('navigatorViewport');
+    const canvas = document.getElementById('navigatorCanvas');
+
+    if (!viewportDiv || !canvas) return;
+
+    try {
+        // Get viewport bounds in thumbnail coordinates
+        const bounds = window.viewportManager.getViewportBoundsInThumbnail(
+            canvas.width,
+            canvas.height
+        );
+
+        // Position the red rectangle
+        viewportDiv.style.left = `${bounds.x}px`;
+        viewportDiv.style.top = `${bounds.y}px`;
+        viewportDiv.style.width = `${bounds.width}px`;
+        viewportDiv.style.height = `${bounds.height}px`;
+
+        logger.log(`[Navigator] Viewport rect: ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`);
+    } catch (error) {
+        logger.error('[Navigator] Failed to update viewport rect:', error);
+    }
+}
+
+/**
  * Switch preview panel between Fit and Zoom modes
  */
 async function setPreviewMode(mode) {
@@ -990,7 +1072,11 @@ async function setPreviewMode(mode) {
         }
 
         state.viewMode = '1:1';
-        logger.log('✓ 1:1 mode UI initialized (rendering in Phase 2)');
+
+        // Render Navigator Map thumbnail
+        renderNavigatorMap();
+
+        logger.log('✓ 1:1 mode initialized');
 
     } else if (mode === 'fit') {
         // FIT MODE: Cleanup ZoomPreviewRenderer, restore renderPreview
@@ -4083,7 +4169,7 @@ async function showDialog() {
                     // CRITICAL: Wait for UXP layout to complete before rendering preview
                     // UXP needs time to calculate element dimensions after DOM changes
                     logger.log('✓ Posterization complete - waiting for layout...');
-                    setTimeout(() => {
+                    setTimeout(async () => {
                         // Check if img is ready (in paletteDialog)
                         const img = document.getElementById('previewImg');
                         if (img) {
@@ -4102,6 +4188,39 @@ async function showDialog() {
                         // Render initial preview
                         renderPreview();
                         logger.log('✓ Preview rendered');
+
+                        // Initialize ViewportManager for 1:1 mode (Phase 2)
+                        try {
+                            logger.log('[Phase 2] Initializing ViewportManager...');
+
+                            // Create CropEngine with posterization data
+                            const cropEngine = new CropEngine();
+                            const initResult = await cropEngine.initialize(
+                                posterizationData.originalPixels,
+                                posterizationData.originalWidth,
+                                posterizationData.originalHeight,
+                                {
+                                    targetColors: result.palette.length,
+                                    palette: result.paletteLab,
+                                    rgbPalette: result.palette,
+                                    colorIndices: result.assignments
+                                }
+                            );
+
+                            // Create ViewportManager
+                            const viewportManager = new ViewportManager(cropEngine, {
+                                documentDPI: pixelData.resolution || 300,
+                                meshTPI: 230
+                            });
+
+                            // Store globally for access by view mode handlers
+                            window.viewportManager = viewportManager;
+                            window.cropEngine = cropEngine;
+
+                            logger.log('[Phase 2] ✓ ViewportManager initialized');
+                        } catch (error) {
+                            logger.error('[Phase 2] Failed to initialize ViewportManager:', error);
+                        }
 
                         // Set up view mode dropdown
                         // Clone element to remove any existing listeners from previous posterization
