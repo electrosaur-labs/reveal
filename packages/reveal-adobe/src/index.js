@@ -826,7 +826,7 @@ function renderNavigatorMap() {
             return;
         }
 
-        const { thumbnailBuffer, thumbnailWidth, thumbnailHeight } = navData;
+        const { thumbnailBuffer, thumbnailWidth, thumbnailHeight, viewportBounds } = navData;
 
         // Encode to JPEG using jpeg-js (UXP doesn't support ImageData constructor)
         const jpegData = jpeg.encode({
@@ -839,13 +839,15 @@ function renderNavigatorMap() {
         const base64 = bufferToBase64(jpegData.data);
         const dataUrl = `data:image/jpeg;base64,${base64}`;
 
-        // Set image source
+        // Set image source and actual dimensions
         img.src = dataUrl;
+        img.width = thumbnailWidth;
+        img.height = thumbnailHeight;
 
         logger.log(`[Navigator] ✓ Thumbnail rendered: ${thumbnailWidth}x${thumbnailHeight} (${Math.round(jpegData.data.length / 1024)}KB)`);
 
-        // Update viewport rectangle
-        updateNavigatorViewport();
+        // Update viewport rectangle using bounds from CropEngine
+        updateNavigatorViewport(viewportBounds);
 
     } catch (error) {
         logger.error('[Navigator] Failed to render:', error);
@@ -854,39 +856,25 @@ function renderNavigatorMap() {
 
 /**
  * Update red viewport rectangle position on Navigator Map
+ * @param {Object} bounds - Viewport bounds from CropEngine {x, y, width, height}
  */
-function updateNavigatorViewport() {
-    if (!window.viewportManager) {
-        logger.error('[Navigator] No viewportManager!');
+function updateNavigatorViewport(bounds) {
+    const viewportDiv = document.getElementById('navigatorViewport');
+
+    if (!viewportDiv) {
+        logger.error('[Navigator] Viewport div not found');
         return;
     }
 
-    const viewportDiv = document.getElementById('navigatorViewport');
-    const img = document.getElementById('navigatorCanvas');
-
-    if (!viewportDiv || !img) {
-        logger.error('[Navigator] Missing elements:', { viewportDiv: !!viewportDiv, img: !!img });
+    if (!bounds) {
+        logger.error('[Navigator] No bounds provided');
         return;
     }
 
     try {
-        // DEBUG: Check ViewportManager state
-        const vmState = window.viewportManager.getState();
-        logger.log('[Navigator] ViewportManager state:', {
-            viewportWidth: vmState.viewportWidth,
-            viewportHeight: vmState.viewportHeight,
-            center: vmState.center
-        });
+        logger.log('[Navigator] Positioning viewport rect:', bounds);
 
-        // Get viewport bounds in thumbnail coordinates (using img width/height)
-        const bounds = window.viewportManager.getViewportBoundsInThumbnail(
-            img.width,
-            img.height
-        );
-
-        logger.log('[Navigator] Calculated bounds:', bounds);
-
-        // Position the red rectangle
+        // Position the red rectangle using bounds from CropEngine
         viewportDiv.style.left = `${bounds.x}px`;
         viewportDiv.style.top = `${bounds.y}px`;
         viewportDiv.style.width = `${bounds.width}px`;
@@ -895,7 +883,6 @@ function updateNavigatorViewport() {
         logger.log(`[Navigator] ✓ Viewport rect positioned: ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`);
     } catch (error) {
         logger.error('[Navigator] Failed to update viewport rect:', error);
-        logger.error('[Navigator] Error stack:', error.stack);
     }
 }
 
