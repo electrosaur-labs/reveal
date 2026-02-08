@@ -855,6 +855,56 @@ function renderNavigatorMap() {
 }
 
 /**
+ * Handle Navigator Map click to jump viewport (Phase 4)
+ * Converts click coordinates to normalized position and updates viewport
+ */
+function attachNavigatorClickHandler() {
+    const navigatorContainer = document.getElementById('navigatorMapContainer');
+    const img = document.getElementById('navigatorCanvas');
+
+    if (!navigatorContainer || !img) {
+        logger.error('[Navigator] Cannot attach click handler - elements not found');
+        return;
+    }
+
+    // Remove existing listener if any
+    const newContainer = navigatorContainer.cloneNode(true);
+    navigatorContainer.parentNode.replaceChild(newContainer, navigatorContainer);
+
+    const newImg = newContainer.querySelector('#navigatorCanvas');
+    if (!newImg) return;
+
+    newContainer.addEventListener('click', async (e) => {
+        if (!window.viewportManager) {
+            logger.warn('[Navigator] ViewportManager not initialized');
+            return;
+        }
+
+        // Get click position relative to img element
+        const rect = newImg.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+
+        // Convert to normalized coordinates (0.0-1.0)
+        const normX = clickX / newImg.width;
+        const normY = clickY / newImg.height;
+
+        logger.log(`[Navigator] Clicked at (${clickX}, ${clickY}) = normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
+
+        // Update viewport center
+        window.viewportManager.jumpToNormalized(normX, normY);
+
+        // Re-render Navigator Map (updates red rect position)
+        renderNavigatorMap();
+
+        // Re-render 1:1 preview (shows new crop)
+        await render1to1Preview();
+    });
+
+    logger.log('[Navigator] ✓ Click handler attached');
+}
+
+/**
  * Render 1:1 pixel-perfect preview using on-demand high-res fetching (Option C: Smart Loading)
  * Fetches ONLY the viewport window at full resolution from Photoshop
  */
@@ -1191,7 +1241,10 @@ async function setPreviewMode(mode) {
         // Render Navigator Map thumbnail
         renderNavigatorMap();
 
-        // Phase 3: Render 1:1 pixels to main preview (NEW!)
+        // Phase 4: Attach Navigator click handler for panning
+        attachNavigatorClickHandler();
+
+        // Phase 3: Render 1:1 pixels to main preview
         await render1to1Preview();
 
         logger.log('✓ 1:1 mode initialized');
