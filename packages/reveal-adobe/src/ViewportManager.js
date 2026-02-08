@@ -134,6 +134,9 @@ class ViewportManager {
         this.center.x = Math.max(0, Math.min(1, this.center.x + normDeltaX));
         this.center.y = Math.max(0, Math.min(1, this.center.y + normDeltaY));
 
+        // CRITICAL FIX: Update CropEngine viewport position for Navigator Map
+        this._syncCropEngineViewport();
+
         console.log(`[ViewportManager] Panned to normalized (${this.center.x.toFixed(3)}, ${this.center.y.toFixed(3)})`);
     }
 
@@ -147,7 +150,38 @@ class ViewportManager {
         this.center.x = Math.max(0, Math.min(1, normX));
         this.center.y = Math.max(0, Math.min(1, normY));
 
+        // CRITICAL FIX: Update CropEngine viewport position for Navigator Map
+        this._syncCropEngineViewport();
+
         console.log(`[ViewportManager] Jumped to normalized (${this.center.x.toFixed(3)}, ${this.center.y.toFixed(3)})`);
+    }
+
+    /**
+     * Sync CropEngine viewport position from normalized center
+     * Must be called whenever center changes to keep Navigator Map accurate
+     * @private
+     */
+    _syncCropEngineViewport() {
+        if (!this.cropEngine) return;
+
+        const fullWidth = this.cropEngine.sourceWidth;
+        const fullHeight = this.cropEngine.sourceHeight;
+
+        // Convert normalized center to absolute pixel coordinates
+        const centerX = this.center.x * fullWidth;
+        const centerY = this.center.y * fullHeight;
+
+        // Calculate crop bounds (top-left corner)
+        let startX = Math.floor(centerX - this.viewportWidth / 2);
+        let startY = Math.floor(centerY - this.viewportHeight / 2);
+
+        // Constrain to image bounds
+        startX = Math.max(0, Math.min(fullWidth - this.viewportWidth, startX));
+        startY = Math.max(0, Math.min(fullHeight - this.viewportHeight, startY));
+
+        // Update CropEngine viewport position
+        this.cropEngine.viewportX = startX;
+        this.cropEngine.viewportY = startY;
     }
 
     /**
