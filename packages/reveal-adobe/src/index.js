@@ -1295,9 +1295,15 @@ async function render1to1Preview() {
  */
 function updateNavigatorViewport(bounds) {
     const viewportDiv = document.getElementById('navigatorViewport');
+    const img = document.getElementById('navigatorCanvas');
 
     if (!viewportDiv) {
         logger.error('[Navigator] Viewport div not found');
+        return;
+    }
+
+    if (!img) {
+        logger.error('[Navigator] Canvas img not found');
         return;
     }
 
@@ -1307,15 +1313,33 @@ function updateNavigatorViewport(bounds) {
     }
 
     try {
-        logger.log('[Navigator] Positioning viewport rect:', bounds);
+        // CRITICAL FIX: Account for object-fit: contain centering offset
+        const containerRect = img.getBoundingClientRect();
+        const imgNaturalWidth = img.naturalWidth || img.width;
+        const imgNaturalHeight = img.naturalHeight || img.height;
 
-        // Position the red rectangle using bounds from CropEngine
-        viewportDiv.style.left = `${bounds.x}px`;
-        viewportDiv.style.top = `${bounds.y}px`;
+        // Calculate scale factor (object-fit: contain logic)
+        const scaleX = containerRect.width / imgNaturalWidth;
+        const scaleY = containerRect.height / imgNaturalHeight;
+        const scale = Math.min(scaleX, scaleY);
+
+        // Calculate actual displayed dimensions
+        const displayedWidth = imgNaturalWidth * scale;
+        const displayedHeight = imgNaturalHeight * scale;
+
+        // Calculate offset from container to displayed image (centering)
+        const offsetX = (containerRect.width - displayedWidth) / 2;
+        const offsetY = (containerRect.height - displayedHeight) / 2;
+
+        logger.log('[Navigator] Positioning viewport rect:', bounds, 'offset:', {offsetX, offsetY});
+
+        // Position the red rectangle using bounds from CropEngine PLUS centering offset
+        viewportDiv.style.left = `${bounds.x + offsetX}px`;
+        viewportDiv.style.top = `${bounds.y + offsetY}px`;
         viewportDiv.style.width = `${bounds.width}px`;
         viewportDiv.style.height = `${bounds.height}px`;
 
-        logger.log(`[Navigator] ✓ Viewport rect positioned: ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`);
+        logger.log(`[Navigator] ✓ Viewport rect positioned: ${bounds.x + offsetX},${bounds.y + offsetY} ${bounds.width}x${bounds.height}`);
     } catch (error) {
         logger.error('[Navigator] Failed to update viewport rect:', error);
     }
