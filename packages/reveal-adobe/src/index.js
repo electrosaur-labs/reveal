@@ -969,7 +969,7 @@ function attachNavigatorClickHandler() {
     };
 
     // ARCHITECT'S FIX: Center-Drag logic with accurate coordinate math
-    const pointermoveHandler = async (e) => {
+    const pointermoveHandler = (e) => {
         if (!dragState.isDragging || !window.viewportManager) return;
 
         dragState.hasDragged = true;
@@ -989,21 +989,18 @@ function attachNavigatorClickHandler() {
         const normX = constrainedX / imgRect.width;
         const normY = constrainedY / imgRect.height;
 
-        // Update viewport center to follow mouse
+        // Update viewport center to follow mouse (this syncs CropEngine via _syncCropEngineViewport)
         window.viewportManager.jumpToNormalized(normX, normY);
 
-        // ARCHITECT'S SOVEREIGN FIX: Sync CropEngine coordinates BEFORE getting Navigator data
-        // This ensures the red box reflects the actual viewport position
-        await window.viewportManager.getLoupeBuffer();
-
         // PERFORMANCE FIX: During drag, only update red rect position (not entire thumbnail)
-        // Get viewport bounds and update red rect directly
+        // Get viewport bounds and update red rect directly - this is fast and synchronous
         const navData = window.viewportManager.getNavigatorMap(160);
         if (navData && navData.viewportBounds) {
             updateNavigatorViewport(navData.viewportBounds);
         }
 
         // ARCHITECT'S FIX: Debounce 1:1 render using requestAnimationFrame for smoothness
+        // getLoupeBuffer is called INSIDE render1to1Preview, not here
         if (!dragState.rafPending) {
             dragState.rafPending = true;
             requestAnimationFrame(async () => {
@@ -1014,15 +1011,13 @@ function attachNavigatorClickHandler() {
     };
 
     // Pointer up - stop dragging
-    const pointerupHandler = async () => {
+    const pointerupHandler = () => {
         if (dragState.isDragging) {
             dragState.isDragging = false;
             navigatorContainer.style.cursor = '';
 
-            // ARCHITECT'S SOVEREIGN FIX: Sync CropEngine coordinates BEFORE full refresh
-            await window.viewportManager.getLoupeBuffer();
-
-            // Full Navigator refresh after drag completes - now sees correct coordinates
+            // Full Navigator refresh after drag completes
+            // jumpToNormalized already synced CropEngine coordinates via _syncCropEngineViewport
             renderNavigatorMap();
 
             logger.log('[Navigator] 🟢 Drag ended - Navigator refreshed');
@@ -1059,13 +1054,10 @@ function attachNavigatorClickHandler() {
 
         logger.log(`[Navigator] Clicked at normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
 
-        // Update viewport center
+        // Update viewport center (this syncs CropEngine via _syncCropEngineViewport)
         window.viewportManager.jumpToNormalized(normX, normY);
 
-        // ARCHITECT'S SOVEREIGN FIX: Sync CropEngine coordinates BEFORE rendering Navigator
-        await window.viewportManager.getLoupeBuffer();
-
-        // Sync UI - now Navigator will see updated viewportX/Y
+        // Sync UI - jumpToNormalized already synced coordinates
         renderNavigatorMap();
         await render1to1Preview();
     };
