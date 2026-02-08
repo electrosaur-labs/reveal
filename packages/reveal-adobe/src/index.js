@@ -4206,10 +4206,9 @@ async function showDialog() {
                                 posterizationData.originalWidth,
                                 posterizationData.originalHeight,
                                 {
-                                    targetColors: result.palette.length,
-                                    palette: result.paletteLab,
-                                    rgbPalette: result.palette,
-                                    colorIndices: result.assignments
+                                    ...posterizationData.params,  // Use actual posterization params, not results!
+                                    actualDocumentWidth: posterizationData.originalWidth,
+                                    actualDocumentHeight: posterizationData.originalHeight
                                 }
                             );
 
