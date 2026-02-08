@@ -979,9 +979,13 @@ function attachNavigatorClickHandler() {
         const clickX = e.clientX - rect.left;
         const clickY = e.clientY - rect.top;
 
+        // BOUNDS CHECK: Constrain to visible image area (prevent dragging into whitespace)
+        const constrainedX = Math.max(0, Math.min(rect.width, clickX));
+        const constrainedY = Math.max(0, Math.min(rect.height, clickY));
+
         // Map to normalized coordinates (0.0 - 1.0)
-        const normX = clickX / rect.width;
-        const normY = clickY / rect.height;
+        const normX = constrainedX / rect.width;
+        const normY = constrainedY / rect.height;
 
         // Update viewport center to follow mouse
         window.viewportManager.jumpToNormalized(normX, normY);
@@ -1026,9 +1030,13 @@ function attachNavigatorClickHandler() {
         const clickX = e.clientX - rect.left;
         const clickY = e.clientY - rect.top;
 
+        // BOUNDS CHECK: Constrain to visible image area (prevent clicking whitespace)
+        const constrainedX = Math.max(0, Math.min(rect.width, clickX));
+        const constrainedY = Math.max(0, Math.min(rect.height, clickY));
+
         // Map to normalized coordinates (0.0 - 1.0)
-        const normX = clickX / rect.width;
-        const normY = clickY / rect.height;
+        const normX = constrainedX / rect.width;
+        const normY = constrainedY / rect.height;
 
         logger.log(`[Navigator] Clicked at normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
 
