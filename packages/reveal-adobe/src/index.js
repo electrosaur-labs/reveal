@@ -855,28 +855,167 @@ function renderNavigatorMap() {
 }
 
 /**
+ * Handle arrow key navigation for viewport panning (Phase 4+)
+ * Arrow keys pan viewport by 10% of viewport size
+ */
+function attachArrowKeyNavigation() {
+    // Remove existing listener if any
+    document.removeEventListener('keydown', window._arrowKeyHandler);
+
+    const handler = async (e) => {
+        // Only handle arrow keys when in 1:1 mode
+        if (!window.previewState || window.previewState.viewMode !== '1:1') {
+            return;
+        }
+
+        if (!window.viewportManager) {
+            return;
+        }
+
+        // Check if focused on an input/textarea
+        const activeElement = document.activeElement;
+        if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+            return;
+        }
+
+        const vmState = window.viewportManager.getState();
+        const panAmount = 50; // pixels to pan
+
+        let handled = false;
+        switch (e.key) {
+            case 'ArrowUp':
+                window.viewportManager.pan(0, -panAmount);
+                handled = true;
+                break;
+            case 'ArrowDown':
+                window.viewportManager.pan(0, panAmount);
+                handled = true;
+                break;
+            case 'ArrowLeft':
+                window.viewportManager.pan(-panAmount, 0);
+                handled = true;
+                break;
+            case 'ArrowRight':
+                window.viewportManager.pan(panAmount, 0);
+                handled = true;
+                break;
+        }
+
+        if (handled) {
+            e.preventDefault();
+
+            // Re-render Navigator and preview
+            renderNavigatorMap();
+            await render1to1Preview();
+        }
+    };
+
+    window._arrowKeyHandler = handler;
+    document.addEventListener('keydown', handler);
+
+    logger.log('[Navigator] ✓ Arrow key navigation attached');
+}
+
+/**
  * Handle Navigator Map click to jump viewport (Phase 4)
  * Converts click coordinates to normalized position and updates viewport
  */
 function attachNavigatorClickHandler() {
     const navigatorContainer = document.getElementById('navigatorMapContainer');
     const img = document.getElementById('navigatorCanvas');
+    const viewportRect = document.getElementById('navigatorViewport');
 
-    if (!navigatorContainer || !img) {
-        logger.error('[Navigator] Cannot attach click handler - elements not found');
+    if (!navigatorContainer || !img || !viewportRect) {
+        logger.error('[Navigator] Cannot attach handlers - elements not found');
         return;
     }
 
-    // Remove existing listener if any
+    // Remove existing listeners by cloning
     const newContainer = navigatorContainer.cloneNode(true);
     navigatorContainer.parentNode.replaceChild(newContainer, navigatorContainer);
 
     const newImg = newContainer.querySelector('#navigatorCanvas');
-    if (!newImg) return;
+    const newViewportRect = newContainer.querySelector('#navigatorViewport');
+    if (!newImg || !newViewportRect) return;
 
+    // Drag state
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let hasDragged = false;
+
+    // Mouse down on viewport rect - start dragging
+    newViewportRect.addEventListener('mousedown', (e) => {
+        if (!window.viewportManager) return;
+
+        isDragging = true;
+        hasDragged = false;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+
+        newViewportRect.style.cursor = 'grabbing';
+        e.stopPropagation(); // Prevent click handler
+        e.preventDefault();
+    });
+
+    // Mouse move - drag viewport rect
+    document.addEventListener('mousemove', async (e) => {
+        if (!isDragging || !window.viewportManager) return;
+
+        const deltaX = e.clientX - dragStartX;
+        const deltaY = e.clientY - dragStartY;
+
+        // Track if we've actually moved (to distinguish from clicks)
+        if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+            hasDragged = true;
+        }
+
+        // Convert pixel delta to normalized delta
+        const rect = newImg.getBoundingClientRect();
+        const normDeltaX = deltaX / rect.width;
+        const normDeltaY = deltaY / rect.height;
+
+        // Update viewport position
+        const currentCenter = window.viewportManager.center;
+        window.viewportManager.jumpToNormalized(
+            currentCenter.x + normDeltaX,
+            currentCenter.y + normDeltaY
+        );
+
+        // Update drag start for next frame
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+
+        // Re-render Navigator Map (updates red rect position)
+        renderNavigatorMap();
+
+        // Re-render 1:1 preview (shows new crop)
+        await render1to1Preview();
+    });
+
+    // Mouse up - stop dragging
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            newViewportRect.style.cursor = 'grab';
+        }
+    });
+
+    // Click on thumbnail (but not on viewport rect) - jump to location
     newContainer.addEventListener('click', async (e) => {
         if (!window.viewportManager) {
             logger.warn('[Navigator] ViewportManager not initialized');
+            return;
+        }
+
+        // Don't handle click if we just dragged
+        if (hasDragged) {
+            hasDragged = false;
+            return;
+        }
+
+        // Don't handle click if it was on the viewport rect
+        if (e.target === newViewportRect) {
             return;
         }
 
@@ -901,7 +1040,10 @@ function attachNavigatorClickHandler() {
         await render1to1Preview();
     });
 
-    logger.log('[Navigator] ✓ Click handler attached');
+    // Set initial cursor style
+    newViewportRect.style.cursor = 'grab';
+
+    logger.log('[Navigator] ✓ Click and drag handlers attached');
 }
 
 /**
@@ -970,16 +1112,45 @@ async function render1to1Preview() {
 
         logger.log(`[1:1] ✓ Mapped pixels to palette`);
 
+        // Check if color isolation mode is active (swatch clicked)
+        const soloColorIndex = window.previewState?.activeSoloIndex;
+        const hasSubstrate = window.selectedPreview?.substrateIndex !== null;
+        const substrateIndex = window.selectedPreview?.substrateIndex;
+
+        if (soloColorIndex !== null && soloColorIndex !== undefined) {
+            logger.log(`[1:1] Color isolation mode: showing only color index ${soloColorIndex}`);
+        }
+
         // Generate preview from mapped indices
         const previewBuffer = new Uint8ClampedArray(cropData.width * cropData.height * 4);
         for (let i = 0; i < colorIndices.length; i++) {
             const colorIdx = colorIndices[i];
-            const color = rgbPalette[colorIdx];
             const idx = i * 4;
-            previewBuffer[idx] = color.r;
-            previewBuffer[idx + 1] = color.g;
-            previewBuffer[idx + 2] = color.b;
-            previewBuffer[idx + 3] = 255;
+
+            // Color isolation: only show pixels of the solo color
+            if (soloColorIndex !== null && soloColorIndex !== undefined && colorIdx !== soloColorIndex) {
+                // Show substrate if it exists, otherwise transparent
+                if (hasSubstrate && substrateIndex !== null) {
+                    const substrateColor = rgbPalette[substrateIndex];
+                    previewBuffer[idx] = substrateColor.r;
+                    previewBuffer[idx + 1] = substrateColor.g;
+                    previewBuffer[idx + 2] = substrateColor.b;
+                    previewBuffer[idx + 3] = 255;
+                } else {
+                    // Transparent (checkerboard will show through)
+                    previewBuffer[idx] = 200;
+                    previewBuffer[idx + 1] = 200;
+                    previewBuffer[idx + 2] = 200;
+                    previewBuffer[idx + 3] = 128; // Semi-transparent
+                }
+            } else {
+                // Show actual color
+                const color = rgbPalette[colorIdx];
+                previewBuffer[idx] = color.r;
+                previewBuffer[idx + 1] = color.g;
+                previewBuffer[idx + 2] = color.b;
+                previewBuffer[idx + 3] = 255;
+            }
         }
 
         // Get main preview img element
@@ -1243,6 +1414,9 @@ async function setPreviewMode(mode) {
 
         // Phase 4: Attach Navigator click handler for panning
         attachNavigatorClickHandler();
+
+        // Phase 4+: Attach arrow key navigation
+        attachArrowKeyNavigation();
 
         // Phase 3: Render 1:1 pixels to main preview
         await render1to1Preview();
@@ -1636,7 +1810,7 @@ function clearSwatchSelection() {
     state.activeSoloIndex = null;
     updateSwatchHighlights();
 
-    // Re-render preview (works in both modes)
+    // Re-render preview (works in all modes)
     if (state.viewMode === 'fit') {
         renderPreview();
     } else if (state.viewMode === 'zoom' && state.zoomRenderer) {
@@ -1644,6 +1818,10 @@ function clearSwatchSelection() {
         state.zoomRenderer.setSoloColor(null);
         state.zoomRenderer.fetchAndRender();
         logger.log('✓ Zoom solo mode cleared');
+    } else if (state.viewMode === '1:1') {
+        // Clear solo mode in 1:1 preview
+        render1to1Preview();
+        logger.log('✓ 1:1 solo mode cleared');
     }
 }
 
@@ -1744,7 +1922,7 @@ function handleSwatchClick(featureIndex) {
     // Update swatch highlighting
     updateSwatchHighlights();
 
-    // Re-render preview (works in both modes now!)
+    // Re-render preview (works in all modes now!)
     if (state.viewMode === 'fit') {
         renderPreview();
     } else if (state.viewMode === 'zoom' && state.zoomRenderer) {
@@ -1752,6 +1930,10 @@ function handleSwatchClick(featureIndex) {
         state.zoomRenderer.setSoloColor(paletteIndex);
         state.zoomRenderer.fetchAndRender();
         logger.log(`✓ Zoom solo mode: showing only color ${featureIndex + 1}`);
+    } else if (state.viewMode === '1:1') {
+        // In 1:1 mode: Re-render with color isolation
+        render1to1Preview();
+        logger.log(`✓ 1:1 solo mode: showing only color ${featureIndex + 1}`);
     }
 }
 
