@@ -1568,8 +1568,57 @@ async function setPreviewMode(mode) {
         logger.log('✓ 1:1 mode initialized');
 
     } else if (mode === 'fit') {
-        // FIT MODE: Cleanup ZoomPreviewRenderer, restore renderPreview
+        // FIT MODE: Cleanup ZoomPreviewRenderer or 1:1 mode, restore renderPreview
         logger.log('Starting fit mode restoration...');
+
+        // Cleanup 1:1 mode if active
+        if (state.viewMode === '1:1') {
+            logger.log('Cleaning up 1:1 mode...');
+
+            // Hide Navigator Map and Diagnostic Tools
+            const navigatorMap = document.getElementById('navigatorMapContainer');
+            const diagnosticTools = document.getElementById('diagnosticTools');
+            const qualityGroup = document.getElementById('previewQualityGroup');
+
+            if (navigatorMap) {
+                navigatorMap.style.display = 'none';
+                logger.log('✓ Navigator Map hidden');
+            }
+            if (diagnosticTools) {
+                diagnosticTools.style.display = 'none';
+                logger.log('✓ Diagnostic Tools hidden');
+            }
+            if (qualityGroup) {
+                qualityGroup.style.display = 'block';
+                logger.log('✓ Preview Quality shown');
+            }
+
+            // Turn off Film Flash and Mesh Overlay modes
+            if (window.viewportManager) {
+                if (window.viewportManager.filmFlashMode) {
+                    window.viewportManager.toggleFilmFlash();
+                    logger.log('✓ Film Flash disabled');
+                }
+                if (window.viewportManager.meshOverlayMode) {
+                    window.viewportManager.toggleMeshOverlay();
+                    logger.log('✓ Mesh Overlay disabled');
+                }
+            }
+
+            // Uncheck diagnostic checkboxes
+            const filmFlashToggle = document.getElementById('filmFlashToggle');
+            const meshOverlayToggle = document.getElementById('meshOverlayToggle');
+            if (filmFlashToggle) {
+                filmFlashToggle.checked = false;
+                logger.log('✓ Film Flash checkbox unchecked');
+            }
+            if (meshOverlayToggle) {
+                meshOverlayToggle.checked = false;
+                logger.log('✓ Mesh Overlay checkbox unchecked');
+            }
+
+            logger.log('✓ 1:1 mode cleanup complete');
+        }
 
         // Cleanup zoom renderer
         if (state.zoomRenderer) {
