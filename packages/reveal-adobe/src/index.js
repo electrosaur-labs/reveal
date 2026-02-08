@@ -855,27 +855,80 @@ function renderNavigatorMap() {
 }
 
 /**
- * Render 1:1 pixel-perfect preview to main canvas (Phase 3)
- * Extracts viewport crop from CropEngine and displays at actual size
+ * Render 1:1 pixel-perfect preview using on-demand high-res fetching (Option C: Smart Loading)
+ * Fetches ONLY the viewport window at full resolution from Photoshop
  */
 async function render1to1Preview() {
-    logger.log('[1:1] Rendering 1:1 preview...');
+    logger.log('[1:1] Rendering 1:1 preview (Smart Loading)...');
 
-    if (!window.viewportManager) {
-        logger.error('[1:1] ViewportManager not initialized');
+    if (!window.viewportManager || !window.cropEngine) {
+        logger.error('[1:1] ViewportManager or CropEngine not initialized');
+        return;
+    }
+
+    if (!posterizationData) {
+        logger.error('[1:1] No posterization data available');
         return;
     }
 
     try {
-        // Get loupe buffer from ViewportManager (extracts current viewport crop)
-        const loupeData = await window.viewportManager.getLoupeBuffer();
+        // Get viewport state (normalized center point)
+        const vmState = window.viewportManager.getState();
+        const { center, viewportWidth, viewportHeight } = vmState;
 
-        if (!loupeData || !loupeData.buffer) {
-            logger.error('[1:1] No loupe buffer returned');
+        // Get actual document dimensions
+        const docInfo = PhotoshopAPI.getDocumentInfo();
+        const fullDocWidth = docInfo.width;
+        const fullDocHeight = docInfo.height;
+
+        // Calculate absolute coordinates in full-resolution document
+        const centerX = center.x * fullDocWidth;
+        const centerY = center.y * fullDocHeight;
+        const cropX = Math.max(0, Math.floor(centerX - viewportWidth / 2));
+        const cropY = Math.max(0, Math.floor(centerY - viewportHeight / 2));
+
+        logger.log(`[1:1] Fetching high-res crop from (${cropX}, ${cropY}) size ${viewportWidth}x${viewportHeight}`);
+        logger.log(`[1:1] Document size: ${fullDocWidth}x${fullDocHeight}, Center: (${center.x.toFixed(3)}, ${center.y.toFixed(3)})`);
+
+        // SMART LOADING: Fetch ONLY the viewport window at full resolution
+        const cropData = await PhotoshopAPI.getHighResCrop(cropX, cropY, viewportWidth, viewportHeight);
+
+        logger.log(`[1:1] ✓ Fetched high-res crop: ${cropData.width}x${cropData.height}`);
+
+        // Get the posterization palette from stored results
+        const state = window.previewState;
+        if (!state || !state.paletteLab) {
+            logger.error('[1:1] No palette available');
             return;
         }
 
-        const { buffer, cropWidth, cropHeight } = loupeData;
+        // Map high-res crop pixels to existing palette
+        logger.log(`[1:1] Mapping ${cropData.width}x${cropData.height} pixels to ${state.paletteLab.length} color palette...`);
+
+        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+            cropData.pixels,
+            state.paletteLab,
+            null, // onProgress
+            cropData.width,
+            cropData.height,
+            {
+                distanceMetric: posterizationData.params.distanceMetric || 'cie76'
+            }
+        );
+
+        logger.log(`[1:1] ✓ Mapped pixels to palette`);
+
+        // Generate preview from mapped indices
+        const previewBuffer = new Uint8ClampedArray(cropData.width * cropData.height * 4);
+        for (let i = 0; i < colorIndices.length; i++) {
+            const colorIdx = colorIndices[i];
+            const color = state.paletteRGB[colorIdx];
+            const idx = i * 4;
+            previewBuffer[idx] = color.r;
+            previewBuffer[idx + 1] = color.g;
+            previewBuffer[idx + 2] = color.b;
+            previewBuffer[idx + 3] = 255;
+        }
 
         // Get main preview img element
         const img = document.getElementById('previewImg');
@@ -886,24 +939,25 @@ async function render1to1Preview() {
 
         // Encode to JPEG using jpeg-js
         const jpegData = jpeg.encode({
-            data: buffer,
-            width: cropWidth,
-            height: cropHeight
+            data: previewBuffer,
+            width: cropData.width,
+            height: cropData.height
         }, 95);
 
         // Convert to base64 data URL
         const base64 = bufferToBase64(jpegData.data);
         const dataUrl = `data:image/jpeg;base64,${base64}`;
 
-        // Set image source - this displays 1:1 pixels!
+        // Set image source - this displays TRUE 1:1 pixels from full-res document!
         img.src = dataUrl;
-        img.width = cropWidth;
-        img.height = cropHeight;
+        img.width = cropData.width;
+        img.height = cropData.height;
 
-        logger.log(`[1:1] ✓ Rendered 1:1 preview: ${cropWidth}x${cropHeight} (${Math.round(jpegData.data.length / 1024)}KB)`);
+        logger.log(`[1:1] ✓ Rendered TRUE 1:1 preview: ${cropData.width}x${cropData.height} from (${cropX}, ${cropY}) (${Math.round(jpegData.data.length / 1024)}KB)`);
 
     } catch (error) {
         logger.error('[1:1] Failed to render:', error);
+        logger.error('[1:1] Error stack:', error.stack);
     }
 }
 

@@ -368,6 +368,103 @@ class PhotoshopAPI {
     }
 
     /**
+     * Get high-resolution crop from specific document region (Option C: Smart Loading)
+     * Fetches ONLY the viewport window at full resolution using batchPlay
+     *
+     * @param {number} x - Absolute X coordinate (in full document pixels)
+     * @param {number} y - Absolute Y coordinate (in full document pixels)
+     * @param {number} width - Crop width (e.g., 800 for viewport)
+     * @param {number} height - Crop height (e.g., 800 for viewport)
+     * @returns {Promise<Object>} - {pixels: Uint16Array (LAB), width, height, format: 'lab', bitDepth}
+     */
+    static async getHighResCrop(x, y, width, height) {
+        const doc = this.getActiveDocument();
+        if (!doc) {
+            throw new Error("No active document");
+        }
+
+        logger.log(`[PhotoshopAPI] Fetching high-res crop: (${x}, ${y}) ${width}x${height}`);
+
+        // Constrain crop to document bounds
+        const cropX = Math.max(0, Math.min(x, doc.width - width));
+        const cropY = Math.max(0, Math.min(y, doc.height - height));
+        const cropWidth = Math.min(width, doc.width - cropX);
+        const cropHeight = Math.min(height, doc.height - cropY);
+
+        logger.log(`[PhotoshopAPI] Constrained crop: (${cropX}, ${cropY}) ${cropWidth}x${cropHeight}`);
+
+        // Get bit depth
+        const bitDepthStr = String(doc.bitsPerChannel).toLowerCase();
+        const docBitDepth = bitDepthStr.includes('16') || doc.bitsPerChannel === 16 ? 16 : 8;
+        const componentSize = docBitDepth;
+
+        // Fetch pixels for specific region
+        let pixelData;
+        try {
+            pixelData = await core.executeAsModal(async () => {
+                return await imaging.getPixels({
+                    documentID: doc.id,
+                    sourceBounds: {
+                        left: cropX,
+                        top: cropY,
+                        right: cropX + cropWidth,
+                        bottom: cropY + cropHeight
+                    },
+                    componentSize: componentSize,
+                    targetComponentCount: 3,
+                    colorSpace: "Lab"
+                });
+            }, { commandName: "Get High-Res Crop" });
+
+            logger.log('[PhotoshopAPI] High-res crop fetched successfully');
+        } catch (error) {
+            logger.error('[PhotoshopAPI] Failed to fetch high-res crop:', error);
+            throw error;
+        }
+
+        // Extract RGBA data
+        let rgbaData;
+        if (pixelData.imageData) {
+            rgbaData = await core.executeAsModal(async () => {
+                return await pixelData.imageData.getData({ chunky: true });
+            }, { commandName: "Get Crop Data" });
+        } else if (pixelData.pixels) {
+            rgbaData = pixelData.pixels;
+        } else {
+            throw new Error("Could not extract pixel data from high-res crop");
+        }
+
+        logger.log(`[PhotoshopAPI] Got ${rgbaData.length} ${componentSize === 16 ? 'elements' : 'bytes'} of crop data`);
+
+        // Convert to Uint16Array if needed
+        if (componentSize === 16 && !(rgbaData instanceof Uint16Array)) {
+            if (rgbaData instanceof Uint8Array || rgbaData instanceof Uint8ClampedArray) {
+                rgbaData = new Uint16Array(rgbaData.buffer, rgbaData.byteOffset, rgbaData.byteLength / 2);
+            }
+        }
+
+        // Convert 8-bit to 16-bit if needed (always return 16-bit for engine)
+        let pixels16;
+        if (componentSize === 8) {
+            pixels16 = this.lab8to16(rgbaData);
+        } else {
+            pixels16 = rgbaData;
+        }
+
+        logger.log(`[PhotoshopAPI] ✓ High-res crop ready: ${cropWidth}x${cropHeight} (16-bit LAB)`);
+
+        return {
+            pixels: pixels16,
+            width: cropWidth,
+            height: cropHeight,
+            format: 'lab',
+            bitDepth: componentSize,
+            cropX: cropX,
+            cropY: cropY
+        };
+    }
+
+    /**
      * Create a data URL from pixel data (for displaying in <img> tags)
      *
      * @param {Uint8ClampedArray} pixels - RGBA pixel data
