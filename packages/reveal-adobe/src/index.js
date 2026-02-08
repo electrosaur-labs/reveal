@@ -974,18 +974,35 @@ function attachNavigatorClickHandler() {
 
         dragState.hasDragged = true;
 
-        // Use getBoundingClientRect for ACTUAL displayed dimensions (accounts for object-fit: contain)
-        const rect = img.getBoundingClientRect();
-        const clickX = e.clientX - rect.left;
-        const clickY = e.clientY - rect.top;
+        // Calculate ACTUAL displayed image bounds accounting for object-fit: contain + centering
+        const containerRect = img.getBoundingClientRect();
+        const imgNaturalWidth = img.naturalWidth || img.width;
+        const imgNaturalHeight = img.naturalHeight || img.height;
 
-        // BOUNDS CHECK: Constrain to visible image area (prevent dragging into whitespace)
-        const constrainedX = Math.max(0, Math.min(rect.width, clickX));
-        const constrainedY = Math.max(0, Math.min(rect.height, clickY));
+        // Calculate scale factor (object-fit: contain logic)
+        const scaleX = containerRect.width / imgNaturalWidth;
+        const scaleY = containerRect.height / imgNaturalHeight;
+        const scale = Math.min(scaleX, scaleY);
+
+        // Calculate actual displayed dimensions
+        const displayedWidth = imgNaturalWidth * scale;
+        const displayedHeight = imgNaturalHeight * scale;
+
+        // Calculate offset from container to displayed image (centering)
+        const offsetX = (containerRect.width - displayedWidth) / 2;
+        const offsetY = (containerRect.height - displayedHeight) / 2;
+
+        // Get click position relative to DISPLAYED image (not container)
+        const clickX = e.clientX - containerRect.left - offsetX;
+        const clickY = e.clientY - containerRect.top - offsetY;
+
+        // BOUNDS CHECK: Constrain to visible image area
+        const constrainedX = Math.max(0, Math.min(displayedWidth, clickX));
+        const constrainedY = Math.max(0, Math.min(displayedHeight, clickY));
 
         // Map to normalized coordinates (0.0 - 1.0)
-        const normX = constrainedX / rect.width;
-        const normY = constrainedY / rect.height;
+        const normX = constrainedX / displayedWidth;
+        const normY = constrainedY / displayedHeight;
 
         // Update viewport center to follow mouse
         window.viewportManager.jumpToNormalized(normX, normY);
@@ -1033,18 +1050,35 @@ function attachNavigatorClickHandler() {
         // Only handle clicks on the img
         if (e.target !== img) return;
 
-        // Use getBoundingClientRect for ACTUAL displayed dimensions
-        const rect = img.getBoundingClientRect();
-        const clickX = e.clientX - rect.left;
-        const clickY = e.clientY - rect.top;
+        // Calculate ACTUAL displayed image bounds accounting for object-fit: contain + centering
+        const containerRect = img.getBoundingClientRect();
+        const imgNaturalWidth = img.naturalWidth || img.width;
+        const imgNaturalHeight = img.naturalHeight || img.height;
 
-        // BOUNDS CHECK: Constrain to visible image area (prevent clicking whitespace)
-        const constrainedX = Math.max(0, Math.min(rect.width, clickX));
-        const constrainedY = Math.max(0, Math.min(rect.height, clickY));
+        // Calculate scale factor (object-fit: contain logic)
+        const scaleX = containerRect.width / imgNaturalWidth;
+        const scaleY = containerRect.height / imgNaturalHeight;
+        const scale = Math.min(scaleX, scaleY);
+
+        // Calculate actual displayed dimensions
+        const displayedWidth = imgNaturalWidth * scale;
+        const displayedHeight = imgNaturalHeight * scale;
+
+        // Calculate offset from container to displayed image (centering)
+        const offsetX = (containerRect.width - displayedWidth) / 2;
+        const offsetY = (containerRect.height - displayedHeight) / 2;
+
+        // Get click position relative to DISPLAYED image (not container)
+        const clickX = e.clientX - containerRect.left - offsetX;
+        const clickY = e.clientY - containerRect.top - offsetY;
+
+        // BOUNDS CHECK: Constrain to visible image area
+        const constrainedX = Math.max(0, Math.min(displayedWidth, clickX));
+        const constrainedY = Math.max(0, Math.min(displayedHeight, clickY));
 
         // Map to normalized coordinates (0.0 - 1.0)
-        const normX = constrainedX / rect.width;
-        const normY = constrainedY / rect.height;
+        const normX = constrainedX / displayedWidth;
+        const normY = constrainedY / displayedHeight;
 
         logger.log(`[Navigator] Clicked at normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
 
