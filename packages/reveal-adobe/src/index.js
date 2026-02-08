@@ -992,6 +992,10 @@ function attachNavigatorClickHandler() {
         // Update viewport center to follow mouse
         window.viewportManager.jumpToNormalized(normX, normY);
 
+        // ARCHITECT'S SOVEREIGN FIX: Sync CropEngine coordinates BEFORE getting Navigator data
+        // This ensures the red box reflects the actual viewport position
+        await window.viewportManager.getLoupeBuffer();
+
         // PERFORMANCE FIX: During drag, only update red rect position (not entire thumbnail)
         // Get viewport bounds and update red rect directly
         const navData = window.viewportManager.getNavigatorMap(160);
@@ -1010,12 +1014,15 @@ function attachNavigatorClickHandler() {
     };
 
     // Pointer up - stop dragging
-    const pointerupHandler = () => {
+    const pointerupHandler = async () => {
         if (dragState.isDragging) {
             dragState.isDragging = false;
             navigatorContainer.style.cursor = '';
 
-            // Full Navigator refresh after drag completes
+            // ARCHITECT'S SOVEREIGN FIX: Sync CropEngine coordinates BEFORE full refresh
+            await window.viewportManager.getLoupeBuffer();
+
+            // Full Navigator refresh after drag completes - now sees correct coordinates
             renderNavigatorMap();
 
             logger.log('[Navigator] 🟢 Drag ended - Navigator refreshed');
@@ -1055,7 +1062,10 @@ function attachNavigatorClickHandler() {
         // Update viewport center
         window.viewportManager.jumpToNormalized(normX, normY);
 
-        // Sync UI
+        // ARCHITECT'S SOVEREIGN FIX: Sync CropEngine coordinates BEFORE rendering Navigator
+        await window.viewportManager.getLoupeBuffer();
+
+        // Sync UI - now Navigator will see updated viewportX/Y
         renderNavigatorMap();
         await render1to1Preview();
     };
