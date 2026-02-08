@@ -72,8 +72,15 @@ class ViewportManager {
             throw new Error('CropEngine not initialized');
         }
 
-        const fullWidth = this.cropEngine.sourceWidth;
-        const fullHeight = this.cropEngine.sourceHeight;
+        // CRITICAL FIX: Use actualDocWidth/Height (full document), NOT sourceWidth/Height (downsampled preview)
+        // This must match _syncCropEngineViewport() to avoid coordinate mismatch
+        const fullWidth = this.cropEngine.actualDocWidth;
+        const fullHeight = this.cropEngine.actualDocHeight;
+
+        if (!fullWidth || !fullHeight) {
+            console.error('[ViewportManager] actualDocWidth/Height not set on CropEngine!');
+            throw new Error('CropEngine actualDocWidth/Height not initialized');
+        }
 
         // Convert normalized center to absolute pixel coordinates
         const centerX = this.center.x * fullWidth;
