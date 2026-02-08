@@ -1004,11 +1004,13 @@ function attachNavigatorClickHandler() {
 
     // Pointer move - drag viewport rect
     const pointermoveHandler = async (e) => {
+        logger.log('[Navigator] 🟡 POINTERMOVE called - isDragging:', dragState.isDragging, 'viewportManager:', !!window.viewportManager);
+
         if (!dragState.isDragging || !window.viewportManager) {
             return;
         }
 
-        logger.log('[Navigator] 🟡 POINTERMOVE - dragging', e.clientX, e.clientY);
+        logger.log('[Navigator] 🟡 POINTERMOVE - DRAGGING', e.clientX, e.clientY);
 
         const deltaX = e.clientX - dragState.dragStartX;
         const deltaY = e.clientY - dragState.dragStartY;
@@ -1091,6 +1093,15 @@ function attachNavigatorClickHandler() {
         // Re-render 1:1 preview (shows new crop)
         await render1to1Preview();
     };
+
+    // DIAGNOSTIC: Log ALL pointer events on container to see what's actually firing
+    navigatorContainer.addEventListener('pointerdown', (e) => {
+        logger.log('[Navigator] 🔻 CONTAINER pointerdown', e.target.id, e.target.tagName);
+    }, true); // Capture phase
+
+    navigatorContainer.addEventListener('pointermove', (e) => {
+        logger.log('[Navigator] 🔻 CONTAINER pointermove', e.target.id);
+    }, true); // Capture phase
 
     // Attach handlers
     viewportRect.addEventListener('pointerdown', pointerdownHandler);
