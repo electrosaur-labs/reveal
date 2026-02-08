@@ -53,8 +53,6 @@ const ImageHeuristicAnalyzer = {
             total: 0,
             absoluteBlacks: 0,   // L < 5 (Halftone dots)
             highChromaCount: 0,  // C > 35 (Vibrant features)
-            warmShadowHues: 0,   // 10-60° in darks (Skin/Brown drift)
-            coolShadowHues: 0,   // 200-260° in darks (Blue/Navy drift)
             neutralDarks: 0,     // L < 20 AND C < 10 (Neutral shadows)
             highlightCount: 0,   // L > 80 (Bright/pastel/high-key)
             maxChroma: 0
@@ -78,15 +76,9 @@ const ImageHeuristicAnalyzer = {
             if (chroma > 35) stats.highChromaCount++;
             if (chroma > stats.maxChroma) stats.maxChroma = chroma;
 
-            // SHADOW TINT ANALYSIS (The Jethro Fix)
-            if (L < 20) {
-                if (chroma < 8) {
-                    stats.neutralDarks++;
-                } else {
-                    const hue = (Math.atan2(b, a) * 180 / Math.PI + 360) % 360;
-                    if (hue > 10 && hue < 60) stats.warmShadowHues++;
-                    if (hue > 200 && hue < 260) stats.coolShadowHues++;
-                }
+            // Shadow analysis
+            if (L < 20 && chroma < 8) {
+                stats.neutralDarks++;
             }
         }
 
@@ -104,32 +96,13 @@ const ImageHeuristicAnalyzer = {
     _matchSignature: function(stats) {
         const totalSamples = stats.total;
         const darkNeutralRatio = stats.neutralDarks / totalSamples;
-        const skinToneRatio = stats.warmShadowHues / totalSamples;
         const absoluteBlackRatio = stats.absoluteBlacks / totalSamples;
 
-        // --- STEP 1: DEFINE ANATOMICAL THRESHOLDS ---
-        // A portrait usually has 15-40% "warm/skin" pixels.
-        // A black-and-white or dark landscape usually has < 5%.
-        const isHumanPalette = skinToneRatio > 0.12;
         const hasSignificantInk = darkNeutralRatio > 0.08 || absoluteBlackRatio > 0.03;
 
-        // --- STEP 2: ASSIGN PRESETS ---
-
-        // CASE A: The "True Jethro"
-        // Both black ink signatures AND human skin tones are present.
-        if (hasSignificantInk && isHumanPalette) {
-            logger.log("[ImageHeuristicAnalyzer] Detected: Halftone Portrait (ink + skin tones)");
-            return {
-                label: "Halftone Portrait",
-                presetId: "halftone-portrait"
-            };
-        }
-
-        // CASE B: The "Noir/Low-Key"
-        // High dark neutral density, but NO human skin tones.
-        // (This stops the false-positive portrait triggers).
-        if (hasSignificantInk && !isHumanPalette) {
-            logger.log("[ImageHeuristicAnalyzer] Detected: Deep Shadow / Noir (ink without skin tones)");
+        // Deep shadow / noir detection
+        if (hasSignificantInk) {
+            logger.log("[ImageHeuristicAnalyzer] Detected: Deep Shadow / Noir");
             return {
                 label: "Deep Shadow / Noir",
                 presetId: "deep-shadow-noir"

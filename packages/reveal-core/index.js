@@ -23,6 +23,7 @@ const ParameterGenerator = require('./lib/analysis/ParameterGenerator');
 const DNAGenerator = require('./lib/analysis/DNAGenerator');
 const ArchetypeMapper = require('./lib/analysis/ArchetypeMapper');
 const ArchetypeLoader = require('./lib/analysis/ArchetypeLoader');
+const PeakFinder = require('./lib/analysis/PeakFinder');
 const logger = require('./lib/utils/logger');
 
 /**
@@ -408,7 +409,10 @@ module.exports.engines = {
     // DNA v2.0 Archetype System (v2.2)
     DNAGenerator: DNAGenerator,
     ArchetypeMapper: ArchetypeMapper,
-    ArchetypeLoader: ArchetypeLoader
+    ArchetypeLoader: ArchetypeLoader,
+
+    // Reveal Mk 1.5 - Identity Peak Detection
+    PeakFinder: PeakFinder
 };
 
 // Export LabDistance at top level for convenient access
@@ -428,3 +432,6 @@ module.exports.DNAValidator = DNAValidator;
 
 // Export ProxyEngine at top level for event-driven UI (Sovereign Foundation)
 module.exports.ProxyEngine = ProxyEngine;
+
+// Export PeakFinder at top level for convenient access (Reveal Mk 1.5)
+module.exports.PeakFinder = PeakFinder;

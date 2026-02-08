@@ -18,6 +18,7 @@ const logger = require("../utils/logger");
 const ColorSpace = require('./ColorSpace');
 const HueAnalysis = require('./HueAnalysis');
 const { CentroidStrategies } = require('./CentroidStrategies');
+const PeakFinder = require('../analysis/PeakFinder');
 
 class PosterizationEngine {
     /**
@@ -34,7 +35,7 @@ class PosterizationEngine {
      * CENTRALIZED TUNING PARAMETERS
      *
      * Balanced preset for complex images with skin tones, hair textures,
-     * and dark backgrounds (e.g., JethroAsMonroe.tif).
+     * and dark backgrounds.
      *
      * Prevents "washout" by using Soft Peak centroid (top 5%) and Logic-Gated pruning.
      */
@@ -151,7 +152,8 @@ class PosterizationEngine {
                 threshold: options.paletteReduction !== undefined ? options.paletteReduction : this.TUNING.prune.threshold,
                 hueLockAngle: options.hueLockAngle !== undefined ? options.hueLockAngle : this.TUNING.prune.hueLockAngle,
                 whitePoint: options.highlightThreshold !== undefined ? options.highlightThreshold : this.TUNING.prune.whitePoint,
-                shadowPoint: options.shadowPoint !== undefined ? options.shadowPoint : this.TUNING.prune.shadowPoint
+                shadowPoint: options.shadowPoint !== undefined ? options.shadowPoint : this.TUNING.prune.shadowPoint,
+                isolationThreshold: options.isolationThreshold !== undefined ? options.isolationThreshold : 0.0
             },
             centroid: {
                 lWeight: options.lWeight !== undefined ? options.lWeight : this.TUNING.centroid.lWeight,
@@ -198,6 +200,39 @@ class PosterizationEngine {
                     ...options,
                     enableGridOptimization,
                     grayscaleOnly: true // Force L-only
+                });
+
+            case 'lab-native':
+                return this._posterizeLabNative(pixels, width, height, targetColors, {
+                    ...options,
+                    enableGridOptimization,
+                    enableHueGapAnalysis: false, // Keep it simple initially
+                    strategy,
+                    strategyName,
+                    tuning
+                });
+
+            case 'forced-centroid':
+                return this._posterizeForcedCentroid(pixels, width, height, targetColors, {
+                    ...options,
+                    enableGridOptimization,
+                    enableHueGapAnalysis: false,  // Disable for clinical mode
+                    snapThreshold,
+                    strategy,
+                    strategyName,
+                    tuning,
+                    forcedCentroids: options.forcedCentroids || []  // NEW: anchor array
+                });
+
+            case 'reveal-mk1.5':
+                return this._posterizeRevealMk1_5(pixels, width, height, targetColors, {
+                    ...options,
+                    enableGridOptimization,
+                    enableHueGapAnalysis: false,  // Disable for Mk 1.5
+                    snapThreshold,
+                    strategy,
+                    strategyName,
+                    tuning
                 });
 
             default:
@@ -2013,12 +2048,6 @@ class PosterizationEngine {
                         continue;
                     }
 
-                    // SHADOW PROTECTION: Prevent merging deep shadows (L<15) with lighter colors
-                    // Critical for JethroAsMonroe halftones - keeps neutral black dots from merging with skin/background
-                    if ((p1.L < shadowProtect && p2.L >= shadowProtect) || (p1.L >= shadowProtect && p2.L < shadowProtect)) {
-                        continue;
-                    }
-
                     // MERGE: Keep the one with higher Saliency score
                     const s1 = (p1.L * 1.5) + (chroma1 * 2.5);
                     const s2 = (p2.L * 1.5) + (chroma2 * 2.5);
@@ -2520,7 +2549,7 @@ class PosterizationEngine {
 
             // Split the largest box
             const box = boxes.shift();
-            const [box1, box2] = this._splitBoxLab(box, grayscaleOnly);
+            const [box1, box2] = this._splitBoxLab(box, grayscaleOnly, tuning);
 
             if (box1 && box2) {
                 boxes.push(box1, box2);
@@ -2579,6 +2608,29 @@ class PosterizationEngine {
             });
         }
 
+        // 🔧 PEAK ELIGIBILITY FLOOR (V1 LEGACY MODE)
+        // Filter out boxes that are too small (< isolationThreshold % of total pixels)
+        // This prevents 16-bit sensor noise and tiny clusters from becoming "identity peaks"
+        // isolationThreshold: 25.0 = 1.0% minimum cluster size
+        const isolationThreshold = tuning?.prune?.isolationThreshold || 0.0;
+        if (isolationThreshold > 0) {
+            const minPixels = totalPixels * (isolationThreshold / 2500);  // 25.0 → 1.0% of image
+            const originalBoxCount = boxes.length;
+            const filteredBoxes = boxes.filter(box => box.colors.length >= minPixels);
+
+            // SAFETY: Only apply filter if we have at least targetColors boxes remaining
+            // If isolation threshold is too aggressive, keep all boxes to avoid empty palette
+            if (filteredBoxes.length >= targetColors) {
+                boxes = filteredBoxes;
+                const filtered = originalBoxCount - boxes.length;
+                logger.log(`🔧 Isolation threshold: Filtered ${filtered} small clusters (< ${(isolationThreshold / 2500 * 100).toFixed(1)}% of pixels)`);
+                logger.log(`   Remaining boxes: ${boxes.length} (down from ${originalBoxCount})`);
+            } else {
+                logger.log(`⚠️ Isolation threshold too aggressive: Would reduce ${originalBoxCount} boxes to ${filteredBoxes.length} (need ${targetColors})`);
+                logger.log(`   Keeping all ${originalBoxCount} boxes to ensure minimum palette size`);
+            }
+        }
+
         // Calculate representative color for each box (centroid in Lab space)
         // Use injected strategy or fallback to VOLUMETRIC
         const palette = boxes.map((box, idx) => {
@@ -2616,12 +2668,17 @@ class PosterizationEngine {
      * Split a box in Lab space by finding channel with highest variance
      * @private
      */
-    static _splitBoxLab(box, grayscaleOnly = false) {
+    static _splitBoxLab(box, grayscaleOnly = false, tuning = null) {
         const { colors } = box;
 
         if (colors.length < 2) {
             return [null, null];
         }
+
+        // Extract weights from tuning (default: lWeight=1.0, cWeight=1.0)
+        // V1 LEGACY: cWeight=2.5 makes chroma the "absolute king" of splits
+        const lWeight = tuning?.centroid?.lWeight ?? 1.0;
+        const cWeight = tuning?.centroid?.cWeight ?? 1.0;
 
         if (grayscaleOnly) {
             // Grayscale mode: Only split on L channel
@@ -2646,16 +2703,18 @@ class PosterizationEngine {
                 { colors: colors2, depth: box.depth + 1, grayscaleOnly }
             ];
         } else {
-            // Color mode: Calculate variance in each Lab channel
+            // Color mode: Calculate WEIGHTED variance in each Lab channel
+            // V1 LEGACY: cWeight amplifies chroma (a, b) importance vs lightness
             const avgL = colors.reduce((sum, c) => sum + c.L, 0) / colors.length;
             const avgA = colors.reduce((sum, c) => sum + c.a, 0) / colors.length;
             const avgB = colors.reduce((sum, c) => sum + c.b, 0) / colors.length;
 
-            const varL = colors.reduce((sum, c) => sum + (c.L - avgL) ** 2, 0);
-            const varA = colors.reduce((sum, c) => sum + (c.a - avgA) ** 2, 0);
-            const varB = colors.reduce((sum, c) => sum + (c.b - avgB) ** 2, 0);
+            // Apply weights to variance - cWeight makes chroma dominate
+            const varL = colors.reduce((sum, c) => sum + (c.L - avgL) ** 2, 0) * lWeight;
+            const varA = colors.reduce((sum, c) => sum + (c.a - avgA) ** 2, 0) * cWeight;
+            const varB = colors.reduce((sum, c) => sum + (c.b - avgB) ** 2, 0) * cWeight;
 
-            // Choose channel with highest variance
+            // Choose channel with highest WEIGHTED variance
             let splitChannel = 'L';
             let maxVar = varL;
             if (varA > maxVar) {
@@ -2802,7 +2861,38 @@ class PosterizationEngine {
      * @returns {Object} {palette, paletteLab, assignments, labPixels, metadata}
      */
     static _posterizeReveal(pixels, width, height, targetColors, options = {}) {
-        const snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
+        // 🔧 LEGACY V1 MODE: CIE76 = "Dumb" Euclidean math, no smart features
+        // When distanceMetric is cie76, force legacy v1 behavior:
+        // - No perceptual snap (threshold = 0.0)
+        // - No palette reduction merging
+        // - No preserved color unification (threshold = 0.5)
+        // - No density floor removal (threshold = 0.0)
+        const distanceMetric = options.distanceMetric || 'cie76';
+        const isLegacyV1Mode = distanceMetric === 'cie76';
+
+        let snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
+        let enablePaletteReduction = options.enablePaletteReduction !== undefined ? options.enablePaletteReduction : true;
+        let paletteReduction = options.paletteReduction !== undefined ? options.paletteReduction : 8.0;
+        let preservedUnifyThreshold = options.preservedUnifyThreshold !== undefined ? options.preservedUnifyThreshold : 12.0;
+        let densityFloor = options.densityFloor !== undefined ? options.densityFloor : 0.005;
+
+        if (isLegacyV1Mode) {
+            logger.log(`🔧 LEGACY V1 MODE: CIE76 detected → Disabling Mk 1.5 "smart" features`);
+            snapThreshold = 0.0;              // Kill perceptual snap
+            enablePaletteReduction = false;   // Kill palette reduction
+            preservedUnifyThreshold = 0.5;    // Kill white/black unification
+            densityFloor = 0.0;               // Kill density floor removal
+
+            // Update options object so these values are used throughout the function
+            options.preservedUnifyThreshold = preservedUnifyThreshold;
+            options.densityFloor = densityFloor;
+
+            logger.log(`   snapThreshold: ${snapThreshold} (no merging)`);
+            logger.log(`   enablePaletteReduction: ${enablePaletteReduction}`);
+            logger.log(`   preservedUnifyThreshold: ${preservedUnifyThreshold} ΔE`);
+            logger.log(`   densityFloor: ${densityFloor} (disabled)`);
+        }
+
         const enableHueGapAnalysis = options.enableHueGapAnalysis !== undefined ? options.enableHueGapAnalysis : false;
         const grayscaleOnly = options.grayscaleOnly !== undefined ? options.grayscaleOnly : false;
         const preserveWhite = options.preserveWhite !== undefined ? options.preserveWhite : false;
@@ -2811,8 +2901,6 @@ class PosterizationEngine {
         const vibrancyBoost = options.vibrancyBoost !== undefined ? options.vibrancyBoost : 2.0;
         const highlightThreshold = options.highlightThreshold !== undefined ? options.highlightThreshold : 92;
         const highlightBoost = options.highlightBoost !== undefined ? options.highlightBoost : 3.0;
-        const enablePaletteReduction = options.enablePaletteReduction !== undefined ? options.enablePaletteReduction : true;
-        const paletteReduction = options.paletteReduction !== undefined ? options.paletteReduction : 8.0;
 
         if (grayscaleOnly) {
             logger.log(`Starting Lab-space posterization: ${targetColors} target colors (GRAYSCALE ONLY)`);
@@ -3366,7 +3454,10 @@ class PosterizationEngine {
 
             if (coverage >= MIN_PRESERVED_COVERAGE) {
                 const absoluteWhite = { L: 100, a: 0, b: 0 };
-                const UNIFY_THRESHOLD = PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
+                // Read preservedUnifyThreshold from options (default: 12.0, Jethro: 0.5)
+                const UNIFY_THRESHOLD = options.preservedUnifyThreshold !== undefined
+                    ? options.preservedUnifyThreshold
+                    : PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
 
                 // Check if palette already has a highlight color close to white
                 const existingMatch = curatedPaletteLab.find(color =>
@@ -3375,7 +3466,7 @@ class PosterizationEngine {
 
                 if (existingMatch) {
                     const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteWhite);
-                    logger.log(`  🔗 White unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)})`);
+                    logger.log(`  🔗 White unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)}, threshold=${UNIFY_THRESHOLD})`);
                 } else {
                     preservedColors.push(absoluteWhite);
                     actuallyPreservedWhite = true;
@@ -3391,7 +3482,10 @@ class PosterizationEngine {
 
             if (coverage >= MIN_PRESERVED_COVERAGE) {
                 const absoluteBlack = { L: 0, a: 0, b: 0 };
-                const UNIFY_THRESHOLD = PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
+                // Read preservedUnifyThreshold from options (default: 12.0, Jethro: 0.5)
+                const UNIFY_THRESHOLD = options.preservedUnifyThreshold !== undefined
+                    ? options.preservedUnifyThreshold
+                    : PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
 
                 // Check if palette already has a deep shadow color close to black
                 const existingMatch = curatedPaletteLab.find(color =>
@@ -3400,7 +3494,7 @@ class PosterizationEngine {
 
                 if (existingMatch) {
                     const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteBlack);
-                    logger.log(`  🔗 Black unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)})`);
+                    logger.log(`  🔗 Black unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)}, threshold=${UNIFY_THRESHOLD})`);
                 } else {
                     preservedColors.push(absoluteBlack);
                     actuallyPreservedBlack = true;
@@ -3597,32 +3691,39 @@ class PosterizationEngine {
             logger.log(`ℹ Final palette: ${finalPaletteLab.length} colors (requested: ${targetColors})`);
         }
 
-        // Apply density floor to remove ghost colors (<0.5% coverage)
+        // Apply density floor to remove ghost colors (<0.5% coverage by default)
         // IMPORTANT: Never remove preserved colors (white/black) or substrate
         // Use actuallyPreserved flags - if a color was skipped by viability threshold, don't protect it
-        const protectedIndices = new Set();
-        if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
-        if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
-        if (substrateLab) protectedIndices.add(finalPaletteLab.length - 1);  // Substrate is always last
+        // Read densityFloor from options (default: 0.005 = 0.5%, Jethro: 0.0 = disabled)
+        const densityFloorThreshold = options.densityFloor !== undefined ? options.densityFloor : 0.005;
 
-        const densityResult = this._applyDensityFloor(
-            assignments,
-            finalPaletteLab,
-            0.005,  // 0.5% threshold
-            protectedIndices
-        );
+        if (densityFloorThreshold > 0) {
+            const protectedIndices = new Set();
+            if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
+            if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
+            if (substrateLab) protectedIndices.add(finalPaletteLab.length - 1);  // Substrate is always last
 
-        if (densityResult.actualCount < finalPaletteLab.length) {
-            const removed = finalPaletteLab.length - densityResult.actualCount;
-            logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < 0.5% coverage`);
-            logger.log(`  Final palette: ${densityResult.actualCount} colors (down from ${finalPaletteLab.length})`);
+            const densityResult = this._applyDensityFloor(
+                assignments,
+                finalPaletteLab,
+                densityFloorThreshold,
+                protectedIndices
+            );
 
-            // Use the cleaned palette and remapped assignments
-            finalPaletteLab = densityResult.palette;
-            assignments = densityResult.assignments;
+            if (densityResult.actualCount < finalPaletteLab.length) {
+                const removed = finalPaletteLab.length - densityResult.actualCount;
+                logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < ${(densityFloorThreshold * 100).toFixed(1)}% coverage`);
+                logger.log(`  Final palette: ${densityResult.actualCount} colors (down from ${finalPaletteLab.length})`);
 
-            // CRITICAL: Regenerate RGB palette to match filtered Lab palette
-            paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
+                // Use the cleaned palette and remapped assignments
+                finalPaletteLab = densityResult.palette;
+                assignments = densityResult.assignments;
+
+                // CRITICAL: Regenerate RGB palette to match filtered Lab palette
+                paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
+            }
+        } else {
+            logger.log(`✓ Density floor disabled (threshold: ${densityFloorThreshold})`);
         }
 
         // Track substrate index for UI filtering and layer identification
@@ -3643,6 +3744,587 @@ class PosterizationEngine {
             }
         };
 
+    }
+
+    /**
+     * Reveal Mk 1.5 Engine: Deterministic Auto-Quantizer
+     *
+     * Pre-scans for "Identity Peaks" (high chroma + low volume + distinct from neighbors)
+     * and automatically reserves palette slots for them before median cut runs.
+     *
+     * PURPOSE: Solves the "low-volume important color" problem without user input.
+     * Auto-detects colors like Monroe blue (0.1% coverage) that would be lost in
+     * probabilistic median cut.
+     *
+     * ALGORITHM:
+     * 1. Convert to perceptual Lab space
+     * 2. [NEW] Scan for identity peaks (C>30, vol<5%, ΔE>15)
+     * 3. [NEW] Reserve N slots for detected peaks
+     * 4. Run median cut on remaining budget
+     * 5. Apply perceptual snap + palette reduction
+     * 6. [NEW] Inject peaks into final palette
+     * 7. [NEW] Protect peaks from density floor
+     * 8. Standard pixel assignment
+     *
+     * @param {Uint16Array} pixels - 16-bit Lab pixel data (MUST be Lab format)
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @param {number} targetColors - Total palette size
+     * @param {Object} options - Engine options
+     * @returns {Object} Standard posterization result with auto-anchor metadata
+     */
+    static _posterizeRevealMk1_5(pixels, width, height, targetColors, options = {}) {
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_entry');
+        logger.log(`🔵 CHECKPOINT 1: Entering _posterizeRevealMk1_5`);
+
+        // CIE76 LEGACY V1 MODE DETECTION (same as _posterizeReveal)
+        const distanceMetric = options.distanceMetric || 'cie76';
+        const isLegacyV1Mode = distanceMetric === 'cie76';
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_metric_parsed');
+        logger.log(`🔵 CHECKPOINT 2: distanceMetric=${distanceMetric}, isLegacyV1Mode=${isLegacyV1Mode}`);
+
+        let snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
+        let enablePaletteReduction = options.enablePaletteReduction !== undefined ? options.enablePaletteReduction : true;
+        let paletteReduction = options.paletteReduction !== undefined ? options.paletteReduction : 8.0;
+        let preservedUnifyThreshold = options.preservedUnifyThreshold !== undefined ? options.preservedUnifyThreshold : 12.0;
+        let densityFloor = options.densityFloor !== undefined ? options.densityFloor : 0.005;
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_thresholds_set');
+        logger.log(`🔵 CHECKPOINT 3: Initial thresholds set`);
+
+        if (isLegacyV1Mode) {
+            logger.log(`🔧 LEGACY V1 MODE (Mk 1.5): CIE76 detected → Disabling Mk 1.5 "smart" features`);
+            snapThreshold = 0.0;              // Kill perceptual snap
+            enablePaletteReduction = false;   // Kill palette reduction
+            preservedUnifyThreshold = 0.5;    // Kill white/black unification
+            densityFloor = 0.0;               // Kill density floor removal
+
+            // Update options object so these values are used throughout the function
+            options.snapThreshold = snapThreshold;
+            options.enablePaletteReduction = enablePaletteReduction;
+            options.paletteReduction = paletteReduction;
+            options.preservedUnifyThreshold = preservedUnifyThreshold;
+            options.densityFloor = densityFloor;
+
+            logger.log(`   snapThreshold: ${snapThreshold} (no merging)`);
+            logger.log(`   enablePaletteReduction: ${enablePaletteReduction} (no pruning)`);
+            logger.log(`   preservedUnifyThreshold: ${preservedUnifyThreshold} (no white/black unification)`);
+            logger.log(`   densityFloor: ${densityFloor} (no ghost removal)`);
+        }
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_legacy_mode_done');
+        logger.log(`🔵 CHECKPOINT 4: Legacy V1 mode processing complete`);
+
+        const grayscaleOnly = options.grayscaleOnly !== undefined ? options.grayscaleOnly : false;
+        const preserveWhite = options.preserveWhite !== undefined ? options.preserveWhite : false;
+        const preserveBlack = options.preserveBlack !== undefined ? options.preserveBlack : false;
+        const vibrancyMode = options.vibrancyMode !== undefined ? options.vibrancyMode : 'aggressive';
+        const vibrancyBoost = options.vibrancyBoost !== undefined ? options.vibrancyBoost : 2.0;
+        const highlightThreshold = options.highlightThreshold !== undefined ? options.highlightThreshold : 92;
+        const highlightBoost = options.highlightBoost !== undefined ? options.highlightBoost : 3.0;
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_options_parsed');
+        logger.log(`🔵 CHECKPOINT 5: Options parsed`);
+
+        logger.log(`\n[Reveal Mk 1.5] Starting deterministic auto-quantizer: ${targetColors} target colors`);
+        logger.log(`  Mode: Automatic outlier detection + median cut`);
+
+        const preserveList = [];
+        if (preserveWhite) preserveList.push('white');
+        if (preserveBlack) preserveList.push('black');
+        if (preserveList.length > 0) {
+            logger.log(`  Preserve colors: ${preserveList.join(', ')}`);
+        }
+
+        const startTime = performance.now();
+
+        logger.log(`🔵 CHECKPOINT 6: Starting performance timer`);
+
+        const isLabInput = options.format === 'lab';
+        if (!isLabInput) {
+            throw new Error('[Reveal Mk 1.5] Requires Lab input format (RGB not supported)');
+        }
+
+        logger.log(`🔵 CHECKPOINT 7: Validated Lab input format`);
+
+        const sourceBitDepth = options.bitDepth || 16;
+        const isEightBitSource = sourceBitDepth <= 8;
+
+        logger.log(`🔵 CHECKPOINT 8: Bit depth=${sourceBitDepth}`);
+
+        // Step 1: Convert to perceptual Lab space (reuse _posterizeReveal logic)
+        logger.log(`✓ Using 16-bit Lab pixels (original source: ${sourceBitDepth}-bit → Float32 perceptual ranges)`);
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_float32array');
+        logger.log(`🔵 CHECKPOINT 9: About to allocate Float32Array(${pixels.length})`);
+        const labPixels = new Float32Array(pixels.length);
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_float32array_allocated');
+        logger.log(`🔵 CHECKPOINT 10: Float32Array allocated successfully`);
+
+        const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
+        const highlightThresholdGate = isEightBitSource ? 97.5 : 98.0;
+
+        if (isEightBitSource) {
+            logger.log(`  8-bit source: Using expanded gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThresholdGate})`);
+        } else {
+            logger.log(`  16-bit source: Using standard gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThresholdGate})`);
+        }
+
+        const maxValue = 32768;
+        const neutralAB = 16384;
+        const abScale = 128 / 16384;
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_pixel_loop');
+        logger.log(`🔵 CHECKPOINT 11: Starting pixel conversion loop (${pixels.length / 3} pixels)`);
+
+        for (let i = 0; i < pixels.length; i += 3) {
+            labPixels[i] = (pixels[i] / maxValue) * 100;
+            labPixels[i + 1] = (pixels[i + 1] - neutralAB) * abScale;
+            labPixels[i + 2] = (pixels[i + 2] - neutralAB) * abScale;
+
+            if (labPixels[i] < shadowThreshold) {
+                labPixels[i] = 0;
+                labPixels[i + 1] = 0;
+                labPixels[i + 2] = 0;
+            } else if (labPixels[i] > highlightThresholdGate) {
+                labPixels[i] = 100;
+                labPixels[i + 1] = 0;
+                labPixels[i + 2] = 0;
+            }
+        }
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_pixel_loop_done');
+        logger.log(`🔵 CHECKPOINT 12: Pixel conversion loop complete`);
+        logger.log(`✓ Converted ${pixels.length / 3} Lab pixels to perceptual ranges`);
+
+        // ========== [NEW] Hard Chromance Gate: Achromatic Purge ==========
+        // Delete color data from low-chroma pixels (halftone noise suppression)
+        const chromaGateThreshold = options.chromaGateThreshold !== undefined ? options.chromaGateThreshold : 0;
+
+        if (chromaGateThreshold > 0) {
+            let purgedCount = 0;
+            logger.log(`\n[Hard Chromance Gate] Applying achromatic purge (C < ${chromaGateThreshold})`);
+
+            for (let i = 0; i < labPixels.length; i += 3) {
+                const a = labPixels[i + 1];
+                const b = labPixels[i + 2];
+                const chroma = Math.sqrt(a * a + b * b);
+
+                // If chroma below threshold, physically delete color data (pure gray)
+                if (chroma < chromaGateThreshold) {
+                    labPixels[i + 1] = 0;  // a* = 0
+                    labPixels[i + 2] = 0;  // b* = 0
+                    purgedCount++;
+                }
+            }
+
+            const purgedPercent = (purgedCount / (labPixels.length / 3)) * 100;
+            logger.log(`✓ Achromatic purge complete: ${purgedCount} pixels (${purgedPercent.toFixed(1)}%) converted to pure gray`);
+            logger.log(`  Goal: Make low-chroma halftone noise mathematically unable to join chromatic plates`);
+        }
+        // =================================================================
+
+        logger.log(`🔵 CHECKPOINT 13: Starting peak detection setup`);
+
+        // ========== [NEW] Mk 1.5: Auto-detect OR use pre-defined anchors ==========
+        // Extract PeakFinder parameters from options (set by archetype)
+        const peakFinderMaxPeaks = options.peakFinderMaxPeaks !== undefined ? options.peakFinderMaxPeaks : 1;
+        const peakFinderPreferredSectors = options.peakFinderPreferredSectors || null;
+        const peakFinderBlacklistedSectors = options.peakFinderBlacklistedSectors || [3, 4]; // Default: blacklist green
+
+        // Check if archetype provides pre-defined forced centroids
+        let forcedCentroids = [];
+        let usedPredefinedAnchors = false;
+        let detectedPeaks = []; // Initialize outside to avoid scoping issues
+
+        // Support both forcedCentroids (camelCase) and forced_centroids (snake_case)
+        const forcedCentroidsInput = options.forcedCentroids || options.forced_centroids;
+
+        logger.log(`🔵 CHECKPOINT 14: forcedCentroidsInput=${forcedCentroidsInput ? forcedCentroidsInput.length : 'none'}`);
+
+        if (forcedCentroidsInput && Array.isArray(forcedCentroidsInput) && forcedCentroidsInput.length > 0) {
+            // Use pre-defined anchors from archetype (Golden Master mode)
+            logger.log(`\n[Reveal Mk 1.5] Using ${forcedCentroidsInput.length} pre-defined forced centroids from archetype`);
+            try {
+                forcedCentroids = forcedCentroidsInput.map(anchor => {
+                    const centroid = {
+                        L: Number(anchor.L || anchor.l),
+                        a: Number(anchor.a),
+                        b: Number(anchor.b)
+                    };
+                    logger.log(`  Anchor: L=${centroid.L.toFixed(1)} a=${centroid.a.toFixed(1)} b=${centroid.b.toFixed(1)} (${anchor.name || 'UNNAMED'})`);
+                    return centroid;
+                });
+                usedPredefinedAnchors = true;
+            } catch (error) {
+                logger.error(`  ✗ Error parsing forcedCentroids: ${error.message}`);
+                logger.log(`  Falling back to auto-detection`);
+            }
+        }
+
+        // Fall back to auto-detection if no valid pre-defined anchors
+        if (!usedPredefinedAnchors) {
+            const peakFinder = new PeakFinder({
+                chromaThreshold: 30,
+                volumeThreshold: 0.05,
+                maxPeaks: peakFinderMaxPeaks,
+                preferredSectors: peakFinderPreferredSectors,
+                blacklistedSectors: peakFinderBlacklistedSectors
+            });
+
+            logger.log(`  PeakFinder config: maxPeaks=${peakFinderMaxPeaks}, blacklist=[${peakFinderBlacklistedSectors.join(',')}], preferred=${peakFinderPreferredSectors ? '[' + peakFinderPreferredSectors.join(',') + ']' : 'none'}`);
+
+            // Pass bitDepth for adaptive thresholds (8.0 for 16-bit, 15.0 for 8-bit)
+            detectedPeaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: sourceBitDepth });
+
+            // Convert peaks to forcedCentroids format
+            forcedCentroids = detectedPeaks.map(peak => ({
+                L: peak.L,
+                a: peak.a,
+                b: peak.b
+            }));
+
+            logger.log(`\n[Reveal Mk 1.5] Auto-detected ${forcedCentroids.length} identity peaks`);
+        }
+        // =============================================================
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_peak_detection_done');
+        logger.log(`🔵 CHECKPOINT 15: Peak detection complete, forcedCentroids=${forcedCentroids.length}`);
+
+        // Step 1.5: Handle preserved colors (white/black)
+        let preservedPixelMap = new Map();
+        let nonPreservedIndices = [];
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_preserved_detection');
+        logger.log(`🔵 CHECKPOINT 16: Starting preserved colors detection`);
+
+        const WHITE_L_MIN = 95;
+        const BLACK_L_MAX = 10;
+        const AB_THRESHOLD = isEightBitSource ? 5 : 0.01;
+
+        for (let i = 0; i < labPixels.length; i += 3) {
+            const L = labPixels[i];
+            const a = labPixels[i + 1];
+            const b = labPixels[i + 2];
+            const pixelIndex = i / 3;
+
+            let isPreserved = false;
+
+            if (preserveWhite && L > WHITE_L_MIN && Math.abs(a) < AB_THRESHOLD && Math.abs(b) < AB_THRESHOLD) {
+                if (!preservedPixelMap.has('white')) {
+                    preservedPixelMap.set('white', new Set());
+                }
+                preservedPixelMap.get('white').add(pixelIndex);
+                isPreserved = true;
+            } else if (preserveBlack && L < BLACK_L_MAX && Math.abs(a) < AB_THRESHOLD && Math.abs(b) < AB_THRESHOLD) {
+                if (!preservedPixelMap.has('black')) {
+                    preservedPixelMap.set('black', new Set());
+                }
+                preservedPixelMap.get('black').add(pixelIndex);
+                isPreserved = true;
+            }
+
+            if (!isPreserved) {
+                nonPreservedIndices.push(pixelIndex);
+            }
+        }
+
+        const totalPixels = labPixels.length / 3;
+        preservedPixelMap.forEach((indices, colorName) => {
+            const percent = ((indices.size / totalPixels) * 100).toFixed(1);
+            logger.log(`✓ Preserved ${indices.size} ${colorName} pixels (${percent}%)`);
+        });
+
+        // ========== [NEW] Slot reservation logic ==========
+        let numPreserved = 0;
+        if (preserveWhite) numPreserved++;
+        if (preserveBlack) numPreserved++;
+
+        const numForced = forcedCentroids.length;
+        const medianCutTarget = Math.max(1, targetColors - numForced - numPreserved);
+
+        logger.log(`\n[Slot Reservation]`);
+        logger.log(`  Total budget:      ${targetColors} colors`);
+        logger.log(`  Auto-anchors:      ${numForced} slots (identity peaks)`);
+        logger.log(`  Preserved colors:  ${numPreserved} slots`);
+        logger.log(`  Median cut budget: ${medianCutTarget} slots`);
+        // ==================================================
+
+        logger.log(`🔵 CHECKPOINT 17: Extracting non-preserved pixels`);
+
+        // Extract non-preserved pixels for quantization
+        let nonPreservedLabPixels = labPixels;
+        if (nonPreservedIndices.length < labPixels.length / 3) {
+            nonPreservedLabPixels = new Float32Array(nonPreservedIndices.length * 3);
+            for (let i = 0; i < nonPreservedIndices.length; i++) {
+                const srcIdx = nonPreservedIndices[i] * 3;
+                nonPreservedLabPixels[i * 3] = labPixels[srcIdx];
+                nonPreservedLabPixels[i * 3 + 1] = labPixels[srcIdx + 1];
+                nonPreservedLabPixels[i * 3 + 2] = labPixels[srcIdx + 2];
+            }
+        }
+
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_median_cut');
+        logger.log(`🔵 CHECKPOINT 18: About to call medianCutInLabSpace with ${medianCutTarget} colors`);
+
+        // Step 2: Run median cut with reduced target
+        logger.log(`\nRunning median cut in Lab space (${medianCutTarget} colors)...`);
+        const initialPaletteLab = this.medianCutInLabSpace(
+            nonPreservedLabPixels,
+            medianCutTarget,
+            grayscaleOnly,
+            width,
+            height,
+            null, // No substrate for Mk 1.5
+            3.5,
+            vibrancyMode,
+            vibrancyBoost,
+            highlightThreshold,
+            highlightBoost,
+            options.strategy || null,
+            options.tuning || null
+        );
+        if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_median_cut_done');
+        logger.log(`🔵 CHECKPOINT 19: medianCutInLabSpace completed`);
+        logger.log(`✓ Initial palette: ${initialPaletteLab.length} colors`);
+
+        // Step 3: Apply perceptual snap
+        const colorSpaceAnalysis = this._analyzeColorSpace(labPixels);
+        const isGrayscale = grayscaleOnly || colorSpaceAnalysis.chromaRange < 10;
+
+        let lRange = 0;
+        let colorSpaceExtent = null;
+
+        if (isGrayscale) {
+            let minL = Infinity, maxL = -Infinity;
+            for (let i = 0; i < labPixels.length; i += 3) {
+                minL = Math.min(minL, labPixels[i]);
+                maxL = Math.max(maxL, labPixels[i]);
+            }
+            lRange = maxL - minL;
+        } else {
+            let minL = Infinity, maxL = -Infinity;
+            let minA = Infinity, maxA = -Infinity;
+            let minB = Infinity, maxB = -Infinity;
+
+            for (let i = 0; i < labPixels.length; i += 3) {
+                minL = Math.min(minL, labPixels[i]);
+                maxL = Math.max(maxL, labPixels[i]);
+                minA = Math.min(minA, labPixels[i + 1]);
+                maxA = Math.max(maxA, labPixels[i + 1]);
+                minB = Math.min(minB, labPixels[i + 2]);
+                maxB = Math.max(maxB, labPixels[i + 2]);
+            }
+
+            colorSpaceExtent = {
+                lRange: maxL - minL,
+                aRange: maxA - minA,
+                bRange: maxB - minB
+            };
+        }
+
+        const adaptiveThreshold = this._getAdaptiveSnapThreshold(
+            snapThreshold,
+            targetColors,
+            isGrayscale,
+            lRange,
+            colorSpaceExtent
+        );
+
+        logger.log(`  Adaptive snap threshold: ΔE ${adaptiveThreshold.toFixed(1)}`);
+
+        let snappedPaletteLab = this.applyPerceptualSnap(
+            initialPaletteLab,
+            adaptiveThreshold,
+            isGrayscale,
+            vibrancyBoost,
+            options.strategy || null,
+            options.tuning || null
+        );
+        logger.log(`✓ Snapped palette: ${snappedPaletteLab.length} colors`);
+
+        // Step 4: Palette reduction (if over budget after snap)
+        if (enablePaletteReduction && snappedPaletteLab.length > medianCutTarget) {
+            const prunedPaletteLab = this._prunePalette(snappedPaletteLab, paletteReduction, highlightThreshold, medianCutTarget, options.tuning || null);
+            if (prunedPaletteLab.length < snappedPaletteLab.length) {
+                logger.log(`✓ Palette pruned: ${snappedPaletteLab.length} → ${prunedPaletteLab.length} colors`);
+                snappedPaletteLab = prunedPaletteLab;
+            }
+        }
+
+        // ========== [NEW] Anchor injection (after perceptual snap) ==========
+        logger.log(`\n[Anchor Injection]`);
+        const mergedPalette = [...snappedPaletteLab];
+        let addedCount = 0;
+        let skippedCount = 0;
+        const anchorDuplicateThreshold = 3.0;
+
+        for (const forced of forcedCentroids) {
+            const isDuplicate = mergedPalette.some(color =>
+                this._labDistance(color, forced) < anchorDuplicateThreshold
+            );
+
+            if (isDuplicate) {
+                logger.log(`  ✗ Skipped peak (duplicate within ΔE ${anchorDuplicateThreshold})`);
+                skippedCount++;
+            } else {
+                mergedPalette.push(forced);
+                logger.log(`  ✓ Added peak: L=${forced.L.toFixed(1)} a=${forced.a.toFixed(1)} b=${forced.b.toFixed(1)}`);
+                addedCount++;
+            }
+        }
+        logger.log(`  Summary: ${addedCount} peaks added, ${skippedCount} skipped (duplicates)`);
+        // ====================================================================
+
+        // Step 5: Add preserved colors (white/black)
+        const preservedColors = [];
+        let actuallyPreservedWhite = false;
+        let actuallyPreservedBlack = false;
+        let whiteIndex = -1;
+        let blackIndex = -1;
+
+        if (preserveWhite) {
+            const whitePixels = preservedPixelMap.get('white');
+            if (whitePixels && whitePixels.size >= totalPixels * PosterizationEngine.MIN_PRESERVED_COVERAGE) {
+                preservedColors.push({ L: 100, a: 0, b: 0 });
+                whiteIndex = mergedPalette.length + preservedColors.length - 1;
+                actuallyPreservedWhite = true;
+                logger.log(`✓ Added white to palette (index ${whiteIndex})`);
+            }
+        }
+
+        if (preserveBlack) {
+            const blackPixels = preservedPixelMap.get('black');
+            if (blackPixels && blackPixels.size >= totalPixels * PosterizationEngine.MIN_PRESERVED_COVERAGE) {
+                preservedColors.push({ L: 0, a: 0, b: 0 });
+                blackIndex = mergedPalette.length + preservedColors.length - 1;
+                actuallyPreservedBlack = true;
+                logger.log(`✓ Added black to palette (index ${blackIndex})`);
+            }
+        }
+
+        const finalPaletteLab = [...mergedPalette, ...preservedColors];
+        logger.log(`\n✓ Final palette before density floor: ${finalPaletteLab.length} colors`);
+
+        // Step 6: Pixel assignment (same as _posterizeReveal)
+        const paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
+        const assignments = new Uint8Array(width * height);
+
+        const ASSIGNMENT_STRIDE = 8;
+        const paletteLength = finalPaletteLab.length;
+
+        for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
+            for (let x = 0; x < width; x += ASSIGNMENT_STRIDE) {
+                let anchorAssignment = 0;
+
+                for (let bY = 0; bY < ASSIGNMENT_STRIDE && (y + bY) < height; bY += 2) {
+                    for (let bX = 0; bX < ASSIGNMENT_STRIDE && (x + bX) < width; bX += 2) {
+                        const pixelIndex = (y + bY) * width + (x + bX);
+                        const preservedColorKey = [...preservedPixelMap.entries()].find(([_, indices]) => indices.has(pixelIndex));
+
+                        if (preservedColorKey) {
+                            const colorName = preservedColorKey[0];
+                            if (colorName === 'white' && actuallyPreservedWhite) {
+                                anchorAssignment = whiteIndex;
+                            } else if (colorName === 'black' && actuallyPreservedBlack) {
+                                anchorAssignment = blackIndex;
+                            }
+                        } else {
+                            let minDistance = Infinity;
+                            const idx = pixelIndex * 3;
+
+                            const pL = labPixels[idx];
+                            const pA = labPixels[idx + 1];
+                            const pB = labPixels[idx + 2];
+
+                            for (let j = 0; j < paletteLength; j++) {
+                                const target = finalPaletteLab[j];
+                                const dL = pL - target.L;
+                                const dA = pA - target.a;
+                                const dB = pB - target.b;
+
+                                const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+
+                                if (dist < minDistance) {
+                                    minDistance = dist;
+                                    anchorAssignment = j;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for (let bY = 0; bY < ASSIGNMENT_STRIDE && (y + bY) < height; bY++) {
+                    const fillRow = (y + bY) * width;
+                    for (let bX = 0; bX < ASSIGNMENT_STRIDE && (x + bX) < width; bX++) {
+                        assignments[fillRow + (x + bX)] = anchorAssignment;
+                    }
+                }
+            }
+        }
+
+        const endTime = performance.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(3);
+        logger.log(`\n✓ Reveal Mk 1.5 complete in ${duration}s`);
+
+        // ========== [NEW] Protect anchors from density floor ==========
+        const protectedIndices = new Set();
+        if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
+        if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
+
+        // Protect auto-detected peaks from density floor removal
+        for (let i = snappedPaletteLab.length; i < mergedPalette.length; i++) {
+            protectedIndices.add(i);
+            logger.log(`  Protected auto-anchor at index ${i} from density floor`);
+        }
+        // ==============================================================
+
+        const densityResult = this._applyDensityFloor(
+            assignments,
+            finalPaletteLab,
+            0.005,
+            protectedIndices
+        );
+
+        let finalPaletteLabFiltered = finalPaletteLab;
+        let assignmentsFiltered = assignments;
+
+        if (densityResult.actualCount < finalPaletteLab.length) {
+            const removed = finalPaletteLab.length - densityResult.actualCount;
+            logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < 0.5% coverage`);
+            logger.log(`  Final palette: ${densityResult.actualCount} colors`);
+
+            finalPaletteLabFiltered = densityResult.palette;
+            assignmentsFiltered = densityResult.assignments;
+        }
+
+        const paletteRgbFiltered = finalPaletteLabFiltered.map(lab => this.labToRgb(lab));
+
+        return {
+            palette: paletteRgbFiltered,
+            paletteLab: finalPaletteLabFiltered,
+            assignments: assignmentsFiltered,
+            labPixels,
+            substrateLab: null,
+            substrateIndex: null,
+            metadata: {
+                targetColors,
+                finalColors: finalPaletteLabFiltered.length,
+                autoAnchors: addedCount,
+                skippedAnchors: skippedCount,
+                detectedPeaks: detectedPeaks.map(p => ({
+                    L: p.L.toFixed(1),
+                    a: p.a.toFixed(1),
+                    b: p.b.toFixed(1),
+                    chroma: p.chroma.toFixed(1),
+                    volume: (p.volume * 100).toFixed(2) + '%'
+                })),
+                snapThreshold,
+                duration: parseFloat(duration),
+                engineType: 'reveal-mk1.5'
+            }
+        };
     }
 
     /**

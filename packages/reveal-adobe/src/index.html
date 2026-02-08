@@ -993,13 +993,15 @@
                                 <strong>Posterization Engine</strong>
                             </label>
                             <select id="engineType" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
-                                <option value="reveal" selected>Reveal - Maximum Quality (Hue-Aware, Recommended)</option>
+                                <option value="reveal">Reveal - Maximum Quality (Hue-Aware, Recommended)</option>
+                                <option value="reveal-mk1.5" selected>Reveal Mk 1.5 - Auto-Protect Outliers (16-bit Archival)</option>
                                 <option value="balanced">Balanced - Fast & Accurate (Lab Space, No Hue Analysis)</option>
                                 <option value="classic">Classic - Fastest (RGB Median Cut)</option>
                                 <option value="stencil">Stencil - Monochrome (Lightness Only)</option>
                             </select>
                             <div class="helper-text">
                                 <strong>Reveal</strong> ensures all hues are represented (best for complex images).
+                                <strong>Reveal Mk 1.5</strong> auto-detects rare high-chroma details (Monroe blue eyes).
                                 <strong>Balanced</strong> is faster with good quality.
                                 <strong>Classic</strong> is fastest for quick tests.
                                 <strong>Stencil</strong> creates grayscale separations (L-channel only).
