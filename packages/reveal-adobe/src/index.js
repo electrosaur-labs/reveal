@@ -855,6 +855,59 @@ function renderNavigatorMap() {
 }
 
 /**
+ * Render 1:1 pixel-perfect preview to main canvas (Phase 3)
+ * Extracts viewport crop from CropEngine and displays at actual size
+ */
+async function render1to1Preview() {
+    logger.log('[1:1] Rendering 1:1 preview...');
+
+    if (!window.viewportManager) {
+        logger.error('[1:1] ViewportManager not initialized');
+        return;
+    }
+
+    try {
+        // Get loupe buffer from ViewportManager (extracts current viewport crop)
+        const loupeData = await window.viewportManager.getLoupeBuffer();
+
+        if (!loupeData || !loupeData.buffer) {
+            logger.error('[1:1] No loupe buffer returned');
+            return;
+        }
+
+        const { buffer, cropWidth, cropHeight } = loupeData;
+
+        // Get main preview img element
+        const img = document.getElementById('previewImg');
+        if (!img) {
+            logger.error('[1:1] Preview img element not found');
+            return;
+        }
+
+        // Encode to JPEG using jpeg-js
+        const jpegData = jpeg.encode({
+            data: buffer,
+            width: cropWidth,
+            height: cropHeight
+        }, 95);
+
+        // Convert to base64 data URL
+        const base64 = bufferToBase64(jpegData.data);
+        const dataUrl = `data:image/jpeg;base64,${base64}`;
+
+        // Set image source - this displays 1:1 pixels!
+        img.src = dataUrl;
+        img.width = cropWidth;
+        img.height = cropHeight;
+
+        logger.log(`[1:1] ✓ Rendered 1:1 preview: ${cropWidth}x${cropHeight} (${Math.round(jpegData.data.length / 1024)}KB)`);
+
+    } catch (error) {
+        logger.error('[1:1] Failed to render:', error);
+    }
+}
+
+/**
  * Update red viewport rectangle position on Navigator Map
  * @param {Object} bounds - Viewport bounds from CropEngine {x, y, width, height}
  */
@@ -1081,6 +1134,9 @@ async function setPreviewMode(mode) {
 
         // Render Navigator Map thumbnail
         renderNavigatorMap();
+
+        // Phase 3: Render 1:1 pixels to main preview (NEW!)
+        await render1to1Preview();
 
         logger.log('✓ 1:1 mode initialized');
 
