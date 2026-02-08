@@ -164,8 +164,14 @@ class ViewportManager {
     _syncCropEngineViewport() {
         if (!this.cropEngine) return;
 
-        const fullWidth = this.cropEngine.sourceWidth;
-        const fullHeight = this.cropEngine.sourceHeight;
+        // CRITICAL FIX: Use actualDocWidth/Height (full document), NOT sourceWidth/Height (downsampled preview)
+        const fullWidth = this.cropEngine.actualDocWidth;
+        const fullHeight = this.cropEngine.actualDocHeight;
+
+        if (!fullWidth || !fullHeight) {
+            console.error('[ViewportManager] actualDocWidth/Height not set on CropEngine!');
+            return;
+        }
 
         // Convert normalized center to absolute pixel coordinates
         const centerX = this.center.x * fullWidth;
@@ -185,7 +191,7 @@ class ViewportManager {
         this.cropEngine.viewportWidth = this.viewportWidth;
         this.cropEngine.viewportHeight = this.viewportHeight;
 
-        console.log(`[ViewportManager] Synced CropEngine viewport: (${startX}, ${startY}) ${this.viewportWidth}x${this.viewportHeight}`);
+        console.log(`[ViewportManager] Synced CropEngine viewport: (${startX}, ${startY}) ${this.viewportWidth}x${this.viewportHeight} (doc: ${fullWidth}x${fullHeight})`);
     }
 
     /**
