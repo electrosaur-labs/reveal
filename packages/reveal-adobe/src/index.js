@@ -974,35 +974,20 @@ function attachNavigatorClickHandler() {
 
         dragState.hasDragged = true;
 
-        // Calculate ACTUAL displayed image bounds accounting for object-fit: contain + centering
-        const containerRect = img.getBoundingClientRect();
-        const imgNaturalWidth = img.naturalWidth || img.width;
-        const imgNaturalHeight = img.naturalHeight || img.height;
+        // Calculate click relative to ACTUAL img element (flexbox centers it in container)
+        const imgRect = img.getBoundingClientRect();
 
-        // Calculate scale factor (object-fit: contain logic)
-        const scaleX = containerRect.width / imgNaturalWidth;
-        const scaleY = containerRect.height / imgNaturalHeight;
-        const scale = Math.min(scaleX, scaleY);
-
-        // Calculate actual displayed dimensions
-        const displayedWidth = imgNaturalWidth * scale;
-        const displayedHeight = imgNaturalHeight * scale;
-
-        // Calculate offset from container to displayed image (centering)
-        const offsetX = (containerRect.width - displayedWidth) / 2;
-        const offsetY = (containerRect.height - displayedHeight) / 2;
-
-        // Get click position relative to DISPLAYED image (not container)
-        const clickX = e.clientX - containerRect.left - offsetX;
-        const clickY = e.clientY - containerRect.top - offsetY;
+        // Get click position relative to img
+        const clickX = e.clientX - imgRect.left;
+        const clickY = e.clientY - imgRect.top;
 
         // BOUNDS CHECK: Constrain to visible image area
-        const constrainedX = Math.max(0, Math.min(displayedWidth, clickX));
-        const constrainedY = Math.max(0, Math.min(displayedHeight, clickY));
+        const constrainedX = Math.max(0, Math.min(imgRect.width, clickX));
+        const constrainedY = Math.max(0, Math.min(imgRect.height, clickY));
 
         // Map to normalized coordinates (0.0 - 1.0)
-        const normX = constrainedX / displayedWidth;
-        const normY = constrainedY / displayedHeight;
+        const normX = constrainedX / imgRect.width;
+        const normY = constrainedY / imgRect.height;
 
         // Update viewport center to follow mouse
         window.viewportManager.jumpToNormalized(normX, normY);
@@ -1050,35 +1035,20 @@ function attachNavigatorClickHandler() {
         // Only handle clicks on the img
         if (e.target !== img) return;
 
-        // Calculate ACTUAL displayed image bounds accounting for object-fit: contain + centering
-        const containerRect = img.getBoundingClientRect();
-        const imgNaturalWidth = img.naturalWidth || img.width;
-        const imgNaturalHeight = img.naturalHeight || img.height;
+        // Calculate click relative to ACTUAL img element (flexbox centers it in container)
+        const imgRect = img.getBoundingClientRect();
 
-        // Calculate scale factor (object-fit: contain logic)
-        const scaleX = containerRect.width / imgNaturalWidth;
-        const scaleY = containerRect.height / imgNaturalHeight;
-        const scale = Math.min(scaleX, scaleY);
-
-        // Calculate actual displayed dimensions
-        const displayedWidth = imgNaturalWidth * scale;
-        const displayedHeight = imgNaturalHeight * scale;
-
-        // Calculate offset from container to displayed image (centering)
-        const offsetX = (containerRect.width - displayedWidth) / 2;
-        const offsetY = (containerRect.height - displayedHeight) / 2;
-
-        // Get click position relative to DISPLAYED image (not container)
-        const clickX = e.clientX - containerRect.left - offsetX;
-        const clickY = e.clientY - containerRect.top - offsetY;
+        // Get click position relative to img
+        const clickX = e.clientX - imgRect.left;
+        const clickY = e.clientY - imgRect.top;
 
         // BOUNDS CHECK: Constrain to visible image area
-        const constrainedX = Math.max(0, Math.min(displayedWidth, clickX));
-        const constrainedY = Math.max(0, Math.min(displayedHeight, clickY));
+        const constrainedX = Math.max(0, Math.min(imgRect.width, clickX));
+        const constrainedY = Math.max(0, Math.min(imgRect.height, clickY));
 
         // Map to normalized coordinates (0.0 - 1.0)
-        const normX = constrainedX / displayedWidth;
-        const normY = constrainedY / displayedHeight;
+        const normX = constrainedX / imgRect.width;
+        const normY = constrainedY / imgRect.height;
 
         logger.log(`[Navigator] Clicked at normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
 
@@ -1313,25 +1283,25 @@ function updateNavigatorViewport(bounds) {
     }
 
     try {
-        // CRITICAL FIX: Account for object-fit: contain centering offset
-        const containerRect = img.getBoundingClientRect();
-        const imgNaturalWidth = img.naturalWidth || img.width;
-        const imgNaturalHeight = img.naturalHeight || img.height;
+        // CRITICAL FIX: Use CONTAINER rect (160x160), not img rect (107x160)
+        // The container is the parent div with fixed 160x160 size and flexbox centering
+        const container = img.parentElement;
+        if (!container) {
+            logger.error('[Navigator] Container not found');
+            return;
+        }
 
-        // Calculate scale factor (object-fit: contain logic)
-        const scaleX = containerRect.width / imgNaturalWidth;
-        const scaleY = containerRect.height / imgNaturalHeight;
-        const scale = Math.min(scaleX, scaleY);
+        const containerRect = container.getBoundingClientRect();
+        const imgRect = img.getBoundingClientRect();
 
-        // Calculate actual displayed dimensions
-        const displayedWidth = imgNaturalWidth * scale;
-        const displayedHeight = imgNaturalHeight * scale;
+        // Calculate offset from container to actual img (flexbox centering)
+        const offsetX = imgRect.left - containerRect.left;
+        const offsetY = imgRect.top - containerRect.top;
 
-        // Calculate offset from container to displayed image (centering)
-        const offsetX = (containerRect.width - displayedWidth) / 2;
-        const offsetY = (containerRect.height - displayedHeight) / 2;
-
-        logger.log('[Navigator] Positioning viewport rect:', bounds, 'offset:', {offsetX, offsetY});
+        logger.log('[Navigator] Container:', containerRect.width, 'x', containerRect.height,
+                   'Img:', imgRect.width, 'x', imgRect.height,
+                   'Offset:', offsetX, offsetY);
+        logger.log('[Navigator] Positioning viewport rect:', bounds);
 
         // Position the red rectangle using bounds from CropEngine PLUS centering offset
         viewportDiv.style.left = `${bounds.x + offsetX}px`;
