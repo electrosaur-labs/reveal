@@ -120,7 +120,7 @@ class LABSliderSync {
      * @private
      */
     _startPolling() {
-        console.log('[LABSliderSync] Starting color change polling (250ms interval)...');
+        console.log('[LABSliderSync] Starting color change polling (2000ms interval - non-intrusive)...');
         this.isPolling = true;
 
         // Use recursive setTimeout to avoid promise accumulation
@@ -142,9 +142,9 @@ class LABSliderSync {
             // Silently ignore errors
         }
 
-        // Schedule next poll after 250ms
+        // Schedule next poll after 2000ms (less aggressive to avoid UI blocking)
         if (this.isPolling) {
-            this.pollTimeout = setTimeout(() => this._pollLoop(), 250);
+            this.pollTimeout = setTimeout(() => this._pollLoop(), 2000);
         }
     }
 
@@ -192,7 +192,10 @@ class LABSliderSync {
                 _obj: 'get',
                 _target: [{ _ref: 'color', _property: 'foregroundColor' }],
                 _options: { dialogOptions: 'dontDisplay' }
-            }], {});
+            }], {
+                modalBehavior: 'fail',  // Fail silently instead of showing modal
+                synchronousExecution: false
+            });
 
             if (!result || !result[0]) {
                 return null;

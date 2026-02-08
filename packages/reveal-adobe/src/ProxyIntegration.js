@@ -72,16 +72,14 @@ async function initializeProxyMode(labPixels, width, height, config) {
             window.updatePreviewCanvas(proxyResult.previewBuffer, proxyResult);
         }
 
-        // 6. Initialize LAB slider sync
+        // 6. Initialize LAB slider sync (2-second polling, non-intrusive)
         const labSync = new LABSliderSync();
         await labSync.initialize(window.sessionState);
-
-        // Store globally for cleanup
         window.labSliderSync = labSync;
 
         const elapsed = performance.now() - startTime;
         console.log(`[ProxyIntegration] ✓ Proxy mode active (${elapsed.toFixed(0)}ms)`);
-        console.log(`[ProxyIntegration] 🎨 LAB sliders are now LIVE - adjust colors in Photoshop Color Panel`);
+        console.log(`[ProxyIntegration] 🎨 LAB slider sync active - adjust colors in Photoshop Color Panel (updates every 2s)`);
 
         return {
             success: true,
