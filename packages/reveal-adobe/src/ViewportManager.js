@@ -179,9 +179,13 @@ class ViewportManager {
         startX = Math.max(0, Math.min(fullWidth - this.viewportWidth, startX));
         startY = Math.max(0, Math.min(fullHeight - this.viewportHeight, startY));
 
-        // Update CropEngine viewport position
+        // ARCHITECT'S FIX: Sync ALL viewport properties (position AND dimensions)
         this.cropEngine.viewportX = startX;
         this.cropEngine.viewportY = startY;
+        this.cropEngine.viewportWidth = this.viewportWidth;
+        this.cropEngine.viewportHeight = this.viewportHeight;
+
+        console.log(`[ViewportManager] Synced CropEngine viewport: (${startX}, ${startY}) ${this.viewportWidth}x${this.viewportHeight}`);
     }
 
     /**
