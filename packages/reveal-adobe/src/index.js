@@ -3515,10 +3515,10 @@ async function showDialog() {
                         logger.log("✓ Posterize button restored");
                     }
 
-                    // Reopen main dialog with size options
+                    // Reopen main dialog with size options (NON-MODAL for LAB slider access)
                     const mainDialog = document.getElementById('mainDialog');
                     if (mainDialog) {
-                        mainDialog.showModal({
+                        mainDialog.show({
                             resize: "both",
                             size: {
                                 width: 620,
@@ -3529,7 +3529,7 @@ async function showDialog() {
                                 maxHeight: 900
                             }
                         });
-                        logger.log("✓ Reopened main dialog");
+                        logger.log("✓ Reopened main dialog (non-modal)");
                     }
 
                     // Note: Keep posterizationData intact so user doesn't lose their work
@@ -4671,8 +4671,9 @@ async function showDialog() {
         }
 
         // NOW show the dialog (after all event listeners are set up)
-        logger.log("All event listeners set up, now showing dialog...");
-        await dialog.showModal({
+        // NON-MODAL to allow access to Photoshop Color Panel for LAB slider sync
+        logger.log("All event listeners set up, now showing dialog (non-modal)...");
+        dialog.show({
             resize: "both",
             size: {
                 width: 620,        // Wide enough for preset selector and buttons

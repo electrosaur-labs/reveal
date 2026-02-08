@@ -63,7 +63,30 @@ class ProxyModeTestHarness {
             stopProxyMode();
             btnTestProxy.style.display = '';
             btnStopProxy.style.display = 'none';
+            const btnCapture = document.getElementById('btnCaptureLAB');
+            if (btnCapture) btnCapture.style.display = 'none';
+
+            // Hide preview canvas and performance indicator
+            const perfContainer = document.getElementById('proxyPerformanceContainer');
+            if (perfContainer) perfContainer.style.display = 'none';
+            const previewContainer = document.getElementById('proxyPreviewContainer');
+            if (previewContainer) previewContainer.style.display = 'none';
+
             this.showStatus('Proxy mode stopped', 'info');
+        });
+
+        // Add "Capture LAB Color" button (The Ink Dropper)
+        const btnCaptureLAB = document.createElement('sp-button');
+        btnCaptureLAB.id = 'btnCaptureLAB';
+        btnCaptureLAB.variant = 'accent';
+        btnCaptureLAB.textContent = '🎨 Capture LAB Color';
+        btnCaptureLAB.style.marginLeft = '10px';
+        btnCaptureLAB.style.display = 'none';
+
+        btnPosterize.parentElement.insertBefore(btnCaptureLAB, btnStopProxy.nextSibling);
+
+        btnCaptureLAB.addEventListener('click', async () => {
+            await this.captureLABColor();
         });
 
         // Add status indicator
@@ -78,6 +101,18 @@ class ProxyModeTestHarness {
         perfDiv.style.cssText = 'margin: 10px 0; padding: 8px; font-family: monospace; display: none;';
         perfDiv.innerHTML = 'Proxy update: <span id="proxyPerformance">--</span>';
         btnPosterize.parentElement.insertBefore(perfDiv, btnPosterize.nextSibling);
+
+        // Add preview canvas for proxy visualization
+        const canvasContainer = document.createElement('div');
+        canvasContainer.id = 'proxyPreviewContainer';
+        canvasContainer.style.cssText = 'margin: 10px 0; padding: 8px; display: none; text-align: center; background: #2c2c2c; border-radius: 4px; min-height: 300px;';
+
+        const canvas = document.createElement('canvas');
+        canvas.id = 'previewCanvas';
+        canvas.style.cssText = 'max-width: 100%; max-height: 512px; image-rendering: auto; display: block;';
+
+        canvasContainer.appendChild(canvas);
+        btnPosterize.parentElement.insertBefore(canvasContainer, btnPosterize.nextSibling);
 
         console.log('[ProxyModeTestHarness] ✓ Test harness attached');
     }
@@ -149,9 +184,20 @@ class ProxyModeTestHarness {
             // Update buttons
             btnTestProxy.style.display = 'none';
             btnStopProxy.style.display = '';
+            document.getElementById('btnCaptureLAB').style.display = '';
 
-            // Show performance indicator
-            document.getElementById('proxyPerformanceContainer').style.display = 'block';
+            // Show performance indicator and preview canvas
+            const perfContainer = document.getElementById('proxyPerformanceContainer');
+            const previewContainer = document.getElementById('proxyPreviewContainer');
+
+            console.log('[ProxyModeTestHarness] perfContainer exists?', !!perfContainer);
+            console.log('[ProxyModeTestHarness] previewContainer exists?', !!previewContainer);
+
+            if (perfContainer) perfContainer.style.display = 'block';
+            if (previewContainer) {
+                previewContainer.style.display = 'block';
+                console.log('[ProxyModeTestHarness] Preview container display set to block');
+            }
 
             // Open Photoshop Color Panel (if possible)
             try {
@@ -162,13 +208,14 @@ class ProxyModeTestHarness {
 
             // Log instructions
             console.log('\n' + '='.repeat(60));
-            console.log('🎨 PROXY MODE ACTIVE');
+            console.log('🎨 PROXY MODE ACTIVE - MANUAL CAPTURE');
             console.log('='.repeat(60));
             console.log('Instructions:');
             console.log('1. Open Photoshop Color Panel (Window → Color)');
             console.log('2. Ensure it\'s in LAB mode');
-            console.log('3. Adjust L, a, or b sliders');
-            console.log('4. Watch the preview update in real-time!');
+            console.log('3. Adjust L, a, or b sliders to desired color');
+            console.log('4. Click "🎨 Capture LAB Color" button');
+            console.log('5. Watch the preview update instantly!');
             console.log('='.repeat(60) + '\n');
 
         } catch (error) {
@@ -178,6 +225,48 @@ class ProxyModeTestHarness {
         } finally {
             btnTestProxy.disabled = false;
             btnTestProxy.textContent = '🎨 Test Proxy Mode';
+        }
+    }
+
+    /**
+     * Capture current LAB color and update palette (Manual Capture mode)
+     */
+    static async captureLABColor() {
+        console.log('[ProxyModeTestHarness] Manual LAB color capture triggered...');
+
+        const btnCapture = document.getElementById('btnCaptureLAB');
+
+        try {
+            // Disable button during capture
+            btnCapture.disabled = true;
+            btnCapture.textContent = 'Capturing...';
+
+            // Ensure LAB slider sync is initialized
+            if (!window.labSliderSync || !window.labSliderSync.isEnabled) {
+                this.showStatus('LAB slider sync not initialized', 'error');
+                return;
+            }
+
+            // Capture and update palette
+            const result = await window.labSliderSync.captureAndUpdatePalette();
+
+            if (result.success) {
+                const { L, a, b } = result.labColor;
+                this.showStatus(
+                    `✓ Captured L=${L.toFixed(1)} a=${a.toFixed(1)} b=${b.toFixed(1)} - Palette updated`,
+                    'success'
+                );
+            } else {
+                this.showStatus(`⚠️ ${result.error}`, 'error');
+            }
+
+        } catch (error) {
+            console.error('[ProxyModeTestHarness] Capture failed:', error);
+            this.showStatus(`Error: ${error.message}`, 'error');
+
+        } finally {
+            btnCapture.disabled = false;
+            btnCapture.textContent = '🎨 Capture LAB Color';
         }
     }
 

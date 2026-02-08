@@ -79,29 +79,33 @@ class PhotoshopAPI {
         // CRITICAL: Pure Lab Stream - all 3 parameters required to prevent conversion
         // Without these, Photoshop converts Lab→RGB→sRGB, clipping colors and destroying perceptual data
         // Lab documents have NO alpha channel - Lab is always 3 channels (L, a, b) only
+        // IMPORTANT: imaging.getPixels() requires modal scope even when called from non-modal dialog
         let pixelData;
         try {
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('reveal_checkpoint', 'before_imaging_getPixels');
             }
 
-            logger.log('STEP 1: About to call imaging.getPixels()...');
+            logger.log('STEP 1: About to call imaging.getPixels() in modal scope...');
             logger.log(`  documentID: ${doc.id}`);
             logger.log(`  targetSize: ${scaledWidth}x${scaledHeight}`);
             logger.log(`  componentSize: ${componentSize}`);
             logger.log(`  targetComponentCount: 3`);
             logger.log(`  colorSpace: Lab`);
 
-            pixelData = await imaging.getPixels({
-                documentID: doc.id,
-                targetSize: {
-                    width: scaledWidth,
-                    height: scaledHeight
-                },
-                componentSize: componentSize,  // Always 8 for now (UXP limitation)
-                targetComponentCount: 3,       // 3 channels: L, a, b (Lab has NO alpha)
-                colorSpace: "Lab"              // THE CRITICAL PARAMETER: Request raw Lab channels (no conversion)
-            });
+            // Wrap in executeAsModal for document access from non-modal dialog
+            pixelData = await core.executeAsModal(async () => {
+                return await imaging.getPixels({
+                    documentID: doc.id,
+                    targetSize: {
+                        width: scaledWidth,
+                        height: scaledHeight
+                    },
+                    componentSize: componentSize,  // Always 8 for now (UXP limitation)
+                    targetComponentCount: 3,       // 3 channels: L, a, b (Lab has NO alpha)
+                    colorSpace: "Lab"              // THE CRITICAL PARAMETER: Request raw Lab channels (no conversion)
+                });
+            }, { commandName: "Get Document Pixels" });
 
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('reveal_checkpoint', 'after_imaging_getPixels');
@@ -138,7 +142,10 @@ class PhotoshopAPI {
                 localStorage.setItem('reveal_checkpoint', 'before_getData');
             }
 
-            rgbaData = await pixelData.imageData.getData({ chunky: true });
+            // getData() also requires modal scope
+            rgbaData = await core.executeAsModal(async () => {
+                return await pixelData.imageData.getData({ chunky: true });
+            }, { commandName: "Get Image Data" });
 
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('reveal_checkpoint', 'after_getData');

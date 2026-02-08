@@ -68,6 +68,13 @@ async function initializeProxyMode(labPixels, width, height, config) {
         window.sessionState.proxyEngine = proxyEngine;
 
         // 5. Update preview canvas with initial result
+        console.log('[ProxyIntegration] Proxy result:', {
+            hasPreviewBuffer: !!proxyResult.previewBuffer,
+            bufferLength: proxyResult.previewBuffer?.length,
+            paletteLength: proxyResult.palette?.length,
+            dimensions: proxyResult.dimensions
+        });
+
         if (window.updatePreviewCanvas) {
             window.updatePreviewCanvas(proxyResult.previewBuffer, proxyResult);
         }
@@ -79,13 +86,13 @@ async function initializeProxyMode(labPixels, width, height, config) {
 
         const elapsed = performance.now() - startTime;
         console.log(`[ProxyIntegration] ✓ Proxy mode active (${elapsed.toFixed(0)}ms)`);
-        console.log(`[ProxyIntegration] 🎨 LAB slider sync active - adjust colors in Photoshop Color Panel (updates every 2s)`);
+        console.log(`[ProxyIntegration] 🎨 Manual Capture ready - adjust LAB sliders, then click "Capture LAB Color"`);
 
         return {
             success: true,
             proxyResult,
             elapsedMs: elapsed,
-            message: 'LAB sliders are now live - adjust colors in Photoshop Color Panel'
+            message: 'Manual Capture ready - adjust LAB sliders, then click "Capture LAB Color"'
         };
 
     } catch (error) {
@@ -101,6 +108,8 @@ async function initializeProxyMode(labPixels, width, height, config) {
  */
 function updatePreviewCanvas(previewBuffer, proxyResult) {
     console.log('[ProxyIntegration] Updating preview canvas...');
+    console.log('[ProxyIntegration] Preview buffer length:', previewBuffer?.length);
+    console.log('[ProxyIntegration] First 20 values:', previewBuffer?.slice(0, 20));
 
     const canvas = document.getElementById('previewCanvas');
     if (!canvas) {
@@ -109,6 +118,10 @@ function updatePreviewCanvas(previewBuffer, proxyResult) {
     }
 
     const ctx = canvas.getContext('2d');
+
+    // Debug: Check canvas element dimensions
+    console.log(`[ProxyIntegration] Canvas element dimensions: ${canvas.width}×${canvas.height}`);
+    console.log(`[ProxyIntegration] Canvas display size: ${canvas.offsetWidth}×${canvas.offsetHeight}`);
 
     // Get proxy dimensions from result or session state
     const width = proxyResult.dimensions?.width || window.sessionState?.proxyEngine?.separationState?.width;
@@ -126,10 +139,56 @@ function updatePreviewCanvas(previewBuffer, proxyResult) {
         console.log(`[ProxyIntegration] Canvas resized to ${width}x${height}`);
     }
 
-    // Create ImageData and draw to canvas
-    const imageData = ctx.createImageData(width, height);
-    imageData.data.set(previewBuffer);
-    ctx.putImageData(imageData, 0, 0);
+    // Clear canvas before redrawing
+    ctx.clearRect(0, 0, width, height);
+    console.log(`[ProxyIntegration] Canvas cleared`);
+
+    // Sample first few pixels for debugging
+    console.log(`[ProxyIntegration] First pixel: R=${previewBuffer[0]} G=${previewBuffer[1]} B=${previewBuffer[2]} A=${previewBuffer[3]}`);
+    console.log(`[ProxyIntegration] Buffer length: ${previewBuffer.length} (expected: ${width * height * 4})`);
+
+    // Draw pixels to canvas using scanline optimization
+    // UXP doesn't support putImageData, so we use fillRect with horizontal runs
+    // This is MUCH faster than pixel-by-pixel (typically 10-100x fewer draw calls)
+    const drawStart = performance.now();
+    console.log(`[ProxyIntegration] Drawing ${width}x${height} with scanline optimization...`);
+
+    let totalRuns = 0;
+
+    for (let y = 0; y < height; y++) {
+        let x = 0;
+        while (x < width) {
+            const idx = (y * width + x) * 4;
+            const r = previewBuffer[idx];
+            const g = previewBuffer[idx + 1];
+            const b = previewBuffer[idx + 2];
+            const a = previewBuffer[idx + 3] / 255;
+
+            // Find run length of consecutive pixels with same color
+            let runLength = 1;
+            while (x + runLength < width) {
+                const nextIdx = (y * width + (x + runLength)) * 4;
+                if (previewBuffer[nextIdx] === r &&
+                    previewBuffer[nextIdx + 1] === g &&
+                    previewBuffer[nextIdx + 2] === b &&
+                    previewBuffer[nextIdx + 3] === previewBuffer[idx + 3]) {
+                    runLength++;
+                } else {
+                    break;
+                }
+            }
+
+            // Draw horizontal run (single fillRect for multiple pixels)
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
+            ctx.fillRect(x, y, runLength, 1);
+
+            totalRuns++;
+            x += runLength;
+        }
+    }
+
+    const drawTime = performance.now() - drawStart;
+    console.log(`[ProxyIntegration] ✓ Canvas drawn: ${totalRuns} runs in ${drawTime.toFixed(0)}ms (${(179200 / totalRuns).toFixed(1)}x compression)`);
 
     console.log(`[ProxyIntegration] ✓ Preview updated (${proxyResult.elapsedMs?.toFixed(1) || '?'}ms)`);
 
