@@ -1668,35 +1668,11 @@
                                     Mesh Overlay
                                 </label>
                             </div>
-
-                            <!-- Navigator Map (shown only in 1:1 mode) -->
-                            <div id="navigatorMapContainer" style="display: none; padding: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px;">
-                                <div style="font-size: 11px; color: #666; font-weight: 600; margin-bottom: 4px;">Navigator Map</div>
-                                <div style="position: relative; width: 160px; height: 160px; cursor: crosshair; border: 1px solid #999; background: #fff;">
-                                    <img id="navigatorCanvas" width="160" height="160" style="display: block;" />
-                                    <div id="navigatorViewport" style="
-                                        position: absolute;
-                                        border: 2px solid #ff0000;
-                                        pointer-events: none;
-                                        box-shadow: 0 0 0 1px rgba(255,255,255,0.8);"></div>
-                                </div>
-                            </div>
                         </div>
                     </div>
 
                     <!-- Palette Content (right side) -->
-                    <div style="flex: 0 0 450px; min-width: 350px; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="info-box" style="background: #e3f2fd; border-left: 4px solid #1473e6; margin-bottom: 16px; flex-shrink: 0;">
-                            <strong>🎨 Edit Your Palette Colors</strong><br>
-                            <ul style="margin: 8px 0 0 0; padding-left: 20px; line-height: 1.8;">
-                                <li>Click swatch to highlight in preview</li>
-                                <li>Click Lab text to open Color Picker</li>
-                                <li><strong>L badge</strong> shows Lightness (0-100): perceptual brightness</li>
-                                <li>Lab coordinates (L, a, b) show <strong>perceptual relationships</strong> between colors</li>
-                                <li>Warning appears if colors are too similar (ΔE &lt; 12) — may not separate cleanly</li>
-                            </ul>
-                        </div>
-
+                    <div style="flex: 0 0 450px; min-width: 350px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; gap: 8px;">
                         <!-- Palette swatches container - now scrollable -->
                         <div id="editablePaletteContainer" class="editable-palette" style="
                             flex: 1 1 0;
@@ -1705,6 +1681,19 @@
                             min-height: 0;
                             padding-right: 8px;">
                             <!-- Color swatches will be added here dynamically -->
+                        </div>
+
+                        <!-- Navigator Map (shown only in 1:1 mode) - MOVED HERE -->
+                        <div id="navigatorMapContainer" style="display: none; padding: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; flex-shrink: 0;">
+                            <div style="font-size: 11px; color: #666; font-weight: 600; margin-bottom: 4px;">Navigator Map</div>
+                            <div style="position: relative; width: 160px; height: 160px; cursor: crosshair; border: 1px solid #999; background: #fff;">
+                                <img id="navigatorCanvas" width="160" height="160" style="display: block;" />
+                                <div id="navigatorViewport" style="
+                                    position: absolute;
+                                    border: 2px solid #ff0000;
+                                    pointer-events: none;
+                                    box-shadow: 0 0 0 1px rgba(255,255,255,0.8);"></div>
+                            </div>
                         </div>
                     </div>
 
