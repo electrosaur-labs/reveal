@@ -1191,11 +1191,13 @@ async function render1to1Preview() {
 
         // Check if color isolation mode is active (swatch clicked)
         const soloColorIndex = window.previewState?.activeSoloIndex;
-        const hasSubstrate = window.selectedPreview?.substrateIndex !== null;
+        const hasSubstrate = window.selectedPreview?.substrateIndex !== null && window.selectedPreview?.substrateIndex !== undefined;
         const substrateIndex = window.selectedPreview?.substrateIndex;
 
         if (soloColorIndex !== null && soloColorIndex !== undefined) {
             logger.log(`[1:1] Color isolation mode: showing only color index ${soloColorIndex}`);
+        } else {
+            logger.log(`[1:1] Showing all colors (no swatch selected)`);
         }
 
         // Generate preview from mapped indices
@@ -1204,15 +1206,34 @@ async function render1to1Preview() {
             const colorIdx = colorIndices[i];
             const idx = i * 4;
 
+            // Bounds check: ensure colorIdx is valid
+            if (colorIdx < 0 || colorIdx >= rgbPalette.length) {
+                logger.error(`[1:1] Invalid color index ${colorIdx}, palette size ${rgbPalette.length}`);
+                // Default to gray
+                previewBuffer[idx] = 128;
+                previewBuffer[idx + 1] = 128;
+                previewBuffer[idx + 2] = 128;
+                previewBuffer[idx + 3] = 255;
+                continue;
+            }
+
             // Color isolation: only show pixels of the solo color
             if (soloColorIndex !== null && soloColorIndex !== undefined && colorIdx !== soloColorIndex) {
                 // Show substrate if it exists, otherwise transparent
-                if (hasSubstrate && substrateIndex !== null) {
+                if (hasSubstrate && substrateIndex >= 0 && substrateIndex < rgbPalette.length) {
                     const substrateColor = rgbPalette[substrateIndex];
-                    previewBuffer[idx] = substrateColor.r;
-                    previewBuffer[idx + 1] = substrateColor.g;
-                    previewBuffer[idx + 2] = substrateColor.b;
-                    previewBuffer[idx + 3] = 255;
+                    if (substrateColor) {
+                        previewBuffer[idx] = substrateColor.r;
+                        previewBuffer[idx + 1] = substrateColor.g;
+                        previewBuffer[idx + 2] = substrateColor.b;
+                        previewBuffer[idx + 3] = 255;
+                    } else {
+                        // Substrate color invalid, show transparent
+                        previewBuffer[idx] = 200;
+                        previewBuffer[idx + 1] = 200;
+                        previewBuffer[idx + 2] = 200;
+                        previewBuffer[idx + 3] = 128;
+                    }
                 } else {
                     // Transparent (checkerboard will show through)
                     previewBuffer[idx] = 200;
@@ -1221,12 +1242,21 @@ async function render1to1Preview() {
                     previewBuffer[idx + 3] = 128; // Semi-transparent
                 }
             } else {
-                // Show actual color
+                // Show actual color (all colors when no swatch selected, or solo color when selected)
                 const color = rgbPalette[colorIdx];
-                previewBuffer[idx] = color.r;
-                previewBuffer[idx + 1] = color.g;
-                previewBuffer[idx + 2] = color.b;
-                previewBuffer[idx + 3] = 255;
+                if (color) {
+                    previewBuffer[idx] = color.r;
+                    previewBuffer[idx + 1] = color.g;
+                    previewBuffer[idx + 2] = color.b;
+                    previewBuffer[idx + 3] = 255;
+                } else {
+                    logger.error(`[1:1] RGB color undefined at index ${colorIdx}`);
+                    // Default to magenta to indicate error
+                    previewBuffer[idx] = 255;
+                    previewBuffer[idx + 1] = 0;
+                    previewBuffer[idx + 2] = 255;
+                    previewBuffer[idx + 3] = 255;
+                }
             }
         }
 
