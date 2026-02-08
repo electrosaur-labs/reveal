@@ -4685,7 +4685,11 @@ async function showDialog() {
                             window.viewportManager = viewportManager;
                             window.cropEngine = cropEngine;
 
-                            logger.log('[Phase 2] ✓ ViewportManager initialized');
+                            // CRITICAL: Sync initial center position to CropEngine for Navigator Map
+                            // ViewportManager defaults to center (0.5, 0.5) but CropEngine viewport isn't synced yet
+                            viewportManager.jumpToNormalized(0.5, 0.5);
+
+                            logger.log('[Phase 2] ✓ ViewportManager initialized and centered');
                         } catch (error) {
                             logger.error('[Phase 2] Failed to initialize ViewportManager:', error);
                         }
