@@ -3298,7 +3298,7 @@ function getFormValues() {
         ignoreTransparent: document.getElementById("ignoreTransparent")?.checked ?? true,
         enableHueGapAnalysis: document.getElementById("enableHueGapAnalysis")?.checked ?? true,  // Hue diversity (default ON)
         maskProfile: document.getElementById("maskProfile")?.value ?? "Gray Gamma 2.2",
-        engineType: document.getElementById("engineType")?.value ?? "reveal",  // Engine selection
+        engineType: document.getElementById("engineType")?.value ?? "reveal-mk1.5",  // Engine selection
         centroidStrategy: document.getElementById("centroidStrategy")?.value ?? "SALIENCY",  // Centroid strategy (SALIENCY or VOLUMETRIC)
         colorMode: document.getElementById("colorMode")?.value ?? "color",  // Color or B/W mode
         substrateMode: document.getElementById("substrateMode")?.value ?? "white",  // Substrate awareness
@@ -3844,7 +3844,7 @@ async function handleAnalyzeImage() {
             preprocessingIntensity: config.preprocessingIntensity || preprocessingDropdownValue,
 
             // Additional parameters from config
-            engineType: config.engineType || 'reveal',
+            engineType: config.engineType || 'reveal-mk1.5',
             centroidStrategy: config.centroidStrategy || 'SALIENCY',
             hueLockAngle: config.hueLockAngle || 20,
             shadowPoint: config.shadowPoint || 15,
@@ -4886,7 +4886,7 @@ async function showDialog() {
 
                     // Default values object
                     const defaults = {
-                        engineType: 'reveal',
+                        engineType: 'reveal-mk1.5',
                         centroidStrategy: 'SALIENCY',
                         substrateMode: 'white',
                         substrateTolerance: 3.5,
@@ -4993,7 +4993,7 @@ async function showDialog() {
 
                         // Use the same defaults as btnResetDefaults
                         const defaults = {
-                            engineType: 'reveal',
+                            engineType: 'reveal-mk1.5',
                             centroidStrategy: 'SALIENCY',
                             substrateMode: 'white',
                             substrateTolerance: 3.5,
