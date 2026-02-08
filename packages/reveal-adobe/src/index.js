@@ -921,14 +921,36 @@ function attachArrowKeyNavigation() {
  * Converts click coordinates to normalized position and updates viewport
  */
 function attachNavigatorClickHandler() {
+    logger.log('🔷🔷🔷 [attachNavigatorClickHandler] CALLED 🔷🔷🔷');
+
     const navigatorContainer = document.getElementById('navigatorMapContainer');
     const img = document.getElementById('navigatorCanvas');
     const viewportRect = document.getElementById('navigatorViewport');
 
+    logger.log('[Navigator] Element lookup:', {
+        container: !!navigatorContainer,
+        img: !!img,
+        viewportRect: !!viewportRect
+    });
+
     if (!navigatorContainer || !img || !viewportRect) {
-        logger.error('[Navigator] Cannot attach handlers - elements not found');
+        logger.error('[Navigator] ❌ Cannot attach handlers - elements not found:', {
+            container: !!navigatorContainer,
+            img: !!img,
+            viewportRect: !!viewportRect
+        });
         return;
     }
+
+    // Log viewport rect properties
+    const rectStyles = window.getComputedStyle(viewportRect);
+    logger.log('[Navigator] Viewport rect computed styles:', {
+        pointerEvents: rectStyles.pointerEvents,
+        zIndex: rectStyles.zIndex,
+        position: rectStyles.position,
+        cursor: rectStyles.cursor,
+        display: rectStyles.display
+    });
 
     // Drag state (stored globally to persist across handler calls)
     if (!window._navigatorDragState) {
@@ -943,6 +965,14 @@ function attachNavigatorClickHandler() {
 
     // Set initial cursor style
     viewportRect.style.cursor = 'grab';
+
+    // TEST: Log ANY pointer event on viewport rect
+    viewportRect.addEventListener('pointerenter', () => {
+        logger.log('[Navigator] 🟣 POINTERENTER on viewport rect');
+    });
+    viewportRect.addEventListener('pointerleave', () => {
+        logger.log('[Navigator] 🟣 POINTERLEAVE on viewport rect');
+    });
 
     // Remove old handlers if they exist
     if (window._navigatorHandlers) {
