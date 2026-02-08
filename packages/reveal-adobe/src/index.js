@@ -990,8 +990,12 @@ function attachNavigatorClickHandler() {
         // Update viewport center to follow mouse
         window.viewportManager.jumpToNormalized(normX, normY);
 
-        // Sync Navigator visual immediately
-        renderNavigatorMap();
+        // PERFORMANCE FIX: During drag, only update red rect position (not entire thumbnail)
+        // Get viewport bounds and update red rect directly
+        const navData = window.viewportManager.getNavigatorMap(160);
+        if (navData && navData.viewportBounds) {
+            updateNavigatorViewport(navData.viewportBounds);
+        }
 
         // ARCHITECT'S FIX: Debounce 1:1 render using requestAnimationFrame for smoothness
         if (!dragState.rafPending) {
@@ -1008,7 +1012,11 @@ function attachNavigatorClickHandler() {
         if (dragState.isDragging) {
             dragState.isDragging = false;
             navigatorContainer.style.cursor = '';
-            logger.log('[Navigator] 🟢 Drag ended');
+
+            // Full Navigator refresh after drag completes
+            renderNavigatorMap();
+
+            logger.log('[Navigator] 🟢 Drag ended - Navigator refreshed');
         }
     };
 
