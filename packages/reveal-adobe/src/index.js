@@ -967,6 +967,31 @@ async function setPreviewMode(mode) {
         state.viewMode = 'zoom';
         logger.log('✓ Zoom mode initialized');
 
+    } else if (mode === '1:1') {
+        // 1:1 CLINICAL LOUPE MODE (Phase 1: UI toggle only)
+        logger.log('Switching to 1:1 Clinical Loupe mode...');
+
+        // Show/hide appropriate UI elements
+        const navigatorMap = document.getElementById('navigatorMapContainer');
+        const diagnosticTools = document.getElementById('diagnosticTools');
+        const qualityGroup = document.getElementById('previewQualityGroup');
+
+        if (navigatorMap) {
+            navigatorMap.style.display = 'block';
+            logger.log('✓ Navigator Map shown');
+        }
+        if (diagnosticTools) {
+            diagnosticTools.style.display = 'flex';
+            logger.log('✓ Diagnostic Tools shown');
+        }
+        if (qualityGroup) {
+            qualityGroup.style.display = 'none';
+            logger.log('✓ Preview Quality hidden');
+        }
+
+        state.viewMode = '1:1';
+        logger.log('✓ 1:1 mode UI initialized (rendering in Phase 2)');
+
     } else if (mode === 'fit') {
         // FIT MODE: Cleanup ZoomPreviewRenderer, restore renderPreview
         logger.log('Starting fit mode restoration...');
