@@ -1520,19 +1520,29 @@ async function setPreviewMode(mode) {
         state.viewMode = '1:1';
 
         // Render Navigator Map thumbnail
+        logger.log('⭐ About to call renderNavigatorMap()');
         renderNavigatorMap();
+        logger.log('⭐ Finished renderNavigatorMap()');
 
         // Phase 4: Attach Navigator click handler for panning
+        logger.log('⭐ About to call attachNavigatorClickHandler()');
         attachNavigatorClickHandler();
+        logger.log('⭐ Finished attachNavigatorClickHandler()');
 
         // Phase 4+: Attach arrow key navigation
+        logger.log('⭐ About to call attachArrowKeyNavigation()');
         attachArrowKeyNavigation();
+        logger.log('⭐ Finished attachArrowKeyNavigation()');
 
         // Attach preview click handler to deselect swatches
+        logger.log('⭐ About to call attachPreviewClickHandler()');
         attachPreviewClickHandler();
+        logger.log('⭐ Finished attachPreviewClickHandler()');
 
         // Phase 3: Render 1:1 pixels to main preview
+        logger.log('⭐ About to call render1to1Preview()');
         await render1to1Preview();
+        logger.log('⭐ Finished render1to1Preview()');
 
         logger.log('✓ 1:1 mode initialized');
 
