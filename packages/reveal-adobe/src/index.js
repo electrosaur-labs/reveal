@@ -930,48 +930,59 @@ function attachNavigatorClickHandler() {
         return;
     }
 
-    // Remove existing listeners by cloning
-    const newContainer = navigatorContainer.cloneNode(true);
-    navigatorContainer.parentNode.replaceChild(newContainer, navigatorContainer);
+    // Drag state (stored globally to persist across handler calls)
+    if (!window._navigatorDragState) {
+        window._navigatorDragState = {
+            isDragging: false,
+            dragStartX: 0,
+            dragStartY: 0,
+            hasDragged: false
+        };
+    }
+    const dragState = window._navigatorDragState;
 
-    const newImg = newContainer.querySelector('#navigatorCanvas');
-    const newViewportRect = newContainer.querySelector('#navigatorViewport');
-    if (!newImg || !newViewportRect) return;
+    // Set initial cursor style
+    viewportRect.style.cursor = 'grab';
 
-    // Drag state
-    let isDragging = false;
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let hasDragged = false;
+    // Remove old handlers if they exist
+    if (window._navigatorHandlers) {
+        const old = window._navigatorHandlers;
+        viewportRect.removeEventListener('mousedown', old.mousedown);
+        navigatorContainer.removeEventListener('mousemove', old.mousemove);
+        navigatorContainer.removeEventListener('mouseup', old.mouseup);
+        navigatorContainer.removeEventListener('click', old.click);
+    }
 
     // Mouse down on viewport rect - start dragging
-    newViewportRect.addEventListener('mousedown', (e) => {
+    const mousedownHandler = (e) => {
         if (!window.viewportManager) return;
 
-        isDragging = true;
-        hasDragged = false;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
+        dragState.isDragging = true;
+        dragState.hasDragged = false;
+        dragState.dragStartX = e.clientX;
+        dragState.dragStartY = e.clientY;
 
-        newViewportRect.style.cursor = 'grabbing';
-        e.stopPropagation(); // Prevent click handler
+        viewportRect.style.cursor = 'grabbing';
+        e.stopPropagation();
         e.preventDefault();
-    });
+
+        logger.log('[Navigator] Started dragging viewport rect');
+    };
 
     // Mouse move - drag viewport rect
-    document.addEventListener('mousemove', async (e) => {
-        if (!isDragging || !window.viewportManager) return;
+    const mousemoveHandler = async (e) => {
+        if (!dragState.isDragging || !window.viewportManager) return;
 
-        const deltaX = e.clientX - dragStartX;
-        const deltaY = e.clientY - dragStartY;
+        const deltaX = e.clientX - dragState.dragStartX;
+        const deltaY = e.clientY - dragState.dragStartY;
 
-        // Track if we've actually moved (to distinguish from clicks)
+        // Track if we've actually moved
         if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
-            hasDragged = true;
+            dragState.hasDragged = true;
         }
 
         // Convert pixel delta to normalized delta
-        const rect = newImg.getBoundingClientRect();
+        const rect = img.getBoundingClientRect();
         const normDeltaX = deltaX / rect.width;
         const normDeltaY = deltaY / rect.height;
 
@@ -983,50 +994,51 @@ function attachNavigatorClickHandler() {
         );
 
         // Update drag start for next frame
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
+        dragState.dragStartX = e.clientX;
+        dragState.dragStartY = e.clientY;
 
         // Re-render Navigator Map (updates red rect position)
         renderNavigatorMap();
 
         // Re-render 1:1 preview (shows new crop)
         await render1to1Preview();
-    });
+    };
 
     // Mouse up - stop dragging
-    document.addEventListener('mouseup', () => {
-        if (isDragging) {
-            isDragging = false;
-            newViewportRect.style.cursor = 'grab';
+    const mouseupHandler = () => {
+        if (dragState.isDragging) {
+            dragState.isDragging = false;
+            viewportRect.style.cursor = 'grab';
+            logger.log('[Navigator] Stopped dragging viewport rect');
         }
-    });
+    };
 
-    // Click on thumbnail (but not on viewport rect) - jump to location
-    newContainer.addEventListener('click', async (e) => {
+    // Click on thumbnail - jump to location
+    const clickHandler = async (e) => {
         if (!window.viewportManager) {
             logger.warn('[Navigator] ViewportManager not initialized');
             return;
         }
 
         // Don't handle click if we just dragged
-        if (hasDragged) {
-            hasDragged = false;
+        if (dragState.hasDragged) {
+            dragState.hasDragged = false;
             return;
         }
 
-        // Don't handle click if it was on the viewport rect
-        if (e.target === newViewportRect) {
+        // Only handle clicks on the img itself
+        if (e.target !== img) {
             return;
         }
 
         // Get click position relative to img element
-        const rect = newImg.getBoundingClientRect();
+        const rect = img.getBoundingClientRect();
         const clickX = e.clientX - rect.left;
         const clickY = e.clientY - rect.top;
 
         // Convert to normalized coordinates (0.0-1.0)
-        const normX = clickX / newImg.width;
-        const normY = clickY / newImg.height;
+        const normX = clickX / img.width;
+        const normY = clickY / img.height;
 
         logger.log(`[Navigator] Clicked at (${clickX}, ${clickY}) = normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
 
@@ -1038,12 +1050,65 @@ function attachNavigatorClickHandler() {
 
         // Re-render 1:1 preview (shows new crop)
         await render1to1Preview();
-    });
+    };
 
-    // Set initial cursor style
-    newViewportRect.style.cursor = 'grab';
+    // Attach handlers
+    viewportRect.addEventListener('mousedown', mousedownHandler);
+    navigatorContainer.addEventListener('mousemove', mousemoveHandler);
+    navigatorContainer.addEventListener('mouseup', mouseupHandler);
+    navigatorContainer.addEventListener('click', clickHandler);
+
+    // Store handlers for cleanup
+    window._navigatorHandlers = {
+        mousedown: mousedownHandler,
+        mousemove: mousemoveHandler,
+        mouseup: mouseupHandler,
+        click: clickHandler
+    };
 
     logger.log('[Navigator] ✓ Click and drag handlers attached');
+}
+
+/**
+ * Attach click handler to preview image to deselect swatches in 1:1 mode
+ */
+function attachPreviewClickHandler() {
+    const previewImg = document.getElementById('previewImg');
+
+    if (!previewImg) {
+        logger.error('[Preview] Cannot attach click handler - preview image not found');
+        return;
+    }
+
+    // Remove old handler if it exists
+    if (window._previewClickHandler) {
+        previewImg.removeEventListener('click', window._previewClickHandler);
+    }
+
+    // Click handler to deselect swatches
+    const clickHandler = async () => {
+        const state = window.previewState;
+        if (!state || state.viewMode !== '1:1') return;
+
+        // Only deselect if something is currently selected
+        if (state.activeSoloIndex === null || state.activeSoloIndex === undefined) {
+            return;
+        }
+
+        logger.log('[Preview] Clicked - deselecting swatch');
+
+        // Clear selection
+        state.activeSoloIndex = null;
+        updateSwatchHighlights();
+
+        // Re-render preview to show all colors
+        await render1to1Preview();
+    };
+
+    previewImg.addEventListener('click', clickHandler);
+    window._previewClickHandler = clickHandler;
+
+    logger.log('[Preview] ✓ Click handler attached to deselect swatches');
 }
 
 /**
@@ -1417,6 +1482,9 @@ async function setPreviewMode(mode) {
 
         // Phase 4+: Attach arrow key navigation
         attachArrowKeyNavigation();
+
+        // Attach preview click handler to deselect swatches
+        attachPreviewClickHandler();
 
         // Phase 3: Render 1:1 pixels to main preview
         await render1to1Preview();
