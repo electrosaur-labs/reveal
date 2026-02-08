@@ -4207,6 +4207,8 @@ async function showDialog() {
                                 posterizationData.originalHeight,
                                 {
                                     ...posterizationData.params,  // Use actual posterization params, not results!
+                                    format: 'lab',                // CRITICAL: Tell engine this is LAB data
+                                    bitDepth: posterizationData.bitDepth || 16,
                                     actualDocumentWidth: posterizationData.originalWidth,
                                     actualDocumentHeight: posterizationData.originalHeight
                                 }
