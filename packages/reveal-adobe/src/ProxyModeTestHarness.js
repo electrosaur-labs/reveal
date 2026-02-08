@@ -190,7 +190,7 @@ class ProxyModeTestHarness {
 
         return {
             targetColors: targetColors,
-            engineType: 'reveal',
+            engineType: 'reveal-mk1.5',
             centroidStrategy: 'SALIENCY',
             distanceMetric: 'cie76',
             format: 'lab',          // CRITICAL: Tell engine this is Lab data
