@@ -895,14 +895,14 @@ async function render1to1Preview() {
 
         logger.log(`[1:1] ✓ Fetched high-res crop: ${cropData.width}x${cropData.height}`);
 
-        // Get the posterization palette from posterizationData
-        if (!posterizationData.paletteLab || !posterizationData.palette) {
-            logger.error('[1:1] No palette available in posterizationData');
+        // Get the posterization palette from window.selectedPreview
+        if (!window.selectedPreview || !window.selectedPreview.paletteLab || !window.selectedPreview.palette) {
+            logger.error('[1:1] No palette available in window.selectedPreview');
             return;
         }
 
-        const labPalette = posterizationData.paletteLab;
-        const rgbPalette = posterizationData.palette;
+        const labPalette = window.selectedPreview.paletteLab;
+        const rgbPalette = window.selectedPreview.palette;
 
         // Map high-res crop pixels to existing palette
         logger.log(`[1:1] Mapping ${cropData.width}x${cropData.height} pixels to ${labPalette.length} color palette...`);
