@@ -947,15 +947,18 @@ function attachNavigatorClickHandler() {
     // Remove old handlers if they exist
     if (window._navigatorHandlers) {
         const old = window._navigatorHandlers;
-        viewportRect.removeEventListener('mousedown', old.mousedown);
-        navigatorContainer.removeEventListener('mousemove', old.mousemove);
-        navigatorContainer.removeEventListener('mouseup', old.mouseup);
+        viewportRect.removeEventListener('pointerdown', old.pointerdown);
+        navigatorContainer.removeEventListener('pointermove', old.pointermove);
+        navigatorContainer.removeEventListener('pointerup', old.pointerup);
+        navigatorContainer.removeEventListener('pointercancel', old.pointercancel);
         navigatorContainer.removeEventListener('click', old.click);
     }
 
-    // Mouse down on viewport rect - start dragging
-    const mousedownHandler = (e) => {
+    // Pointer down on viewport rect - start dragging
+    const pointerdownHandler = (e) => {
         if (!window.viewportManager) return;
+
+        logger.log('[Navigator] 🔴 POINTERDOWN detected on viewport rect');
 
         dragState.isDragging = true;
         dragState.hasDragged = false;
@@ -969,9 +972,13 @@ function attachNavigatorClickHandler() {
         logger.log('[Navigator] Started dragging viewport rect');
     };
 
-    // Mouse move - drag viewport rect
-    const mousemoveHandler = async (e) => {
-        if (!dragState.isDragging || !window.viewportManager) return;
+    // Pointer move - drag viewport rect
+    const pointermoveHandler = async (e) => {
+        if (!dragState.isDragging || !window.viewportManager) {
+            return;
+        }
+
+        logger.log('[Navigator] 🟡 POINTERMOVE - dragging', e.clientX, e.clientY);
 
         const deltaX = e.clientX - dragState.dragStartX;
         const deltaY = e.clientY - dragState.dragStartY;
@@ -985,6 +992,8 @@ function attachNavigatorClickHandler() {
         const rect = img.getBoundingClientRect();
         const normDeltaX = deltaX / rect.width;
         const normDeltaY = deltaY / rect.height;
+
+        logger.log(`[Navigator] Delta: (${deltaX}, ${deltaY}) -> Norm: (${normDeltaX.toFixed(3)}, ${normDeltaY.toFixed(3)})`);
 
         // Update viewport position
         const currentCenter = window.viewportManager.center;
@@ -1004,9 +1013,10 @@ function attachNavigatorClickHandler() {
         await render1to1Preview();
     };
 
-    // Mouse up - stop dragging
-    const mouseupHandler = () => {
+    // Pointer up - stop dragging
+    const pointerupHandler = () => {
         if (dragState.isDragging) {
+            logger.log('[Navigator] 🟢 POINTERUP - stopping drag');
             dragState.isDragging = false;
             viewportRect.style.cursor = 'grab';
             logger.log('[Navigator] Stopped dragging viewport rect');
@@ -1053,20 +1063,25 @@ function attachNavigatorClickHandler() {
     };
 
     // Attach handlers
-    viewportRect.addEventListener('mousedown', mousedownHandler);
-    navigatorContainer.addEventListener('mousemove', mousemoveHandler);
-    navigatorContainer.addEventListener('mouseup', mouseupHandler);
+    viewportRect.addEventListener('pointerdown', pointerdownHandler);
+    navigatorContainer.addEventListener('pointermove', pointermoveHandler);
+    navigatorContainer.addEventListener('pointerup', pointerupHandler);
+    navigatorContainer.addEventListener('pointercancel', pointerupHandler); // Same as pointerup
     navigatorContainer.addEventListener('click', clickHandler);
 
     // Store handlers for cleanup
     window._navigatorHandlers = {
-        mousedown: mousedownHandler,
-        mousemove: mousemoveHandler,
-        mouseup: mouseupHandler,
+        pointerdown: pointerdownHandler,
+        pointermove: pointermoveHandler,
+        pointerup: pointerupHandler,
+        pointercancel: pointerupHandler,
         click: clickHandler
     };
 
-    logger.log('[Navigator] ✓ Click and drag handlers attached');
+    logger.log('[Navigator] ✓ Pointer and click handlers attached to:', {
+        viewportRect: viewportRect.id,
+        container: navigatorContainer.id
+    });
 }
 
 /**
