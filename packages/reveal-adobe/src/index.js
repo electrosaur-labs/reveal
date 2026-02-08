@@ -921,146 +921,96 @@ function attachArrowKeyNavigation() {
  * Converts click coordinates to normalized position and updates viewport
  */
 function attachNavigatorClickHandler() {
-    logger.log('🔷🔷🔷 [attachNavigatorClickHandler] CALLED 🔷🔷🔷');
+    logger.log('🔷 [attachNavigatorClickHandler] CALLED - Implementing Architect\'s Center-Drag Pattern');
 
     const navigatorContainer = document.getElementById('navigatorMapContainer');
     const img = document.getElementById('navigatorCanvas');
     const viewportRect = document.getElementById('navigatorViewport');
 
-    logger.log('[Navigator] Element lookup:', {
-        container: !!navigatorContainer,
-        img: !!img,
-        viewportRect: !!viewportRect
-    });
-
     if (!navigatorContainer || !img || !viewportRect) {
-        logger.error('[Navigator] ❌ Cannot attach handlers - elements not found:', {
-            container: !!navigatorContainer,
-            img: !!img,
-            viewportRect: !!viewportRect
-        });
+        logger.error('[Navigator] ❌ Elements not found');
         return;
     }
 
-    // Log viewport rect properties
-    const rectStyles = window.getComputedStyle(viewportRect);
-    logger.log('[Navigator] Viewport rect computed styles:', {
-        pointerEvents: rectStyles.pointerEvents,
-        zIndex: rectStyles.zIndex,
-        position: rectStyles.position,
-        cursor: rectStyles.cursor,
-        display: rectStyles.display
-    });
-
-    // Drag state (stored globally to persist across handler calls)
+    // Drag state (stored globally)
     if (!window._navigatorDragState) {
         window._navigatorDragState = {
             isDragging: false,
-            dragStartX: 0,
-            dragStartY: 0,
-            hasDragged: false
+            hasDragged: false,
+            rafPending: false  // For debouncing 1:1 renders
         };
     }
     const dragState = window._navigatorDragState;
 
-    // Set initial cursor style
-    viewportRect.style.cursor = 'grab';
-
-    // TEST: Log ANY pointer event on viewport rect
-    viewportRect.addEventListener('pointerenter', () => {
-        logger.log('[Navigator] 🟣 POINTERENTER on viewport rect');
-    });
-    viewportRect.addEventListener('pointerleave', () => {
-        logger.log('[Navigator] 🟣 POINTERLEAVE on viewport rect');
-    });
-
     // Remove old handlers if they exist
     if (window._navigatorHandlers) {
         const old = window._navigatorHandlers;
-        viewportRect.removeEventListener('pointerdown', old.pointerdown);
+        navigatorContainer.removeEventListener('pointerdown', old.pointerdown);
         navigatorContainer.removeEventListener('pointermove', old.pointermove);
         navigatorContainer.removeEventListener('pointerup', old.pointerup);
         navigatorContainer.removeEventListener('pointercancel', old.pointercancel);
         navigatorContainer.removeEventListener('click', old.click);
     }
 
-    // Pointer down on viewport rect - start dragging
+    // ARCHITECT'S FIX: Attach pointerdown to img (not red rect - it has pointer-events: none)
     const pointerdownHandler = (e) => {
         if (!window.viewportManager) return;
 
-        logger.log('[Navigator] 🔴 POINTERDOWN detected on viewport rect');
+        // Only start drag if clicking on the img
+        if (e.target !== img) return;
 
         dragState.isDragging = true;
         dragState.hasDragged = false;
-        dragState.dragStartX = e.clientX;
-        dragState.dragStartY = e.clientY;
 
-        viewportRect.style.cursor = 'grabbing';
-        e.stopPropagation();
+        navigatorContainer.style.cursor = 'grabbing';
         e.preventDefault();
 
-        logger.log('[Navigator] Started dragging viewport rect');
+        logger.log('[Navigator] 🔴 Drag started - Center-Drag mode active');
     };
 
-    // Pointer move - drag viewport rect
+    // ARCHITECT'S FIX: Center-Drag logic with accurate coordinate math
     const pointermoveHandler = async (e) => {
-        logger.log('[Navigator] 🟡 POINTERMOVE called - isDragging:', dragState.isDragging, 'viewportManager:', !!window.viewportManager);
+        if (!dragState.isDragging || !window.viewportManager) return;
 
-        if (!dragState.isDragging || !window.viewportManager) {
-            return;
-        }
+        dragState.hasDragged = true;
 
-        logger.log('[Navigator] 🟡 POINTERMOVE - DRAGGING', e.clientX, e.clientY);
-
-        const deltaX = e.clientX - dragState.dragStartX;
-        const deltaY = e.clientY - dragState.dragStartY;
-
-        // Track if we've actually moved
-        if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
-            dragState.hasDragged = true;
-        }
-
-        // Convert pixel delta to normalized delta
+        // Use getBoundingClientRect for ACTUAL displayed dimensions (accounts for object-fit: contain)
         const rect = img.getBoundingClientRect();
-        const normDeltaX = deltaX / rect.width;
-        const normDeltaY = deltaY / rect.height;
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
 
-        logger.log(`[Navigator] Delta: (${deltaX}, ${deltaY}) -> Norm: (${normDeltaX.toFixed(3)}, ${normDeltaY.toFixed(3)})`);
+        // Map to normalized coordinates (0.0 - 1.0)
+        const normX = clickX / rect.width;
+        const normY = clickY / rect.height;
 
-        // Update viewport position
-        const currentCenter = window.viewportManager.center;
-        window.viewportManager.jumpToNormalized(
-            currentCenter.x + normDeltaX,
-            currentCenter.y + normDeltaY
-        );
+        // Update viewport center to follow mouse
+        window.viewportManager.jumpToNormalized(normX, normY);
 
-        // Update drag start for next frame
-        dragState.dragStartX = e.clientX;
-        dragState.dragStartY = e.clientY;
-
-        // Re-render Navigator Map (updates red rect position)
+        // Sync Navigator visual immediately
         renderNavigatorMap();
 
-        // Re-render 1:1 preview (shows new crop)
-        await render1to1Preview();
+        // ARCHITECT'S FIX: Debounce 1:1 render using requestAnimationFrame for smoothness
+        if (!dragState.rafPending) {
+            dragState.rafPending = true;
+            requestAnimationFrame(async () => {
+                await render1to1Preview();
+                dragState.rafPending = false;
+            });
+        }
     };
 
     // Pointer up - stop dragging
     const pointerupHandler = () => {
         if (dragState.isDragging) {
-            logger.log('[Navigator] 🟢 POINTERUP - stopping drag');
             dragState.isDragging = false;
-            viewportRect.style.cursor = 'grab';
-            logger.log('[Navigator] Stopped dragging viewport rect');
+            navigatorContainer.style.cursor = '';
+            logger.log('[Navigator] 🟢 Drag ended');
         }
     };
 
-    // Click on thumbnail - jump to location
+    // ARCHITECT'S FIX: Click handler with accurate coordinate math
     const clickHandler = async (e) => {
-        if (!window.viewportManager) {
-            logger.warn('[Navigator] ViewportManager not initialized');
-            return;
-        }
+        if (!window.viewportManager) return;
 
         // Don't handle click if we just dragged
         if (dragState.hasDragged) {
@@ -1068,46 +1018,33 @@ function attachNavigatorClickHandler() {
             return;
         }
 
-        // Only handle clicks on the img itself
-        if (e.target !== img) {
-            return;
-        }
+        // Only handle clicks on the img
+        if (e.target !== img) return;
 
-        // Get click position relative to img element
+        // Use getBoundingClientRect for ACTUAL displayed dimensions
         const rect = img.getBoundingClientRect();
         const clickX = e.clientX - rect.left;
         const clickY = e.clientY - rect.top;
 
-        // Convert to normalized coordinates (0.0-1.0)
-        const normX = clickX / img.width;
-        const normY = clickY / img.height;
+        // Map to normalized coordinates (0.0 - 1.0)
+        const normX = clickX / rect.width;
+        const normY = clickY / rect.height;
 
-        logger.log(`[Navigator] Clicked at (${clickX}, ${clickY}) = normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
+        logger.log(`[Navigator] Clicked at normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
 
         // Update viewport center
         window.viewportManager.jumpToNormalized(normX, normY);
 
-        // Re-render Navigator Map (updates red rect position)
+        // Sync UI
         renderNavigatorMap();
-
-        // Re-render 1:1 preview (shows new crop)
         await render1to1Preview();
     };
 
-    // DIAGNOSTIC: Log ALL pointer events on container to see what's actually firing
-    navigatorContainer.addEventListener('pointerdown', (e) => {
-        logger.log('[Navigator] 🔻 CONTAINER pointerdown', e.target.id, e.target.tagName);
-    }, true); // Capture phase
-
-    navigatorContainer.addEventListener('pointermove', (e) => {
-        logger.log('[Navigator] 🔻 CONTAINER pointermove', e.target.id);
-    }, true); // Capture phase
-
-    // Attach handlers
-    viewportRect.addEventListener('pointerdown', pointerdownHandler);
+    // Attach handlers to container/img (NOT viewport rect - it has pointer-events: none)
+    img.addEventListener('pointerdown', pointerdownHandler);
     navigatorContainer.addEventListener('pointermove', pointermoveHandler);
     navigatorContainer.addEventListener('pointerup', pointerupHandler);
-    navigatorContainer.addEventListener('pointercancel', pointerupHandler); // Same as pointerup
+    navigatorContainer.addEventListener('pointercancel', pointerupHandler);
     navigatorContainer.addEventListener('click', clickHandler);
 
     // Store handlers for cleanup
@@ -1119,10 +1056,7 @@ function attachNavigatorClickHandler() {
         click: clickHandler
     };
 
-    logger.log('[Navigator] ✓ Pointer and click handlers attached to:', {
-        viewportRect: viewportRect.id,
-        container: navigatorContainer.id
-    });
+    logger.log('[Navigator] ✓ Architect\'s Center-Drag pattern implemented');
 }
 
 /**
