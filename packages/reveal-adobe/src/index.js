@@ -819,28 +819,30 @@ function renderNavigatorMap() {
             return;
         }
 
-        // Get canvas and render thumbnail
-        const canvas = document.getElementById('navigatorCanvas');
-        if (!canvas) {
-            logger.error('[Navigator] Canvas not found');
+        // Get img element (now using img instead of canvas for UXP compatibility)
+        const img = document.getElementById('navigatorCanvas');
+        if (!img) {
+            logger.error('[Navigator] Image element not found');
             return;
         }
 
-        const ctx = canvas.getContext('2d');
         const { thumbnailBuffer, thumbnailWidth, thumbnailHeight } = navData;
 
-        // Create ImageData and render to canvas
-        const imageData = new ImageData(
-            new Uint8ClampedArray(thumbnailBuffer),
-            thumbnailWidth,
-            thumbnailHeight
-        );
+        // Encode to JPEG using jpeg-js (UXP doesn't support ImageData constructor)
+        const jpegData = jpeg.encode({
+            data: thumbnailBuffer,
+            width: thumbnailWidth,
+            height: thumbnailHeight
+        }, 95);
 
-        // Scale to fit 160x160 canvas if needed
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.putImageData(imageData, 0, 0);
+        // Convert to base64 data URL
+        const base64 = bufferToBase64(jpegData.data);
+        const dataUrl = `data:image/jpeg;base64,${base64}`;
 
-        logger.log(`[Navigator] ✓ Thumbnail rendered: ${thumbnailWidth}x${thumbnailHeight}`);
+        // Set image source
+        img.src = dataUrl;
+
+        logger.log(`[Navigator] ✓ Thumbnail rendered: ${thumbnailWidth}x${thumbnailHeight} (${Math.round(jpegData.data.length / 1024)}KB)`);
 
         // Update viewport rectangle
         updateNavigatorViewport();
@@ -854,19 +856,35 @@ function renderNavigatorMap() {
  * Update red viewport rectangle position on Navigator Map
  */
 function updateNavigatorViewport() {
-    if (!window.viewportManager) return;
+    if (!window.viewportManager) {
+        logger.error('[Navigator] No viewportManager!');
+        return;
+    }
 
     const viewportDiv = document.getElementById('navigatorViewport');
-    const canvas = document.getElementById('navigatorCanvas');
+    const img = document.getElementById('navigatorCanvas');
 
-    if (!viewportDiv || !canvas) return;
+    if (!viewportDiv || !img) {
+        logger.error('[Navigator] Missing elements:', { viewportDiv: !!viewportDiv, img: !!img });
+        return;
+    }
 
     try {
-        // Get viewport bounds in thumbnail coordinates
+        // DEBUG: Check ViewportManager state
+        const vmState = window.viewportManager.getState();
+        logger.log('[Navigator] ViewportManager state:', {
+            viewportWidth: vmState.viewportWidth,
+            viewportHeight: vmState.viewportHeight,
+            center: vmState.center
+        });
+
+        // Get viewport bounds in thumbnail coordinates (using img width/height)
         const bounds = window.viewportManager.getViewportBoundsInThumbnail(
-            canvas.width,
-            canvas.height
+            img.width,
+            img.height
         );
+
+        logger.log('[Navigator] Calculated bounds:', bounds);
 
         // Position the red rectangle
         viewportDiv.style.left = `${bounds.x}px`;
@@ -874,9 +892,10 @@ function updateNavigatorViewport() {
         viewportDiv.style.width = `${bounds.width}px`;
         viewportDiv.style.height = `${bounds.height}px`;
 
-        logger.log(`[Navigator] Viewport rect: ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`);
+        logger.log(`[Navigator] ✓ Viewport rect positioned: ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`);
     } catch (error) {
         logger.error('[Navigator] Failed to update viewport rect:', error);
+        logger.error('[Navigator] Error stack:', error.stack);
     }
 }
 
