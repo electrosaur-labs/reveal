@@ -25,6 +25,11 @@ const logger = Reveal.logger;
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 const DNAGenerator = require("./DNAGenerator");
 
+// 1:1 Viewport components for mechanical knobs
+const CropEngine = require('../../reveal-core/lib/engines/CropEngine');
+const { SessionState } = require('./SessionState');
+const ViewportManager = require('./ViewportManager');
+
 // Zoom preview components
 const ZoomPreviewRenderer = require("./api/ZoomPreviewRenderer");
 
@@ -4116,6 +4121,34 @@ async function showDialog() {
                 btnPosterize.addEventListener("click", () => {
                     handlePosterization(btnPosterize, originalText);
                 });
+            }
+
+            // Set up View Mode switching (Phase 1: UI state machine)
+            const viewModeSelect = document.getElementById('viewMode');
+            if (viewModeSelect) {
+                viewModeSelect.addEventListener('change', (e) => {
+                    const mode = e.target.value;
+                    logger.log(`[ViewMode] Switching to: ${mode}`);
+
+                    const navigatorMap = document.getElementById('navigatorMapContainer');
+                    const diagnosticTools = document.getElementById('diagnosticTools');
+                    const qualityGroup = document.getElementById('previewQualityGroup');
+
+                    if (mode === '1:1') {
+                        // Show 1:1 Clinical Loupe UI
+                        if (navigatorMap) navigatorMap.style.display = 'block';
+                        if (diagnosticTools) diagnosticTools.style.display = 'flex';
+                        if (qualityGroup) qualityGroup.style.display = 'none';
+                        logger.log('[ViewMode] ✓ 1:1 mode UI shown');
+                    } else {
+                        // Show standard Fit/Zoom UI
+                        if (navigatorMap) navigatorMap.style.display = 'none';
+                        if (diagnosticTools) diagnosticTools.style.display = 'none';
+                        if (qualityGroup) qualityGroup.style.display = 'flex';
+                        logger.log(`[ViewMode] ✓ ${mode} mode UI shown`);
+                    }
+                });
+                logger.log('[ViewMode] ✓ View mode switcher initialized');
             }
 
             // Target Colors slider value display is handled by sliderConfigs below (no sync needed)

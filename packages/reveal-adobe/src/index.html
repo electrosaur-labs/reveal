@@ -1642,17 +1642,44 @@
                                 <select id="viewMode" style="padding: 4px 8px; font-size: 11px; border: 1px solid #ccc; border-radius: 3px;">
                                     <option value="fit" selected>Fit</option>
                                     <option value="zoom">Zoom</option>
+                                    <option value="1:1">1:1 Clinical Loupe</option>
                                 </select>
                             </div>
 
                             <!-- Preview Quality/Resolution Dropdown -->
-                            <div style="display: flex; align-items: center; gap: 8px;">
+                            <div id="previewQualityGroup" style="display: flex; align-items: center; gap: 8px;">
                                 <label id="previewStrideLabel" for="previewStride" style="font-size: 11px; color: #666;">Preview Quality:</label>
                                 <select id="previewStride" style="padding: 4px 8px; font-size: 11px; border: 1px solid #ccc; border-radius: 3px;">
                                     <option value="4" selected>Standard (fast)</option>
                                     <option value="2">Fine (slow)</option>
                                     <option value="1">Finest (slower)</option>
                                 </select>
+                            </div>
+
+                            <!-- Diagnostic Tools (shown only in 1:1 mode) -->
+                            <div id="diagnosticTools" style="display: none; align-items: center; gap: 12px;">
+                                <label style="font-size: 11px; color: #666; font-weight: 600;">Diagnostic:</label>
+                                <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer;">
+                                    <input type="checkbox" id="filmFlashToggle" style="cursor: pointer;">
+                                    Film Flash
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer;">
+                                    <input type="checkbox" id="meshOverlayToggle" style="cursor: pointer;">
+                                    Mesh Overlay
+                                </label>
+                            </div>
+
+                            <!-- Navigator Map (shown only in 1:1 mode) -->
+                            <div id="navigatorMapContainer" style="display: none; padding: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px;">
+                                <div style="font-size: 11px; color: #666; font-weight: 600; margin-bottom: 4px;">Navigator Map</div>
+                                <div style="position: relative; width: 160px; height: 160px; cursor: crosshair; border: 1px solid #999; background: #fff;">
+                                    <canvas id="navigatorCanvas" width="160" height="160" style="display: block;"></canvas>
+                                    <div id="navigatorViewport" style="
+                                        position: absolute;
+                                        border: 2px solid #ff0000;
+                                        pointer-events: none;
+                                        box-shadow: 0 0 0 1px rgba(255,255,255,0.8);"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
