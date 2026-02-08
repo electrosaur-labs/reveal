@@ -435,7 +435,6 @@ class PosterizationEngine {
                 for (const sector of PROTECTED_SECTORS) {
                     if (this._checkBucketForHueSector(bucket, sector, 2)) {
                         priority *= HUE_PRIORITY_MULTIPLIER;
-                        logger.log(`[Green Rescue] 🌿 Found hue sector ${sector} in bucket ${index} - inflating priority ${HUE_PRIORITY_MULTIPLIER}×`);
                         break; // Only multiply once
                     }
                 }
@@ -1571,21 +1570,14 @@ class PosterizationEngine {
             // Green colors have a < 0 in perceptual Lab space
             if (targetSectors.includes(sector)) {
                 greenCandidates++;
-                logger.log(`[Green Peek] Found color in sector ${sector}: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}, hue=${normHue.toFixed(0)}°`);
                 return true;
             }
 
             // ADDITIONAL CHECK: Any color with negative a* and positive b* is green-ish
             // This catches greens that might be classified in adjacent sectors
             if (c.a < -3 && c.b > 0 && chroma > 3) {
-                logger.log(`[Green Peek] Found green-axis color: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}`);
                 return true;
             }
-        }
-
-        // Log diagnostic info if no green found
-        if (lowChromaSkips > sampleSize * 0.8) {
-            logger.log(`[Green Peek] Box has mostly low-chroma colors (${lowChromaSkips}/${sampleSize} skipped, threshold=${chromaThreshold})`);
         }
 
         return false;
@@ -1648,18 +1640,12 @@ class PosterizationEngine {
         if (isArchiveMode) {
             if (!greenSector3Covered && !greenSector4Covered) {
                 // Check if box contains ANY green signals (sectors 3 or 4)
-                logger.log(`[Green Peek] Checking box with ${box.colors.length} colors (threshold=${GREEN_PEEK_THRESHOLD}, greenEnergy=${greenEnergy.toFixed(1)}%)`);
                 const hasGreenSignal = this._boxContainsHueSector(box.colors, [3, 4], GREEN_PEEK_THRESHOLD);
 
                 if (hasGreenSignal && greenEnergy > 0.1) {
                     multiplier = GREEN_PEEK_MULTIPLIER;
-                    logger.log(`[Green Peek] 🌿 Box contains hidden green signal (${greenEnergy.toFixed(1)}% image energy) - ${multiplier}× boost`);
                     return basePriority * multiplier;  // Early return with boost
-                } else if (hasGreenSignal) {
-                    logger.log(`[Green Peek] ⚠️ Green signal found but image greenEnergy too low (${greenEnergy.toFixed(1)}%)`);
                 }
-            } else {
-                logger.log(`[Green Peek] Skipped - green sectors already covered (3:${greenSector3Covered}, 4:${greenSector4Covered})`);
             }
         }
 
@@ -1696,7 +1682,7 @@ class PosterizationEngine {
                 if (isRedSector) {
                     logger.log(`[Red Rescue] 🔴 Forcing split on Red bucket (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
                 } else if (isArchiveMode && isGreenSector) {
-                    logger.log(`[Green Rescue] 🌿 Forcing split on ${sectorNames[boxSector]} bucket (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
+                    // Green Rescue: Forcing split on green bucket with energy boost
                 } else {
                     logger.log(`[Hue Priority] ⭐ ${sectorNames[boxSector]} sector (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
                 }
@@ -2566,9 +2552,7 @@ class PosterizationEngine {
         const GREEN_RESCUE_THRESHOLD = 1.5;  // Activate if green > 1.5% of image
         const shouldRescueGreen = !grayscaleOnly && greenEnergy > GREEN_RESCUE_THRESHOLD && is16Bit;
 
-        if (shouldRescueGreen) {
-            logger.log(`[Green Rescue] 🌿 Activating Green-Priority Centroid (green energy: ${greenEnergy.toFixed(1)}%)`);
-        }
+        // Green Rescue activated if needed (green energy check)
 
         // PRE-SCAN: Find the box with most green content for forced rescue
         let bestGreenBoxIdx = -1;
@@ -2586,7 +2570,6 @@ class PosterizationEngine {
                     return sector === 3 || sector === 4;  // Y-Green or Green
                 });
                 const greenRatio = box.colors.length > 0 ? greenColors.length / box.colors.length : 0;
-                logger.log(`[Green Rescue] Box ${idx} scan: ${greenColors.length} green pixels (${(greenRatio * 100).toFixed(1)}% of box)`);
 
                 if (greenColors.length > bestGreenCount) {
                     bestGreenCount = greenColors.length;
@@ -2594,10 +2577,6 @@ class PosterizationEngine {
                     bestGreenBoxIdx = idx;
                 }
             });
-
-            if (bestGreenBoxIdx >= 0) {
-                logger.log(`[Green Rescue] Best green box: #${bestGreenBoxIdx} with ${bestGreenCount} green pixels (${(bestGreenRatio * 100).toFixed(1)}%)`);
-            }
         }
 
         // Calculate representative color for each box (centroid in Lab space)
@@ -2616,7 +2595,7 @@ class PosterizationEngine {
                 });
 
                 if (greenColors.length > 0) {
-                    logger.log(`[Green Rescue] ✅ Box ${idx}: FORCING green centroid from ${greenColors.length} pixels`);
+                    // Force green centroid calculation for this box
                     return this._calculateLabCentroid(greenColors, grayscaleOnly, strategy, tuning);
                 }
             }

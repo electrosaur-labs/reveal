@@ -13,6 +13,7 @@
 const PosterizationEngine = require('./lib/engines/PosterizationEngine');
 const SeparationEngine = require('./lib/engines/SeparationEngine');
 const PreviewEngine = require('./lib/engines/PreviewEngine');
+const ProxyEngine = require('./lib/engines/ProxyEngine');
 const DocumentValidator = require('./lib/validation/DocumentValidator');
 const DNAValidator = require('./lib/validation/DNAValidator');
 const ImageHeuristicAnalyzer = require('./lib/analysis/ImageHeuristicAnalyzer');
@@ -386,6 +387,7 @@ module.exports.engines = {
     PosterizationEngine,
     SeparationEngine,
     PreviewEngine,
+    ProxyEngine,
     DocumentValidator,
     DNAValidator,
     ImageHeuristicAnalyzer,
@@ -423,3 +425,6 @@ module.exports.DNAGenerator = DNAGenerator;
 module.exports.ArchetypeMapper = ArchetypeMapper;
 module.exports.ArchetypeLoader = ArchetypeLoader;
 module.exports.DNAValidator = DNAValidator;
+
+// Export ProxyEngine at top level for event-driven UI (Sovereign Foundation)
+module.exports.ProxyEngine = ProxyEngine;
