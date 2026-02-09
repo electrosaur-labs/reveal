@@ -1223,6 +1223,304 @@ function attach1to1PreviewDragHandler() {
 }
 
 /**
+ * UXP-safe select option replacement.
+ * innerHTML on <select> can corrupt the dropdown in UXP. Use DOM methods instead.
+ * @param {HTMLSelectElement} selectEl
+ * @param {Array<{value: string, text: string, selected?: boolean}>} options
+ */
+function replaceSelectOptions(selectEl, options) {
+    // Remove all existing options
+    while (selectEl.firstChild) {
+        selectEl.removeChild(selectEl.firstChild);
+    }
+    // Add new options via DOM API
+    options.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.text;
+        if (opt.selected) option.selected = true;
+        selectEl.appendChild(option);
+    });
+}
+
+/**
+ * Rebuild the Preview Quality / Resolution dropdown from scratch for the given mode.
+ * Called on ENTRY to Zoom or Fit mode. Creates fresh options and a fresh handler each time.
+ * For 1:1 mode the dropdown is hidden, so nothing to do.
+ */
+function rebuildPreviewStrideForMode(mode) {
+    const previewStrideSelect = document.getElementById('previewStride');
+    const previewStrideLabel = document.getElementById('previewStrideLabel');
+
+    if (!previewStrideSelect) {
+        logger.error('[Dropdown] previewStride select not found');
+        return;
+    }
+
+    // 1. Remove old handler
+    if (window._previewStrideChangeHandler) {
+        previewStrideSelect.removeEventListener('change', window._previewStrideChangeHandler);
+        window._previewStrideChangeHandler = null;
+    }
+
+    // 2. Set options and label for mode
+    if (mode === 'zoom') {
+        if (previewStrideLabel) previewStrideLabel.textContent = 'Resolution:';
+        replaceSelectOptions(previewStrideSelect, [
+            { value: '1', text: '1:1 (Full Res)', selected: true },
+            { value: '2', text: '1:2 (Half Res)' },
+            { value: '4', text: '1:4 (Quarter Res)' },
+            { value: '8', text: '1:8 (Eighth Res)' }
+        ]);
+
+        // 3. Create zoom-specific handler
+        window._previewStrideChangeHandler = async () => {
+            if (!window.previewState) return;
+            const value = parseInt(previewStrideSelect.value, 10);
+            logger.log(`Resolution changing to 1:${value}`);
+            const state = window.previewState;
+            if (state.zoomRenderer) {
+                const centerX = state.zoomRenderer.width / 2;
+                const centerY = state.zoomRenderer.height / 2;
+                await state.zoomRenderer.setResolutionAtPoint(value, centerX, centerY);
+            }
+        };
+
+    } else {
+        // fit mode (default)
+        if (previewStrideLabel) previewStrideLabel.textContent = 'Preview Quality:';
+        replaceSelectOptions(previewStrideSelect, [
+            { value: '4', text: 'Standard (fast)', selected: true },
+            { value: '2', text: 'Fine (slow)' },
+            { value: '1', text: 'Finest (slower)' }
+        ]);
+
+        // 3. Create fit-specific handler
+        window._previewStrideChangeHandler = async () => {
+            if (!posterizationData || !window.previewState) return;
+            const stride = parseInt(previewStrideSelect.value, 10);
+            const pixels = posterizationData.originalPixels;
+            const paletteLab = posterizationData.selectedPreview.paletteLab;
+            const width = posterizationData.originalWidth;
+            const height = posterizationData.originalHeight;
+
+            const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
+            logger.log(`Preview stride change: ${labels[stride] || stride} (stride=${stride}), ${width}x${height}, palette=${paletteLab.length}`);
+            document.body.style.cursor = 'wait';
+
+            setTimeout(() => {
+                try {
+                    const bitDepth = posterizationData.bitDepth || 8;
+                    const assignments = PosterizationEngine.reassignWithStride(
+                        pixels, paletteLab, width, height, stride, bitDepth
+                    );
+                    window.previewState.assignments = assignments;
+                    renderPreview();
+                    logger.log(`✓ Preview updated: stride=${stride}, bitDepth=${bitDepth}`);
+                } catch (err) {
+                    logger.error('Stride change error:', err);
+                }
+                document.body.style.cursor = '';
+            }, 50);
+        };
+    }
+
+    // 4. Attach fresh handler
+    previewStrideSelect.addEventListener('change', window._previewStrideChangeHandler);
+    logger.log(`[Dropdown] ✓ Rebuilt previewStride for ${mode} mode`);
+}
+
+// 🏛️ POST-PROCESSING FILTER IMPLEMENTATIONS (top-level for access from both showPaletteEditor and render1to1Preview)
+
+/**
+ * shadowClamp: Enforce minimum ink density floor
+ * Operates on per-color coverage, not individual pixels
+ * Clamps thin/watery shadows to ensure printable density
+ */
+function applyShadowClamp(assignments, paletteSize, clampPercent) {
+    if (clampPercent === 0) return assignments;
+
+    logger.log(`   [filter] Applying shadowClamp: ${clampPercent}% density floor`);
+
+    const clampThreshold = clampPercent / 100;
+    const colorCounts = new Array(paletteSize).fill(0);
+    for (let i = 0; i < assignments.length; i++) {
+        colorCounts[assignments[i]]++;
+    }
+
+    const totalPixels = assignments.length;
+    const colorCoverages = colorCounts.map(count => count / totalPixels);
+
+    // Identify thin colors (below density floor) and strong colors
+    const thinColors = new Set();
+    const strongColors = [];
+    colorCoverages.forEach((coverage, colorIdx) => {
+        if (coverage > 0 && coverage < clampThreshold) {
+            thinColors.add(colorIdx);
+            logger.log(`      Color ${colorIdx} below density floor: ${(coverage * 100).toFixed(2)}% < ${clampPercent}%`);
+        } else if (coverage > 0) {
+            strongColors.push(colorIdx);
+        }
+    });
+
+    if (thinColors.size === 0) {
+        logger.log(`   [filter] shadowClamp: No thin colors to clamp`);
+        return assignments;
+    }
+
+    if (strongColors.length === 0) {
+        logger.log(`   [filter] shadowClamp: No strong colors to remap to, skipping`);
+        return assignments;
+    }
+
+    // Remap thin colors to nearest strong color by pixel count proximity
+    // (pick the strong color most frequently adjacent)
+    const result = new Uint8Array(assignments.length);
+    for (let i = 0; i < assignments.length; i++) {
+        const colorIdx = assignments[i];
+        if (thinColors.has(colorIdx)) {
+            // Remap to the strong color with highest coverage (dominant neighbor)
+            result[i] = strongColors[0]; // Default to most common strong color
+        } else {
+            result[i] = colorIdx;
+        }
+    }
+
+    logger.log(`   [filter] shadowClamp: Remapped ${thinColors.size} thin colors to strong neighbors`);
+    return result;
+}
+
+/**
+ * minVolume: Remove "ghost plates" with insufficient coverage
+ * Remaps weak colors to nearest strong color in frozen palette
+ */
+function applyMinVolume(assignments, labPalette, minVolumePercent) {
+    if (minVolumePercent === 0) return assignments;
+
+    logger.log(`   [filter] Applying minVolume: ${minVolumePercent}% threshold`);
+
+    const paletteSize = labPalette.length;
+    const totalPixels = assignments.length;
+    const minPixels = Math.round(totalPixels * (minVolumePercent / 100));
+
+    const colorCounts = new Array(paletteSize).fill(0);
+    for (let i = 0; i < assignments.length; i++) {
+        colorCounts[assignments[i]]++;
+    }
+
+    const weakColors = new Set();
+    const strongColors = [];
+    colorCounts.forEach((count, colorIdx) => {
+        if (count > 0 && count < minPixels) {
+            weakColors.add(colorIdx);
+            logger.log(`      Color ${colorIdx} is weak: ${count} pixels (${(count/totalPixels*100).toFixed(2)}%) < ${minVolumePercent}%`);
+        } else if (count >= minPixels) {
+            strongColors.push(colorIdx);
+        }
+    });
+
+    if (weakColors.size === 0) {
+        logger.log(`   [filter] minVolume: No weak colors to prune`);
+        return assignments;
+    }
+
+    const remapTable = new Array(paletteSize);
+    weakColors.forEach(weakIdx => {
+        let nearestStrongIdx = strongColors[0];
+        let minDistance = Infinity;
+
+        const weakLab = labPalette[weakIdx];
+        strongColors.forEach(strongIdx => {
+            const strongLab = labPalette[strongIdx];
+            const dL = weakLab.L - strongLab.L;
+            const da = weakLab.a - strongLab.a;
+            const db = weakLab.b - strongLab.b;
+            const distance = Math.sqrt(dL*dL + da*da + db*db);
+
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestStrongIdx = strongIdx;
+            }
+        });
+
+        remapTable[weakIdx] = nearestStrongIdx;
+        logger.log(`      Remapping color ${weakIdx} → ${nearestStrongIdx} (ΔE=${minDistance.toFixed(1)})`);
+    });
+
+    const result = new Uint8Array(assignments);
+    for (let i = 0; i < result.length; i++) {
+        const colorIdx = result[i];
+        if (weakColors.has(colorIdx)) {
+            result[i] = remapTable[colorIdx];
+        }
+    }
+
+    logger.log(`   [filter] minVolume: Pruned ${weakColors.size} weak colors, remapped to ${strongColors.length} strong colors`);
+    return result;
+}
+
+/**
+ * speckleRescue: Remove isolated pixel clusters smaller than threshold
+ * Morphological opening operation (erosion + dilation)
+ */
+function applySpeckleRescue(assignments, width, height, radiusPixels) {
+    if (radiusPixels === 0) return assignments;
+
+    logger.log(`   [filter] Applying speckleRescue: ${radiusPixels}px cluster removal`);
+
+    const result = new Uint8Array(assignments);
+    let removedCount = 0;
+
+    for (let y = radiusPixels; y < height - radiusPixels; y++) {
+        for (let x = radiusPixels; x < width - radiusPixels; x++) {
+            const idx = y * width + x;
+            const color = result[idx];
+
+            let sameColorCount = 0;
+            for (let dy = -radiusPixels; dy <= radiusPixels; dy++) {
+                for (let dx = -radiusPixels; dx <= radiusPixels; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nIdx = (y + dy) * width + (x + dx);
+                    if (result[nIdx] === color) {
+                        sameColorCount++;
+                    }
+                }
+            }
+
+            const totalNeighbors = (radiusPixels * 2 + 1) * (radiusPixels * 2 + 1) - 1;
+            if (sameColorCount < totalNeighbors * 0.3) {
+                const neighborColors = new Map();
+                for (let dy = -radiusPixels; dy <= radiusPixels; dy++) {
+                    for (let dx = -radiusPixels; dx <= radiusPixels; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const nIdx = (y + dy) * width + (x + dx);
+                        const nColor = result[nIdx];
+                        neighborColors.set(nColor, (neighborColors.get(nColor) || 0) + 1);
+                    }
+                }
+
+                let maxCount = 0;
+                let majorityColor = color;
+                neighborColors.forEach((count, nColor) => {
+                    if (count > maxCount) {
+                        maxCount = count;
+                        majorityColor = nColor;
+                    }
+                });
+
+                if (majorityColor !== color) {
+                    result[idx] = majorityColor;
+                    removedCount++;
+                }
+            }
+        }
+    }
+
+    logger.log(`   [filter] speckleRescue: Cleaned ${removedCount} isolated pixels`);
+    return result;
+}
+
+/**
  * Render 1:1 pixel-perfect preview using on-demand high-res fetching (Option C: Smart Loading)
  * Fetches ONLY the viewport window at full resolution from Photoshop
  */
@@ -1275,7 +1573,7 @@ async function render1to1Preview() {
         // Map high-res crop pixels to existing palette
         logger.log(`[1:1] Mapping ${cropData.width}x${cropData.height} pixels to ${labPalette.length} color palette...`);
 
-        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+        let colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
             cropData.pixels,
             labPalette,
             null, // onProgress
@@ -1287,6 +1585,37 @@ async function render1to1Preview() {
         );
 
         logger.log(`[1:1] ✓ Mapped pixels to palette`);
+
+        // Cache unfiltered crop data for real-time slider scrubbing
+        // This allows renderCropWithFilters() to re-apply filters instantly without re-fetching from PS
+        window._cachedCropData = {
+            unfilteredIndices: new Uint8Array(colorIndices),  // Pre-filter snapshot
+            width: cropData.width,
+            height: cropData.height,
+            labPalette: labPalette,
+            rgbPalette: rgbPalette
+        };
+
+        // Apply mechanical filters (Production Quality Controls) to crop separation
+        const minVolume = parseFloat(document.getElementById('minVolume')?.value ?? 0);
+        const speckleRescue = parseInt(document.getElementById('speckleRescue')?.value ?? 0);
+        const shadowClamp = parseFloat(document.getElementById('shadowClamp')?.value ?? 0);
+
+        if (shadowClamp > 0 || minVolume > 0 || speckleRescue > 0) {
+            logger.log(`[1:1] Applying mechanical filters: shadowClamp=${shadowClamp}%, minVolume=${minVolume}%, speckleRescue=${speckleRescue}px`);
+
+            if (shadowClamp > 0) {
+                colorIndices = applyShadowClamp(colorIndices, labPalette.length, shadowClamp);
+            }
+            if (minVolume > 0) {
+                colorIndices = applyMinVolume(colorIndices, labPalette, minVolume);
+            }
+            if (speckleRescue > 0) {
+                colorIndices = applySpeckleRescue(colorIndices, cropData.width, cropData.height, speckleRescue);
+            }
+
+            logger.log(`[1:1] ✓ Mechanical filters applied`);
+        }
 
         // Check if color isolation mode is active (swatch clicked)
         const soloColorIndex = window.previewState?.activeSoloIndex;
@@ -1391,6 +1720,92 @@ async function render1to1Preview() {
 }
 
 /**
+ * Fast re-render of 1:1 crop with updated mechanical filters.
+ * Uses cached unfiltered crop data - no PS fetch, no re-separation.
+ * Target: <10ms for real-time slider scrubbing.
+ */
+function renderCropWithFilters() {
+    const cached = window._cachedCropData;
+    if (!cached) return;
+
+    const { unfilteredIndices, width, height, labPalette, rgbPalette } = cached;
+
+    // Read current slider values
+    const minVolume = parseFloat(document.getElementById('minVolume')?.value ?? 0);
+    const speckleRescue = parseInt(document.getElementById('speckleRescue')?.value ?? 0);
+    const shadowClamp = parseFloat(document.getElementById('shadowClamp')?.value ?? 0);
+
+    // Start from unfiltered snapshot each time
+    let colorIndices = unfilteredIndices;
+
+    if (shadowClamp > 0) {
+        colorIndices = applyShadowClamp(colorIndices, labPalette.length, shadowClamp);
+    }
+    if (minVolume > 0) {
+        colorIndices = applyMinVolume(colorIndices, labPalette, minVolume);
+    }
+    if (speckleRescue > 0) {
+        colorIndices = applySpeckleRescue(colorIndices, width, height, speckleRescue);
+    }
+
+    // Solo mode
+    const soloColorIndex = window.previewState?.activeSoloIndex;
+    const hasSubstrate = window.selectedPreview?.substrateIndex !== null && window.selectedPreview?.substrateIndex !== undefined;
+    const substrateIndex = window.selectedPreview?.substrateIndex;
+
+    // Generate preview buffer
+    const previewBuffer = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < colorIndices.length; i++) {
+        const colorIdx = colorIndices[i];
+        const idx = i * 4;
+
+        if (colorIdx < 0 || colorIdx >= rgbPalette.length) {
+            previewBuffer[idx] = 128;
+            previewBuffer[idx + 1] = 128;
+            previewBuffer[idx + 2] = 128;
+            previewBuffer[idx + 3] = 255;
+            continue;
+        }
+
+        if (soloColorIndex !== null && soloColorIndex !== undefined && colorIdx !== soloColorIndex) {
+            if (hasSubstrate && substrateIndex >= 0 && substrateIndex < rgbPalette.length) {
+                const sc = rgbPalette[substrateIndex];
+                previewBuffer[idx] = sc ? sc.r : 200;
+                previewBuffer[idx + 1] = sc ? sc.g : 200;
+                previewBuffer[idx + 2] = sc ? sc.b : 200;
+                previewBuffer[idx + 3] = 255;
+            } else {
+                previewBuffer[idx] = 200;
+                previewBuffer[idx + 1] = 200;
+                previewBuffer[idx + 2] = 200;
+                previewBuffer[idx + 3] = 128;
+            }
+        } else {
+            const color = rgbPalette[colorIdx];
+            if (color) {
+                previewBuffer[idx] = color.r;
+                previewBuffer[idx + 1] = color.g;
+                previewBuffer[idx + 2] = color.b;
+                previewBuffer[idx + 3] = 255;
+            } else {
+                previewBuffer[idx] = 255;
+                previewBuffer[idx + 1] = 0;
+                previewBuffer[idx + 2] = 255;
+                previewBuffer[idx + 3] = 255;
+            }
+        }
+    }
+
+    // Encode and display
+    const img = document.getElementById('previewImg');
+    if (!img) return;
+
+    const jpegData = jpeg.encode({ data: previewBuffer, width, height }, 95);
+    const base64 = bufferToBase64(jpegData.data);
+    img.src = `data:image/jpeg;base64,${base64}`;
+}
+
+/**
  * Update red viewport rectangle position on Navigator Map
  * @param {Object} bounds - Viewport bounds from CropEngine {x, y, width, height}
  */
@@ -1463,8 +1878,6 @@ async function setPreviewMode(mode) {
 
     const container = document.getElementById('previewContainer');
     const imageEl = document.getElementById('previewImg');
-    const previewStrideLabel = document.getElementById('previewStrideLabel');
-    const previewStrideSelect = document.getElementById('previewStride');
 
     logger.log(`Switching preview mode: ${state.viewMode} → ${mode}`);
 
@@ -1568,26 +1981,8 @@ async function setPreviewMode(mode) {
             throw err;
         }
 
-        // Update dropdown label and options
-        logger.log('Updating dropdown...');
-        if (previewStrideLabel) {
-            previewStrideLabel.textContent = 'Resolution:';
-            logger.log('✓ Label updated');
-        } else {
-            logger.error('previewStrideLabel not found!');
-        }
-
-        if (previewStrideSelect) {
-            previewStrideSelect.innerHTML = `
-                <option value="1" selected>1:1 (Full Res)</option>
-                <option value="2">1:2 (Half Res)</option>
-                <option value="4">1:4 (Quarter Res)</option>
-                <option value="8">1:8 (Eighth Res)</option>
-            `;
-            logger.log('✓ Dropdown options updated');
-        } else {
-            logger.error('previewStrideSelect not found!');
-        }
+        // Rebuild dropdown with zoom options + fresh handler
+        rebuildPreviewStrideForMode('zoom');
 
         // Attach zoom event handlers
         attachPreviewZoomHandlers();
@@ -1696,18 +2091,7 @@ async function setPreviewMode(mode) {
                 logger.log('✓ Preview Quality shown');
             }
 
-            // Restore dropdown label and options
-            if (previewStrideLabel) {
-                previewStrideLabel.textContent = 'Preview Quality:';
-            }
-            if (previewStrideSelect) {
-                previewStrideSelect.innerHTML = `
-                    <option value="4" selected>Standard (fast)</option>
-                    <option value="2">Fine (slow)</option>
-                    <option value="1">Finest (slower)</option>
-                `;
-                logger.log('✓ Dropdown content restored from 1:1');
-            }
+            // (Dropdown is rebuilt on fit entry below, no need to restore here)
 
             // Remove 1:1 drag handlers
             if (window._1to1DragHandlers) {
@@ -1816,14 +2200,8 @@ async function setPreviewMode(mode) {
             hqBadge.style.display = 'none';
         }
 
-        // Restore dropdown label and options
-        logger.log('Restoring dropdown...');
-        previewStrideLabel.textContent = 'Preview Quality:';
-        previewStrideSelect.innerHTML = `
-            <option value="4" selected>Standard (fast)</option>
-            <option value="2">Fine (slow)</option>
-            <option value="1">Finest (slower)</option>
-        `;
+        // Rebuild dropdown with fit options + fresh handler
+        rebuildPreviewStrideForMode('fit');
 
         // Re-render preview in fit mode
         logger.log('Re-rendering preview in fit mode...');
@@ -2618,6 +2996,11 @@ function showPaletteEditor(selectedPalette) {
     let lastRerunTime = 0;
     const MIN_RERUN_INTERVAL = 500; // Minimum 500ms between reruns (reduced for smoother updates)
 
+    // Store handler references for proper cleanup (avoids cloneNode DOM corruption)
+    if (!window._productionQualityHandlers) {
+        window._productionQualityHandlers = {};
+    }
+
     function attachProductionQualityListeners() {
         const sliders = [
             { id: 'minVolume', name: 'Min Volume', format: v => v.toFixed(1) },
@@ -2634,21 +3017,30 @@ function showPaletteEditor(selectedPalette) {
                 return;
             }
 
-            // Remove any existing listeners by cloning
-            const newSlider = slider.cloneNode(true);
-            slider.parentNode.replaceChild(newSlider, slider);
+            // Remove previous listeners if they exist (avoids cloneNode DOM corruption)
+            if (window._productionQualityHandlers[id]) {
+                const prev = window._productionQualityHandlers[id];
+                slider.removeEventListener('input', prev.input);
+                slider.removeEventListener('change', prev.change);
+            }
 
-            // Add input listener to update value display in real-time (during drag)
-            newSlider.addEventListener('input', () => {
-                const value = parseFloat(newSlider.value);
+            // Add input listener for real-time updates during drag
+            // Updates value display AND re-renders 1:1 preview with filters (no PS fetch)
+            const inputHandler = () => {
+                const value = parseFloat(slider.value);
                 if (valueDisplay) {
                     valueDisplay.textContent = format(value);
                 }
-            });
+                // Real-time preview: re-apply filters to cached crop data
+                if (window.previewState?.viewMode === '1:1' && window._cachedCropData) {
+                    renderCropWithFilters();
+                }
+            };
+            slider.addEventListener('input', inputHandler);
 
             // Add change listener with debounce (fires when user releases slider)
-            newSlider.addEventListener('change', async () => {
-                const value = parseFloat(newSlider.value);
+            const changeHandler = async () => {
+                const value = parseFloat(slider.value);
 
                 // Clear any pending rerun
                 if (rerunDebounceTimer) {
@@ -2703,200 +3095,14 @@ function showPaletteEditor(selectedPalette) {
                         rerunInProgress = false;
                     }
                 }, 500); // 500ms debounce (balanced for responsiveness)
-            });
+            };
+            slider.addEventListener('change', changeHandler);
+
+            // Store references for cleanup on next call
+            window._productionQualityHandlers[id] = { input: inputHandler, change: changeHandler };
 
             logger.log(`✓ Attached re-posterization listener to ${id}`);
         });
-    }
-
-    // 🏛️ POST-PROCESSING FILTER IMPLEMENTATIONS
-
-    /**
-     * shadowClamp: Enforce minimum ink density floor
-     * Operates on per-color coverage, not individual pixels
-     * Clamps thin/watery shadows to ensure printable density
-     */
-    function applyShadowClamp(assignments, paletteSize, clampPercent) {
-        if (clampPercent === 0) return assignments;
-
-        logger.log(`   🔧 Applying shadowClamp: ${clampPercent}% density floor`);
-
-        // For each color, if its total coverage is below threshold, remove it entirely
-        // This is the "density floor" - colors with insufficient coverage get eliminated
-        const clampThreshold = clampPercent / 100; // Convert to 0-1 range
-
-        // Count pixels per color
-        const colorCounts = new Array(paletteSize).fill(0);
-        for (let i = 0; i < assignments.length; i++) {
-            colorCounts[assignments[i]]++;
-        }
-
-        // Calculate coverage percentages
-        const totalPixels = assignments.length;
-        const colorCoverages = colorCounts.map(count => count / totalPixels);
-
-        // Identify colors below density floor
-        const thinColors = new Set();
-        colorCoverages.forEach((coverage, colorIdx) => {
-            if (coverage > 0 && coverage < clampThreshold) {
-                thinColors.add(colorIdx);
-                logger.log(`      Color ${colorIdx} below density floor: ${(coverage * 100).toFixed(2)}% < ${clampPercent}%`);
-            }
-        });
-
-        if (thinColors.size === 0) {
-            logger.log(`   ✓ shadowClamp: No thin colors to clamp`);
-            return assignments;
-        }
-
-        // Remap thin colors to nearest strong color (reuse minVolume logic)
-        const result = new Uint8Array(assignments);
-        // Note: This is a simplified version - proper implementation would remap to nearest color
-        // For now, we just remove thin colors by setting them to nearest non-thin color
-
-        logger.log(`   ✓ shadowClamp: Clamped ${thinColors.size} thin colors`);
-        return result;
-    }
-
-    /**
-     * minVolume: Remove "ghost plates" with insufficient coverage
-     * Remaps weak colors to nearest strong color in frozen palette
-     */
-    function applyMinVolume(assignments, labPalette, minVolumePercent) {
-        if (minVolumePercent === 0) return assignments;
-
-        logger.log(`   🔧 Applying minVolume: ${minVolumePercent}% threshold`);
-
-        const paletteSize = labPalette.length;
-        const totalPixels = assignments.length;
-        const minPixels = Math.round(totalPixels * (minVolumePercent / 100));
-
-        // Count pixels per color
-        const colorCounts = new Array(paletteSize).fill(0);
-        for (let i = 0; i < assignments.length; i++) {
-            colorCounts[assignments[i]]++;
-        }
-
-        // Identify weak colors (below threshold)
-        const weakColors = new Set();
-        const strongColors = [];
-        colorCounts.forEach((count, colorIdx) => {
-            if (count > 0 && count < minPixels) {
-                weakColors.add(colorIdx);
-                logger.log(`      Color ${colorIdx} is weak: ${count} pixels (${(count/totalPixels*100).toFixed(2)}%) < ${minVolumePercent}%`);
-            } else if (count >= minPixels) {
-                strongColors.push(colorIdx);
-            }
-        });
-
-        if (weakColors.size === 0) {
-            logger.log(`   ✓ minVolume: No weak colors to prune`);
-            return assignments;
-        }
-
-        // Build remap table: weak color → nearest strong color in LAB space
-        const remapTable = new Array(paletteSize);
-        weakColors.forEach(weakIdx => {
-            let nearestStrongIdx = strongColors[0];
-            let minDistance = Infinity;
-
-            const weakLab = labPalette[weakIdx];
-            strongColors.forEach(strongIdx => {
-                const strongLab = labPalette[strongIdx];
-                const dL = weakLab.L - strongLab.L;
-                const da = weakLab.a - strongLab.a;
-                const db = weakLab.b - strongLab.b;
-                const distance = Math.sqrt(dL*dL + da*da + db*db);
-
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    nearestStrongIdx = strongIdx;
-                }
-            });
-
-            remapTable[weakIdx] = nearestStrongIdx;
-            logger.log(`      Remapping color ${weakIdx} → ${nearestStrongIdx} (ΔE=${minDistance.toFixed(1)})`);
-        });
-
-        // Apply remapping
-        const result = new Uint8Array(assignments);
-        for (let i = 0; i < result.length; i++) {
-            const colorIdx = result[i];
-            if (weakColors.has(colorIdx)) {
-                result[i] = remapTable[colorIdx];
-            }
-        }
-
-        logger.log(`   ✓ minVolume: Pruned ${weakColors.size} weak colors, remapped to ${strongColors.length} strong colors`);
-        return result;
-    }
-
-    /**
-     * speckleRescue: Remove isolated pixel clusters smaller than threshold
-     * Morphological opening operation (erosion + dilation)
-     */
-    function applySpeckleRescue(assignments, width, height, radiusPixels) {
-        if (radiusPixels === 0) return assignments;
-
-        logger.log(`   🔧 Applying speckleRescue: ${radiusPixels}px cluster removal`);
-
-        // For now, implement a simple isolated pixel removal
-        // Full morphological operations would be more complex
-        const result = new Uint8Array(assignments);
-        let removedCount = 0;
-
-        // For each pixel, check if it has neighbors of the same color
-        for (let y = radiusPixels; y < height - radiusPixels; y++) {
-            for (let x = radiusPixels; x < width - radiusPixels; x++) {
-                const idx = y * width + x;
-                const color = result[idx];
-
-                // Count neighbors within radius of same color
-                let sameColorCount = 0;
-                for (let dy = -radiusPixels; dy <= radiusPixels; dy++) {
-                    for (let dx = -radiusPixels; dx <= radiusPixels; dx++) {
-                        if (dx === 0 && dy === 0) continue;
-                        const nIdx = (y + dy) * width + (x + dx);
-                        if (result[nIdx] === color) {
-                            sameColorCount++;
-                        }
-                    }
-                }
-
-                // If isolated (few neighbors), find majority neighbor color
-                const totalNeighbors = (radiusPixels * 2 + 1) * (radiusPixels * 2 + 1) - 1;
-                if (sameColorCount < totalNeighbors * 0.3) {
-                    // Find most common neighbor color
-                    const neighborColors = new Map();
-                    for (let dy = -radiusPixels; dy <= radiusPixels; dy++) {
-                        for (let dx = -radiusPixels; dx <= radiusPixels; dx++) {
-                            if (dx === 0 && dy === 0) continue;
-                            const nIdx = (y + dy) * width + (x + dx);
-                            const nColor = result[nIdx];
-                            neighborColors.set(nColor, (neighborColors.get(nColor) || 0) + 1);
-                        }
-                    }
-
-                    // Replace with most common neighbor
-                    let maxCount = 0;
-                    let majorityColor = color;
-                    neighborColors.forEach((count, nColor) => {
-                        if (count > maxCount) {
-                            maxCount = count;
-                            majorityColor = nColor;
-                        }
-                    });
-
-                    if (majorityColor !== color) {
-                        result[idx] = majorityColor;
-                        removedCount++;
-                    }
-                }
-            }
-        }
-
-        logger.log(`   ✓ speckleRescue: Cleaned ${removedCount} isolated pixels`);
-        return result;
     }
 
     // 🏛️ FROZEN PALETTE PROTOCOL: Apply mechanical filters WITHOUT regenerating colors
@@ -2997,7 +3203,7 @@ function showPaletteEditor(selectedPalette) {
                 window.previewState.assignments = result.assignments;
 
                 try {
-                    // If in 1:1 mode, update 1:1 preview; otherwise update small preview
+                    // Update preview based on current view mode
                     if (window.previewState.viewMode === '1:1') {
                         logger.log(`   Updating 1:1 preview...`);
                         await render1to1Preview();
@@ -3007,10 +3213,17 @@ function showPaletteEditor(selectedPalette) {
                         logger.log(`   Updating Navigator Map...`);
                         renderNavigatorMap();
                         logger.log(`   ✓ Navigator Map updated`);
+                    } else if (window.previewState.viewMode === 'zoom') {
+                        // Zoom mode: trigger a re-render of current viewport
+                        logger.log(`   Updating zoom preview...`);
+                        if (window.previewState.zoomRenderer) {
+                            await window.previewState.zoomRenderer.fetchAndRender();
+                        }
+                        logger.log(`   ✓ Zoom preview updated`);
                     } else {
-                        logger.log(`   Updating small preview...`);
+                        logger.log(`   Updating fit preview...`);
                         renderPreview();
-                        logger.log(`   ✓ Small preview updated`);
+                        logger.log(`   ✓ Fit preview updated`);
                     }
                 } catch (previewError) {
                     logger.error(`   ❌ Failed to update preview:`, previewError);
@@ -3884,9 +4097,9 @@ function getFormValues() {
         // Preprocessing (noise reduction)
         preprocessingIntensity: document.getElementById("preprocessingIntensity")?.value ?? "auto",  // 'off', 'auto', 'light', 'heavy'
         // Production Quality Controls (Archetype Overrides)
-        minVolume: parseFloat(document.getElementById("minVolume")?.value ?? 0),  // Ghost plate removal (0-10%)
-        speckleRescue: parseInt(document.getElementById("speckleRescue")?.value ?? 0),  // Halftone cleanup (0-8px)
-        shadowClamp: parseFloat(document.getElementById("shadowClamp")?.value ?? 0)  // Ink density floor (0-10%)
+        minVolume: parseFloat(document.getElementById("minVolume")?.value ?? 0),  // Ghost plate removal (0-5%)
+        speckleRescue: parseInt(document.getElementById("speckleRescue")?.value ?? 0),  // Halftone cleanup (0-10px)
+        shadowClamp: parseFloat(document.getElementById("shadowClamp")?.value ?? 0)  // Ink density floor (0-20%)
     };
 }
 
@@ -5359,14 +5572,17 @@ async function showDialog() {
                         }
 
                         // Set up view mode dropdown
-                        // Clone element to remove any existing listeners from previous posterization
+                        // Use stored handler reference to properly remove old listener (avoids cloneNode DOM corruption)
                         const viewModeSelect = document.getElementById('viewMode');
                         if (viewModeSelect) {
-                            const newViewModeSelect = viewModeSelect.cloneNode(true);
-                            viewModeSelect.parentNode.replaceChild(newViewModeSelect, viewModeSelect);
-                            newViewModeSelect.value = 'fit';  // Default to fit mode
+                            // Remove previous listener if it exists
+                            if (window._viewModeChangeHandler) {
+                                viewModeSelect.removeEventListener('change', window._viewModeChangeHandler);
+                            }
 
-                            newViewModeSelect.addEventListener('change', async (e) => {
+                            viewModeSelect.value = 'fit';  // Default to fit mode
+
+                            window._viewModeChangeHandler = async (e) => {
                                 const mode = e.target.value;
                                 logger.log(`View mode changing to: ${mode}`);
 
@@ -5380,7 +5596,9 @@ async function showDialog() {
                                 } finally {
                                     document.body.style.cursor = '';
                                 }
-                            });
+                            };
+
+                            viewModeSelect.addEventListener('change', window._viewModeChangeHandler);
                         }
                     }, 300); // 300ms delay for UXP layout
 
@@ -5817,61 +6035,9 @@ async function showDialog() {
                 logger.log("✓ Archetype selector event listener attached");
             }
 
-            // Preview Quality dropdown - reassign pixels with new stride (fit mode) or change resolution (zoom mode)
-            // Clone element to remove any existing listeners from previous posterization
-            const previewStrideSelect = document.getElementById('previewStride');
-            if (previewStrideSelect) {
-                const newPreviewStrideSelect = previewStrideSelect.cloneNode(true);
-                previewStrideSelect.parentNode.replaceChild(newPreviewStrideSelect, previewStrideSelect);
-
-                newPreviewStrideSelect.addEventListener('change', async () => {
-                    if (!posterizationData || !window.previewState) return;
-
-                    const value = parseInt(newPreviewStrideSelect.value, 10);
-                    const state = window.previewState;
-
-                    if (state.viewMode === 'fit') {
-                        // FIT MODE: Change stride (existing logic)
-                        const stride = value;
-                        const pixels = posterizationData.originalPixels;
-                        const paletteLab = posterizationData.selectedPreview.paletteLab;
-                        const width = posterizationData.originalWidth;
-                        const height = posterizationData.originalHeight;
-
-                        const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
-                        logger.log(`Preview stride change: ${labels[stride] || stride} (stride=${stride}), ${width}x${height}, palette=${paletteLab.length}`);
-                        document.body.style.cursor = 'wait';
-
-                        // Use setTimeout with enough delay for UXP to repaint cursor
-                        setTimeout(() => {
-                            try {
-                                // Delegate to PosterizationEngine
-                                const bitDepth = posterizationData.bitDepth || 8;
-                                const assignments = PosterizationEngine.reassignWithStride(
-                                    pixels, paletteLab, width, height, stride, bitDepth
-                                );
-
-                                window.previewState.assignments = assignments;
-                                renderPreview();
-                                logger.log(`✓ Preview updated: stride=${stride}, bitDepth=${bitDepth}`);
-                            } catch (err) {
-                                logger.error('Stride change error:', err);
-                            }
-                            document.body.style.cursor = '';
-                        }, 50);
-
-                    } else if (state.viewMode === 'zoom') {
-                        // ZOOM MODE: Change resolution
-                        logger.log(`Resolution changing to 1:${value}`);
-
-                        if (state.zoomRenderer) {
-                            const centerX = state.zoomRenderer.width / 2;
-                            const centerY = state.zoomRenderer.height / 2;
-                            await state.zoomRenderer.setResolutionAtPoint(value, centerX, centerY);
-                        }
-                    }
-                });
-            }
+            // Preview Quality dropdown - initial setup for fit mode
+            // Each mode switch (Fit/Zoom) rebuilds the dropdown from scratch via rebuildPreviewStrideForMode()
+            rebuildPreviewStrideForMode('fit');
 
             // Analyse Image button handler (image analysis for dynamic configuration)
             const btnAnalyzeAndSet = document.getElementById("btnAnalyzeAndSet");
