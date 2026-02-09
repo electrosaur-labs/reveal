@@ -2925,9 +2925,11 @@ function showPaletteEditor(selectedPalette) {
             logger.log(`   Mechanical params: minVolume=${config.minVolume}%, speckleRescue=${config.speckleRescue}px, shadowClamp=${config.shadowClamp}%`);
 
             // Re-separate with FIXED palette using SeparationEngine only
+            // Signature: (rawBytes, labPalette, onProgress, width, height, options)
             const assignments = await SeparationEngine.mapPixelsToPaletteAsync(
                 labPixels,
                 frozenPalette.labPalette,
+                null,  // onProgress callback (not needed for real-time)
                 width,
                 height,
                 {
