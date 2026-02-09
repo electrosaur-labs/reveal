@@ -2613,6 +2613,9 @@ function showPaletteEditor(selectedPalette) {
 
     // Attach event listeners to Production Quality Control sliders
     // These trigger re-posterization when values change
+    let rerunInProgress = false;
+    let rerunDebounceTimer = null;
+
     function attachProductionQualityListeners() {
         const sliders = [
             { id: 'minVolume', name: 'Min Volume' },
@@ -2631,28 +2634,40 @@ function showPaletteEditor(selectedPalette) {
             const newSlider = slider.cloneNode(true);
             slider.parentNode.replaceChild(newSlider, slider);
 
-            // Add change listener (fires when user releases slider)
+            // Add change listener with debounce (fires when user releases slider)
             newSlider.addEventListener('change', async () => {
                 const value = parseFloat(newSlider.value);
-                logger.log(`🎚️ ${name} changed to ${value} - triggering re-posterization`);
 
-                // Show progress indicator
-                document.body.style.cursor = 'wait';
-
-                try {
-                    // Get current form values (includes new slider values)
-                    const config = getFormValues();
-
-                    // Re-run posterization with new parameters
-                    await rerunPosterization(config);
-
-                    logger.log(`✓ Re-posterization complete with ${name}=${value}`);
-                } catch (error) {
-                    logger.error(`Failed to re-posterize with ${name}:`, error);
-                    showErrorDialog("Re-posterization Error", error.message, error.stack);
-                } finally {
-                    document.body.style.cursor = '';
+                // Clear any pending rerun
+                if (rerunDebounceTimer) {
+                    clearTimeout(rerunDebounceTimer);
                 }
+
+                // Prevent overlapping reruns
+                if (rerunInProgress) {
+                    logger.log(`⏳ ${name} changed to ${value} - waiting for current rerun to finish`);
+                    return;
+                }
+
+                logger.log(`🎚️ ${name} changed to ${value} - scheduling re-posterization`);
+
+                // Debounce to prevent rapid-fire reruns
+                rerunDebounceTimer = setTimeout(async () => {
+                    rerunInProgress = true;
+                    document.body.style.cursor = 'wait';
+
+                    try {
+                        const config = getFormValues();
+                        await rerunPosterization(config);
+                        logger.log(`✓ Re-posterization complete with ${name}=${value}`);
+                    } catch (error) {
+                        logger.error(`Failed to re-posterize with ${name}:`, error);
+                        alert(`Re-posterization failed: ${error.message}\n\nPlease run posterization again from Parameters dialog.`);
+                    } finally {
+                        document.body.style.cursor = '';
+                        rerunInProgress = false;
+                    }
+                }, 300); // 300ms debounce
             });
 
             logger.log(`✓ Attached re-posterization listener to ${id}`);
@@ -2661,73 +2676,84 @@ function showPaletteEditor(selectedPalette) {
 
     // Function to re-run posterization with current slider values
     async function rerunPosterization(config) {
-        logger.log('🔄 Re-running posterization with updated parameters...');
-        logger.log(`   minVolume: ${config.minVolume}%, speckleRescue: ${config.speckleRescue}px, shadowClamp: ${config.shadowClamp}%`);
+        try {
+            logger.log('🔄 Re-running posterization with updated parameters...');
+            logger.log(`   minVolume: ${config.minVolume}%, speckleRescue: ${config.speckleRescue}px, shadowClamp: ${config.shadowClamp}%`);
 
-        // Get the original image data
-        const originalData = window._originalImageData;
+            // Get the original image data (stored after preprocessing)
+            const originalData = window._originalImageData;
 
-        if (!originalData || !originalData.labPixels) {
-            throw new Error('Original image data not available. Please run posterization again.');
-        }
+            if (!originalData || !originalData.labPixels) {
+                throw new Error('Original image data not available');
+            }
 
-        // Make a fresh copy for this posterization (preprocessing may modify it)
-        const labPixels = new Uint16Array(originalData.labPixels);
-        const { width, height, bitDepth, format } = originalData;
+            // Make a fresh copy (preprocessing was already applied, stored in _originalImageData)
+            const labPixels = new Uint16Array(originalData.labPixels);
+            const { width, height, bitDepth, format } = originalData;
 
-        // Apply preprocessing if enabled (matches main posterization flow)
-        const preprocessingIntensity = config.preprocessingIntensity || 'auto';
-        if (preprocessingIntensity !== 'off') {
-            logger.log(`   Applying ${preprocessingIntensity} preprocessing...`);
-            const preprocessConfig = {
-                enabled: true,
-                radius: preprocessingIntensity === 'heavy' ? 5 : 3,
-                sigmaR: preprocessingIntensity === 'heavy' ? 40 : 25
-            };
+            // Run posterization with new config (skipping preprocessing - already applied)
+            logger.log(`   Posterizing ${width}x${height} with ${config.targetColors} colors...`);
 
-            BilateralFilter.applyBilateralFilterLab(
+            const result = PosterizationEngine.posterize(
                 labPixels,
                 width,
                 height,
-                preprocessConfig.radius,
-                preprocessConfig.sigmaR
+                config.targetColors,
+                {
+                    engineType: config.engineType || 'reveal-mk1.5',
+                    centroidStrategy: config.centroidStrategy || 'SALIENCY',
+                    distanceMetric: config.distanceMetric || 'cie76',
+                    format: format,
+                    bitDepth: bitDepth,
+                    enableHueGapAnalysis: config.enableHueGapAnalysis,
+                    preserveWhite: config.preserveWhite,
+                    preserveBlack: config.preserveBlack,
+                    vibrancyMode: config.vibrancyMode,
+                    vibrancyBoost: config.vibrancyBoost,
+                    highlightThreshold: config.highlightThreshold,
+                    highlightBoost: config.highlightBoost,
+                    enablePaletteReduction: config.enablePaletteReduction,
+                    paletteReduction: config.paletteReduction,
+                    substrateMode: config.substrateMode,
+                    substrateTolerance: config.substrateTolerance,
+                    // Production Quality Controls (the reason for this rerun!)
+                    minVolume: config.minVolume,
+                    speckleRescue: config.speckleRescue,
+                    shadowClamp: config.shadowClamp,
+                    isPreview: true,
+                    previewStride: parseInt(document.getElementById('previewStride')?.value || '4', 10)
+                }
             );
-        }
 
-        // Run posterization with new config (including production quality parameters)
-        const result = await PosterizationEngine.posterize(
-            labPixels,
-            width,
-            height,
-            config.targetColors,
-            {
-                ...config,
-                format,
-                bitDepth,
-                isPreview: true,
-                previewStride: parseInt(document.getElementById('previewStride')?.value || '4', 10)
+            logger.log(`   Got ${result.palette.length} colors`);
+
+            // Store results
+            window.selectedPreview = result;
+            selectedPreview = result;
+            selectedPalette = {
+                hexColors: result.hexColors,
+                allHexColors: result.hexColors,
+                paletteLab: result.labPalette
+            };
+
+            // Re-render swatches and preview
+            logger.log(`   Rendering ${result.hexColors.length} swatches...`);
+            renderPaletteSwatches();
+
+            // Update preview
+            if (window.previewState) {
+                logger.log(`   Updating preview...`);
+                window.previewState.palette = result.hexColors;
+                renderPreview();
             }
-        );
 
-        // Store results
-        window.selectedPreview = result;
-        selectedPreview = result;
-        selectedPalette = {
-            hexColors: result.hexColors,
-            allHexColors: result.hexColors,
-            paletteLab: result.labPalette
-        };
+            logger.log(`✓ Re-posterization complete: ${result.hexColors.length} colors`);
 
-        // Re-render swatches and preview
-        renderPaletteSwatches();
-
-        // Update preview
-        if (window.previewState) {
-            window.previewState.palette = result.hexColors;
-            await renderPreview();
+        } catch (error) {
+            logger.error(`❌ Re-posterization failed:`, error);
+            logger.error(`   Stack:`, error.stack);
+            throw error; // Re-throw so the caller can handle it
         }
-
-        logger.log(`✓ Re-posterization complete: ${result.hexColors.length} colors`);
     }
 
     // Attach listeners after palette is rendered
@@ -4693,16 +4719,6 @@ async function showDialog() {
                     logger.log(`   Second pixel (COPY): L=${pixelsCopy[3]} a=${pixelsCopy[4]} b=${pixelsCopy[5]}`);
                     logger.log(`   Third pixel (COPY): L=${pixelsCopy[6]} a=${pixelsCopy[7]} b=${pixelsCopy[8]}`);
 
-                    // Store original image data for re-posterization (used by Production Quality Controls)
-                    window._originalImageData = {
-                        labPixels: new Uint16Array(pixelsCopy), // Make another copy to preserve original
-                        width: pixelData.width,
-                        height: pixelData.height,
-                        bitDepth: pixelData.bitDepth,
-                        format: pixelData.format
-                    };
-                    logger.log(`✓ Stored original image data for re-posterization (${pixelData.width}×${pixelData.height})`);
-
                     // Apply preprocessing (bilateral filter for noise reduction) if enabled
                     // Engine always operates in 16-bit Lab space
                     const preprocessingIntensity = params.preprocessingIntensity || 'auto';
@@ -4776,6 +4792,17 @@ async function showDialog() {
                     } else {
                         logger.log(`⏭️ Preprocessing: Off (user disabled)`);
                     }
+
+                    // Store preprocessed image data for re-posterization (used by Production Quality Controls)
+                    // This must happen AFTER preprocessing so sliders can skip preprocessing step
+                    window._originalImageData = {
+                        labPixels: new Uint16Array(pixelsCopy), // pixelsCopy now contains preprocessed data
+                        width: pixelData.width,
+                        height: pixelData.height,
+                        bitDepth: pixelData.bitDepth,
+                        format: pixelData.format
+                    };
+                    logger.log(`✓ Stored preprocessed image data for re-posterization (${pixelData.width}×${pixelData.height})`);
 
                     // Determine color count (manual override or auto-detect)
                     let colorCount;
