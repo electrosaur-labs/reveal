@@ -2701,8 +2701,12 @@ function showPaletteEditor(selectedPalette) {
             const labPixels = new Uint16Array(originalData.labPixels);
             const { width, height, bitDepth, format } = originalData;
 
-            // Run posterization with new config (skipping preprocessing - already applied)
+            // Use stored config from initial posterization to ensure same colors
+            const storedConfig = originalData.config || {};
+
+            // Run posterization with SAME config as initial (skipping preprocessing - already applied)
             logger.log(`   Posterizing ${width}x${height} with ${config.targetColors} colors...`);
+            logger.log(`   Using stored config to ensure color consistency`);
 
             const result = PosterizationEngine.posterize(
                 labPixels,
@@ -2710,22 +2714,28 @@ function showPaletteEditor(selectedPalette) {
                 height,
                 config.targetColors,
                 {
-                    engineType: config.engineType || 'reveal-mk1.5',
-                    centroidStrategy: config.centroidStrategy || 'SALIENCY',
-                    distanceMetric: config.distanceMetric || 'cie76',
+                    // Use stored config from initial posterization
+                    engineType: storedConfig.engineType || 'reveal-mk1.5',
+                    centroidStrategy: storedConfig.centroidStrategy || 'SALIENCY',
+                    distanceMetric: storedConfig.distanceMetric || 'cie76',
                     format: format,
                     bitDepth: bitDepth,
-                    enableHueGapAnalysis: config.enableHueGapAnalysis,
-                    preserveWhite: config.preserveWhite,
-                    preserveBlack: config.preserveBlack,
-                    vibrancyMode: config.vibrancyMode,
-                    vibrancyBoost: config.vibrancyBoost,
-                    highlightThreshold: config.highlightThreshold,
-                    highlightBoost: config.highlightBoost,
-                    enablePaletteReduction: config.enablePaletteReduction,
-                    paletteReduction: config.paletteReduction,
-                    substrateMode: config.substrateMode,
-                    substrateTolerance: config.substrateTolerance,
+                    enableHueGapAnalysis: storedConfig.enableHueGapAnalysis,
+                    preserveWhite: storedConfig.preserveWhite,
+                    preserveBlack: storedConfig.preserveBlack,
+                    preservedUnifyThreshold: storedConfig.preservedUnifyThreshold,
+                    substrateMode: storedConfig.substrateMode,
+                    substrateTolerance: storedConfig.substrateTolerance,
+                    vibrancyMode: storedConfig.vibrancyMode,
+                    vibrancyBoost: storedConfig.vibrancyBoost,
+                    highlightThreshold: storedConfig.highlightThreshold,
+                    highlightBoost: storedConfig.highlightBoost,
+                    enablePaletteReduction: storedConfig.enablePaletteReduction,
+                    paletteReduction: storedConfig.paletteReduction,
+                    densityFloor: storedConfig.densityFloor,
+                    isolationThreshold: storedConfig.isolationThreshold,
+                    grayscaleOnly: storedConfig.grayscaleOnly,
+                    tuning: storedConfig.tuning,
                     // Production Quality Controls (the reason for this rerun!)
                     minVolume: config.minVolume,
                     speckleRescue: config.speckleRescue,
@@ -4814,16 +4824,38 @@ async function showDialog() {
                         logger.log(`⏭️ Preprocessing: Off (user disabled)`);
                     }
 
-                    // Store preprocessed image data for re-posterization (used by Production Quality Controls)
+                    // Store preprocessed image data + config for re-posterization (used by Production Quality Controls)
                     // This must happen AFTER preprocessing so sliders can skip preprocessing step
                     window._originalImageData = {
                         labPixels: new Uint16Array(pixelsCopy), // pixelsCopy now contains preprocessed data
                         width: pixelData.width,
                         height: pixelData.height,
                         bitDepth: pixelData.bitDepth,
-                        format: pixelData.format
+                        format: pixelData.format,
+                        // Store original config for deterministic re-posterization
+                        config: {
+                            engineType: params.engineType,
+                            centroidStrategy: params.centroidStrategy,
+                            distanceMetric: params.distanceMetric,
+                            enableHueGapAnalysis: params.enableHueGapAnalysis,
+                            preserveWhite: params.preserveWhite,
+                            preserveBlack: params.preserveBlack,
+                            preservedUnifyThreshold: params.preservedUnifyThreshold,
+                            substrateMode: params.substrateMode,
+                            substrateTolerance: params.substrateTolerance,
+                            vibrancyMode: params.vibrancyMode,
+                            vibrancyBoost: params.vibrancyBoost,
+                            highlightThreshold: params.highlightThreshold,
+                            highlightBoost: params.highlightBoost,
+                            enablePaletteReduction: params.enablePaletteReduction,
+                            paletteReduction: params.paletteReduction,
+                            densityFloor: params.densityFloor,
+                            isolationThreshold: params.isolationThreshold,
+                            grayscaleOnly: grayscaleOnly,
+                            tuning: tuning
+                        }
                     };
-                    logger.log(`✓ Stored preprocessed image data for re-posterization (${pixelData.width}×${pixelData.height})`);
+                    logger.log(`✓ Stored preprocessed image data + config for re-posterization (${pixelData.width}×${pixelData.height})`);
 
                     // Determine color count (manual override or auto-detect)
                     let colorCount;
