@@ -2611,6 +2611,128 @@ function showPaletteEditor(selectedPalette) {
 
     }
 
+    // Attach event listeners to Production Quality Control sliders
+    // These trigger re-posterization when values change
+    function attachProductionQualityListeners() {
+        const sliders = [
+            { id: 'minVolume', name: 'Min Volume' },
+            { id: 'speckleRescue', name: 'Speckle Rescue' },
+            { id: 'shadowClamp', name: 'Shadow Clamp' }
+        ];
+
+        sliders.forEach(({ id, name }) => {
+            const slider = document.getElementById(id);
+            if (!slider) {
+                logger.log(`⚠️ Production Quality slider not found: ${id}`);
+                return;
+            }
+
+            // Remove any existing listeners by cloning
+            const newSlider = slider.cloneNode(true);
+            slider.parentNode.replaceChild(newSlider, slider);
+
+            // Add change listener (fires when user releases slider)
+            newSlider.addEventListener('change', async () => {
+                const value = parseFloat(newSlider.value);
+                logger.log(`🎚️ ${name} changed to ${value} - triggering re-posterization`);
+
+                // Show progress indicator
+                document.body.style.cursor = 'wait';
+
+                try {
+                    // Get current form values (includes new slider values)
+                    const config = getFormValues();
+
+                    // Re-run posterization with new parameters
+                    await rerunPosterization(config);
+
+                    logger.log(`✓ Re-posterization complete with ${name}=${value}`);
+                } catch (error) {
+                    logger.error(`Failed to re-posterize with ${name}:`, error);
+                    showErrorDialog("Re-posterization Error", error.message, error.stack);
+                } finally {
+                    document.body.style.cursor = '';
+                }
+            });
+
+            logger.log(`✓ Attached re-posterization listener to ${id}`);
+        });
+    }
+
+    // Function to re-run posterization with current slider values
+    async function rerunPosterization(config) {
+        logger.log('🔄 Re-running posterization with updated parameters...');
+        logger.log(`   minVolume: ${config.minVolume}%, speckleRescue: ${config.speckleRescue}px, shadowClamp: ${config.shadowClamp}%`);
+
+        // Get the original image data
+        const originalData = window._originalImageData;
+
+        if (!originalData || !originalData.labPixels) {
+            throw new Error('Original image data not available. Please run posterization again.');
+        }
+
+        // Make a fresh copy for this posterization (preprocessing may modify it)
+        const labPixels = new Uint16Array(originalData.labPixels);
+        const { width, height, bitDepth, format } = originalData;
+
+        // Apply preprocessing if enabled (matches main posterization flow)
+        const preprocessingIntensity = config.preprocessingIntensity || 'auto';
+        if (preprocessingIntensity !== 'off') {
+            logger.log(`   Applying ${preprocessingIntensity} preprocessing...`);
+            const preprocessConfig = {
+                enabled: true,
+                radius: preprocessingIntensity === 'heavy' ? 5 : 3,
+                sigmaR: preprocessingIntensity === 'heavy' ? 40 : 25
+            };
+
+            BilateralFilter.applyBilateralFilterLab(
+                labPixels,
+                width,
+                height,
+                preprocessConfig.radius,
+                preprocessConfig.sigmaR
+            );
+        }
+
+        // Run posterization with new config (including production quality parameters)
+        const result = await PosterizationEngine.posterize(
+            labPixels,
+            width,
+            height,
+            config.targetColors,
+            {
+                ...config,
+                format,
+                bitDepth,
+                isPreview: true,
+                previewStride: parseInt(document.getElementById('previewStride')?.value || '4', 10)
+            }
+        );
+
+        // Store results
+        window.selectedPreview = result;
+        selectedPreview = result;
+        selectedPalette = {
+            hexColors: result.hexColors,
+            allHexColors: result.hexColors,
+            paletteLab: result.labPalette
+        };
+
+        // Re-render swatches and preview
+        renderPaletteSwatches();
+
+        // Update preview
+        if (window.previewState) {
+            window.previewState.palette = result.hexColors;
+            await renderPreview();
+        }
+
+        logger.log(`✓ Re-posterization complete: ${result.hexColors.length} colors`);
+    }
+
+    // Attach listeners after palette is rendered
+    attachProductionQualityListeners();
+
     // Hide "Posterize" button, show "Apply Separation" and "Back" buttons
     const btnPosterize = document.getElementById('btnPosterize');
     if (btnPosterize) btnPosterize.style.display = 'none';
@@ -4570,6 +4692,16 @@ async function showDialog() {
                     logger.log(`   First pixel (COPY): L=${pixelsCopy[0]} a=${pixelsCopy[1]} b=${pixelsCopy[2]}`);
                     logger.log(`   Second pixel (COPY): L=${pixelsCopy[3]} a=${pixelsCopy[4]} b=${pixelsCopy[5]}`);
                     logger.log(`   Third pixel (COPY): L=${pixelsCopy[6]} a=${pixelsCopy[7]} b=${pixelsCopy[8]}`);
+
+                    // Store original image data for re-posterization (used by Production Quality Controls)
+                    window._originalImageData = {
+                        labPixels: new Uint16Array(pixelsCopy), // Make another copy to preserve original
+                        width: pixelData.width,
+                        height: pixelData.height,
+                        bitDepth: pixelData.bitDepth,
+                        format: pixelData.format
+                    };
+                    logger.log(`✓ Stored original image data for re-posterization (${pixelData.width}×${pixelData.height})`);
 
                     // Apply preprocessing (bilateral filter for noise reduction) if enabled
                     // Engine always operates in 16-bit Lab space

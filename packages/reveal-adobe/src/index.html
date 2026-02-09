@@ -1657,15 +1657,28 @@
                             </div>
 
                         </div>
+                    </div>
+
+                    <!-- Palette Content (right side) -->
+                    <div style="flex: 0 0 450px; min-width: 350px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; gap: 8px;">
+                        <!-- Palette swatches container - now scrollable -->
+                        <div id="editablePaletteContainer" class="editable-palette" style="
+                            flex: 1 1 0;
+                            overflow-y: auto;
+                            overflow-x: hidden;
+                            min-height: 0;
+                            padding-right: 8px;">
+                            <!-- Color swatches will be added here dynamically -->
+                        </div>
 
                         <!-- Production Quality Controls -->
-                        <div style="margin-top: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
+                        <div style="padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; flex-shrink: 0;">
                             <div style="font-size: 12px; font-weight: 600; color: #495057; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
                                 <span>🎚️</span>
                                 <span>Production Quality Controls</span>
                             </div>
                             <div style="font-size: 10px; color: #6c757d; margin-bottom: 12px; line-height: 1.4;">
-                                Adjust these controls and see effects in real-time in 1:1 mode
+                                Adjust and see effects in real-time in 1:1 mode
                             </div>
 
                             <!-- minVolume Slider (compact) -->
@@ -1697,19 +1710,6 @@
                                 <sp-slider id="shadowClamp" min="0" max="10" step="0.5" value="0" variant="filled" style="width: 100%;"></sp-slider>
                                 <div style="font-size: 9px; color: #6c757d; margin-top: 2px;">Ink density floor (6% typical)</div>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- Palette Content (right side) -->
-                    <div style="flex: 0 0 450px; min-width: 350px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; gap: 8px;">
-                        <!-- Palette swatches container - now scrollable -->
-                        <div id="editablePaletteContainer" class="editable-palette" style="
-                            flex: 1 1 0;
-                            overflow-y: auto;
-                            overflow-x: hidden;
-                            min-height: 0;
-                            padding-right: 8px;">
-                            <!-- Color swatches will be added here dynamically -->
                         </div>
 
                         <!-- Navigator Map (shown only in 1:1 mode) - MOVED HERE -->
