@@ -1471,6 +1471,15 @@ async function setPreviewMode(mode) {
     if (mode === 'zoom') {
         // ZOOM MODE: Initialize ZoomPreviewRenderer
 
+        // Show quality group if coming from 1:1 mode
+        if (state.viewMode === '1:1') {
+            const qualityGroup = document.getElementById('previewQualityGroup');
+            if (qualityGroup) {
+                qualityGroup.style.display = 'flex';
+                logger.log('✓ Preview Quality shown (from 1:1)');
+            }
+        }
+
         // Get metadata from posterizationData
         if (!posterizationData || !posterizationData.docInfo) {
             logger.error('Missing posterizationData for zoom mode');
@@ -1685,6 +1694,19 @@ async function setPreviewMode(mode) {
             if (qualityGroup) {
                 qualityGroup.style.display = 'flex';
                 logger.log('✓ Preview Quality shown');
+            }
+
+            // Restore dropdown label and options
+            if (previewStrideLabel) {
+                previewStrideLabel.textContent = 'Preview Quality:';
+            }
+            if (previewStrideSelect) {
+                previewStrideSelect.innerHTML = `
+                    <option value="4" selected>Standard (fast)</option>
+                    <option value="2">Fine (slow)</option>
+                    <option value="1">Finest (slower)</option>
+                `;
+                logger.log('✓ Dropdown content restored from 1:1');
             }
 
             // Remove 1:1 drag handlers
