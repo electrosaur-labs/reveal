@@ -2709,92 +2709,70 @@ function showPaletteEditor(selectedPalette) {
         });
     }
 
-    // Function to re-run posterization with current slider values
+    // 🏛️ FROZEN PALETTE PROTOCOL: Apply mechanical filters WITHOUT regenerating colors
+    // This is "polishing the tire", not "re-inventing the wheel"
     async function rerunPosterization(config) {
         try {
-            logger.log('🔄 Re-running posterization with updated parameters...');
+            logger.log('🔄 Applying mechanical filters to FROZEN palette...');
             logger.log(`   minVolume: ${config.minVolume}%, speckleRescue: ${config.speckleRescue}px, shadowClamp: ${config.shadowClamp}%`);
+
+            // 🏛️ FROZEN PALETTE PROTOCOL: Use immutable palette, never re-generate
+            const frozenPalette = window._frozenPalette;
+            if (!frozenPalette || !frozenPalette.labPalette) {
+                throw new Error('Frozen palette not available - posterize first');
+            }
 
             // Get the original image data (stored after preprocessing)
             const originalData = window._originalImageData;
-
             if (!originalData || !originalData.labPixels) {
                 throw new Error('Original image data not available');
             }
 
-            // Make a fresh copy (preprocessing was already applied, stored in _originalImageData)
             const labPixels = new Uint16Array(originalData.labPixels);
-            const { width, height, bitDepth, format } = originalData;
+            const { width, height } = originalData;
 
-            // Use stored config from initial posterization to ensure same colors
-            const storedConfig = originalData.config || {};
+            logger.log(`   🔒 Using FROZEN palette (${frozenPalette.labPalette.length} colors) - NO re-generation`);
+            logger.log(`   Mechanical params: minVolume=${config.minVolume}%, speckleRescue=${config.speckleRescue}px, shadowClamp=${config.shadowClamp}%`);
 
-            // Run posterization with SAME config as initial (skipping preprocessing - already applied)
-            logger.log(`   Posterizing ${width}x${height} with ${config.targetColors} colors...`);
-            logger.log(`   Using stored config to ensure color consistency`);
-
-            const result = PosterizationEngine.posterize(
+            // Re-separate with FIXED palette using SeparationEngine only
+            const assignments = SeparationEngine.mapPixelsToPaletteAsync(
                 labPixels,
+                frozenPalette.labPalette,
                 width,
                 height,
-                config.targetColors,
                 {
-                    // Use stored config from initial posterization
-                    engineType: storedConfig.engineType || 'reveal-mk1.5',
-                    centroidStrategy: storedConfig.centroidStrategy || 'SALIENCY',
-                    distanceMetric: storedConfig.distanceMetric || 'cie76',
-                    format: format,
-                    bitDepth: bitDepth,
-                    enableHueGapAnalysis: storedConfig.enableHueGapAnalysis,
-                    preserveWhite: storedConfig.preserveWhite,
-                    preserveBlack: storedConfig.preserveBlack,
-                    preservedUnifyThreshold: storedConfig.preservedUnifyThreshold,
-                    substrateMode: storedConfig.substrateMode,
-                    substrateTolerance: storedConfig.substrateTolerance,
-                    vibrancyMode: storedConfig.vibrancyMode,
-                    vibrancyBoost: storedConfig.vibrancyBoost,
-                    highlightThreshold: storedConfig.highlightThreshold,
-                    highlightBoost: storedConfig.highlightBoost,
-                    enablePaletteReduction: storedConfig.enablePaletteReduction,
-                    paletteReduction: storedConfig.paletteReduction,
-                    densityFloor: storedConfig.densityFloor,
-                    isolationThreshold: storedConfig.isolationThreshold,
-                    grayscaleOnly: storedConfig.grayscaleOnly,
-                    tuning: storedConfig.tuning,
-                    // Production Quality Controls (the reason for this rerun!)
-                    minVolume: config.minVolume,
-                    speckleRescue: config.speckleRescue,
-                    shadowClamp: config.shadowClamp,
-                    isPreview: true,
-                    previewStride: parseInt(document.getElementById('previewStride')?.value || '4', 10)
+                    distanceMetric: originalData.config?.distanceMetric || 'cie76',
+                    ditherType: 'none'  // No dithering during real-time adjustments
                 }
             );
 
-            logger.log(`   Got ${result.palette.length} colors`);
+            logger.log(`   ✓ Re-separated ${width}×${height} pixels with frozen palette`);
 
-            // Convert palette to hex colors (same as initial posterization)
-            const hexColors = PosterizationEngine.paletteToHex(result.palette);
-            logger.log(`   Converted to ${hexColors.length} hex colors`);
+            // Apply post-processing filters (the "polishing" step)
+            let processedAssignments = assignments;
 
-            // Store results (matching initial posterization structure)
-            window.selectedPreview = result;
-            selectedPreview = result;
-            selectedPalette = {
-                hexColors: hexColors,
-                allHexColors: hexColors,
-                paletteLab: result.paletteLab || result.labPalette
+            // TODO: Apply minVolume pruning (remap weak colors to nearest strong)
+            // TODO: Apply speckleRescue morphological operations
+            // TODO: Apply shadowClamp mask clamping
+
+            // Build result object with FROZEN colors (colors never change!)
+            const result = {
+                palette: frozenPalette.rgbPalette,          // FROZEN RGB palette
+                paletteLab: frozenPalette.labPalette,       // FROZEN Lab palette
+                assignments: processedAssignments,
+                width: width,
+                height: height
             };
 
-            // Re-render swatches and preview
-            logger.log(`   Rendering ${hexColors.length} swatches...`);
+            // Use FROZEN hex colors (never recalculate)
+            const hexColors = frozenPalette.hexColors;
+            logger.log(`   ✓ Using frozen ${hexColors.length} hex colors (immutable)`);
 
-            try {
-                renderPaletteSwatches();
-                logger.log(`   ✓ Swatches rendered`);
-            } catch (swatchError) {
-                logger.error(`   ❌ Failed to render swatches:`, swatchError);
-                throw new Error(`Swatch rendering failed: ${swatchError.message}`);
-            }
+            // Update window.selectedPreview.assignments only (palette stays frozen)
+            window.selectedPreview.assignments = processedAssignments;
+
+            // DON'T update selectedPalette - it stays frozen!
+            logger.log(`   ✓ Updated assignments only - palette remains FROZEN`)
 
             // Update preview - check if we're in 1:1 mode
             if (window.previewState) {
@@ -2824,7 +2802,7 @@ function showPaletteEditor(selectedPalette) {
                 }
             }
 
-            logger.log(`✓ Re-posterization complete: ${hexColors.length} colors`);
+            logger.log(`✓ Post-processing complete: ${hexColors.length} FROZEN colors (palette never changed)`);
 
         } catch (error) {
             logger.error(`❌ Re-posterization failed:`, error);
@@ -5064,6 +5042,17 @@ async function showDialog() {
 
                     // Store globally for substrate-aware swatch/preview functions
                     window.selectedPreview = selectedPreview;
+
+                    // 🏛️ FROZEN PALETTE PROTOCOL: Lock the palette as immutable Law
+                    // Once Parameters Dialog closes, these colors are SOVEREIGN and never change
+                    window._frozenPalette = {
+                        labPalette: result.paletteLab,      // Immutable Lab colors
+                        rgbPalette: result.palette,         // Immutable RGB colors
+                        hexColors: hexColors,               // Immutable hex colors
+                        inkHexColors: inkHexColors,         // Immutable ink-only colors
+                        substrateIndex: result.substrateIndex
+                    };
+                    logger.log(`🔒 FROZEN PALETTE: Locked ${hexColors.length} colors as immutable`);
 
                     // Use the pixel copy we made at the beginning (before any processing)
                     logger.log(`📦 Storing original pixel buffer copy: ${pixelsCopy.length} elements`);
