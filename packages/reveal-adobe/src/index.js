@@ -4863,38 +4863,16 @@ async function showDialog() {
                         logger.log(`⏭️ Preprocessing: Off (user disabled)`);
                     }
 
-                    // Store preprocessed image data + config for re-posterization (used by Production Quality Controls)
+                    // TEMP: Store preprocessed image data (config will be stored later after tuning is defined)
                     // This must happen AFTER preprocessing so sliders can skip preprocessing step
                     window._originalImageData = {
                         labPixels: new Uint16Array(pixelsCopy), // pixelsCopy now contains preprocessed data
                         width: pixelData.width,
                         height: pixelData.height,
                         bitDepth: pixelData.bitDepth,
-                        format: pixelData.format,
-                        // Store original config for deterministic re-posterization
-                        config: {
-                            engineType: params.engineType,
-                            centroidStrategy: params.centroidStrategy,
-                            distanceMetric: params.distanceMetric,
-                            enableHueGapAnalysis: params.enableHueGapAnalysis,
-                            preserveWhite: params.preserveWhite,
-                            preserveBlack: params.preserveBlack,
-                            preservedUnifyThreshold: params.preservedUnifyThreshold,
-                            substrateMode: params.substrateMode,
-                            substrateTolerance: params.substrateTolerance,
-                            vibrancyMode: params.vibrancyMode,
-                            vibrancyBoost: params.vibrancyBoost,
-                            highlightThreshold: params.highlightThreshold,
-                            highlightBoost: params.highlightBoost,
-                            enablePaletteReduction: params.enablePaletteReduction,
-                            paletteReduction: params.paletteReduction,
-                            densityFloor: params.densityFloor,
-                            isolationThreshold: params.isolationThreshold,
-                            grayscaleOnly: grayscaleOnly,
-                            tuning: tuning
-                        }
+                        format: pixelData.format
                     };
-                    logger.log(`✓ Stored preprocessed image data + config for re-posterization (${pixelData.width}×${pixelData.height})`);
+                    logger.log(`✓ Stored preprocessed image data for re-posterization (${pixelData.width}×${pixelData.height})`);
 
                     // Determine color count (manual override or auto-detect)
                     let colorCount;
@@ -4941,6 +4919,30 @@ async function showDialog() {
                             vibrancyBoost: params.vibrancyBoost         // Vibrancy boost exponent (default: 2.2)
                         }
                     };
+
+                    // Store config for re-posterization (now that tuning is defined)
+                    window._originalImageData.config = {
+                        engineType: params.engineType,
+                        centroidStrategy: params.centroidStrategy,
+                        distanceMetric: params.distanceMetric,
+                        enableHueGapAnalysis: params.enableHueGapAnalysis,
+                        preserveWhite: params.preserveWhite,
+                        preserveBlack: params.preserveBlack,
+                        preservedUnifyThreshold: params.preservedUnifyThreshold,
+                        substrateMode: params.substrateMode,
+                        substrateTolerance: params.substrateTolerance,
+                        vibrancyMode: params.vibrancyMode,
+                        vibrancyBoost: params.vibrancyBoost,
+                        highlightThreshold: params.highlightThreshold,
+                        highlightBoost: params.highlightBoost,
+                        enablePaletteReduction: params.enablePaletteReduction,
+                        paletteReduction: params.paletteReduction,
+                        densityFloor: params.densityFloor,
+                        isolationThreshold: params.isolationThreshold,
+                        grayscaleOnly: grayscaleOnly,
+                        tuning: tuning  // Now defined!
+                    };
+                    logger.log(`✓ Stored posterization config (tuning included)`);
 
                     const result = PosterizationEngine.posterize(
                         pixelData.pixels,
