@@ -5435,7 +5435,3 @@ if (typeof module !== 'undefined' && module.exports) {
         initPlugin
     };
 }
-
-// Enable Proxy Mode Test Harness (Sovereign Foundation)
-const { ProxyModeTestHarness } = require('./ProxyModeTestHarness');
-ProxyModeTestHarness.attach();
