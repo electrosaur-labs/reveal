@@ -993,13 +993,15 @@
                                 <strong>Posterization Engine</strong>
                             </label>
                             <select id="engineType" class="form-control" style="width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;">
-                                <option value="reveal" selected>Reveal - Maximum Quality (Hue-Aware, Recommended)</option>
+                                <option value="reveal">Reveal - Maximum Quality (Hue-Aware, Recommended)</option>
+                                <option value="reveal-mk1.5" selected>Reveal Mk 1.5 - Auto-Protect Outliers (16-bit Archival)</option>
                                 <option value="balanced">Balanced - Fast & Accurate (Lab Space, No Hue Analysis)</option>
                                 <option value="classic">Classic - Fastest (RGB Median Cut)</option>
                                 <option value="stencil">Stencil - Monochrome (Lightness Only)</option>
                             </select>
                             <div class="helper-text">
                                 <strong>Reveal</strong> ensures all hues are represented (best for complex images).
+                                <strong>Reveal Mk 1.5</strong> auto-detects rare high-chroma details (Monroe blue eyes).
                                 <strong>Balanced</strong> is faster with good quality.
                                 <strong>Classic</strong> is fastest for quick tests.
                                 <strong>Stencil</strong> creates grayscale separations (L-channel only).
@@ -1640,11 +1642,12 @@
                                 <select id="viewMode" style="padding: 4px 8px; font-size: 11px; border: 1px solid #ccc; border-radius: 3px;">
                                     <option value="fit" selected>Fit</option>
                                     <option value="zoom">Zoom</option>
+                                    <option value="1:1">1:1 Clinical Loupe</option>
                                 </select>
                             </div>
 
                             <!-- Preview Quality/Resolution Dropdown -->
-                            <div style="display: flex; align-items: center; gap: 8px;">
+                            <div id="previewQualityGroup" style="display: flex; align-items: center; gap: 8px;">
                                 <label id="previewStrideLabel" for="previewStride" style="font-size: 11px; color: #666;">Preview Quality:</label>
                                 <select id="previewStride" style="padding: 4px 8px; font-size: 11px; border: 1px solid #ccc; border-radius: 3px;">
                                     <option value="4" selected>Standard (fast)</option>
@@ -1652,22 +1655,12 @@
                                     <option value="1">Finest (slower)</option>
                                 </select>
                             </div>
+
                         </div>
                     </div>
 
                     <!-- Palette Content (right side) -->
-                    <div style="flex: 0 0 450px; min-width: 350px; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="info-box" style="background: #e3f2fd; border-left: 4px solid #1473e6; margin-bottom: 16px; flex-shrink: 0;">
-                            <strong>🎨 Edit Your Palette Colors</strong><br>
-                            <ul style="margin: 8px 0 0 0; padding-left: 20px; line-height: 1.8;">
-                                <li>Click swatch to highlight in preview</li>
-                                <li>Click Lab text to open Color Picker</li>
-                                <li><strong>L badge</strong> shows Lightness (0-100): perceptual brightness</li>
-                                <li>Lab coordinates (L, a, b) show <strong>perceptual relationships</strong> between colors</li>
-                                <li>Warning appears if colors are too similar (ΔE &lt; 12) — may not separate cleanly</li>
-                            </ul>
-                        </div>
-
+                    <div style="flex: 0 0 450px; min-width: 350px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; gap: 8px;">
                         <!-- Palette swatches container - now scrollable -->
                         <div id="editablePaletteContainer" class="editable-palette" style="
                             flex: 1 1 0;
@@ -1676,6 +1669,20 @@
                             min-height: 0;
                             padding-right: 8px;">
                             <!-- Color swatches will be added here dynamically -->
+                        </div>
+
+                        <!-- Navigator Map (shown only in 1:1 mode) - MOVED HERE -->
+                        <div id="navigatorMapContainer" style="display: none; padding: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; flex-shrink: 0;">
+                            <div style="font-size: 11px; color: #666; font-weight: 600; margin-bottom: 4px; text-align: center;">Navigator Map</div>
+                            <div style="position: relative; width: 160px; height: 160px; cursor: crosshair; border: 1px solid #999; background: #fff; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                                <img id="navigatorCanvas" width="160" height="160" style="display: block; max-width: 100%; max-height: 100%; object-fit: contain;" />
+                                <div id="navigatorViewport" style="
+                                    position: absolute;
+                                    border: 2px solid #ff0000;
+                                    pointer-events: none;
+                                    z-index: 10;
+                                    box-shadow: 0 0 0 1px rgba(255,255,255,0.8);"></div>
+                            </div>
                         </div>
                     </div>
 

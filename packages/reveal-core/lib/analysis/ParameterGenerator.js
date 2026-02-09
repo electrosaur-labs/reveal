@@ -34,11 +34,13 @@ class DynamicConfigurator {
      * @param {number} [options.width] - Image width
      * @param {number} [options.height] - Image height
      * @param {string} [options.preprocessingIntensity='auto'] - 'off', 'auto', 'light', 'heavy'
+     * @param {string} [options.manualArchetypeId] - Optional manual archetype ID to bypass DNA matching
      * @returns {Object} Complete configuration from matched archetype
      */
     static generate(dna, options = {}) {
         // 1. Match DNA to nearest archetype using 4D weighted distance
-        const archetype = ArchetypeLoader.matchArchetype(dna);
+        // If manualArchetypeId is provided, bypass DNA matching
+        const archetype = ArchetypeLoader.matchArchetype(dna, options.manualArchetypeId);
 
         // 2. Clone archetype parameters (deep copy to avoid mutations)
         const params = JSON.parse(JSON.stringify(archetype.parameters));
@@ -331,22 +333,6 @@ class DynamicConfigurator {
             console.log(`   ❄️ Cool Outlier Protection (${(coolPresence * 100).toFixed(1)}% cool in warm image)`);
             params.neutralSovereigntyThreshold = 0;  // Don't neutralize cool colors
             params.enableHueGapAnalysis = true;      // Force cool color slots
-        }
-
-        // SPECIAL CASE: Muddy Hybrid Prevention (The Horse Fix)
-        // Prevent transitional colors when there's high contrast between warm and cool sectors
-        // Targets images with dominant warm sector + minority green/foliage creating muddy border centroids
-        const warmPresence = (dna.sectors?.orange?.weight || 0) +
-                            (dna.sectors?.yellow?.weight || 0) +
-                            (dna.sectors?.red?.weight || 0);
-        const greenPresence = (dna.sectors?.green?.weight || 0) +
-                             (dna.sectors?.chartreuse?.weight || 0);
-
-        // If dominant warm with minority green, tighten hue lock and increase merging
-        if (warmPresence > 0.4 && greenPresence > 0.05 && greenPresence < 0.2) {
-            console.log(`   🎨 Hybrid Prevention (${(warmPresence * 100).toFixed(1)}% warm, ${(greenPresence * 100).toFixed(1)}% green)`);
-            params.hueLockAngle = Math.min(params.hueLockAngle || 45, 15);  // Tighten hue lock
-            params.paletteReduction = Math.max(params.paletteReduction || 6.0, 10.0);  // Aggressive merging
         }
 
         console.log(''); // Blank line for readability

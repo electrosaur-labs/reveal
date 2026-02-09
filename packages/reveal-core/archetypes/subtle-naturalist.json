@@ -19,6 +19,7 @@
     "hue_entropy": 2.0
   },
   "parameters": {
+    "engineType": "reveal-mk1.5",
     "targetColorsSlider": 8,
     "ditherType": "blue-noise",
     "distanceMetric": "cie2000",

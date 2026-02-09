@@ -25,6 +25,11 @@ const logger = Reveal.logger;
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 const DNAGenerator = require("./DNAGenerator");
 
+// 1:1 Viewport components for mechanical knobs
+const CropEngine = require('../../reveal-core/lib/engines/CropEngine');
+const { SessionState } = require('./SessionState');
+const ViewportManager = require('./ViewportManager');
+
 // Zoom preview components
 const ZoomPreviewRenderer = require("./api/ZoomPreviewRenderer");
 
@@ -58,6 +63,7 @@ let posterizationData = null;
  */
 let lastImageDNA = null;
 let lastGeneratedConfig = null;  // Complete config from ParameterGenerator (includes all parameters)
+let lastSelectedArchetypeId = null;  // Manually selected archetype ID (bypasses DNA matching)
 
 /**
  * Zoom preview state (tile managers, viewport tracker, renderer)
@@ -793,6 +799,654 @@ function renderPreview() {
 }
 
 /**
+ * Render Navigator Map thumbnail (Phase 2)
+ * Shows compositional overview with red viewport rectangle
+ */
+function renderNavigatorMap() {
+    logger.log('[Navigator] Rendering Navigator Map...');
+
+    if (!window.viewportManager) {
+        logger.error('[Navigator] ViewportManager not initialized');
+        return;
+    }
+
+    try {
+        // Get thumbnail data from ViewportManager
+        const navData = window.viewportManager.getNavigatorMap(160); // 160px thumbnail
+
+        if (!navData || !navData.thumbnailBuffer) {
+            logger.error('[Navigator] No thumbnail data returned');
+            return;
+        }
+
+        // Get img element (now using img instead of canvas for UXP compatibility)
+        const img = document.getElementById('navigatorCanvas');
+        if (!img) {
+            logger.error('[Navigator] Image element not found');
+            return;
+        }
+
+        const { thumbnailBuffer, thumbnailWidth, thumbnailHeight, viewportBounds } = navData;
+
+        // Encode to JPEG using jpeg-js (UXP doesn't support ImageData constructor)
+        const jpegData = jpeg.encode({
+            data: thumbnailBuffer,
+            width: thumbnailWidth,
+            height: thumbnailHeight
+        }, 95);
+
+        // Convert to base64 data URL
+        const base64 = bufferToBase64(jpegData.data);
+        const dataUrl = `data:image/jpeg;base64,${base64}`;
+
+        // Set image source and actual dimensions
+        img.src = dataUrl;
+        img.width = thumbnailWidth;
+        img.height = thumbnailHeight;
+
+        logger.log(`[Navigator] ✓ Thumbnail rendered: ${thumbnailWidth}x${thumbnailHeight} (${Math.round(jpegData.data.length / 1024)}KB)`);
+
+        // Update viewport rectangle using bounds from CropEngine
+        updateNavigatorViewport(viewportBounds);
+
+    } catch (error) {
+        logger.error('[Navigator] Failed to render:', error);
+    }
+}
+
+/**
+ * Handle arrow key navigation for viewport panning (Phase 4+)
+ * Arrow keys pan viewport by 10% of viewport size
+ */
+function attachArrowKeyNavigation() {
+    // Remove existing listener if any
+    document.removeEventListener('keydown', window._arrowKeyHandler);
+
+    const handler = async (e) => {
+        // Only handle arrow keys when in 1:1 mode
+        if (!window.previewState || window.previewState.viewMode !== '1:1') {
+            return;
+        }
+
+        if (!window.viewportManager) {
+            return;
+        }
+
+        // Check if focused on an input/textarea
+        const activeElement = document.activeElement;
+        if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+            return;
+        }
+
+        const vmState = window.viewportManager.getState();
+        const panAmount = 50; // pixels to pan
+
+        let handled = false;
+        switch (e.key) {
+            case 'ArrowUp':
+                window.viewportManager.pan(0, -panAmount);
+                handled = true;
+                break;
+            case 'ArrowDown':
+                window.viewportManager.pan(0, panAmount);
+                handled = true;
+                break;
+            case 'ArrowLeft':
+                window.viewportManager.pan(-panAmount, 0);
+                handled = true;
+                break;
+            case 'ArrowRight':
+                window.viewportManager.pan(panAmount, 0);
+                handled = true;
+                break;
+        }
+
+        if (handled) {
+            e.preventDefault();
+
+            // Re-render Navigator and preview
+            renderNavigatorMap();
+            await render1to1Preview();
+        }
+    };
+
+    window._arrowKeyHandler = handler;
+    document.addEventListener('keydown', handler);
+
+    logger.log('[Navigator] ✓ Arrow key navigation attached');
+}
+
+/**
+ * Handle Navigator Map click to jump viewport (Phase 4)
+ * Converts click coordinates to normalized position and updates viewport
+ */
+function attachNavigatorClickHandler() {
+    logger.log('🔷 [attachNavigatorClickHandler] CALLED - Implementing Architect\'s Center-Drag Pattern');
+
+    const navigatorContainer = document.getElementById('navigatorMapContainer');
+    const img = document.getElementById('navigatorCanvas');
+    const viewportRect = document.getElementById('navigatorViewport');
+
+    if (!navigatorContainer || !img || !viewportRect) {
+        logger.error('[Navigator] ❌ Elements not found');
+        return;
+    }
+
+    // Drag state (stored globally)
+    if (!window._navigatorDragState) {
+        window._navigatorDragState = {
+            isDragging: false,
+            hasDragged: false,
+            rafPending: false  // For debouncing 1:1 renders
+        };
+    }
+    const dragState = window._navigatorDragState;
+
+    // Remove old handlers if they exist
+    if (window._navigatorHandlers) {
+        const old = window._navigatorHandlers;
+        navigatorContainer.removeEventListener('pointerdown', old.pointerdown);
+        navigatorContainer.removeEventListener('pointermove', old.pointermove);
+        navigatorContainer.removeEventListener('pointerup', old.pointerup);
+        navigatorContainer.removeEventListener('pointercancel', old.pointercancel);
+        navigatorContainer.removeEventListener('click', old.click);
+    }
+
+    // ARCHITECT'S FIX: Attach pointerdown to img (not red rect - it has pointer-events: none)
+    const pointerdownHandler = (e) => {
+        if (!window.viewportManager) return;
+
+        // Only start drag if clicking on the img
+        if (e.target !== img) return;
+
+        dragState.isDragging = true;
+        dragState.hasDragged = false;
+
+        navigatorContainer.style.cursor = 'grabbing';
+        e.preventDefault();
+
+        logger.log('[Navigator] 🔴 Drag started - Center-Drag mode active');
+    };
+
+    // ARCHITECT'S FIX: Center-Drag logic with accurate coordinate math
+    const pointermoveHandler = (e) => {
+        if (!dragState.isDragging || !window.viewportManager) return;
+
+        dragState.hasDragged = true;
+
+        // Calculate click relative to ACTUAL img element (flexbox centers it in container)
+        const imgRect = img.getBoundingClientRect();
+
+        // Get click position relative to img
+        const clickX = e.clientX - imgRect.left;
+        const clickY = e.clientY - imgRect.top;
+
+        // BOUNDS CHECK: Constrain to visible image area
+        const constrainedX = Math.max(0, Math.min(imgRect.width, clickX));
+        const constrainedY = Math.max(0, Math.min(imgRect.height, clickY));
+
+        // Map to normalized coordinates (0.0 - 1.0)
+        const normX = constrainedX / imgRect.width;
+        const normY = constrainedY / imgRect.height;
+
+        // Update viewport center to follow mouse (this syncs CropEngine via _syncCropEngineViewport)
+        window.viewportManager.jumpToNormalized(normX, normY);
+
+        // PERFORMANCE FIX: During drag, only update red rect position (not entire thumbnail)
+        // Get viewport bounds and update red rect directly - this is fast and synchronous
+        const navData = window.viewportManager.getNavigatorMap(160);
+        if (navData && navData.viewportBounds) {
+            updateNavigatorViewport(navData.viewportBounds);
+        }
+
+        // ARCHITECT'S FIX: Debounce 1:1 render using requestAnimationFrame for smoothness
+        // getLoupeBuffer is called INSIDE render1to1Preview, not here
+        if (!dragState.rafPending) {
+            dragState.rafPending = true;
+            requestAnimationFrame(async () => {
+                await render1to1Preview();
+                dragState.rafPending = false;
+            });
+        }
+    };
+
+    // Pointer up - stop dragging
+    const pointerupHandler = () => {
+        if (dragState.isDragging) {
+            dragState.isDragging = false;
+            navigatorContainer.style.cursor = '';
+
+            // Full Navigator refresh after drag completes
+            // jumpToNormalized already synced CropEngine coordinates via _syncCropEngineViewport
+            renderNavigatorMap();
+
+            logger.log('[Navigator] 🟢 Drag ended - Navigator refreshed');
+        }
+    };
+
+    // ARCHITECT'S FIX: Click handler with accurate coordinate math
+    const clickHandler = async (e) => {
+        if (!window.viewportManager) return;
+
+        // Don't handle click if we just dragged
+        if (dragState.hasDragged) {
+            dragState.hasDragged = false;
+            return;
+        }
+
+        // Only handle clicks on the img
+        if (e.target !== img) return;
+
+        // Calculate click relative to ACTUAL img element (flexbox centers it in container)
+        const imgRect = img.getBoundingClientRect();
+
+        // Get click position relative to img
+        const clickX = e.clientX - imgRect.left;
+        const clickY = e.clientY - imgRect.top;
+
+        // BOUNDS CHECK: Constrain to visible image area
+        const constrainedX = Math.max(0, Math.min(imgRect.width, clickX));
+        const constrainedY = Math.max(0, Math.min(imgRect.height, clickY));
+
+        // Map to normalized coordinates (0.0 - 1.0)
+        const normX = constrainedX / imgRect.width;
+        const normY = constrainedY / imgRect.height;
+
+        logger.log(`[Navigator] Clicked at normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
+
+        // Update viewport center (this syncs CropEngine via _syncCropEngineViewport)
+        window.viewportManager.jumpToNormalized(normX, normY);
+
+        // Sync UI - jumpToNormalized already synced coordinates
+        renderNavigatorMap();
+        await render1to1Preview();
+    };
+
+    // Attach handlers to container/img (NOT viewport rect - it has pointer-events: none)
+    img.addEventListener('pointerdown', pointerdownHandler);
+    navigatorContainer.addEventListener('pointermove', pointermoveHandler);
+    navigatorContainer.addEventListener('pointerup', pointerupHandler);
+    navigatorContainer.addEventListener('pointercancel', pointerupHandler);
+    navigatorContainer.addEventListener('click', clickHandler);
+
+    // Store handlers for cleanup
+    window._navigatorHandlers = {
+        pointerdown: pointerdownHandler,
+        pointermove: pointermoveHandler,
+        pointerup: pointerupHandler,
+        pointercancel: pointerupHandler,
+        click: clickHandler
+    };
+
+    logger.log('[Navigator] ✓ Architect\'s Center-Drag pattern implemented');
+}
+
+/**
+ * Attach click handler to preview image to deselect swatches in 1:1 mode
+ */
+function attachPreviewClickHandler() {
+    const previewImg = document.getElementById('previewImg');
+
+    if (!previewImg) {
+        logger.error('[Preview] Cannot attach click handler - preview image not found');
+        return;
+    }
+
+    // Remove old handler if it exists
+    if (window._previewClickHandler) {
+        previewImg.removeEventListener('click', window._previewClickHandler);
+    }
+
+    // Click handler to deselect swatches
+    const clickHandler = async () => {
+        const state = window.previewState;
+        if (!state || state.viewMode !== '1:1') return;
+
+        // Only deselect if something is currently selected
+        if (state.activeSoloIndex === null || state.activeSoloIndex === undefined) {
+            return;
+        }
+
+        logger.log('[Preview] Clicked - deselecting swatch');
+
+        // Clear selection
+        state.activeSoloIndex = null;
+        updateSwatchHighlights();
+
+        // Re-render preview to show all colors
+        await render1to1Preview();
+    };
+
+    previewImg.addEventListener('click', clickHandler);
+    window._previewClickHandler = clickHandler;
+
+    logger.log('[Preview] ✓ Click handler attached to deselect swatches');
+}
+
+/**
+ * Attach drag-to-pan handler for 1:1 preview mode
+ * Allows user to drag the main preview image to pan around the document
+ */
+function attach1to1PreviewDragHandler() {
+    const previewContainer = document.getElementById('previewContainer');
+    const previewImg = document.getElementById('previewImg');
+
+    if (!previewContainer || !previewImg) {
+        logger.error('[1:1 Drag] Cannot attach drag handler - elements not found');
+        return;
+    }
+
+    // Remove old handlers if they exist
+    if (window._1to1DragHandlers) {
+        const old = window._1to1DragHandlers;
+        previewContainer.removeEventListener('pointerdown', old.pointerdown);
+        previewContainer.removeEventListener('pointermove', old.pointermove);
+        previewContainer.removeEventListener('pointerup', old.pointerup);
+        previewContainer.removeEventListener('pointercancel', old.pointerup);
+    }
+
+    // Drag state
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let hasDragged = false;
+
+    const pointerdownHandler = (e) => {
+        // Only drag if clicking on the preview image
+        if (e.target !== previewImg) return;
+
+        isDragging = true;
+        hasDragged = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        previewContainer.style.cursor = 'grabbing';
+        e.preventDefault();
+    };
+
+    const pointermoveHandler = async (e) => {
+        if (!isDragging || !window.viewportManager) return;
+
+        hasDragged = true;
+
+        // Calculate delta in screen pixels
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+
+        // Update start position for next move
+        startX = e.clientX;
+        startY = e.clientY;
+
+        // Pan the viewport (negative delta because we're moving opposite to mouse)
+        window.viewportManager.pan(-deltaX, -deltaY);
+
+        // Update Navigator red rectangle immediately
+        const navData = window.viewportManager.getNavigatorMap(160);
+        if (navData && navData.viewportBounds) {
+            updateNavigatorViewport(navData.viewportBounds);
+        }
+
+        // Debounce 1:1 preview render
+        if (!window._1to1PanRafPending) {
+            window._1to1PanRafPending = true;
+            requestAnimationFrame(async () => {
+                await render1to1Preview();
+                window._1to1PanRafPending = false;
+            });
+        }
+    };
+
+    const pointerupHandler = () => {
+        if (isDragging) {
+            isDragging = false;
+            previewContainer.style.cursor = '';
+
+            // Full Navigator refresh after drag completes
+            if (hasDragged) {
+                renderNavigatorMap();
+            }
+        }
+    };
+
+    previewContainer.addEventListener('pointerdown', pointerdownHandler);
+    previewContainer.addEventListener('pointermove', pointermoveHandler);
+    previewContainer.addEventListener('pointerup', pointerupHandler);
+    previewContainer.addEventListener('pointercancel', pointerupHandler);
+
+    // Store handlers for cleanup
+    window._1to1DragHandlers = {
+        pointerdown: pointerdownHandler,
+        pointermove: pointermoveHandler,
+        pointerup: pointerupHandler
+    };
+
+    logger.log('[1:1 Drag] ✓ Drag-to-pan handler attached');
+}
+
+/**
+ * Render 1:1 pixel-perfect preview using on-demand high-res fetching (Option C: Smart Loading)
+ * Fetches ONLY the viewport window at full resolution from Photoshop
+ */
+async function render1to1Preview() {
+    logger.log('[1:1] Rendering 1:1 preview (Smart Loading)...');
+
+    if (!window.viewportManager || !window.cropEngine) {
+        logger.error('[1:1] ViewportManager or CropEngine not initialized');
+        return;
+    }
+
+    if (!posterizationData) {
+        logger.error('[1:1] No posterization data available');
+        return;
+    }
+
+    try {
+        // Get viewport state (normalized center point)
+        const vmState = window.viewportManager.getState();
+        const { center, viewportWidth, viewportHeight } = vmState;
+
+        // Get actual document dimensions
+        const docInfo = PhotoshopAPI.getDocumentInfo();
+        const fullDocWidth = docInfo.width;
+        const fullDocHeight = docInfo.height;
+
+        // Calculate absolute coordinates in full-resolution document
+        const centerX = center.x * fullDocWidth;
+        const centerY = center.y * fullDocHeight;
+        const cropX = Math.max(0, Math.floor(centerX - viewportWidth / 2));
+        const cropY = Math.max(0, Math.floor(centerY - viewportHeight / 2));
+
+        logger.log(`[1:1] Fetching high-res crop from (${cropX}, ${cropY}) size ${viewportWidth}x${viewportHeight}`);
+        logger.log(`[1:1] Document size: ${fullDocWidth}x${fullDocHeight}, Center: (${center.x.toFixed(3)}, ${center.y.toFixed(3)})`);
+
+        // SMART LOADING: Fetch ONLY the viewport window at full resolution
+        const cropData = await PhotoshopAPI.getHighResCrop(cropX, cropY, viewportWidth, viewportHeight);
+
+        logger.log(`[1:1] ✓ Fetched high-res crop: ${cropData.width}x${cropData.height}`);
+
+        // Get the posterization palette from window.selectedPreview
+        if (!window.selectedPreview || !window.selectedPreview.paletteLab || !window.selectedPreview.palette) {
+            logger.error('[1:1] No palette available in window.selectedPreview');
+            return;
+        }
+
+        const labPalette = window.selectedPreview.paletteLab;
+        const rgbPalette = window.selectedPreview.palette;
+
+        // Map high-res crop pixels to existing palette
+        logger.log(`[1:1] Mapping ${cropData.width}x${cropData.height} pixels to ${labPalette.length} color palette...`);
+
+        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+            cropData.pixels,
+            labPalette,
+            null, // onProgress
+            cropData.width,
+            cropData.height,
+            {
+                distanceMetric: posterizationData.params.distanceMetric || 'cie76'
+            }
+        );
+
+        logger.log(`[1:1] ✓ Mapped pixels to palette`);
+
+        // Check if color isolation mode is active (swatch clicked)
+        const soloColorIndex = window.previewState?.activeSoloIndex;
+        const hasSubstrate = window.selectedPreview?.substrateIndex !== null && window.selectedPreview?.substrateIndex !== undefined;
+        const substrateIndex = window.selectedPreview?.substrateIndex;
+
+        if (soloColorIndex !== null && soloColorIndex !== undefined) {
+            logger.log(`[1:1] Color isolation mode: showing only color index ${soloColorIndex}`);
+        } else {
+            logger.log(`[1:1] Showing all colors (no swatch selected)`);
+        }
+
+        // Generate preview from mapped indices
+        const previewBuffer = new Uint8ClampedArray(cropData.width * cropData.height * 4);
+        for (let i = 0; i < colorIndices.length; i++) {
+            const colorIdx = colorIndices[i];
+            const idx = i * 4;
+
+            // Bounds check: ensure colorIdx is valid
+            if (colorIdx < 0 || colorIdx >= rgbPalette.length) {
+                logger.error(`[1:1] Invalid color index ${colorIdx}, palette size ${rgbPalette.length}`);
+                // Default to gray
+                previewBuffer[idx] = 128;
+                previewBuffer[idx + 1] = 128;
+                previewBuffer[idx + 2] = 128;
+                previewBuffer[idx + 3] = 255;
+                continue;
+            }
+
+            // Color isolation: only show pixels of the solo color
+            if (soloColorIndex !== null && soloColorIndex !== undefined && colorIdx !== soloColorIndex) {
+                // Show substrate if it exists, otherwise transparent
+                if (hasSubstrate && substrateIndex >= 0 && substrateIndex < rgbPalette.length) {
+                    const substrateColor = rgbPalette[substrateIndex];
+                    if (substrateColor) {
+                        previewBuffer[idx] = substrateColor.r;
+                        previewBuffer[idx + 1] = substrateColor.g;
+                        previewBuffer[idx + 2] = substrateColor.b;
+                        previewBuffer[idx + 3] = 255;
+                    } else {
+                        // Substrate color invalid, show transparent
+                        previewBuffer[idx] = 200;
+                        previewBuffer[idx + 1] = 200;
+                        previewBuffer[idx + 2] = 200;
+                        previewBuffer[idx + 3] = 128;
+                    }
+                } else {
+                    // Transparent (checkerboard will show through)
+                    previewBuffer[idx] = 200;
+                    previewBuffer[idx + 1] = 200;
+                    previewBuffer[idx + 2] = 200;
+                    previewBuffer[idx + 3] = 128; // Semi-transparent
+                }
+            } else {
+                // Show actual color (all colors when no swatch selected, or solo color when selected)
+                const color = rgbPalette[colorIdx];
+                if (color) {
+                    previewBuffer[idx] = color.r;
+                    previewBuffer[idx + 1] = color.g;
+                    previewBuffer[idx + 2] = color.b;
+                    previewBuffer[idx + 3] = 255;
+                } else {
+                    logger.error(`[1:1] RGB color undefined at index ${colorIdx}`);
+                    // Default to magenta to indicate error
+                    previewBuffer[idx] = 255;
+                    previewBuffer[idx + 1] = 0;
+                    previewBuffer[idx + 2] = 255;
+                    previewBuffer[idx + 3] = 255;
+                }
+            }
+        }
+
+        // Get main preview img element
+        const img = document.getElementById('previewImg');
+        if (!img) {
+            logger.error('[1:1] Preview img element not found');
+            return;
+        }
+
+        // Encode to JPEG using jpeg-js
+        const jpegData = jpeg.encode({
+            data: previewBuffer,
+            width: cropData.width,
+            height: cropData.height
+        }, 95);
+
+        // Convert to base64 data URL
+        const base64 = bufferToBase64(jpegData.data);
+        const dataUrl = `data:image/jpeg;base64,${base64}`;
+
+        // Set image source - this displays TRUE 1:1 pixels from full-res document!
+        img.src = dataUrl;
+        img.width = cropData.width;
+        img.height = cropData.height;
+
+        logger.log(`[1:1] ✓ Rendered TRUE 1:1 preview: ${cropData.width}x${cropData.height} from (${cropX}, ${cropY}) (${Math.round(jpegData.data.length / 1024)}KB)`);
+
+    } catch (error) {
+        logger.error('[1:1] Failed to render:', error);
+        logger.error('[1:1] Error stack:', error.stack);
+    }
+}
+
+/**
+ * Update red viewport rectangle position on Navigator Map
+ * @param {Object} bounds - Viewport bounds from CropEngine {x, y, width, height}
+ */
+function updateNavigatorViewport(bounds) {
+    const viewportDiv = document.getElementById('navigatorViewport');
+    const img = document.getElementById('navigatorCanvas');
+
+    if (!viewportDiv) {
+        logger.error('[Navigator] Viewport div not found');
+        return;
+    }
+
+    if (!img) {
+        logger.error('[Navigator] Canvas img not found');
+        return;
+    }
+
+    if (!bounds) {
+        logger.error('[Navigator] No bounds provided');
+        return;
+    }
+
+    try {
+        // CRITICAL FIX: Use CONTAINER rect (160x160), not img rect (107x160)
+        // The container is the parent div with fixed 160x160 size and flexbox centering
+        const container = img.parentElement;
+        if (!container) {
+            logger.error('[Navigator] Container not found');
+            return;
+        }
+
+        const containerRect = container.getBoundingClientRect();
+        const imgRect = img.getBoundingClientRect();
+
+        // Calculate offset from container to actual img (flexbox centering)
+        const offsetX = imgRect.left - containerRect.left;
+        const offsetY = imgRect.top - containerRect.top;
+
+        logger.log('[Navigator] Container:', containerRect.width, 'x', containerRect.height,
+                   'Img:', imgRect.width, 'x', imgRect.height,
+                   'Offset:', offsetX, offsetY);
+        logger.log('[Navigator] Positioning viewport rect:', bounds);
+
+        // Position the red rectangle using bounds from CropEngine PLUS centering offset
+        viewportDiv.style.left = `${bounds.x + offsetX}px`;
+        viewportDiv.style.top = `${bounds.y + offsetY}px`;
+        viewportDiv.style.width = `${bounds.width}px`;
+        viewportDiv.style.height = `${bounds.height}px`;
+
+        logger.log(`[Navigator] ✓ Viewport rect positioned: ${bounds.x + offsetX},${bounds.y + offsetY} ${bounds.width}x${bounds.height}`);
+    } catch (error) {
+        logger.error('[Navigator] Failed to update viewport rect:', error);
+    }
+}
+
+/**
  * Switch preview panel between Fit and Zoom modes
  */
 async function setPreviewMode(mode) {
@@ -816,6 +1470,15 @@ async function setPreviewMode(mode) {
 
     if (mode === 'zoom') {
         // ZOOM MODE: Initialize ZoomPreviewRenderer
+
+        // Show quality group if coming from 1:1 mode
+        if (state.viewMode === '1:1') {
+            const qualityGroup = document.getElementById('previewQualityGroup');
+            if (qualityGroup) {
+                qualityGroup.style.display = 'flex';
+                logger.log('✓ Preview Quality shown (from 1:1)');
+            }
+        }
 
         // Get metadata from posterizationData
         if (!posterizationData || !posterizationData.docInfo) {
@@ -961,9 +1624,108 @@ async function setPreviewMode(mode) {
         state.viewMode = 'zoom';
         logger.log('✓ Zoom mode initialized');
 
+    } else if (mode === '1:1') {
+        // 1:1 CLINICAL LOUPE MODE (Phase 1: UI toggle only)
+        logger.log('Switching to 1:1 Clinical Loupe mode...');
+
+        // Show/hide appropriate UI elements
+        const navigatorMap = document.getElementById('navigatorMapContainer');
+        const qualityGroup = document.getElementById('previewQualityGroup');
+
+        if (navigatorMap) {
+            navigatorMap.style.display = 'block';
+            logger.log('✓ Navigator Map shown');
+        }
+        if (qualityGroup) {
+            qualityGroup.style.display = 'none';
+            logger.log('✓ Preview Quality hidden');
+        }
+
+        state.viewMode = '1:1';
+
+        // Render Navigator Map thumbnail
+        logger.log('⭐ About to call renderNavigatorMap()');
+        renderNavigatorMap();
+        logger.log('⭐ Finished renderNavigatorMap()');
+
+        // Phase 4: Attach Navigator click handler for panning
+        logger.log('⭐ About to call attachNavigatorClickHandler()');
+        attachNavigatorClickHandler();
+        logger.log('⭐ Finished attachNavigatorClickHandler()');
+
+        // Phase 4+: Attach arrow key navigation
+        logger.log('⭐ About to call attachArrowKeyNavigation()');
+        attachArrowKeyNavigation();
+        logger.log('⭐ Finished attachArrowKeyNavigation()');
+
+        // Attach preview click handler to deselect swatches
+        logger.log('⭐ About to call attachPreviewClickHandler()');
+        attachPreviewClickHandler();
+        logger.log('⭐ Finished attachPreviewClickHandler()');
+
+        // Attach preview drag handler for panning
+        logger.log('⭐ About to call attach1to1PreviewDragHandler()');
+        attach1to1PreviewDragHandler();
+        logger.log('⭐ Finished attach1to1PreviewDragHandler()');
+
+        // Phase 3: Render 1:1 pixels to main preview
+        logger.log('⭐ About to call render1to1Preview()');
+        await render1to1Preview();
+        logger.log('⭐ Finished render1to1Preview()');
+
+        logger.log('✓ 1:1 mode initialized');
+
     } else if (mode === 'fit') {
-        // FIT MODE: Cleanup ZoomPreviewRenderer, restore renderPreview
+        // FIT MODE: Cleanup ZoomPreviewRenderer or 1:1 mode, restore renderPreview
         logger.log('Starting fit mode restoration...');
+
+        // Cleanup 1:1 mode if active
+        if (state.viewMode === '1:1') {
+            logger.log('Cleaning up 1:1 mode...');
+
+            // Hide Navigator Map
+            const navigatorMap = document.getElementById('navigatorMapContainer');
+            const qualityGroup = document.getElementById('previewQualityGroup');
+
+            if (navigatorMap) {
+                navigatorMap.style.display = 'none';
+                logger.log('✓ Navigator Map hidden');
+            }
+            if (qualityGroup) {
+                qualityGroup.style.display = 'flex';
+                logger.log('✓ Preview Quality shown');
+            }
+
+            // Restore dropdown label and options
+            if (previewStrideLabel) {
+                previewStrideLabel.textContent = 'Preview Quality:';
+            }
+            if (previewStrideSelect) {
+                previewStrideSelect.innerHTML = `
+                    <option value="4" selected>Standard (fast)</option>
+                    <option value="2">Fine (slow)</option>
+                    <option value="1">Finest (slower)</option>
+                `;
+                logger.log('✓ Dropdown content restored from 1:1');
+            }
+
+            // Remove 1:1 drag handlers
+            if (window._1to1DragHandlers) {
+                const previewContainer = document.getElementById('previewContainer');
+                if (previewContainer) {
+                    const handlers = window._1to1DragHandlers;
+                    previewContainer.removeEventListener('pointerdown', handlers.pointerdown);
+                    previewContainer.removeEventListener('pointermove', handlers.pointermove);
+                    previewContainer.removeEventListener('pointerup', handlers.pointerup);
+                    previewContainer.removeEventListener('pointercancel', handlers.pointerup);
+                    previewContainer.style.cursor = '';
+                    window._1to1DragHandlers = null;
+                    logger.log('✓ 1:1 drag handlers removed');
+                }
+            }
+
+            logger.log('✓ 1:1 mode cleanup complete');
+        }
 
         // Cleanup zoom renderer
         if (state.zoomRenderer) {
@@ -1348,7 +2110,7 @@ function clearSwatchSelection() {
     state.activeSoloIndex = null;
     updateSwatchHighlights();
 
-    // Re-render preview (works in both modes)
+    // Re-render preview (works in all modes)
     if (state.viewMode === 'fit') {
         renderPreview();
     } else if (state.viewMode === 'zoom' && state.zoomRenderer) {
@@ -1356,6 +2118,10 @@ function clearSwatchSelection() {
         state.zoomRenderer.setSoloColor(null);
         state.zoomRenderer.fetchAndRender();
         logger.log('✓ Zoom solo mode cleared');
+    } else if (state.viewMode === '1:1') {
+        // Clear solo mode in 1:1 preview
+        render1to1Preview();
+        logger.log('✓ 1:1 solo mode cleared');
     }
 }
 
@@ -1456,7 +2222,7 @@ function handleSwatchClick(featureIndex) {
     // Update swatch highlighting
     updateSwatchHighlights();
 
-    // Re-render preview (works in both modes now!)
+    // Re-render preview (works in all modes now!)
     if (state.viewMode === 'fit') {
         renderPreview();
     } else if (state.viewMode === 'zoom' && state.zoomRenderer) {
@@ -1464,6 +2230,10 @@ function handleSwatchClick(featureIndex) {
         state.zoomRenderer.setSoloColor(paletteIndex);
         state.zoomRenderer.fetchAndRender();
         logger.log(`✓ Zoom solo mode: showing only color ${featureIndex + 1}`);
+    } else if (state.viewMode === '1:1') {
+        // In 1:1 mode: Re-render with color isolation
+        render1to1Preview();
+        logger.log(`✓ 1:1 solo mode: showing only color ${featureIndex + 1}`);
     }
 }
 
@@ -2669,7 +3439,7 @@ function getFormValues() {
         ignoreTransparent: document.getElementById("ignoreTransparent")?.checked ?? true,
         enableHueGapAnalysis: document.getElementById("enableHueGapAnalysis")?.checked ?? true,  // Hue diversity (default ON)
         maskProfile: document.getElementById("maskProfile")?.value ?? "Gray Gamma 2.2",
-        engineType: document.getElementById("engineType")?.value ?? "reveal",  // Engine selection
+        engineType: document.getElementById("engineType")?.value ?? "reveal-mk1.5",  // Engine selection
         centroidStrategy: document.getElementById("centroidStrategy")?.value ?? "SALIENCY",  // Centroid strategy (SALIENCY or VOLUMETRIC)
         colorMode: document.getElementById("colorMode")?.value ?? "color",  // Color or B/W mode
         substrateMode: document.getElementById("substrateMode")?.value ?? "white",  // Substrate awareness
@@ -2852,7 +3622,7 @@ Object.keys(PARAMETER_PRESETS).forEach(id => {
  * Each archetype contains complete 30-parameter specifications
  * Note: Must be hardcoded for UXP/browser environment (no fs module)
  *
- * ALL 18 DNA v2.0 ARCHETYPES (Updated 2026-02-04)
+ * ALL 19 DNA v2.0 ARCHETYPES (Updated 2026-02-05 - Added Jethro Monroe Clinical)
  */
 const ARCHETYPES = {
     // Core archetypes (DNA v2.0 optimized)
@@ -2872,6 +3642,7 @@ const ARCHETYPES = {
     'soft-ethereal': require('@reveal/core/archetypes/soft-ethereal.json'),
     'hard-commercial': require('@reveal/core/archetypes/hard-commercial.json'),
     'bright-desaturated': require('@reveal/core/archetypes/bright-desaturated.json'),
+    'jethro-monroe-clinical': require('@reveal/core/archetypes/jethro-monroe-clinical.json'),
 
     // Legacy archetypes (backward compatibility)
     'vibrant-hyper': require('@reveal/core/archetypes/vibrant-hyper.json'),
@@ -3133,11 +3904,13 @@ async function handleAnalyzeImage() {
         logger.log(`  DNA generation time: ${dnaTime.toFixed(2)}ms`);
 
         // Run ParameterGenerator to get dynamic configuration (with entropy analysis)
+        // Pass manualArchetypeId if user has manually selected an archetype
         const config = ParameterGenerator.generate(dna, {
             imageData: result.pixels,
             width: result.width,
             height: result.height,
-            preprocessingIntensity: 'auto'  // Let entropy analysis decide
+            preprocessingIntensity: 'auto',  // Let entropy analysis decide
+            manualArchetypeId: lastSelectedArchetypeId  // Bypass DNA matching if manual selection
         });
         logger.log("✓ Generated dynamic config:", config);
 
@@ -3212,7 +3985,7 @@ async function handleAnalyzeImage() {
             preprocessingIntensity: config.preprocessingIntensity || preprocessingDropdownValue,
 
             // Additional parameters from config
-            engineType: config.engineType || 'reveal',
+            engineType: config.engineType || 'reveal-mk1.5',
             centroidStrategy: config.centroidStrategy || 'SALIENCY',
             hueLockAngle: config.hueLockAngle || 20,
             shadowPoint: config.shadowPoint || 15,
@@ -3511,10 +4284,10 @@ async function showDialog() {
                         logger.log("✓ Posterize button restored");
                     }
 
-                    // Reopen main dialog with size options
+                    // Reopen main dialog with size options (NON-MODAL for LAB slider access)
                     const mainDialog = document.getElementById('mainDialog');
                     if (mainDialog) {
-                        mainDialog.showModal({
+                        mainDialog.show({
                             resize: "both",
                             size: {
                                 width: 620,
@@ -3525,7 +4298,7 @@ async function showDialog() {
                                 maxHeight: 900
                             }
                         });
-                        logger.log("✓ Reopened main dialog");
+                        logger.log("✓ Reopened main dialog (non-modal)");
                     }
 
                     // Note: Keep posterizationData intact so user doesn't lose their work
@@ -3708,14 +4481,34 @@ async function showDialog() {
 
                 // Get form values and merge with stored config (includes parameters not in UI)
                 const formParams = getFormValues();
+
+                // DIAGNOSTIC: Log what we're merging
+                logger.log("📋 Config merge diagnostic:");
+                logger.log("  lastGeneratedConfig exists:", !!lastGeneratedConfig);
+                if (lastGeneratedConfig) {
+                    logger.log("  lastGeneratedConfig.id:", lastGeneratedConfig.id);
+                    logger.log("  lastGeneratedConfig.distanceMetric:", lastGeneratedConfig.distanceMetric);
+                    logger.log("  lastGeneratedConfig.cWeight:", lastGeneratedConfig.cWeight);
+                    logger.log("  lastGeneratedConfig.vibrancyBoost:", lastGeneratedConfig.vibrancyBoost);
+                }
+                logger.log("  formParams.distanceMetric:", formParams.distanceMetric);
+                logger.log("  formParams.cWeight:", formParams.cWeight);
+                logger.log("  formParams.vibrancyBoost:", formParams.vibrancyBoost);
+
                 const params = {
                     ...lastGeneratedConfig,  // Start with complete config from ParameterGenerator
                     ...formParams            // Override with user-adjusted UI values
                 };
                 const grayscaleOnly = params.colorMode === 'bw';  // Determine from dropdown
 
-                // Log parameters for debugging
-                logger.log("Posterization parameters (merged):", params);
+                // Log final merged parameters
+                logger.log("📦 Final merged parameters:");
+                logger.log("  id:", params.id);
+                logger.log("  distanceMetric:", params.distanceMetric);
+                logger.log("  cWeight:", params.cWeight);
+                logger.log("  vibrancyBoost:", params.vibrancyBoost);
+                logger.log("  targetColors:", params.targetColors);
+                logger.log("  paletteReduction:", params.paletteReduction);
                 if (lastGeneratedConfig) {
                     logger.log("  Config-only parameters (not in UI):", {
                         vibrancyThreshold: lastGeneratedConfig.vibrancyThreshold,
@@ -3877,7 +4670,8 @@ async function showDialog() {
                             threshold: params.paletteReduction,         // Delta-E merge distance (default: 9.0)
                             hueLockAngle: params.hueLockAngle,          // Hue protection angle (default: 18°)
                             whitePoint: params.highlightThreshold,      // L-value floor for white protection (default: 85)
-                            shadowPoint: params.shadowPoint             // L-value ceiling for shadow protection (default: 15)
+                            shadowPoint: params.shadowPoint,            // L-value ceiling for shadow protection (default: 15)
+                            isolationThreshold: params.isolationThreshold !== undefined ? params.isolationThreshold : 0.0  // Peak eligibility floor (25.0 = 1% minimum)
                         },
                         centroid: {
                             lWeight: params.lWeight,                    // Saliency lightness priority (default: 1.1)
@@ -3899,12 +4693,13 @@ async function showDialog() {
                             centroidStrategy: params.centroidStrategy,  // NEW: User-selected strategy (SALIENCY or VOLUMETRIC)
                             enableGridOptimization: true,            // NEW: Default ON (Architect's requirement)
                             enableHueGapAnalysis: params.enableHueGapAnalysis,  // USER-CONTROLLED: Force hue diversity (default: ON, may exceed target count)
-                            snapThreshold: 8.0,                      // Perceptual snap threshold (ΔE < 8 = noise)
+                            distanceMetric: params.distanceMetric,   // CIE76/CIE94/CIE2000 (cie76 = legacy v1 behavior)
                             format: pixelData.format,                // Pass Lab format flag for optimization
                             bitDepth: pixelData.bitDepth,            // Source bit depth (8 or 16) for Shadow Gate calibration
                             grayscaleOnly,                           // User-selected mode: grayscale (L-only) or color (full Lab)
                             preserveWhite: params.preserveWhite,
                             preserveBlack: params.preserveBlack,
+                            preservedUnifyThreshold: params.preservedUnifyThreshold,  // ΔE threshold for white/black unification (default: 12.0, Jethro: 0.5)
                             substrateMode: params.substrateMode,     // Substrate awareness mode (auto, white, black, none)
                             substrateTolerance: params.substrateTolerance,  // ΔE threshold for substrate culling
                             vibrancyMode: params.vibrancyMode,       // Vibrancy algorithm (linear, aggressive, exponential)
@@ -3913,6 +4708,8 @@ async function showDialog() {
                             highlightBoost: params.highlightBoost,   // Highlight boost (split.highlightBoost)
                             enablePaletteReduction: params.enablePaletteReduction,  // Enable/disable palette reduction (default: true)
                             paletteReduction: params.paletteReduction,  // Color merging threshold (prune.threshold)
+                            densityFloor: params.densityFloor,       // Density floor threshold (default: 0.005 = 0.5%, Jethro: 0.0 = disabled)
+                            isolationThreshold: params.isolationThreshold,  // Peak eligibility floor (25.0 = 1% minimum cluster size)
                             tuning: tuning,                          // NEW: Centralized tuning configuration
                             // ignoreTransparent is handled during RGB→Lab conversion (alpha channel check)
                             isPreview: true,                          // Enable stride optimization for preview speed
@@ -4025,7 +4822,7 @@ async function showDialog() {
                     // CRITICAL: Wait for UXP layout to complete before rendering preview
                     // UXP needs time to calculate element dimensions after DOM changes
                     logger.log('✓ Posterization complete - waiting for layout...');
-                    setTimeout(() => {
+                    setTimeout(async () => {
                         // Check if img is ready (in paletteDialog)
                         const img = document.getElementById('previewImg');
                         if (img) {
@@ -4044,6 +4841,44 @@ async function showDialog() {
                         // Render initial preview
                         renderPreview();
                         logger.log('✓ Preview rendered');
+
+                        // Initialize ViewportManager for 1:1 mode (Phase 2)
+                        try {
+                            logger.log('[Phase 2] Initializing ViewportManager...');
+
+                            // Create CropEngine with posterization data
+                            const cropEngine = new CropEngine();
+                            const initResult = await cropEngine.initialize(
+                                posterizationData.originalPixels,
+                                posterizationData.originalWidth,
+                                posterizationData.originalHeight,
+                                {
+                                    ...posterizationData.params,  // Use actual posterization params, not results!
+                                    format: 'lab',                // CRITICAL: Tell engine this is LAB data
+                                    bitDepth: posterizationData.bitDepth || 16,
+                                    actualDocumentWidth: pixelData.originalWidth,   // ACTUAL document size, not preview
+                                    actualDocumentHeight: pixelData.originalHeight  // ACTUAL document size, not preview
+                                }
+                            );
+
+                            // Create ViewportManager
+                            const viewportManager = new ViewportManager(cropEngine, {
+                                documentDPI: pixelData.resolution || 300,
+                                meshTPI: 230
+                            });
+
+                            // Store globally for access by view mode handlers
+                            window.viewportManager = viewportManager;
+                            window.cropEngine = cropEngine;
+
+                            // CRITICAL: Sync initial center position to CropEngine for Navigator Map
+                            // ViewportManager defaults to center (0.5, 0.5) but CropEngine viewport isn't synced yet
+                            viewportManager.jumpToNormalized(0.5, 0.5);
+
+                            logger.log('[Phase 2] ✓ ViewportManager initialized and centered');
+                        } catch (error) {
+                            logger.error('[Phase 2] Failed to initialize ViewportManager:', error);
+                        }
 
                         // Set up view mode dropdown
                         // Clone element to remove any existing listeners from previous posterization
@@ -4192,7 +5027,7 @@ async function showDialog() {
 
                     // Default values object
                     const defaults = {
-                        engineType: 'reveal',
+                        engineType: 'reveal-mk1.5',
                         centroidStrategy: 'SALIENCY',
                         substrateMode: 'white',
                         substrateTolerance: 3.5,
@@ -4290,14 +5125,16 @@ async function showDialog() {
                     if (selectedValue === 'auto') {
                         // "Analyze Image..." - trigger DNA analysis
                         logger.log("Triggering DNA analysis...");
+                        lastSelectedArchetypeId = null;  // Clear manual selection
                         await handleAnalyzeImage();
                     } else if (selectedValue === 'manual') {
                         // "Manual Input" - reset to defaults
                         logger.log("Resetting to manual input (defaults)...");
+                        lastSelectedArchetypeId = null;  // Clear manual selection
 
                         // Use the same defaults as btnResetDefaults
                         const defaults = {
-                            engineType: 'reveal',
+                            engineType: 'reveal-mk1.5',
                             centroidStrategy: 'SALIENCY',
                             substrateMode: 'white',
                             substrateTolerance: 3.5,
@@ -4360,14 +5197,23 @@ async function showDialog() {
                         logger.log("✓ Reset to manual input defaults");
                     } else {
                         // Archetype selected - load parameters from archetype
+                        logger.log(`🔍 TRACE: Entering archetype selection for: ${selectedValue}`);
                         const archetype = ARCHETYPES[selectedValue];
+                        logger.log(`🔍 TRACE: Archetype found:`, archetype ? 'YES' : 'NO');
+                        logger.log(`🔍 TRACE: Has parameters:`, archetype?.parameters ? 'YES' : 'NO');
+
                         if (archetype && archetype.parameters) {
                             logger.log(`Loading parameters from archetype: ${archetype.name}`);
+                            lastSelectedArchetypeId = selectedValue;  // Store manual selection ID
+                            logger.log(`🔍 TRACE: Set lastSelectedArchetypeId to: ${lastSelectedArchetypeId}`);
 
                             const params = archetype.parameters;
+                            logger.log(`🔍 TRACE: params object:`, params);
 
                             // Map archetype parameters to UI controls
                             const paramMapping = {
+                                engineType: params.engineType,
+                                centroidStrategy: params.centroidStrategy,
                                 targetColorsSlider: params.targetColorsSlider,
                                 ditherType: params.ditherType,
                                 distanceMetric: params.distanceMetric,
@@ -4393,7 +5239,11 @@ async function showDialog() {
                             };
 
                             // Apply parameters to UI
-                            Object.keys(paramMapping).forEach(key => {
+                            logger.log(`🔍 TRACE: Starting UI application loop for ${Object.keys(paramMapping).length} parameters`);
+
+                            try {
+                                Object.keys(paramMapping).forEach(key => {
+                                    logger.log(`🔍 TRACE: Processing parameter: ${key}`);
                                 const element = document.getElementById(key);
                                 if (!element) {
                                     logger.log(`  Element not found for parameter: ${key}`);
@@ -4402,12 +5252,20 @@ async function showDialog() {
 
                                 const value = paramMapping[key];
 
+                                // Special diagnostic for paletteReduction
+                                if (key === 'paletteReduction') {
+                                    logger.log(`🔍 PALETTE REDUCTION TRACE:`);
+                                    logger.log(`  Value from archetype: ${value}`);
+                                    logger.log(`  Element type: ${element.tagName}`);
+                                    logger.log(`  Current element value BEFORE: ${element.value}`);
+                                }
+
                                 if (element.type === 'checkbox') {
                                     element.checked = value;
-                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                    // Don't dispatch events - we're loading programmatically, not responding to user input
                                 } else if (element.tagName === 'SELECT') {
                                     element.value = value;
-                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                    // Don't dispatch events - we're loading programmatically
                                 } else if (element.tagName === 'SP-SLIDER') {
                                     element.value = value;
                                     const valueDisplay = document.getElementById(`${key}Value`);
@@ -4419,15 +5277,51 @@ async function showDialog() {
                                             valueDisplay.textContent = value.toString();
                                         }
                                     }
-                                    element.dispatchEvent(new Event('input', { bubbles: true }));
-                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                    // Don't dispatch events - we're loading programmatically
+
+                                    // Special diagnostic for paletteReduction AFTER setting
+                                    if (key === 'paletteReduction') {
+                                        logger.log(`  Element value AFTER setting: ${element.value}`);
+                                        logger.log(`  Display value: ${valueDisplay ? valueDisplay.textContent : 'N/A'}`);
+                                    }
                                 }
-                            });
+
+                                    // Log if paletteReduction wasn't handled by any branch
+                                    if (key === 'paletteReduction' && element.tagName !== 'SP-SLIDER' && element.tagName !== 'SELECT' && element.type !== 'checkbox') {
+                                        logger.log(`  ⚠️ WARNING: paletteReduction element is ${element.tagName} with type ${element.type}, not handled!`);
+                                    }
+                                });
+
+                                logger.log(`🔍 TRACE: Finished UI application loop successfully`);
+                            } catch (error) {
+                                logger.error(`❌ ERROR in UI application loop:`, error);
+                                logger.error(`   Error message: ${error.message}`);
+                                logger.error(`   Error stack:`, error.stack);
+                            }
+
+                            logger.log(`🔍 TRACE: Finished applying ${Object.keys(paramMapping).length} parameters to UI`);
 
                             // Store the complete config for posterization (includes parameters not in UI)
-                            lastGeneratedConfig = { ...params };
+                            // CRITICAL: Must include archetype ID and metadata to prevent parameter dilution
+                            logger.log(`🔍 TRACE: About to set lastGeneratedConfig...`);
+                            lastGeneratedConfig = {
+                                // Identity (prevents DNA hijacking)
+                                id: archetype.id,
+                                name: archetype.name,
+
+                                // All parameters from archetype JSON
+                                ...params,
+
+                                // Metadata
+                                meta: {
+                                    archetype: archetype.name,
+                                    archetypeId: archetype.id,
+                                    manualSelection: true  // Flag to indicate this was manually chosen
+                                }
+                            };
 
                             logger.log(`✓ Loaded ${Object.keys(paramMapping).length} parameters from archetype: ${archetype.name}`);
+                            logger.log(`✓ Stored complete config: id=${lastGeneratedConfig.id}, distanceMetric=${lastGeneratedConfig.distanceMetric}, cWeight=${lastGeneratedConfig.cWeight}`);
                         } else {
                             logger.error(`Archetype not found or missing parameters: ${selectedValue}`);
                         }
@@ -4583,9 +5477,14 @@ async function showDialog() {
             logger.log("Event listeners already attached, skipping setup");
         }
 
+        // Set up View Mode switching (Phase 1: UI state machine)
+        // View mode switching is handled by setPreviewMode() function
+        // (called from the change handler set up during posterization)
+
         // NOW show the dialog (after all event listeners are set up)
-        logger.log("All event listeners set up, now showing dialog...");
-        await dialog.showModal({
+        // NON-MODAL to allow access to Photoshop Color Panel for LAB slider sync
+        logger.log("All event listeners set up, now showing dialog (non-modal)...");
+        dialog.show({
             resize: "both",
             size: {
                 width: 620,        // Wide enough for preset selector and buttons

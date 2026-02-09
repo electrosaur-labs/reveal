@@ -79,29 +79,33 @@ class PhotoshopAPI {
         // CRITICAL: Pure Lab Stream - all 3 parameters required to prevent conversion
         // Without these, Photoshop converts Lab→RGB→sRGB, clipping colors and destroying perceptual data
         // Lab documents have NO alpha channel - Lab is always 3 channels (L, a, b) only
+        // IMPORTANT: imaging.getPixels() requires modal scope even when called from non-modal dialog
         let pixelData;
         try {
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('reveal_checkpoint', 'before_imaging_getPixels');
             }
 
-            logger.log('STEP 1: About to call imaging.getPixels()...');
+            logger.log('STEP 1: About to call imaging.getPixels() in modal scope...');
             logger.log(`  documentID: ${doc.id}`);
             logger.log(`  targetSize: ${scaledWidth}x${scaledHeight}`);
             logger.log(`  componentSize: ${componentSize}`);
             logger.log(`  targetComponentCount: 3`);
             logger.log(`  colorSpace: Lab`);
 
-            pixelData = await imaging.getPixels({
-                documentID: doc.id,
-                targetSize: {
-                    width: scaledWidth,
-                    height: scaledHeight
-                },
-                componentSize: componentSize,  // Always 8 for now (UXP limitation)
-                targetComponentCount: 3,       // 3 channels: L, a, b (Lab has NO alpha)
-                colorSpace: "Lab"              // THE CRITICAL PARAMETER: Request raw Lab channels (no conversion)
-            });
+            // Wrap in executeAsModal for document access from non-modal dialog
+            pixelData = await core.executeAsModal(async () => {
+                return await imaging.getPixels({
+                    documentID: doc.id,
+                    targetSize: {
+                        width: scaledWidth,
+                        height: scaledHeight
+                    },
+                    componentSize: componentSize,  // Always 8 for now (UXP limitation)
+                    targetComponentCount: 3,       // 3 channels: L, a, b (Lab has NO alpha)
+                    colorSpace: "Lab"              // THE CRITICAL PARAMETER: Request raw Lab channels (no conversion)
+                });
+            }, { commandName: "Get Document Pixels" });
 
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('reveal_checkpoint', 'after_imaging_getPixels');
@@ -138,7 +142,10 @@ class PhotoshopAPI {
                 localStorage.setItem('reveal_checkpoint', 'before_getData');
             }
 
-            rgbaData = await pixelData.imageData.getData({ chunky: true });
+            // getData() also requires modal scope
+            rgbaData = await core.executeAsModal(async () => {
+                return await pixelData.imageData.getData({ chunky: true });
+            }, { commandName: "Get Image Data" });
 
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('reveal_checkpoint', 'after_getData');
@@ -358,6 +365,103 @@ class PhotoshopAPI {
         }
 
         return lab8;
+    }
+
+    /**
+     * Get high-resolution crop from specific document region (Option C: Smart Loading)
+     * Fetches ONLY the viewport window at full resolution using batchPlay
+     *
+     * @param {number} x - Absolute X coordinate (in full document pixels)
+     * @param {number} y - Absolute Y coordinate (in full document pixels)
+     * @param {number} width - Crop width (e.g., 800 for viewport)
+     * @param {number} height - Crop height (e.g., 800 for viewport)
+     * @returns {Promise<Object>} - {pixels: Uint16Array (LAB), width, height, format: 'lab', bitDepth}
+     */
+    static async getHighResCrop(x, y, width, height) {
+        const doc = this.getActiveDocument();
+        if (!doc) {
+            throw new Error("No active document");
+        }
+
+        logger.log(`[PhotoshopAPI] Fetching high-res crop: (${x}, ${y}) ${width}x${height}`);
+
+        // Constrain crop to document bounds
+        const cropX = Math.max(0, Math.min(x, doc.width - width));
+        const cropY = Math.max(0, Math.min(y, doc.height - height));
+        const cropWidth = Math.min(width, doc.width - cropX);
+        const cropHeight = Math.min(height, doc.height - cropY);
+
+        logger.log(`[PhotoshopAPI] Constrained crop: (${cropX}, ${cropY}) ${cropWidth}x${cropHeight}`);
+
+        // Get bit depth
+        const bitDepthStr = String(doc.bitsPerChannel).toLowerCase();
+        const docBitDepth = bitDepthStr.includes('16') || doc.bitsPerChannel === 16 ? 16 : 8;
+        const componentSize = docBitDepth;
+
+        // Fetch pixels for specific region
+        let pixelData;
+        try {
+            pixelData = await core.executeAsModal(async () => {
+                return await imaging.getPixels({
+                    documentID: doc.id,
+                    sourceBounds: {
+                        left: cropX,
+                        top: cropY,
+                        right: cropX + cropWidth,
+                        bottom: cropY + cropHeight
+                    },
+                    componentSize: componentSize,
+                    targetComponentCount: 3,
+                    colorSpace: "Lab"
+                });
+            }, { commandName: "Get High-Res Crop" });
+
+            logger.log('[PhotoshopAPI] High-res crop fetched successfully');
+        } catch (error) {
+            logger.error('[PhotoshopAPI] Failed to fetch high-res crop:', error);
+            throw error;
+        }
+
+        // Extract RGBA data
+        let rgbaData;
+        if (pixelData.imageData) {
+            rgbaData = await core.executeAsModal(async () => {
+                return await pixelData.imageData.getData({ chunky: true });
+            }, { commandName: "Get Crop Data" });
+        } else if (pixelData.pixels) {
+            rgbaData = pixelData.pixels;
+        } else {
+            throw new Error("Could not extract pixel data from high-res crop");
+        }
+
+        logger.log(`[PhotoshopAPI] Got ${rgbaData.length} ${componentSize === 16 ? 'elements' : 'bytes'} of crop data`);
+
+        // Convert to Uint16Array if needed
+        if (componentSize === 16 && !(rgbaData instanceof Uint16Array)) {
+            if (rgbaData instanceof Uint8Array || rgbaData instanceof Uint8ClampedArray) {
+                rgbaData = new Uint16Array(rgbaData.buffer, rgbaData.byteOffset, rgbaData.byteLength / 2);
+            }
+        }
+
+        // Convert 8-bit to 16-bit if needed (always return 16-bit for engine)
+        let pixels16;
+        if (componentSize === 8) {
+            pixels16 = this.lab8to16(rgbaData);
+        } else {
+            pixels16 = rgbaData;
+        }
+
+        logger.log(`[PhotoshopAPI] ✓ High-res crop ready: ${cropWidth}x${cropHeight} (16-bit LAB)`);
+
+        return {
+            pixels: pixels16,
+            width: cropWidth,
+            height: cropHeight,
+            format: 'lab',
+            bitDepth: componentSize,
+            cropX: cropX,
+            cropY: cropY
+        };
     }
 
     /**

@@ -108,14 +108,30 @@ class ArchetypeLoader {
      * Match DNA to nearest archetype
      * Supports both DNA v1.0 (4D: L/C/K/σL) and DNA v2.0 (7D + 12-sector hue analysis)
      * @param {Object} dna - DNA object (v1.0 or v2.0)
+     * @param {string} [manualArchetypeId] - Optional manual archetype ID to bypass DNA matching
      * @returns {Object} Matched archetype
      */
-    static matchArchetype(dna) {
+    static matchArchetype(dna, manualArchetypeId = null) {
         const archetypes = this.loadArchetypes();
 
         if (archetypes.length === 0) {
             console.warn('⚠️ No archetypes loaded, using fallback');
             return this.getFallbackArchetype();
+        }
+
+        // MANUAL SELECTION BYPASS: If user explicitly selected an archetype, skip DNA matching
+        if (manualArchetypeId) {
+            const manualArchetype = archetypes.find(a => a.id === manualArchetypeId);
+            if (manualArchetype) {
+                console.log(`🛑 DNA Matcher Bypassed. Loading Sovereign Static Settings.`);
+                console.log(`   User-selected archetype: ${manualArchetype.name}`);
+                console.log(`   Parameters locked: ${manualArchetype.parameters?.distanceMetric}, ` +
+                           `cWeight=${manualArchetype.parameters?.cWeight}, ` +
+                           `vibrancyBoost=${manualArchetype.parameters?.vibrancyBoost}`);
+                return manualArchetype;
+            } else {
+                console.warn(`⚠️ Manual archetype not found: ${manualArchetypeId}, falling back to DNA matching`);
+            }
         }
 
         // Detect DNA version
