@@ -5337,39 +5337,8 @@ async function showDialog() {
         }
 
         // Set up View Mode switching (Phase 1: UI state machine)
-        // OUTSIDE listenersAttached guard so it runs every time dialog opens
-        const viewModeSelect = document.getElementById('viewMode');
-        if (viewModeSelect) {
-            // Remove existing listener if any to prevent duplicates
-            const newSelect = viewModeSelect.cloneNode(true);
-            viewModeSelect.parentNode.replaceChild(newSelect, viewModeSelect);
-
-            newSelect.addEventListener('change', (e) => {
-                const mode = e.target.value;
-                logger.log(`[ViewMode] Switching to: ${mode}`);
-
-                const navigatorMap = document.getElementById('navigatorMapContainer');
-                const diagnosticTools = document.getElementById('diagnosticTools');
-                const qualityGroup = document.getElementById('previewQualityGroup');
-
-                if (mode === '1:1') {
-                    // Show 1:1 Clinical Loupe UI
-                    if (navigatorMap) navigatorMap.style.display = 'block';
-                    if (diagnosticTools) diagnosticTools.style.display = 'flex';
-                    if (qualityGroup) qualityGroup.style.display = 'none';
-                    logger.log('[ViewMode] ✓ 1:1 mode UI shown');
-                } else {
-                    // Show standard Fit/Zoom UI
-                    if (navigatorMap) navigatorMap.style.display = 'none';
-                    if (diagnosticTools) diagnosticTools.style.display = 'none';
-                    if (qualityGroup) qualityGroup.style.display = 'flex';
-                    logger.log(`[ViewMode] ✓ ${mode} mode UI shown`);
-                }
-            });
-            logger.log('[ViewMode] ✓ View mode switcher initialized');
-        } else {
-            logger.error('[ViewMode] ❌ viewMode select not found!');
-        }
+        // View mode switching is handled by setPreviewMode() function
+        // (called from the change handler set up during posterization)
 
         // NOW show the dialog (after all event listeners are set up)
         // NON-MODAL to allow access to Photoshop Color Panel for LAB slider sync
