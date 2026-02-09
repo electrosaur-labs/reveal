@@ -3463,7 +3463,11 @@ function getFormValues() {
         // Distance metric for color matching
         distanceMetric: document.getElementById("distanceMetric")?.value ?? "cie94",  // 'cie76' (Graphic) or 'cie94' (Photographic)
         // Preprocessing (noise reduction)
-        preprocessingIntensity: document.getElementById("preprocessingIntensity")?.value ?? "auto"  // 'off', 'auto', 'light', 'heavy'
+        preprocessingIntensity: document.getElementById("preprocessingIntensity")?.value ?? "auto",  // 'off', 'auto', 'light', 'heavy'
+        // Production Quality Controls (Archetype Overrides)
+        minVolume: parseFloat(document.getElementById("minVolume")?.value ?? 0),  // Ghost plate removal (0-10%)
+        speckleRescue: parseInt(document.getElementById("speckleRescue")?.value ?? 0),  // Halftone cleanup (0-8px)
+        shadowClamp: parseFloat(document.getElementById("shadowClamp")?.value ?? 0)  // Ink density floor (0-10%)
     };
 }
 
@@ -3498,7 +3502,11 @@ const sliderConfigs = [
     { id: 'paletteReduction', format: v => v.toFixed(1) },
     { id: 'hueLockAngle', format: v => v.toFixed(0) },
     { id: 'shadowPoint', format: v => v.toFixed(0) },
-    { id: 'targetColorsSlider', valueId: 'targetColorsValue', format: v => v.toFixed(0) }
+    { id: 'targetColorsSlider', valueId: 'targetColorsValue', format: v => v.toFixed(0) },
+    // Production Quality Controls
+    { id: 'minVolume', format: v => v.toFixed(1) },
+    { id: 'speckleRescue', format: v => v.toFixed(0) },
+    { id: 'shadowClamp', format: v => v.toFixed(1) }
 ];
 
 /**
@@ -5155,7 +5163,11 @@ async function showDialog() {
                             preserveBlack: false,
                             ignoreTransparent: true,
                             enableHueGapAnalysis: true,
-                            maskProfile: 'Gray Gamma 2.2'
+                            maskProfile: 'Gray Gamma 2.2',
+                            // Production Quality Controls (defaults off)
+                            minVolume: 0,
+                            speckleRescue: 0,
+                            shadowClamp: 0
                         };
 
                         // Reset all form controls
@@ -5235,7 +5247,11 @@ async function showDialog() {
                                 preserveWhite: params.preserveWhite,
                                 preserveBlack: params.preserveBlack,
                                 ignoreTransparent: params.ignoreTransparent,
-                                maskProfile: params.maskProfile
+                                maskProfile: params.maskProfile,
+                                // Production Quality Controls (Archetype Overrides)
+                                minVolume: params.minVolume,
+                                speckleRescue: params.speckleRescue,
+                                shadowClamp: params.shadowClamp
                             };
 
                             // Apply parameters to UI
