@@ -1124,6 +1124,105 @@ function attachPreviewClickHandler() {
 }
 
 /**
+ * Attach drag-to-pan handler for 1:1 preview mode
+ * Allows user to drag the main preview image to pan around the document
+ */
+function attach1to1PreviewDragHandler() {
+    const previewContainer = document.getElementById('previewContainer');
+    const previewImg = document.getElementById('previewImg');
+
+    if (!previewContainer || !previewImg) {
+        logger.error('[1:1 Drag] Cannot attach drag handler - elements not found');
+        return;
+    }
+
+    // Remove old handlers if they exist
+    if (window._1to1DragHandlers) {
+        const old = window._1to1DragHandlers;
+        previewContainer.removeEventListener('pointerdown', old.pointerdown);
+        previewContainer.removeEventListener('pointermove', old.pointermove);
+        previewContainer.removeEventListener('pointerup', old.pointerup);
+        previewContainer.removeEventListener('pointercancel', old.pointerup);
+    }
+
+    // Drag state
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let hasDragged = false;
+
+    const pointerdownHandler = (e) => {
+        // Only drag if clicking on the preview image
+        if (e.target !== previewImg) return;
+
+        isDragging = true;
+        hasDragged = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        previewContainer.style.cursor = 'grabbing';
+        e.preventDefault();
+    };
+
+    const pointermoveHandler = async (e) => {
+        if (!isDragging || !window.viewportManager) return;
+
+        hasDragged = true;
+
+        // Calculate delta in screen pixels
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+
+        // Update start position for next move
+        startX = e.clientX;
+        startY = e.clientY;
+
+        // Pan the viewport (negative delta because we're moving opposite to mouse)
+        window.viewportManager.pan(-deltaX, -deltaY);
+
+        // Update Navigator red rectangle immediately
+        const navData = window.viewportManager.getNavigatorMap(160);
+        if (navData && navData.viewportBounds) {
+            updateNavigatorViewport(navData.viewportBounds);
+        }
+
+        // Debounce 1:1 preview render
+        if (!window._1to1PanRafPending) {
+            window._1to1PanRafPending = true;
+            requestAnimationFrame(async () => {
+                await render1to1Preview();
+                window._1to1PanRafPending = false;
+            });
+        }
+    };
+
+    const pointerupHandler = () => {
+        if (isDragging) {
+            isDragging = false;
+            previewContainer.style.cursor = '';
+
+            // Full Navigator refresh after drag completes
+            if (hasDragged) {
+                renderNavigatorMap();
+            }
+        }
+    };
+
+    previewContainer.addEventListener('pointerdown', pointerdownHandler);
+    previewContainer.addEventListener('pointermove', pointermoveHandler);
+    previewContainer.addEventListener('pointerup', pointerupHandler);
+    previewContainer.addEventListener('pointercancel', pointerupHandler);
+
+    // Store handlers for cleanup
+    window._1to1DragHandlers = {
+        pointerdown: pointerdownHandler,
+        pointermove: pointermoveHandler,
+        pointerup: pointerupHandler
+    };
+
+    logger.log('[1:1 Drag] ✓ Drag-to-pan handler attached');
+}
+
+/**
  * Render 1:1 pixel-perfect preview using on-demand high-res fetching (Option C: Smart Loading)
  * Fetches ONLY the viewport window at full resolution from Photoshop
  */
@@ -1555,6 +1654,11 @@ async function setPreviewMode(mode) {
         attachPreviewClickHandler();
         logger.log('⭐ Finished attachPreviewClickHandler()');
 
+        // Attach preview drag handler for panning
+        logger.log('⭐ About to call attach1to1PreviewDragHandler()');
+        attach1to1PreviewDragHandler();
+        logger.log('⭐ Finished attach1to1PreviewDragHandler()');
+
         // Phase 3: Render 1:1 pixels to main preview
         logger.log('⭐ About to call render1to1Preview()');
         await render1to1Preview();
@@ -1581,6 +1685,21 @@ async function setPreviewMode(mode) {
             if (qualityGroup) {
                 qualityGroup.style.display = 'flex';
                 logger.log('✓ Preview Quality shown');
+            }
+
+            // Remove 1:1 drag handlers
+            if (window._1to1DragHandlers) {
+                const previewContainer = document.getElementById('previewContainer');
+                if (previewContainer) {
+                    const handlers = window._1to1DragHandlers;
+                    previewContainer.removeEventListener('pointerdown', handlers.pointerdown);
+                    previewContainer.removeEventListener('pointermove', handlers.pointermove);
+                    previewContainer.removeEventListener('pointerup', handlers.pointerup);
+                    previewContainer.removeEventListener('pointercancel', handlers.pointerup);
+                    previewContainer.style.cursor = '';
+                    window._1to1DragHandlers = null;
+                    logger.log('✓ 1:1 drag handlers removed');
+                }
             }
 
             logger.log('✓ 1:1 mode cleanup complete');
