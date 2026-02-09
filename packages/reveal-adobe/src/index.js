@@ -2618,13 +2618,15 @@ function showPaletteEditor(selectedPalette) {
 
     function attachProductionQualityListeners() {
         const sliders = [
-            { id: 'minVolume', name: 'Min Volume' },
-            { id: 'speckleRescue', name: 'Speckle Rescue' },
-            { id: 'shadowClamp', name: 'Shadow Clamp' }
+            { id: 'minVolume', name: 'Min Volume', format: v => v.toFixed(1) },
+            { id: 'speckleRescue', name: 'Speckle Rescue', format: v => v.toFixed(0) },
+            { id: 'shadowClamp', name: 'Shadow Clamp', format: v => v.toFixed(1) }
         ];
 
-        sliders.forEach(({ id, name }) => {
+        sliders.forEach(({ id, name, format }) => {
             const slider = document.getElementById(id);
+            const valueDisplay = document.getElementById(`${id}Value`);
+
             if (!slider) {
                 logger.log(`⚠️ Production Quality slider not found: ${id}`);
                 return;
@@ -2633,6 +2635,14 @@ function showPaletteEditor(selectedPalette) {
             // Remove any existing listeners by cloning
             const newSlider = slider.cloneNode(true);
             slider.parentNode.replaceChild(newSlider, slider);
+
+            // Add input listener to update value display in real-time (during drag)
+            newSlider.addEventListener('input', () => {
+                const value = parseFloat(newSlider.value);
+                if (valueDisplay) {
+                    valueDisplay.textContent = format(value);
+                }
+            });
 
             // Add change listener with debounce (fires when user releases slider)
             newSlider.addEventListener('change', async () => {
@@ -2744,11 +2754,18 @@ function showPaletteEditor(selectedPalette) {
             logger.log(`   Rendering ${hexColors.length} swatches...`);
             renderPaletteSwatches();
 
-            // Update preview
+            // Update preview - check if we're in 1:1 mode
             if (window.previewState) {
-                logger.log(`   Updating preview...`);
                 window.previewState.palette = hexColors;
-                renderPreview();
+
+                // If in 1:1 mode, update 1:1 preview; otherwise update small preview
+                if (window.previewState.viewMode === '1:1') {
+                    logger.log(`   Updating 1:1 preview...`);
+                    await render1to1Preview();
+                } else {
+                    logger.log(`   Updating small preview...`);
+                    renderPreview();
+                }
             }
 
             logger.log(`✓ Re-posterization complete: ${hexColors.length} colors`);
