@@ -2616,7 +2616,7 @@ function showPaletteEditor(selectedPalette) {
     let rerunInProgress = false;
     let rerunDebounceTimer = null;
     let lastRerunTime = 0;
-    const MIN_RERUN_INTERVAL = 2000; // Minimum 2 seconds between reruns
+    const MIN_RERUN_INTERVAL = 500; // Minimum 500ms between reruns (reduced for smoother updates)
 
     function attachProductionQualityListeners() {
         const sliders = [
@@ -2702,7 +2702,7 @@ function showPaletteEditor(selectedPalette) {
                         document.body.style.cursor = '';
                         rerunInProgress = false;
                     }
-                }, 1000); // 1000ms debounce (increased from 300ms)
+                }, 500); // 500ms debounce (balanced for responsiveness)
             });
 
             logger.log(`✓ Attached re-posterization listener to ${id}`);
@@ -2798,7 +2798,9 @@ function showPaletteEditor(selectedPalette) {
 
             // Update preview - check if we're in 1:1 mode
             if (window.previewState) {
+                // Update previewState with new results
                 window.previewState.palette = hexColors;
+                window.previewState.assignments = result.assignments;
 
                 try {
                     // If in 1:1 mode, update 1:1 preview; otherwise update small preview
@@ -2806,6 +2808,11 @@ function showPaletteEditor(selectedPalette) {
                         logger.log(`   Updating 1:1 preview...`);
                         await render1to1Preview();
                         logger.log(`   ✓ 1:1 preview updated`);
+
+                        // Update Navigator Map thumbnail
+                        logger.log(`   Updating Navigator Map...`);
+                        renderNavigatorMap();
+                        logger.log(`   ✓ Navigator Map updated`);
                     } else {
                         logger.log(`   Updating small preview...`);
                         renderPreview();
