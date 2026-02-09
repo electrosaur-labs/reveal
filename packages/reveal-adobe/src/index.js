@@ -2615,6 +2615,8 @@ function showPaletteEditor(selectedPalette) {
     // These trigger re-posterization when values change
     let rerunInProgress = false;
     let rerunDebounceTimer = null;
+    let lastRerunTime = 0;
+    const MIN_RERUN_INTERVAL = 2000; // Minimum 2 seconds between reruns
 
     function attachProductionQualityListeners() {
         const sliders = [
@@ -2655,29 +2657,52 @@ function showPaletteEditor(selectedPalette) {
 
                 // Prevent overlapping reruns
                 if (rerunInProgress) {
-                    logger.log(`⏳ ${name} changed to ${value} - waiting for current rerun to finish`);
+                    logger.log(`⏳ ${name} changed to ${value} - rerun already in progress, ignoring`);
                     return;
+                }
+
+                // Throttle: prevent reruns faster than MIN_RERUN_INTERVAL
+                const now = Date.now();
+                const timeSinceLastRerun = now - lastRerunTime;
+                if (timeSinceLastRerun < MIN_RERUN_INTERVAL && lastRerunTime > 0) {
+                    logger.log(`⏳ ${name} changed to ${value} - throttled (${timeSinceLastRerun}ms since last rerun)`);
+                    // Still debounce, but will be checked again when timer fires
                 }
 
                 logger.log(`🎚️ ${name} changed to ${value} - scheduling re-posterization`);
 
-                // Debounce to prevent rapid-fire reruns
+                // Debounce to prevent rapid-fire reruns (increased to 1 second)
                 rerunDebounceTimer = setTimeout(async () => {
+                    // Check throttle again when timer fires
+                    const timeSinceLastCheck = Date.now() - lastRerunTime;
+                    if (timeSinceLastCheck < MIN_RERUN_INTERVAL && lastRerunTime > 0) {
+                        logger.log(`⏳ Throttled: Only ${timeSinceLastCheck}ms since last rerun, skipping`);
+                        return;
+                    }
+
+                    if (rerunInProgress) {
+                        logger.log(`⏳ Rerun already in progress, skipping`);
+                        return;
+                    }
+
                     rerunInProgress = true;
+                    lastRerunTime = Date.now();
                     document.body.style.cursor = 'wait';
 
                     try {
                         const config = getFormValues();
+                        logger.log(`🔄 Starting re-posterization...`);
                         await rerunPosterization(config);
                         logger.log(`✓ Re-posterization complete with ${name}=${value}`);
                     } catch (error) {
-                        logger.error(`Failed to re-posterize with ${name}:`, error);
+                        logger.error(`❌ Failed to re-posterize with ${name}:`, error);
+                        logger.error(`   Stack:`, error.stack);
                         alert(`Re-posterization failed: ${error.message}\n\nPlease run posterization again from Parameters dialog.`);
                     } finally {
                         document.body.style.cursor = '';
                         rerunInProgress = false;
                     }
-                }, 300); // 300ms debounce
+                }, 1000); // 1000ms debounce (increased from 300ms)
             });
 
             logger.log(`✓ Attached re-posterization listener to ${id}`);
@@ -2762,19 +2787,33 @@ function showPaletteEditor(selectedPalette) {
 
             // Re-render swatches and preview
             logger.log(`   Rendering ${hexColors.length} swatches...`);
-            renderPaletteSwatches();
+
+            try {
+                renderPaletteSwatches();
+                logger.log(`   ✓ Swatches rendered`);
+            } catch (swatchError) {
+                logger.error(`   ❌ Failed to render swatches:`, swatchError);
+                throw new Error(`Swatch rendering failed: ${swatchError.message}`);
+            }
 
             // Update preview - check if we're in 1:1 mode
             if (window.previewState) {
                 window.previewState.palette = hexColors;
 
-                // If in 1:1 mode, update 1:1 preview; otherwise update small preview
-                if (window.previewState.viewMode === '1:1') {
-                    logger.log(`   Updating 1:1 preview...`);
-                    await render1to1Preview();
-                } else {
-                    logger.log(`   Updating small preview...`);
-                    renderPreview();
+                try {
+                    // If in 1:1 mode, update 1:1 preview; otherwise update small preview
+                    if (window.previewState.viewMode === '1:1') {
+                        logger.log(`   Updating 1:1 preview...`);
+                        await render1to1Preview();
+                        logger.log(`   ✓ 1:1 preview updated`);
+                    } else {
+                        logger.log(`   Updating small preview...`);
+                        renderPreview();
+                        logger.log(`   ✓ Small preview updated`);
+                    }
+                } catch (previewError) {
+                    logger.error(`   ❌ Failed to update preview:`, previewError);
+                    throw new Error(`Preview update failed: ${previewError.message}`);
                 }
             }
 
