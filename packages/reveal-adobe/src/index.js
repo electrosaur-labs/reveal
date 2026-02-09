@@ -2727,27 +2727,31 @@ function showPaletteEditor(selectedPalette) {
 
             logger.log(`   Got ${result.palette.length} colors`);
 
-            // Store results
+            // Convert palette to hex colors (same as initial posterization)
+            const hexColors = PosterizationEngine.paletteToHex(result.palette);
+            logger.log(`   Converted to ${hexColors.length} hex colors`);
+
+            // Store results (matching initial posterization structure)
             window.selectedPreview = result;
             selectedPreview = result;
             selectedPalette = {
-                hexColors: result.hexColors,
-                allHexColors: result.hexColors,
-                paletteLab: result.labPalette
+                hexColors: hexColors,
+                allHexColors: hexColors,
+                paletteLab: result.paletteLab || result.labPalette
             };
 
             // Re-render swatches and preview
-            logger.log(`   Rendering ${result.hexColors.length} swatches...`);
+            logger.log(`   Rendering ${hexColors.length} swatches...`);
             renderPaletteSwatches();
 
             // Update preview
             if (window.previewState) {
                 logger.log(`   Updating preview...`);
-                window.previewState.palette = result.hexColors;
+                window.previewState.palette = hexColors;
                 renderPreview();
             }
 
-            logger.log(`✓ Re-posterization complete: ${result.hexColors.length} colors`);
+            logger.log(`✓ Re-posterization complete: ${hexColors.length} colors`);
 
         } catch (error) {
             logger.error(`❌ Re-posterization failed:`, error);
