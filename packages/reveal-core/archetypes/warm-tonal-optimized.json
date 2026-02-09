@@ -24,7 +24,7 @@
     "temperature_bias": 3.0
   },
   "parameters": {
-    "targetColorsSlider": 10,
+    "targetColorsSlider": 8,
     "ditherType": "none",
     "distanceMetric": "cie94",
     "lWeight": 0.3,
@@ -49,6 +49,10 @@
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 25,
     "neutralCentroidClampThreshold": 5.0,
-    "preprocessingIntensity": "medium"
+    "preprocessingIntensity": "medium",
+    "shadowClamp": 6.0,
+    "speckleRescue": 4,
+    "medianPass": false,
+    "minVolume": 1.5
   }
 }

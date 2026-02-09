@@ -88,8 +88,7 @@ class ArchetypeLoader {
             require('../../archetypes/noir-shadow.json'),
             require('../../archetypes/pure-graphic.json'),
             require('../../archetypes/vibrant-tonal.json'),
-            require('../../archetypes/warm-tonal-optimized.json'),
-            require('../../archetypes/thermonuclear-yellow.json')
+            require('../../archetypes/warm-tonal-optimized.json')
         ].map(archetype => {
             // Set default weights if not specified (DNA v1.0 backward compatibility)
             if (!archetype.weights) {

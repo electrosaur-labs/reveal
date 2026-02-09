@@ -19,7 +19,6 @@
     "hue_entropy": 2.0
   },
   "parameters": {
-    "engineType": "reveal-mk1.5",
     "targetColorsSlider": 8,
     "ditherType": "blue-noise",
     "distanceMetric": "cie2000",
@@ -45,6 +44,11 @@
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 0,
     "neutralCentroidClampThreshold": 0.8,
-    "preprocessingIntensity": "light"
+    "preprocessingIntensity": "light",
+    "shadowClamp": 6.0,
+    "detailRescue": 5.0,
+    "speckleRescue": 4,
+    "medianPass": false,
+    "minVolume": 1.5
   }
 }

@@ -461,6 +461,257 @@ class SeparationEngine {
     }
 
     /**
+     * Morphological despeckle: Remove isolated pixel clusters below threshold
+     * Uses iterative flood-fill (8-way connectivity) to identify connected components
+     *
+     * @param {Uint8Array} mask - Layer mask to despeckle (modified in-place)
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @param {number} threshold - Minimum cluster size (clusters < threshold are removed)
+     * @returns {Object} { clustersRemoved, pixelsRemoved }
+     * @private
+     */
+    static _despeckleMask(mask, width, height, threshold) {
+        const pixelCount = width * height;
+        const visited = new Uint8Array(pixelCount);
+        const stack = new Uint32Array(pixelCount);
+
+        let clustersRemoved = 0;
+        let pixelsRemoved = 0;
+        const clustersToRemove = []; // Store small clusters for removal
+
+        // Find all connected components using flood-fill
+        for (let i = 0; i < pixelCount; i++) {
+            // Skip empty pixels or already visited
+            if (mask[i] === 0 || visited[i] === 1) continue;
+
+            // Start new connected component with iterative flood fill
+            const clusterPixels = [];
+            let stackPtr = 0;
+
+            stack[stackPtr++] = i;
+            visited[i] = 1;
+
+            // Iterative flood fill using explicit stack
+            while (stackPtr > 0) {
+                const idx = stack[--stackPtr];
+                clusterPixels.push(idx);
+
+                const x = idx % width;
+                const y = Math.floor(idx / width);
+
+                // Check 8 neighbors (diagonal connectivity counts)
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue; // Skip center pixel
+
+                        const nx = x + dx;
+                        const ny = y + dy;
+
+                        // Bounds check
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+
+                        const nIdx = ny * width + nx;
+
+                        // Add unvisited non-zero neighbors to stack
+                        if (mask[nIdx] > 0 && visited[nIdx] === 0) {
+                            stack[stackPtr++] = nIdx;
+                            visited[nIdx] = 1;
+                        }
+                    }
+                }
+            }
+
+            // If cluster is below threshold, mark for removal
+            if (clusterPixels.length < threshold) {
+                clustersToRemove.push(clusterPixels);
+                clustersRemoved++;
+                pixelsRemoved += clusterPixels.length;
+            }
+        }
+
+        // Remove small clusters (set pixels to 0)
+        for (const cluster of clustersToRemove) {
+            for (const pixelIdx of cluster) {
+                mask[pixelIdx] = 0;
+            }
+        }
+
+        return { clustersRemoved, pixelsRemoved };
+    }
+
+    /**
+     * Palette Post-Pruning: Merge colors below minVolume threshold
+     *
+     * SOVEREIGN SOLUTION: Treats color selection as resource allocation.
+     * If a color doesn't have the "Volume" to justify a screen, it must be evicted.
+     *
+     * ALGORITHM:
+     * 1. Count pixels per color (volume = pixelCount / totalPixels)
+     * 2. Identify "weak" colors (volume < minVolume)
+     * 3. Find nearest "strong" neighbor using Lab distance
+     * 4. Reassign all weak pixels to strong neighbor
+     * 5. Remove weak colors from palette
+     *
+     * @param {Array<Object>} labPalette - Original Lab palette [{L, a, b}, ...]
+     * @param {Uint8ClampedArray} colorIndices - Pixel-to-color mapping
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @param {number} minVolume - Minimum coverage percentage (e.g., 1.5 = 1.5%)
+     * @param {Object} options - {distanceMetric: 'cie76'|'cie94'|'cie2000'}
+     * @returns {Object} {prunedPalette, remappedIndices, mergedCount, details}
+     */
+    static pruneWeakColors(labPalette, colorIndices, width, height, minVolume, options = {}) {
+        const pixelCount = width * height;
+        const minPixels = Math.ceil((minVolume / 100) * pixelCount);
+        const distanceMetric = options.distanceMetric || 'cie76';
+
+        // 1. Count pixels per color
+        const colorCounts = new Array(labPalette.length).fill(0);
+        for (let i = 0; i < colorIndices.length; i++) {
+            colorCounts[colorIndices[i]]++;
+        }
+
+        // Calculate volumes (percentages)
+        const volumes = colorCounts.map(count => (count / pixelCount) * 100);
+
+        // 2. Identify weak and strong colors
+        const weakIndices = [];
+        const strongIndices = [];
+        for (let i = 0; i < labPalette.length; i++) {
+            if (colorCounts[i] < minPixels) {
+                weakIndices.push(i);
+            } else {
+                strongIndices.push(i);
+            }
+        }
+
+        // No weak colors to prune
+        if (weakIndices.length === 0) {
+            console.log(`✅ minVolume=${minVolume}%: All ${labPalette.length} colors above threshold`);
+            return {
+                prunedPalette: labPalette,
+                remappedIndices: colorIndices,
+                mergedCount: 0,
+                details: []
+            };
+        }
+
+        // No strong colors to merge into (shouldn't happen, but safety check)
+        if (strongIndices.length === 0) {
+            console.log(`⚠️ minVolume=${minVolume}%: ALL colors below threshold! Skipping pruning.`);
+            return {
+                prunedPalette: labPalette,
+                remappedIndices: colorIndices,
+                mergedCount: 0,
+                details: []
+            };
+        }
+
+        // SAFETY CHECK: Prevent over-pruning below minimum viable palette
+        const MIN_COLORS = 4; // Never prune below 4 colors (printmaker minimum)
+        const finalColorCount = strongIndices.length;
+
+        if (finalColorCount < MIN_COLORS) {
+            const needed = MIN_COLORS - finalColorCount;
+            console.log(`⚠️ minVolume=${minVolume}%: Would prune to ${finalColorCount} colors (below ${MIN_COLORS} minimum)`);
+            console.log(`   Keeping ${needed} largest weak colors to maintain ${MIN_COLORS}-color minimum`);
+
+            // Sort weak colors by volume (descending) and promote the largest ones
+            const sortedWeak = weakIndices
+                .map(idx => ({ idx, volume: volumes[idx], count: colorCounts[idx] }))
+                .sort((a, b) => b.count - a.count);
+
+            // Move the largest N weak colors to strong list
+            for (let i = 0; i < needed && i < sortedWeak.length; i++) {
+                const promotedIdx = sortedWeak[i].idx;
+                strongIndices.push(promotedIdx);
+                const weakPos = weakIndices.indexOf(promotedIdx);
+                weakIndices.splice(weakPos, 1);
+                console.log(`   Promoted color ${promotedIdx} (${sortedWeak[i].volume.toFixed(2)}%) to preserve minimum`);
+            }
+        }
+
+        console.log(`🗑️ minVolume=${minVolume}%: Pruning ${weakIndices.length} weak colors from ${labPalette.length}`);
+
+        // 3. Create remapping table: weakIndex → strongIndex
+        const remapTable = new Array(labPalette.length);
+        const mergeDetails = [];
+
+        for (const weakIdx of weakIndices) {
+            const weakColor = labPalette[weakIdx];
+            let bestStrongIdx = strongIndices[0];
+            let bestDistSq = Infinity;
+
+            // Find nearest strong neighbor using Lab distance
+            for (const strongIdx of strongIndices) {
+                const strongColor = labPalette[strongIdx];
+                const dL = weakColor.L - strongColor.L;
+                const da = weakColor.a - strongColor.a;
+                const db = weakColor.b - strongColor.b;
+
+                // Use CIE76 (Euclidean) for speed and simplicity
+                const distSq = dL * dL + da * da + db * db;
+
+                if (distSq < bestDistSq) {
+                    bestDistSq = distSq;
+                    bestStrongIdx = strongIdx;
+                }
+            }
+
+            remapTable[weakIdx] = bestStrongIdx;
+
+            mergeDetails.push({
+                weakIndex: weakIdx,
+                strongIndex: bestStrongIdx,
+                weakColor: weakColor,
+                strongColor: labPalette[bestStrongIdx],
+                volume: volumes[weakIdx],
+                pixelCount: colorCounts[weakIdx],
+                deltaE: Math.sqrt(bestDistSq)
+            });
+
+            console.log(`  • Color ${weakIdx} (${volumes[weakIdx].toFixed(2)}%) → Color ${bestStrongIdx} (ΔE=${Math.sqrt(bestDistSq).toFixed(1)})`);
+        }
+
+        // Keep strong colors unchanged
+        for (const strongIdx of strongIndices) {
+            remapTable[strongIdx] = strongIdx;
+        }
+
+        // 4. Reassign all pixels using remapTable
+        const remappedIndices = new Uint8ClampedArray(colorIndices.length);
+        for (let i = 0; i < colorIndices.length; i++) {
+            const oldIdx = colorIndices[i];
+            remappedIndices[i] = remapTable[oldIdx];
+        }
+
+        // 5. Build pruned palette (strong colors only) and create compact index mapping
+        const prunedPalette = [];
+        const compactMapping = new Array(labPalette.length); // oldIndex → newIndex
+
+        for (let i = 0; i < strongIndices.length; i++) {
+            const strongIdx = strongIndices[i];
+            prunedPalette.push(labPalette[strongIdx]);
+            compactMapping[strongIdx] = i;
+        }
+
+        // 6. Compact remapped indices to use new palette indices
+        for (let i = 0; i < remappedIndices.length; i++) {
+            remappedIndices[i] = compactMapping[remappedIndices[i]];
+        }
+
+        console.log(`✅ Palette pruned: ${labPalette.length} → ${prunedPalette.length} colors`);
+
+        return {
+            prunedPalette,
+            remappedIndices,
+            mergedCount: weakIndices.length,
+            details: mergeDetails
+        };
+    }
+
+    /**
      * Main separation workflow (ASYNC with progress reporting).
      *
      * REWRITE NOTE: Removed generateLayerPixels (RGBA) to prevent RGB Ghosting.
@@ -488,11 +739,10 @@ class SeparationEngine {
             `L:${c.L.toFixed(1)} a:${c.a.toFixed(1)} b:${c.b.toFixed(1)}`
         ));
 
-        // Generate the pixel-to-color mapping (Async with progress)
+        // Extract options (pass full options object to preserve all parameters)
         const onProgress = options.onProgress || null;
         const ditherType = options.ditherType || 'none';
         const distanceMetric = options.distanceMetric || 'cie76';
-        const cie94Params = options.cie94Params;
         logger.log(`Dithering type: ${ditherType}, Distance metric: ${distanceMetric}`);
 
         const colorIndices = await this.mapPixelsToPaletteAsync(
@@ -501,7 +751,7 @@ class SeparationEngine {
             onProgress,
             width,
             height,
-            { ditherType, distanceMetric, cie94Params }
+            options  // Pass full options object to preserve all parameters
         );
 
         const layers = [];
@@ -511,6 +761,36 @@ class SeparationEngine {
             logger.log(`Processing Layer ${index + 1}: L:${labColor.L.toFixed(1)}`);
 
             const mask = this.generateLayerMask(colorIndices, index, width, height);
+
+            // Apply shadowClamp: Clamp barely-visible pixels to printable minimum
+            if (options.shadowClamp !== undefined && options.shadowClamp > 0) {
+                const clampThreshold = Math.round(options.shadowClamp * 255 / 100); // Convert % to 0-255
+                let clampedCount = 0;
+
+                for (let i = 0; i < mask.length; i++) {
+                    const density = mask[i];
+
+                    // If barely visible (0 < density < threshold), clamp to threshold
+                    if (density > 0 && density < clampThreshold) {
+                        mask[i] = clampThreshold;
+                        clampedCount++;
+                    }
+                }
+
+                if (clampedCount > 0) {
+                    logger.log(`  🔒 shadowClamp: Clamped ${clampedCount} pixels to ${options.shadowClamp}% minimum`);
+                }
+            }
+
+            // Apply speckleRescue: Remove isolated clusters below threshold (morphological despeckle)
+            if (options.speckleRescue !== undefined && options.speckleRescue > 0) {
+                const threshold = Math.round(options.speckleRescue); // Minimum cluster size (default: 4 pixels)
+                const pruned = this._despeckleMask(mask, width, height, threshold);
+
+                if (pruned.clustersRemoved > 0) {
+                    logger.log(`  🧹 speckleRescue: Removed ${pruned.clustersRemoved} clusters (${pruned.pixelsRemoved} pixels) below ${threshold}px threshold`);
+                }
+            }
 
             // Count opaque pixels in this layer
             let opaquePixelCount = 0;

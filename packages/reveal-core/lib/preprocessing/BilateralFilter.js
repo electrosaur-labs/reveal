@@ -215,8 +215,15 @@ function shouldPreprocess(dna, entropyScore, is16Bit = false) {
     // Bit-depth aware "very low" threshold:
     // - 8-bit: 15 (compression artifacts are inherent, don't over-filter)
     // - 16-bit: 2 (high SNR scans, any detected noise is likely junk)
-    const veryLowThreshold = is16Bit ? 2 : 15;
+    let veryLowThreshold = is16Bit ? 2 : 15;
     const bitDepthLabel = is16Bit ? '16-bit' : '8-bit';
+
+    // Apply detailRescue: Lower entropy threshold to preserve fine details
+    if (dna.detailRescue !== undefined && dna.detailRescue > 0) {
+        const originalThreshold = veryLowThreshold;
+        veryLowThreshold = Math.max(0, veryLowThreshold - dna.detailRescue);
+        console.log(`🔍 detailRescue: Entropy threshold ${originalThreshold} → ${veryLowThreshold} (reduced by ${dna.detailRescue})`);
+    }
 
     // Vector/Flat: NEVER filter - preserves sharp edges
     if (archetype.includes('vector') || archetype.includes('flat')) {

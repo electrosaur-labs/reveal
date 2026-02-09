@@ -89,7 +89,41 @@
         "hueLockAngle": { "type": "number", "minimum": 0, "maximum": 90 },
         "neutralSovereigntyThreshold": { "type": "number", "minimum": 0, "maximum": 100 },
         "neutralCentroidClampThreshold": { "type": "number", "minimum": 0, "maximum": 20 },
-        "ditherType": { "type": "string", "enum": ["BlueNoise", "Atkinson", "none"] }
+        "ditherType": { "type": "string", "enum": ["BlueNoise", "Atkinson", "none"] },
+        "shadowClamp": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Forces ink density between 0-N% up to exactly N%. Eliminates unprintable tints."
+        },
+        "chromaGate": {
+          "type": "number",
+          "minimum": 1.0,
+          "maximum": 3.0,
+          "description": "Multiplier for cWeight when DNA.maxC is high. Improves high-chroma color accuracy."
+        },
+        "detailRescue": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 20,
+          "description": "Reduces entropy noise floor by N points. Preserves small structural details."
+        },
+        "speckleRescue": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 8,
+          "description": "Morphological despeckle: removes isolated clusters below N pixels. Eliminates unprintable digital lint. Standard: 4 pixels for 230-mesh screens."
+        },
+        "medianPass": {
+          "type": "boolean",
+          "description": "Pre-posterization median filter (3×3): removes salt & pepper noise before palette generation. Essential for organic/sensor photos to prevent noise from becoming distinct colors. Disable for intentional halftone patterns."
+        },
+        "minVolume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Palette post-pruning: merge colors with pixel coverage below N%. Resource allocation - weak colors (<minVolume) are merged to nearest neighbors. Prevents outlier/noise colors from claiming screens."
+        }
       }
     }
   }

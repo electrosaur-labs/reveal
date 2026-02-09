@@ -19,7 +19,7 @@
     "primary_sector_weight": 2.5
   },
   "parameters": {
-    "targetColorsSlider": 10,
+    "targetColorsSlider": 8,
     "ditherType": "blue-noise",
     "distanceMetric": "cie94",
     "lWeight": 1.2,
@@ -44,6 +44,10 @@
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 10,
     "neutralCentroidClampThreshold": 2.5,
-    "preprocessingIntensity": "heavy"
+    "preprocessingIntensity": "heavy",
+    "shadowClamp": 6.0,
+    "chromaGate": 1.5,
+    "speckleRescue": 4,
+    "minVolume": 1.0
   }
 }

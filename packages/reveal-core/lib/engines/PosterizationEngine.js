@@ -19,6 +19,7 @@ const ColorSpace = require('./ColorSpace');
 const HueAnalysis = require('./HueAnalysis');
 const { CentroidStrategies } = require('./CentroidStrategies');
 const PeakFinder = require('../analysis/PeakFinder');
+const LabDistance = require('../color/LabDistance');
 
 class PosterizationEngine {
     /**
@@ -174,7 +175,7 @@ class PosterizationEngine {
         // Dispatch to appropriate engine with strategy injection
         switch (engineType) {
             case 'reveal':
-                return this._posterizeReveal(pixels, width, height, targetColors, {
+                return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
                     ...options,
                     enableGridOptimization,
                     enableHueGapAnalysis, // Respect user setting (default: false)
@@ -237,7 +238,7 @@ class PosterizationEngine {
 
             default:
                 logger.warn(`⚠️ Unknown engine type '${engineType}', falling back to 'reveal'`);
-                return this._posterizeReveal(pixels, width, height, targetColors, {
+                return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
                     ...options,
                     enableGridOptimization,
                     enableHueGapAnalysis, // Respect user setting (default: false)
@@ -470,6 +471,7 @@ class PosterizationEngine {
                 for (const sector of PROTECTED_SECTORS) {
                     if (this._checkBucketForHueSector(bucket, sector, 2)) {
                         priority *= HUE_PRIORITY_MULTIPLIER;
+                        logger.log(`[Green Rescue] 🌿 Found hue sector ${sector} in bucket ${index} - inflating priority ${HUE_PRIORITY_MULTIPLIER}×`);
                         break; // Only multiply once
                     }
                 }
@@ -1605,14 +1607,21 @@ class PosterizationEngine {
             // Green colors have a < 0 in perceptual Lab space
             if (targetSectors.includes(sector)) {
                 greenCandidates++;
+                logger.log(`[Green Peek] Found color in sector ${sector}: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}, hue=${normHue.toFixed(0)}°`);
                 return true;
             }
 
             // ADDITIONAL CHECK: Any color with negative a* and positive b* is green-ish
             // This catches greens that might be classified in adjacent sectors
             if (c.a < -3 && c.b > 0 && chroma > 3) {
+                logger.log(`[Green Peek] Found green-axis color: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}`);
                 return true;
             }
+        }
+
+        // Log diagnostic info if no green found
+        if (lowChromaSkips > sampleSize * 0.8) {
+            logger.log(`[Green Peek] Box has mostly low-chroma colors (${lowChromaSkips}/${sampleSize} skipped, threshold=${chromaThreshold})`);
         }
 
         return false;
@@ -1675,12 +1684,18 @@ class PosterizationEngine {
         if (isArchiveMode) {
             if (!greenSector3Covered && !greenSector4Covered) {
                 // Check if box contains ANY green signals (sectors 3 or 4)
+                logger.log(`[Green Peek] Checking box with ${box.colors.length} colors (threshold=${GREEN_PEEK_THRESHOLD}, greenEnergy=${greenEnergy.toFixed(1)}%)`);
                 const hasGreenSignal = this._boxContainsHueSector(box.colors, [3, 4], GREEN_PEEK_THRESHOLD);
 
                 if (hasGreenSignal && greenEnergy > 0.1) {
                     multiplier = GREEN_PEEK_MULTIPLIER;
+                    logger.log(`[Green Peek] 🌿 Box contains hidden green signal (${greenEnergy.toFixed(1)}% image energy) - ${multiplier}× boost`);
                     return basePriority * multiplier;  // Early return with boost
+                } else if (hasGreenSignal) {
+                    logger.log(`[Green Peek] ⚠️ Green signal found but image greenEnergy too low (${greenEnergy.toFixed(1)}%)`);
                 }
+            } else {
+                logger.log(`[Green Peek] Skipped - green sectors already covered (3:${greenSector3Covered}, 4:${greenSector4Covered})`);
             }
         }
 
@@ -1717,7 +1732,7 @@ class PosterizationEngine {
                 if (isRedSector) {
                     logger.log(`[Red Rescue] 🔴 Forcing split on Red bucket (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
                 } else if (isArchiveMode && isGreenSector) {
-                    // Green Rescue: Forcing split on green bucket with energy boost
+                    logger.log(`[Green Rescue] 🌿 Forcing split on ${sectorNames[boxSector]} bucket (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
                 } else {
                     logger.log(`[Hue Priority] ⭐ ${sectorNames[boxSector]} sector (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
                 }
@@ -2581,7 +2596,9 @@ class PosterizationEngine {
         const GREEN_RESCUE_THRESHOLD = 1.5;  // Activate if green > 1.5% of image
         const shouldRescueGreen = !grayscaleOnly && greenEnergy > GREEN_RESCUE_THRESHOLD && is16Bit;
 
-        // Green Rescue activated if needed (green energy check)
+        if (shouldRescueGreen) {
+            logger.log(`[Green Rescue] 🌿 Activating Green-Priority Centroid (green energy: ${greenEnergy.toFixed(1)}%)`);
+        }
 
         // PRE-SCAN: Find the box with most green content for forced rescue
         let bestGreenBoxIdx = -1;
@@ -2599,6 +2616,7 @@ class PosterizationEngine {
                     return sector === 3 || sector === 4;  // Y-Green or Green
                 });
                 const greenRatio = box.colors.length > 0 ? greenColors.length / box.colors.length : 0;
+                logger.log(`[Green Rescue] Box ${idx} scan: ${greenColors.length} green pixels (${(greenRatio * 100).toFixed(1)}% of box)`);
 
                 if (greenColors.length > bestGreenCount) {
                     bestGreenCount = greenColors.length;
@@ -2606,6 +2624,10 @@ class PosterizationEngine {
                     bestGreenBoxIdx = idx;
                 }
             });
+
+            if (bestGreenBoxIdx >= 0) {
+                logger.log(`[Green Rescue] Best green box: #${bestGreenBoxIdx} with ${bestGreenCount} green pixels (${(bestGreenRatio * 100).toFixed(1)}%)`);
+            }
         }
 
         // 🔧 PEAK ELIGIBILITY FLOOR (V1 LEGACY MODE)
@@ -2647,7 +2669,7 @@ class PosterizationEngine {
                 });
 
                 if (greenColors.length > 0) {
-                    // Force green centroid calculation for this box
+                    logger.log(`[Green Rescue] ✅ Box ${idx}: FORCING green centroid from ${greenColors.length} pixels`);
                     return this._calculateLabCentroid(greenColors, grayscaleOnly, strategy, tuning);
                 }
             }
@@ -2860,7 +2882,7 @@ class PosterizationEngine {
      * @param {boolean} [options.preserveBlack=true] - Force black into palette
      * @returns {Object} {palette, paletteLab, assignments, labPixels, metadata}
      */
-    static _posterizeReveal(pixels, width, height, targetColors, options = {}) {
+    static _posterizeRevealMk1_0(pixels, width, height, targetColors, options = {}) {
         // 🔧 LEGACY V1 MODE: CIE76 = "Dumb" Euclidean math, no smart features
         // When distanceMetric is cie76, force legacy v1 behavior:
         // - No perceptual snap (threshold = 0.0)
@@ -2892,6 +2914,7 @@ class PosterizationEngine {
             logger.log(`   preservedUnifyThreshold: ${preservedUnifyThreshold} ΔE`);
             logger.log(`   densityFloor: ${densityFloor} (disabled)`);
         }
+
 
         const enableHueGapAnalysis = options.enableHueGapAnalysis !== undefined ? options.enableHueGapAnalysis : false;
         const grayscaleOnly = options.grayscaleOnly !== undefined ? options.grayscaleOnly : false;
@@ -4207,12 +4230,30 @@ class PosterizationEngine {
         const finalPaletteLab = [...mergedPalette, ...preservedColors];
         logger.log(`\n✓ Final palette before density floor: ${finalPaletteLab.length} colors`);
 
-        // Step 6: Pixel assignment (same as _posterizeReveal)
+        // Step 6: Pixel assignment (with preview stride support)
         const paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
         const assignments = new Uint8Array(width * height);
 
-        const ASSIGNMENT_STRIDE = 8;
+        // PERFORMANCE OPTIMIZATION: Preview mode uses stride sampling
+        // This reduces distance calculations (4× stride = 1/16 pixels computed)
+        // User-selectable: Standard=4 (fast), Fine=2 (slow), Finest=1 (slower)
+        const isPreview = options.isPreview === true;
+        const useStride = isPreview && options.optimizePreview !== false;
+        const ASSIGNMENT_STRIDE = useStride ? (options.previewStride || 4) : 1;
+
+        if (useStride) {
+            const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
+            logger.log(`Assigning pixels to palette (preview mode with ${ASSIGNMENT_STRIDE}× stride)...`);
+        } else {
+            logger.log(`Assigning pixels to palette...`);
+        }
+
         const paletteLength = finalPaletteLab.length;
+
+        // Extract distance options for accurate assignment
+        const assignDistanceMetric = options.distanceMetric || 'squared';
+        const lWeight = options.lWeight !== undefined ? options.lWeight : 1.0;
+        const cWeight = options.cWeight !== undefined ? options.cWeight : 1.0;
 
         for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
             for (let x = 0; x < width; x += ASSIGNMENT_STRIDE) {
@@ -4240,11 +4281,29 @@ class PosterizationEngine {
 
                             for (let j = 0; j < paletteLength; j++) {
                                 const target = finalPaletteLab[j];
-                                const dL = pL - target.L;
-                                const dA = pA - target.a;
-                                const dB = pB - target.b;
 
-                                const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
+                                let dist;
+                                if (grayscaleOnly) {
+                                    const dL = pL - target.L;
+                                    dist = dL * dL;
+                                } else {
+                                    // Use proper distance metric from options
+                                    if (assignDistanceMetric === 'cie76') {
+                                        dist = LabDistance.cie76SquaredInline(pL, pA, pB, target.L, target.a, target.b);
+                                    } else if (assignDistanceMetric === 'cie94') {
+                                        const C1 = Math.sqrt(pA * pA + pB * pB);
+                                        dist = LabDistance.cie94SquaredInline(pL, pA, pB, target.L, target.a, target.b, C1);
+                                    } else if (assignDistanceMetric === 'cie2000') {
+                                        dist = LabDistance.cie2000SquaredInline(pL, pA, pB, target.L, target.a, target.b);
+                                    } else {
+                                        // Squared Euclidean with weights
+                                        const dL = pL - target.L;
+                                        const dA = pA - target.a;
+                                        const dB = pB - target.b;
+                                        const dC = Math.sqrt(dA * dA + dB * dB);
+                                        dist = (lWeight * dL * dL) + (cWeight * dC * dC);
+                                    }
+                                }
 
                                 if (dist < minDistance) {
                                     minDistance = dist;
@@ -4268,35 +4327,35 @@ class PosterizationEngine {
         const duration = ((endTime - startTime) / 1000).toFixed(3);
         logger.log(`\n✓ Reveal Mk 1.5 complete in ${duration}s`);
 
-        // ========== [NEW] Protect anchors from density floor ==========
-        const protectedIndices = new Set();
-        if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
-        if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
-
-        // Protect auto-detected peaks from density floor removal
-        for (let i = snappedPaletteLab.length; i < mergedPalette.length; i++) {
-            protectedIndices.add(i);
-            logger.log(`  Protected auto-anchor at index ${i} from density floor`);
-        }
-        // ==============================================================
-
-        const densityResult = this._applyDensityFloor(
-            assignments,
-            finalPaletteLab,
-            0.005,
-            protectedIndices
-        );
-
+        // Apply density floor to remove ghost colors (<0.5% coverage by default)
+        // Read densityFloor from options (default: 0.005 = 0.5%, Legacy V1: 0.0 = disabled)
         let finalPaletteLabFiltered = finalPaletteLab;
         let assignmentsFiltered = assignments;
 
-        if (densityResult.actualCount < finalPaletteLab.length) {
-            const removed = finalPaletteLab.length - densityResult.actualCount;
-            logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < 0.5% coverage`);
-            logger.log(`  Final palette: ${densityResult.actualCount} colors`);
+        if (densityFloor > 0) {
+            // Only protect preserved colors (white/black) from density floor
+            // Auto-anchors are NOT protected - they must meet the coverage threshold
+            const protectedIndices = new Set();
+            if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
+            if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
 
-            finalPaletteLabFiltered = densityResult.palette;
-            assignmentsFiltered = densityResult.assignments;
+            const densityResult = this._applyDensityFloor(
+                assignments,
+                finalPaletteLab,
+                densityFloor,
+                protectedIndices
+            );
+
+            if (densityResult.actualCount < finalPaletteLab.length) {
+                const removed = finalPaletteLab.length - densityResult.actualCount;
+                logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < ${(densityFloor * 100).toFixed(1)}% coverage`);
+                logger.log(`  Final palette: ${densityResult.actualCount} colors`);
+
+                finalPaletteLabFiltered = densityResult.palette;
+                assignmentsFiltered = densityResult.assignments;
+            }
+        } else {
+            logger.log(`✓ Density floor disabled (threshold: ${densityFloor})`);
         }
 
         const paletteRgbFiltered = finalPaletteLabFiltered.map(lab => this.labToRgb(lab));
@@ -4340,7 +4399,7 @@ class PosterizationEngine {
      */
     static _posterizeBalanced(pixels, width, height, targetColors, options = {}) {
         // Same as _posterizeReveal but with enableHueGapAnalysis forced to false
-        return this._posterizeReveal(pixels, width, height, targetColors, {
+        return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
             ...options,
             enableHueGapAnalysis: false
         });
@@ -4491,7 +4550,7 @@ class PosterizationEngine {
     static _posterizeStencil(pixels, width, height, targetColors, options = {}) {
         logger.log('Stencil engine: Quantizing L-channel only (a=b=0)');
 
-        return this._posterizeReveal(pixels, width, height, targetColors, {
+        return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
             ...options,
             grayscaleOnly: true,
             enableHueGapAnalysis: false
@@ -4532,11 +4591,20 @@ class PosterizationEngine {
      * @param {number} height - Image height
      * @param {number} stride - Assignment stride (4=Standard, 2=Fine, 1=Finest)
      * @param {number} bitDepth - Original source bit depth (for logging only; data is always 16-bit)
+     * @param {Object} options - Distance metric and weight options
+     * @param {string} options.distanceMetric - Distance metric (cie76, cie94, cie2000, or squared)
+     * @param {number} options.lWeight - Lightness weight for distance calculation
+     * @param {number} options.cWeight - Chroma weight for distance calculation
      * @returns {Uint16Array} - Pixel-to-palette assignments
      */
-    static reassignWithStride(labPixels, paletteLab, width, height, stride = 1, bitDepth = 16) {
+    static reassignWithStride(labPixels, paletteLab, width, height, stride = 1, bitDepth = 16, options = {}) {
         const assignments = new Uint16Array(width * height);
         const paletteLen = paletteLab.length;
+
+        // Extract distance options with defaults
+        const distanceMetric = options.distanceMetric || 'squared';
+        const lWeight = options.lWeight !== undefined ? options.lWeight : 1.0;
+        const cWeight = options.cWeight !== undefined ? options.cWeight : 1.0;
 
         // 16-BIT INTEGER PRECISION FIX:
         // Pre-convert palette to 16-bit integer space ONCE to preserve precision.
@@ -4548,6 +4616,13 @@ class PosterizationEngine {
             b: (p.b + 128) * 128
         }));
 
+        // Also keep Float32 Lab values for proper distance calculations
+        const paletteFloat = paletteLab.map(p => ({
+            L: p.L,
+            a: p.a,
+            b: p.b
+        }));
+
         for (let y = 0; y < height; y += stride) {
             const rowOffset = y * width;
 
@@ -4555,19 +4630,40 @@ class PosterizationEngine {
                 const anchorI = rowOffset + x;
                 const idx = anchorI * 3;
 
-                // Read raw 16-bit values directly (no normalization)
+                // Read raw 16-bit values and convert to Float32 Lab for accurate distance
                 const rawL = labPixels[idx];
                 const rawA = labPixels[idx + 1];
                 const rawB = labPixels[idx + 2];
 
-                // Find nearest palette color using integer 16-bit distance
+                // Convert to perceptual Lab (Float32)
+                const pixelLab = {
+                    L: (rawL / 32768) * 100,
+                    a: (rawA / 128) - 128,
+                    b: (rawB / 128) - 128
+                };
+
+                // Find nearest palette color using proper distance metric and weights
                 let minDist = Infinity, anchorAssignment = 0;
                 for (let j = 0; j < paletteLen; j++) {
-                    const target16 = palette16[j];
-                    const dL = rawL - target16.L;
-                    const dA = rawA - target16.a;
-                    const dB = rawB - target16.b;
-                    const dist = 1.5 * dL * dL + dA * dA + dB * dB;
+                    const target = paletteFloat[j];
+
+                    let dist;
+                    if (distanceMetric === 'cie76') {
+                        dist = LabDistance.cie76SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b);
+                    } else if (distanceMetric === 'cie94') {
+                        const C1 = Math.sqrt(pixelLab.a * pixelLab.a + pixelLab.b * pixelLab.b);
+                        dist = LabDistance.cie94SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b, C1);
+                    } else if (distanceMetric === 'cie2000') {
+                        dist = LabDistance.cie2000SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b);
+                    } else {
+                        // Squared Euclidean with weights (default)
+                        const dL = pixelLab.L - target.L;
+                        const dA = pixelLab.a - target.a;
+                        const dB = pixelLab.b - target.b;
+                        const chromaDist = Math.sqrt(dA * dA + dB * dB);
+                        dist = (lWeight * dL * dL) + (cWeight * chromaDist * chromaDist);
+                    }
+
                     if (dist < minDist) { minDist = dist; anchorAssignment = j; }
                 }
 
