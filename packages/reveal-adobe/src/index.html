@@ -1363,89 +1363,6 @@
                     </div>
                 </div>
 
-                <!-- Production Quality Controls Section -->
-                <div class="collapsible-section open">
-                    <div class="collapsible-header">Production Quality Controls</div>
-                    <div class="collapsible-content">
-                        <div class="helper-text" style="margin-bottom: 12px; background: #fff3cd; padding: 8px; border-radius: 4px; border-left: 3px solid #ffc107;">
-                            <strong>🔬 Archetype Overrides:</strong> These controls override archetype defaults and update in real-time in 1:1 mode.
-                            Use the Clinical Loupe to inspect the effects pixel-by-pixel.
-                        </div>
-
-                        <!-- minVolume Slider -->
-                        <div class="form-group">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <sp-label>Minimum Volume Threshold (%)</sp-label>
-                                <sp-label id="minVolumeValue" style="font-weight: 600;">0.0</sp-label>
-                            </div>
-                            <sp-slider id="minVolume"
-                                       min="0"
-                                       max="10"
-                                       step="0.5"
-                                       value="0"
-                                       variant="filled">
-                            </sp-slider>
-                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
-                                <span>0%</span>
-                                <span>10%</span>
-                            </div>
-                            <div class="helper-text">
-                                <strong>Ghost Plate Removal:</strong> Merge colors with pixel coverage below this threshold.
-                                Prevents weak/noise colors from claiming screens.
-                                <br><strong>0%</strong> = Keep all colors • <strong>3-5%</strong> = Production standard
-                            </div>
-                        </div>
-
-                        <!-- speckleRescue Slider -->
-                        <div class="form-group">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <sp-label>Speckle Rescue (pixels)</sp-label>
-                                <sp-label id="speckleRescueValue" style="font-weight: 600;">0</sp-label>
-                            </div>
-                            <sp-slider id="speckleRescue"
-                                       min="0"
-                                       max="8"
-                                       step="1"
-                                       value="0"
-                                       variant="filled">
-                            </sp-slider>
-                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
-                                <span>0px</span>
-                                <span>8px</span>
-                            </div>
-                            <div class="helper-text">
-                                <strong>Halftone Cleanup:</strong> Morphological despeckle removes isolated pixel clusters.
-                                Eliminates unprintable digital lint.
-                                <br><strong>0px</strong> = No cleanup • <strong>4px</strong> = Standard for 230-mesh screens
-                            </div>
-                        </div>
-
-                        <!-- shadowClamp Slider -->
-                        <div class="form-group">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <sp-label>Shadow Clamp (%)</sp-label>
-                                <sp-label id="shadowClampValue" style="font-weight: 600;">0.0</sp-label>
-                            </div>
-                            <sp-slider id="shadowClamp"
-                                       min="0"
-                                       max="10"
-                                       step="0.5"
-                                       value="0"
-                                       variant="filled">
-                            </sp-slider>
-                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 2px;">
-                                <span>0%</span>
-                                <span>10%</span>
-                            </div>
-                            <div class="helper-text">
-                                <strong>Ink Density Floor:</strong> Forces ink density between 0-N% up to exactly N%.
-                                Eliminates unprintable thin tints.
-                                <br><strong>0%</strong> = No clamping • <strong>6%</strong> = Typical for water-based inks
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Color Mode & Target Section -->
                 <div class="collapsible-section open">
                     <div class="collapsible-header">Color Mode & Target</div>
@@ -1739,6 +1656,47 @@
                                 </select>
                             </div>
 
+                        </div>
+
+                        <!-- Production Quality Controls -->
+                        <div style="margin-top: 12px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
+                            <div style="font-size: 12px; font-weight: 600; color: #495057; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                                <span>🎚️</span>
+                                <span>Production Quality Controls</span>
+                            </div>
+                            <div style="font-size: 10px; color: #6c757d; margin-bottom: 12px; line-height: 1.4;">
+                                Adjust these controls and see effects in real-time in 1:1 mode
+                            </div>
+
+                            <!-- minVolume Slider (compact) -->
+                            <div style="margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                    <span style="font-size: 11px; color: #495057;">Min Volume (%)</span>
+                                    <span id="minVolumeValue" style="font-size: 11px; font-weight: 600; color: #007bff;">0.0</span>
+                                </div>
+                                <sp-slider id="minVolume" min="0" max="10" step="0.5" value="0" variant="filled" style="width: 100%;"></sp-slider>
+                                <div style="font-size: 9px; color: #6c757d; margin-top: 2px;">Ghost plate removal (3-5% standard)</div>
+                            </div>
+
+                            <!-- speckleRescue Slider (compact) -->
+                            <div style="margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                    <span style="font-size: 11px; color: #495057;">Speckle Rescue (px)</span>
+                                    <span id="speckleRescueValue" style="font-size: 11px; font-weight: 600; color: #007bff;">0</span>
+                                </div>
+                                <sp-slider id="speckleRescue" min="0" max="8" step="1" value="0" variant="filled" style="width: 100%;"></sp-slider>
+                                <div style="font-size: 9px; color: #6c757d; margin-top: 2px;">Halftone cleanup (4px for 230-mesh)</div>
+                            </div>
+
+                            <!-- shadowClamp Slider (compact) -->
+                            <div style="margin-bottom: 4px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                    <span style="font-size: 11px; color: #495057;">Shadow Clamp (%)</span>
+                                    <span id="shadowClampValue" style="font-size: 11px; font-weight: 600; color: #007bff;">0.0</span>
+                                </div>
+                                <sp-slider id="shadowClamp" min="0" max="10" step="0.5" value="0" variant="filled" style="width: 100%;"></sp-slider>
+                                <div style="font-size: 9px; color: #6c757d; margin-top: 2px;">Ink density floor (6% typical)</div>
+                            </div>
                         </div>
                     </div>
 
