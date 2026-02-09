@@ -2735,7 +2735,7 @@ function showPaletteEditor(selectedPalette) {
             logger.log(`   Mechanical params: minVolume=${config.minVolume}%, speckleRescue=${config.speckleRescue}px, shadowClamp=${config.shadowClamp}%`);
 
             // Re-separate with FIXED palette using SeparationEngine only
-            const assignments = SeparationEngine.mapPixelsToPaletteAsync(
+            const assignments = await SeparationEngine.mapPixelsToPaletteAsync(
                 labPixels,
                 frozenPalette.labPalette,
                 width,
@@ -2746,7 +2746,7 @@ function showPaletteEditor(selectedPalette) {
                 }
             );
 
-            logger.log(`   ✓ Re-separated ${width}×${height} pixels with frozen palette`);
+            logger.log(`   ✓ Re-separated ${width}×${height} pixels with frozen palette (${assignments.length} assignments)`);
 
             // Apply post-processing filters (the "polishing" step)
             let processedAssignments = assignments;
@@ -5133,6 +5133,11 @@ async function showDialog() {
                             viewportManager.jumpToNormalized(0.5, 0.5);
 
                             logger.log('[Phase 2] ✓ ViewportManager initialized and centered');
+
+                            // Initialize Navigator Map with current image
+                            logger.log('[Phase 2] Rendering initial Navigator Map...');
+                            renderNavigatorMap();
+                            logger.log('[Phase 2] ✓ Navigator Map rendered');
                         } catch (error) {
                             logger.error('[Phase 2] Failed to initialize ViewportManager:', error);
                         }
