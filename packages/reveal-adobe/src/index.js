@@ -1579,7 +1579,7 @@ async function setPreviewMode(mode) {
                 logger.log('✓ Navigator Map hidden');
             }
             if (qualityGroup) {
-                qualityGroup.style.display = 'block';
+                qualityGroup.style.display = 'flex';
                 logger.log('✓ Preview Quality shown');
             }
 
