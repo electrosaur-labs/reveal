@@ -54,8 +54,86 @@ class CropEngine {
     }
 
     /**
-     * Initialize from full-resolution source image
-     * Performs full posterization/separation ONCE
+     * Initialize from pre-computed separation state (PREFERRED)
+     * Uses the SAME palette and colorIndices as the main pipeline,
+     * ensuring Navigator Map thumbnail matches the main preview exactly.
+     *
+     * @param {Uint16Array} labPixels - Source 16-bit LAB data (for high-res crop extraction)
+     * @param {number} width - Source width
+     * @param {number} height - Source height
+     * @param {Object} separationResult - Pre-computed results from main pipeline
+     * @param {Array<Object>} separationResult.paletteLab - Lab palette [{L, a, b}, ...]
+     * @param {Array<Object>} separationResult.rgbPalette - RGB palette [{r, g, b}, ...]
+     * @param {Uint8Array} separationResult.colorIndices - Pixel→palette index mapping
+     * @param {Object} config - Additional config (actualDocumentWidth/Height, bitDepth)
+     * @returns {Promise<Object>} Initial state
+     */
+    async initializeWithSeparation(labPixels, width, height, separationResult, config) {
+        console.log(`[CropEngine] Initializing from pre-computed separation: ${width}x${height}, ${separationResult.paletteLab.length} colors`);
+        const startTime = performance.now();
+
+        // Store source buffer (for high-res crop extraction)
+        this.sourceBuffer = labPixels;
+        this.sourceWidth = width;
+        this.sourceHeight = height;
+
+        // Store ACTUAL document dimensions for Navigator Map
+        this.actualDocWidth = config.actualDocumentWidth || width;
+        this.actualDocHeight = config.actualDocumentHeight || height;
+        console.log(`[CropEngine] Source: ${width}x${height}, Actual document: ${this.actualDocWidth}x${this.actualDocHeight}`);
+
+        // Use pre-computed palette and colorIndices (SAME as main pipeline)
+        const labPalette = separationResult.paletteLab;
+        const rgbPalette = separationResult.rgbPalette;
+        const colorIndices = separationResult.colorIndices;
+
+        // Generate masks from pre-computed colorIndices
+        const masks = [];
+        for (let i = 0; i < labPalette.length; i++) {
+            const mask = SeparationEngine.generateLayerMask(colorIndices, i, width, height);
+            masks.push(mask);
+        }
+
+        // Cache separation state (matches main pipeline exactly)
+        this.separationState = {
+            palette: labPalette,
+            rgbPalette: rgbPalette,
+            colorIndices: colorIndices,
+            masks: masks,
+            width: width,
+            height: height,
+            statistics: {}
+        };
+
+        // Store metadata
+        this.sourceMetadata = {
+            originalWidth: width,
+            originalHeight: height,
+            bitDepth: config.bitDepth || 16
+        };
+
+        // Center viewport initially
+        this.centerViewport();
+
+        const elapsed = performance.now() - startTime;
+        console.log(`[CropEngine] Initialized from separation state in ${elapsed.toFixed(1)}ms (no re-posterization)`);
+
+        return {
+            palette: this.separationState.palette,
+            rgbPalette: this.separationState.rgbPalette,
+            statistics: this.separationState.statistics,
+            dimensions: { width, height },
+            viewportX: this.viewportX,
+            viewportY: this.viewportY,
+            viewMode: this.viewMode,
+            elapsedMs: elapsed
+        };
+    }
+
+    /**
+     * Initialize from full-resolution source image (LEGACY)
+     * Performs full posterization/separation ONCE - may produce different palette than main pipeline!
+     * Prefer initializeWithSeparation() for Navigator Map accuracy.
      *
      * @param {Uint16Array} labPixels - Full-res 16-bit LAB data
      * @param {number} width - Source width

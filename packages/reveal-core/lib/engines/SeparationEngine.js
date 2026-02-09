@@ -167,6 +167,13 @@ class SeparationEngine {
 
         // Shadow threshold in 16-bit units: 40% L = 13107
         const SHADOW_THRESHOLD_16 = 13107;
+
+        // Snap threshold must match the distance metric's scale:
+        // - CIE76 16-bit: squared distances in 16-bit space (0 to ~3.2 billion). 180000 ≈ ΔE ~1.3 perceptual
+        // - CIE2000: squared distances in perceptual ΔE² (0 to ~10000). 1.0 ≈ ΔE 1.0 (barely perceptible)
+        // - CIE94 16-bit: squared distances in 16-bit-weighted space. Same scale as CIE76.
+        const snapThreshold = distanceConfig.isCIE2000 ? 1.0 : SNAP_THRESHOLD_SQ_16;
+
         let lastBestIndex = 0;
 
         // Process in chunks with event loop yielding
@@ -209,7 +216,7 @@ class SeparationEngine {
                     );
                 }
 
-                if (minDistanceSq > SNAP_THRESHOLD_SQ_16) {
+                if (minDistanceSq > snapThreshold) {
                     let nearestIndex = lastBestIndex;
 
                     // Search all palette colors
@@ -241,7 +248,7 @@ class SeparationEngine {
                         if (distSq < minDistanceSq) {
                             minDistanceSq = distSq;
                             nearestIndex = c;
-                            if (distSq < SNAP_THRESHOLD_SQ_16) break; // Early exit
+                            if (distSq < snapThreshold) break; // Early exit
                         }
                     }
                     lastBestIndex = nearestIndex;

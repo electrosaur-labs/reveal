@@ -383,13 +383,22 @@ class PhotoshopAPI {
             throw new Error("No active document");
         }
 
-        logger.log(`[PhotoshopAPI] Fetching high-res crop: (${x}, ${y}) ${width}x${height}`);
+        logger.log(`[PhotoshopAPI] Fetching high-res crop: requested(${x}, ${y}) ${width}x${height}`);
+        logger.log(`[PhotoshopAPI] doc.width=${doc.width} doc.height=${doc.height} (type: ${typeof doc.width})`);
 
         // Constrain crop to document bounds
         const cropX = Math.max(0, Math.min(x, doc.width - width));
         const cropY = Math.max(0, Math.min(y, doc.height - height));
         const cropWidth = Math.min(width, doc.width - cropX);
         const cropHeight = Math.min(height, doc.height - cropY);
+
+        // DIAGNOSTIC: Detect if clamping forced position to 0,0
+        if (x !== cropX || y !== cropY) {
+            logger.log(`[PhotoshopAPI] ⚠️ CLAMPED: (${x},${y})→(${cropX},${cropY}) because doc=${doc.width}x${doc.height} viewport=${width}x${height}`);
+            if (doc.width <= width || doc.height <= height) {
+                logger.log(`[PhotoshopAPI] ❌ STUCK VIEWPORT: doc dimension (${doc.width}x${doc.height}) <= viewport (${width}x${height}). Crop is LOCKED!`);
+            }
+        }
 
         logger.log(`[PhotoshopAPI] Constrained crop: (${cropX}, ${cropY}) ${cropWidth}x${cropHeight}`);
 

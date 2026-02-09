@@ -699,6 +699,13 @@ function renderPreview() {
         return;
     }
 
+    // MODE GUARD: renderPreview() is for fit mode only!
+    // Calling it in 1:1 or zoom mode overwrites the viewport-specific image
+    if (state.viewMode && state.viewMode !== 'fit') {
+        logger.error(`⚠️ renderPreview() called in ${state.viewMode} mode - BLOCKED! This would overwrite the viewport image.`);
+        return;
+    }
+
     const img = document.getElementById('previewImg');
     if (!img) {
         logger.error('Preview img element not found');
@@ -1011,7 +1018,7 @@ function attachNavigatorClickHandler() {
     };
 
     // Pointer up - stop dragging
-    const pointerupHandler = () => {
+    const pointerupHandler = async () => {
         if (dragState.isDragging) {
             dragState.isDragging = false;
             navigatorContainer.style.cursor = '';
@@ -1020,7 +1027,10 @@ function attachNavigatorClickHandler() {
             // jumpToNormalized already synced CropEngine coordinates via _syncCropEngineViewport
             renderNavigatorMap();
 
-            logger.log('[Navigator] 🟢 Drag ended - Navigator refreshed');
+            // CRITICAL: Final render at latest center position
+            await render1to1Preview();
+
+            logger.log('[Navigator] 🟢 Drag ended - Navigator refreshed + preview rendered');
         }
     };
 
@@ -1195,14 +1205,18 @@ function attach1to1PreviewDragHandler() {
         }
     };
 
-    const pointerupHandler = () => {
+    const pointerupHandler = async () => {
         if (isDragging) {
             isDragging = false;
             previewContainer.style.cursor = '';
 
-            // Full Navigator refresh after drag completes
+            // Full Navigator refresh + final render at latest position after drag completes
             if (hasDragged) {
                 renderNavigatorMap();
+                // CRITICAL: Final render at the current center position
+                // Without this, the preview stays at whatever intermediate position
+                // the last RAF-debounced render happened to capture
+                await render1to1Preview();
             }
         }
     };
@@ -1542,19 +1556,22 @@ async function render1to1Preview() {
         const vmState = window.viewportManager.getState();
         const { center, viewportWidth, viewportHeight } = vmState;
 
-        // Get actual document dimensions
+        // Get actual document dimensions FRESH from Photoshop
         const docInfo = PhotoshopAPI.getDocumentInfo();
         const fullDocWidth = docInfo.width;
         const fullDocHeight = docInfo.height;
+
+        // Also get CropEngine dimensions for comparison
+        const ceSourceW = window.cropEngine.sourceWidth;
+        const ceSourceH = window.cropEngine.sourceHeight;
+        const ceActualW = window.cropEngine.actualDocWidth;
+        const ceActualH = window.cropEngine.actualDocHeight;
 
         // Calculate absolute coordinates in full-resolution document
         const centerX = center.x * fullDocWidth;
         const centerY = center.y * fullDocHeight;
         const cropX = Math.max(0, Math.floor(centerX - viewportWidth / 2));
         const cropY = Math.max(0, Math.floor(centerY - viewportHeight / 2));
-
-        logger.log(`[1:1] Fetching high-res crop from (${cropX}, ${cropY}) size ${viewportWidth}x${viewportHeight}`);
-        logger.log(`[1:1] Document size: ${fullDocWidth}x${fullDocHeight}, Center: (${center.x.toFixed(3)}, ${center.y.toFixed(3)})`);
 
         // SMART LOADING: Fetch ONLY the viewport window at full resolution
         const cropData = await PhotoshopAPI.getHighResCrop(cropX, cropY, viewportWidth, viewportHeight);
@@ -1571,7 +1588,8 @@ async function render1to1Preview() {
         const rgbPalette = window.selectedPreview.palette;
 
         // Map high-res crop pixels to existing palette
-        logger.log(`[1:1] Mapping ${cropData.width}x${cropData.height} pixels to ${labPalette.length} color palette...`);
+        const usedMetric = posterizationData.params.distanceMetric || 'cie76';
+        logger.log(`[1:1] Mapping ${cropData.width}x${cropData.height} pixels to ${labPalette.length} colors (${usedMetric})...`);
 
         let colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
             cropData.pixels,
@@ -1580,7 +1598,7 @@ async function render1to1Preview() {
             cropData.width,
             cropData.height,
             {
-                distanceMetric: posterizationData.params.distanceMetric || 'cie76'
+                distanceMetric: usedMetric
             }
         );
 
@@ -1711,7 +1729,8 @@ async function render1to1Preview() {
         img.width = cropData.width;
         img.height = cropData.height;
 
-        logger.log(`[1:1] ✓ Rendered TRUE 1:1 preview: ${cropData.width}x${cropData.height} from (${cropX}, ${cropY}) (${Math.round(jpegData.data.length / 1024)}KB)`);
+
+        logger.log(`[1:1] ✓ Rendered TRUE 1:1 preview: ${cropData.width}x${cropData.height} from req(${cropX},${cropY}) actual(${cropData.cropX},${cropData.cropY}) (${Math.round(jpegData.data.length / 1024)}KB)`);
 
     } catch (error) {
         logger.error('[1:1] Failed to render:', error);
@@ -2203,11 +2222,13 @@ async function setPreviewMode(mode) {
         // Rebuild dropdown with fit options + fresh handler
         rebuildPreviewStrideForMode('fit');
 
+        // Set viewMode BEFORE rendering (mode guard in renderPreview checks this)
+        state.viewMode = 'fit';
+
         // Re-render preview in fit mode
         logger.log('Re-rendering preview in fit mode...');
         renderPreview();
 
-        state.viewMode = 'fit';
         logger.log('✓ Fit mode restored');
     }
 }
@@ -2254,6 +2275,8 @@ function attachPreviewZoomHandlers() {
         transformX = 0;
         transformY = 0;
         lastRenderTime = 0; // Allow immediate first render
+        // Cancel any pending HQ timeout so it doesn't block drag renders
+        clearTimeout(renderer.qualityTimeout);
         container.classList.add('panning');
         e.preventDefault();
     };
@@ -2309,7 +2332,10 @@ function attachPreviewZoomHandlers() {
         isDragging = false;
         container.classList.remove('panning');
 
-        // Reset transform on the active image and fetch HQ at final position
+        // Cancel any pending HQ timeout that might block our final render
+        clearTimeout(renderer.qualityTimeout);
+
+        // Reset transform on the active image
         const activeImg = renderer.getActiveImage();
         if (activeImg) {
             activeImg.style.transform = 'translate3d(0, 0, 0)';
@@ -2317,8 +2343,9 @@ function attachPreviewZoomHandlers() {
         transformX = 0;
         transformY = 0;
 
-        // Final high-quality render
-        renderer.fetchAndRender(true);
+        // Final render at current position - the dirty flag mechanism
+        // ensures this will execute even if a previous render is in-flight
+        renderer.fetchAndRender(false);
 
         // If we actually dragged (moved), suppress the next click event
         if (hasMoved) {
@@ -5532,15 +5559,20 @@ async function showDialog() {
                         try {
                             logger.log('[Phase 2] Initializing ViewportManager...');
 
-                            // Create CropEngine with posterization data
+                            // Create CropEngine with PRE-COMPUTED separation state
+                            // CRITICAL: Use the frozen palette from main pipeline (not re-posterize)
+                            // This ensures Navigator Map thumbnail shows the SAME colors as the preview
                             const cropEngine = new CropEngine();
-                            const initResult = await cropEngine.initialize(
+                            const initResult = await cropEngine.initializeWithSeparation(
                                 posterizationData.originalPixels,
                                 posterizationData.originalWidth,
                                 posterizationData.originalHeight,
                                 {
-                                    ...posterizationData.params,  // Use actual posterization params, not results!
-                                    format: 'lab',                // CRITICAL: Tell engine this is LAB data
+                                    paletteLab: window._frozenPalette.labPalette,
+                                    rgbPalette: window._frozenPalette.rgbPalette,
+                                    colorIndices: result.assignments
+                                },
+                                {
                                     bitDepth: posterizationData.bitDepth || 16,
                                     actualDocumentWidth: pixelData.originalWidth,   // ACTUAL document size, not preview
                                     actualDocumentHeight: pixelData.originalHeight  // ACTUAL document size, not preview
@@ -5560,6 +5592,26 @@ async function showDialog() {
                             // CRITICAL: Sync initial center position to CropEngine for Navigator Map
                             // ViewportManager defaults to center (0.5, 0.5) but CropEngine viewport isn't synced yet
                             viewportManager.jumpToNormalized(0.5, 0.5);
+
+                            // DIAGNOSTIC: Log ALL dimension values for debugging viewport issues
+                            logger.log('╔══════════════════════════════════════════════════════╗');
+                            logger.log('║  VIEWPORT INITIALIZATION DIAGNOSTIC                  ║');
+                            logger.log('╠══════════════════════════════════════════════════════╣');
+                            logger.log(`║  pixelData.width (downsampled):  ${pixelData.width}`);
+                            logger.log(`║  pixelData.height (downsampled): ${pixelData.height}`);
+                            logger.log(`║  pixelData.originalWidth (doc):  ${pixelData.originalWidth}`);
+                            logger.log(`║  pixelData.originalHeight (doc): ${pixelData.originalHeight}`);
+                            logger.log(`║  pixelData.scale:                ${pixelData.scale}`);
+                            logger.log(`║  cropEngine.sourceWidth:         ${cropEngine.sourceWidth}`);
+                            logger.log(`║  cropEngine.sourceHeight:        ${cropEngine.sourceHeight}`);
+                            logger.log(`║  cropEngine.actualDocWidth:      ${cropEngine.actualDocWidth}`);
+                            logger.log(`║  cropEngine.actualDocHeight:     ${cropEngine.actualDocHeight}`);
+                            logger.log(`║  viewportManager.viewportWidth:  ${viewportManager.viewportWidth}`);
+                            logger.log(`║  viewportManager.viewportHeight: ${viewportManager.viewportHeight}`);
+                            logger.log(`║  docInfo.width:                  ${docInfo.width}`);
+                            logger.log(`║  docInfo.height:                 ${docInfo.height}`);
+                            logger.log(`║  docInfo.resolution:             ${docInfo.resolution}`);
+                            logger.log('╚══════════════════════════════════════════════════════╝');
 
                             logger.log('[Phase 2] ✓ ViewportManager initialized and centered');
 

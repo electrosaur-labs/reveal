@@ -31,6 +31,7 @@ class ZoomPreviewRenderer {
 
         this.activePixelData = null;
         this.isRendering = false;
+        this._renderDirty = false; // Flag: viewport changed while rendering
 
         // Shared buffer to prevent GC pauses
         this.rgbaBuffer = new Uint8Array(this.width * this.height * 4);
@@ -87,8 +88,13 @@ class ZoomPreviewRenderer {
      * @param {boolean} highQuality - Use 16-bit Lab for better color accuracy (slower)
      */
     async fetchAndRender(highQuality = false) {
-        if (this.isRendering) return;
+        if (this.isRendering) {
+            // Mark dirty so current render triggers a follow-up when it completes
+            this._renderDirty = true;
+            return;
+        }
         this.isRendering = true;
+        this._renderDirty = false;
 
         // Show badge if starting a high-quality pass
         if (highQuality && this.hqBadge) {
@@ -117,6 +123,16 @@ class ZoomPreviewRenderer {
             const divisor = highQuality ? 32768 : 255; // Normalized Lab range
 
             console.log(`[ZoomRenderer] Fetching ${componentSize}-bit viewport: (${left}, ${top}) to (${right}, ${bottom}), resolution 1:${this.resolution}`);
+
+            // DIAGNOSTIC: Show viewport bounds on-screen
+            let diagEl = document.getElementById('_diagZoom');
+            if (!diagEl) {
+                diagEl = document.createElement('div');
+                diagEl.id = '_diagZoom';
+                diagEl.style.cssText = 'position:absolute;top:4px;left:4px;background:rgba(255,0,0,0.8);color:#fff;font:bold 11px monospace;padding:2px 6px;z-index:999;pointer-events:none;';
+                this.container.appendChild(diagEl);
+            }
+            diagEl.textContent = `BOUNDS:(${left},${top})-(${right},${bottom}) VP:(${Math.round(this.viewportX)},${Math.round(this.viewportY)}) RES:1:${this.resolution} DOC:${this.docWidth}x${this.docHeight}`;
 
             this.activePixelData = await photoshop.core.executeAsModal(async () => {
                 return await photoshop.imaging.getPixels({
@@ -252,19 +268,28 @@ class ZoomPreviewRenderer {
                             }, 1000);
                         }
 
-                        // Schedule high-quality upgrade after interaction settles
-                        if (!highQuality) {
+                        this.isRendering = false;
+
+                        // If viewport changed while we were rendering, re-render at new position
+                        if (this._renderDirty) {
+                            console.log('[ZoomRenderer] Viewport dirty - re-rendering at new position');
+                            this._renderDirty = false;
+                            this.fetchAndRender(false).catch(err => {
+                                console.error('[ZoomRenderer] Dirty re-render failed:', err);
+                            });
+                        } else if (!highQuality) {
+                            // Schedule high-quality upgrade only if viewport is stable
                             this.qualityTimeout = setTimeout(() => {
                                 console.log('[ZoomRenderer] Upgrading to 16-bit high-quality render...');
                                 this.fetchAndRender(true);
                             }, 500);
                         }
 
-                        this.isRendering = false;
                         resolve();
                     } catch (err) {
                         console.error('[ZoomRenderer] Error in onload callback:', err);
                         this.isRendering = false;
+                        this._renderDirty = false;
                         reject(err);
                     }
                 };
@@ -272,6 +297,7 @@ class ZoomPreviewRenderer {
                 nextImg.onerror = (err) => {
                     console.error('[ZoomRenderer] Image load error:', err);
                     this.isRendering = false;
+                    this._renderDirty = false;
                     reject(new Error('Image failed to load'));
                 };
 
@@ -288,6 +314,7 @@ class ZoomPreviewRenderer {
                 this.hqBadge.style.display = 'none';
             }
             this.isRendering = false;
+            this._renderDirty = false;
             return Promise.reject(error);
         }
     }
@@ -360,6 +387,8 @@ class ZoomPreviewRenderer {
     }
 
     pan(deltaX, deltaY) {
+        // Cancel any pending HQ upgrade - user is actively panning
+        clearTimeout(this.qualityTimeout);
         this.viewportX += deltaX;
         this.viewportY += deltaY;
         this.applyBounds();

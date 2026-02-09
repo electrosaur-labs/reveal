@@ -114,6 +114,9 @@ class ViewportManager {
         const fullWidth = this.cropEngine.sourceWidth;
         const fullHeight = this.cropEngine.sourceHeight;
 
+        const prevX = this.center.x;
+        const prevY = this.center.y;
+
         // Convert delta to normalized space
         const normDeltaX = deltaX / fullWidth;
         const normDeltaY = deltaY / fullHeight;
@@ -125,7 +128,7 @@ class ViewportManager {
         // CRITICAL FIX: Update CropEngine viewport position for Navigator Map
         this._syncCropEngineViewport();
 
-        console.log(`[ViewportManager] Panned to normalized (${this.center.x.toFixed(3)}, ${this.center.y.toFixed(3)})`);
+        console.log(`[ViewportManager] pan(${deltaX},${deltaY}) srcDim=${fullWidth}x${fullHeight} center:(${prevX.toFixed(3)},${prevY.toFixed(3)})→(${this.center.x.toFixed(3)},${this.center.y.toFixed(3)})`);
     }
 
     /**
