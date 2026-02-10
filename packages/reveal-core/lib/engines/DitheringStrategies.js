@@ -272,7 +272,6 @@ async function floydSteinberg(rawBytes, labPalette, width, height, onProgress) {
 
     // Handle empty palette gracefully
     if (!labPalette || labPalette.length === 0) {
-        logger.log('Floyd-Steinberg: Empty palette, returning zeros');
         return colorIndices;
     }
 
@@ -281,7 +280,6 @@ async function floydSteinberg(rawBytes, labPalette, width, height, onProgress) {
 
     const CHUNK_SIZE = 32768; // Smaller chunk for dithering overhead (181 rows of 1024px)
 
-    logger.log(`Floyd-Steinberg dithering: ${width}x${height} (${pixelCount} pixels)`);
 
     // CRITICAL: Process row-by-row, left-to-right for error propagation
     // Cannot use random-access chunking like nearest-neighbor
@@ -336,7 +334,6 @@ async function floydSteinberg(rawBytes, labPalette, width, height, onProgress) {
     }
 
     if (onProgress) onProgress(100);
-    logger.log(`✓ Floyd-Steinberg dithering complete`);
     return colorIndices;
 }
 
@@ -358,7 +355,6 @@ async function atkinson(rawBytes, labPalette, width, height, onProgress) {
 
     // Handle empty palette gracefully
     if (!labPalette || labPalette.length === 0) {
-        logger.log('Atkinson: Empty palette, returning zeros');
         return colorIndices;
     }
 
@@ -367,7 +363,6 @@ async function atkinson(rawBytes, labPalette, width, height, onProgress) {
 
     const CHUNK_SIZE = 32768; // Smaller chunk for dithering overhead
 
-    logger.log(`Atkinson dithering: ${width}x${height} (${pixelCount} pixels)`);
 
     // CRITICAL: Process row-by-row, left-to-right for error propagation
     for (let i = 0; i < pixelCount; i++) {
@@ -408,7 +403,6 @@ async function atkinson(rawBytes, labPalette, width, height, onProgress) {
     }
 
     if (onProgress) onProgress(100);
-    logger.log(`✓ Atkinson dithering complete`);
     return colorIndices;
 }
 
@@ -430,7 +424,6 @@ async function stucki(rawBytes, labPalette, width, height, onProgress) {
 
     // Handle empty palette gracefully
     if (!labPalette || labPalette.length === 0) {
-        logger.log('Stucki: Empty palette, returning zeros');
         return colorIndices;
     }
 
@@ -439,7 +432,6 @@ async function stucki(rawBytes, labPalette, width, height, onProgress) {
 
     const CHUNK_SIZE = 32768; // Smaller chunk for dithering overhead
 
-    logger.log(`Stucki dithering: ${width}x${height} (${pixelCount} pixels)`);
 
     // CRITICAL: Process row-by-row, left-to-right for error propagation
     for (let i = 0; i < pixelCount; i++) {
@@ -479,7 +471,6 @@ async function stucki(rawBytes, labPalette, width, height, onProgress) {
     }
 
     if (onProgress) onProgress(100);
-    logger.log(`✓ Stucki dithering complete`);
     return colorIndices;
 }
 
@@ -507,13 +498,11 @@ async function blueNoise(rawBytes, labPalette, width, height, onProgress, scale 
 
     // Handle empty palette gracefully
     if (!labPalette || labPalette.length === 0) {
-        logger.log('Blue Noise: Empty palette, returning zeros');
         return colorIndices;
     }
 
     // Handle single-color palette (no dithering needed)
     if (labPalette.length === 1) {
-        logger.log('Blue Noise: Single color palette, all pixels map to index 0');
         return colorIndices; // Already filled with zeros
     }
 
@@ -522,7 +511,6 @@ async function blueNoise(rawBytes, labPalette, width, height, onProgress, scale 
     const maskSize = 64;
     const CHUNK_SIZE = 65536; // 64k pixels per UI yield
 
-    logger.log(`Blue Noise dithering: ${width}x${height} (${pixelCount} pixels, scale=${scale})`);
 
     for (let i = 0; i < pixelCount; i++) {
         const pxIdx = i * 3;
@@ -565,7 +553,6 @@ async function blueNoise(rawBytes, labPalette, width, height, onProgress, scale 
     }
 
     if (onProgress) onProgress(100);
-    logger.log(`✓ Blue Noise dithering complete (Macro-Cell scale: ${scale}px)`);
     return colorIndices;
 }
 
@@ -592,19 +579,16 @@ async function bayer(rawBytes, labPalette, width, height, onProgress, scale = 1)
 
     // Handle empty palette gracefully
     if (!labPalette || labPalette.length === 0) {
-        logger.log('Bayer: Empty palette, returning zeros');
         return colorIndices;
     }
 
     // Handle single-color palette (no dithering needed)
     if (labPalette.length === 1) {
-        logger.log('Bayer: Single color palette, all pixels map to index 0');
         return colorIndices;
     }
 
     const CHUNK_SIZE = 65536; // 64k pixels per UI yield
 
-    logger.log(`Bayer 8x8 dithering: ${width}x${height} (${pixelCount} pixels, scale=${scale})`);
 
     for (let i = 0; i < pixelCount; i++) {
         const pxIdx = i * 3;
@@ -645,7 +629,6 @@ async function bayer(rawBytes, labPalette, width, height, onProgress, scale = 1)
     }
 
     if (onProgress) onProgress(100);
-    logger.log(`✓ Bayer 8x8 dithering complete (Macro-Cell scale: ${scale}px)`);
     return colorIndices;
 }
 

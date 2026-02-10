@@ -50,7 +50,6 @@ class CropEngine {
     setViewportDimensions(width, height) {
         this.viewportWidth = Math.floor(width);
         this.viewportHeight = Math.floor(height);
-        console.log(`[CropEngine] Viewport dimensions updated: ${this.viewportWidth}x${this.viewportHeight}`);
     }
 
     /**
@@ -69,7 +68,6 @@ class CropEngine {
      * @returns {Promise<Object>} Initial state
      */
     async initializeWithSeparation(labPixels, width, height, separationResult, config) {
-        console.log(`[CropEngine] Initializing from pre-computed separation: ${width}x${height}, ${separationResult.paletteLab.length} colors`);
         const startTime = performance.now();
 
         // Store source buffer (for high-res crop extraction)
@@ -80,7 +78,6 @@ class CropEngine {
         // Store ACTUAL document dimensions for Navigator Map
         this.actualDocWidth = config.actualDocumentWidth || width;
         this.actualDocHeight = config.actualDocumentHeight || height;
-        console.log(`[CropEngine] Source: ${width}x${height}, Actual document: ${this.actualDocWidth}x${this.actualDocHeight}`);
 
         // Use pre-computed palette and colorIndices (SAME as main pipeline)
         const labPalette = separationResult.paletteLab;
@@ -116,7 +113,6 @@ class CropEngine {
         this.centerViewport();
 
         const elapsed = performance.now() - startTime;
-        console.log(`[CropEngine] Initialized from separation state in ${elapsed.toFixed(1)}ms (no re-posterization)`);
 
         return {
             palette: this.separationState.palette,
@@ -142,7 +138,6 @@ class CropEngine {
      * @returns {Promise<Object>} Initial state
      */
     async initialize(labPixels, width, height, config) {
-        console.log(`[CropEngine] Initializing from ${width}x${height} source`);
         const startTime = performance.now();
 
         // Store source buffer (may be downsampled preview)
@@ -153,7 +148,6 @@ class CropEngine {
         // Store ACTUAL document dimensions for Navigator Map
         this.actualDocWidth = config.actualDocumentWidth || width;
         this.actualDocHeight = config.actualDocumentHeight || height;
-        console.log(`[CropEngine] Source: ${width}x${height}, Actual document: ${this.actualDocWidth}x${this.actualDocHeight}`);
 
         // 1. Run posterization on FULL resolution
         const posterizeResult = await PosterizationEngine.posterize(
@@ -164,9 +158,6 @@ class CropEngine {
             config
         );
 
-        console.log('[CropEngine] Posterization result:', {
-            paletteLength: posterizeResult.paletteLab?.length
-        });
 
         // 2. Run separation - get color indices for FULL image
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -189,12 +180,6 @@ class CropEngine {
         }
 
         // 4. Log palette data for debugging
-        console.log('[CropEngine] Palette data:', {
-            hasRgbPalette: !!posterizeResult.palette,
-            hasLabPalette: !!posterizeResult.paletteLab,
-            rgbSample: posterizeResult.palette?.[0],
-            labSample: posterizeResult.paletteLab?.[0]
-        });
 
         // 5. Ensure RGB palette is properly converted from Lab
         let rgbPalette;
@@ -206,20 +191,16 @@ class CropEngine {
                 rgbPalette = posterizeResult.palette;
             } else if ('L' in firstColor) {
                 // Contains Lab values, convert to RGB
-                console.log('[CropEngine] posterizeResult.palette contains Lab values, converting to RGB');
                 rgbPalette = posterizeResult.palette.map(lab => ColorSpace.labToRgb(lab));
             } else {
                 // Unknown format, convert from paletteLab as fallback
-                console.log('[CropEngine] Unknown palette format, converting from paletteLab');
                 rgbPalette = posterizeResult.paletteLab.map(lab => ColorSpace.labToRgb(lab));
             }
         } else {
             // No RGB palette provided, convert from Lab palette
-            console.log('[CropEngine] No RGB palette provided, converting from paletteLab');
             rgbPalette = posterizeResult.paletteLab.map(lab => ColorSpace.labToRgb(lab));
         }
 
-        console.log('[CropEngine] RGB palette sample:', rgbPalette[0]);
 
         // 6. Cache full separation state
         this.separationState = {
@@ -244,7 +225,6 @@ class CropEngine {
         this.centerViewport();
 
         const elapsed = performance.now() - startTime;
-        console.log(`[CropEngine] Initialized in ${elapsed.toFixed(1)}ms`);
 
         // Return initial fit-mode view (entire image downsampled)
         return {
@@ -277,7 +257,6 @@ class CropEngine {
         const cropWidth = Math.min(this.viewportWidth, this.sourceWidth - this.viewportX);
         const cropHeight = Math.min(this.viewportHeight, this.sourceHeight - this.viewportY);
 
-        console.log(`[CropEngine] Extracting crop at (${this.viewportX}, ${this.viewportY}), size ${cropWidth}x${cropHeight}`);
 
         // Extract crop from full-res color indices
         const cropIndices = this._extractCropIndices(
@@ -336,7 +315,6 @@ class CropEngine {
         );
 
         const elapsed = performance.now() - startTime;
-        console.log(`[CropEngine] Extracted crop in ${elapsed.toFixed(1)}ms`);
 
         return {
             previewBuffer,
@@ -365,7 +343,6 @@ class CropEngine {
             this.viewportY + deltaY
         ));
 
-        console.log(`[CropEngine] Panned to (${this.viewportX}, ${this.viewportY})`);
     }
 
     /**
@@ -385,7 +362,6 @@ class CropEngine {
             y - this.viewportHeight / 2
         ));
 
-        console.log(`[CropEngine] Jumped to (${this.viewportX}, ${this.viewportY})`);
     }
 
     /**
@@ -401,7 +377,6 @@ class CropEngine {
      */
     toggleViewMode() {
         this.viewMode = this.viewMode === '1:1' ? 'fit' : '1:1';
-        console.log(`[CropEngine] Toggled to ${this.viewMode} mode`);
         return this.viewMode;
     }
 
@@ -410,21 +385,12 @@ class CropEngine {
      * @returns {Object} { thumbnailBuffer, thumbnailWidth, thumbnailHeight, viewportBounds }
      */
     getNavigatorMap(thumbnailSize = 200) {
-        console.log('🔵🔵🔵 [CropEngine.getNavigatorMap] CALLED 🔵🔵🔵');
-        console.log('[CropEngine.getNavigatorMap] separationState:', {
-            exists: !!this.separationState,
-            hasColorIndices: !!this.separationState?.colorIndices,
-            hasRgbPalette: !!this.separationState?.rgbPalette,
-            colorIndicesLength: this.separationState?.colorIndices?.length,
-            rgbPaletteLength: this.separationState?.rgbPalette?.length
-        });
 
         // Calculate scale based on ACTUAL document dimensions
         const scale = Math.min(thumbnailSize / this.actualDocWidth, thumbnailSize / this.actualDocHeight);
         const thumbWidth = Math.round(this.actualDocWidth * scale);
         const thumbHeight = Math.round(this.actualDocHeight * scale);
 
-        console.log(`[CropEngine] Navigator: actualDoc ${this.actualDocWidth}x${this.actualDocHeight}, scale ${scale.toFixed(3)}, thumb ${thumbWidth}x${thumbHeight}`);
 
         // Generate thumbnail from color indices (using source buffer dimensions)
         const thumbnailBuffer = this._downsampleColorIndices(
@@ -443,7 +409,6 @@ class CropEngine {
             height: Math.round(this.viewportHeight * scale)
         };
 
-        console.log(`[CropEngine] Viewport bounds: x=${viewportBounds.x}, y=${viewportBounds.y}, w=${viewportBounds.width}, h=${viewportBounds.height}`);
 
         return {
             thumbnailBuffer,
@@ -539,7 +504,6 @@ class CropEngine {
             return cropIndices;
         }
 
-        console.log(`[CropEngine] minVolume: Pruning ${weakIndices.length} weak colors in crop`);
 
         // Remap weak colors to nearest strong colors
         const newCropIndices = new Uint8Array(cropIndices.length);
@@ -584,7 +548,6 @@ class CropEngine {
             erodedMasks.push(eroded);
         }
 
-        console.log(`[CropEngine] speckleRescue: Eroded ${cropMasks.length} masks with radius ${radiusPixels}px`);
 
         return erodedMasks;
     }
@@ -610,7 +573,6 @@ class CropEngine {
             clampedMasks.push(clamped);
         }
 
-        console.log(`[CropEngine] shadowClamp: Clamped to ${clampValue}/255`);
 
         return clampedMasks;
     }
@@ -679,11 +641,6 @@ class CropEngine {
         const thumbnailBuffer = new Uint8ClampedArray(dstWidth * dstHeight * 4);
 
         // Debug: Log palette info (once)
-        console.log('[CropEngine._downsampleColorIndices] RGB Palette:', {
-            exists: !!this.separationState.rgbPalette,
-            length: this.separationState.rgbPalette?.length,
-            sample: this.separationState.rgbPalette?.[0]
-        });
 
         for (let i = 0; i < thumbnailIndices.length; i++) {
             const colorIdx = thumbnailIndices[i];

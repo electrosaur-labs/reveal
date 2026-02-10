@@ -60,11 +60,9 @@ class ArchetypeLoader {
                 return archetype;
             });
 
-            console.log(`✓ Loaded ${this.archetypes.length} archetypes from ${archetypesDir}`);
         } else {
             // Browser/UXP: Use built-in archetypes
             this.archetypes = this.getBuiltInArchetypes();
-            console.log(`✓ Loaded ${this.archetypes.length} built-in archetypes`);
         }
 
         return this.archetypes;
@@ -122,11 +120,6 @@ class ArchetypeLoader {
         if (manualArchetypeId) {
             const manualArchetype = archetypes.find(a => a.id === manualArchetypeId);
             if (manualArchetype) {
-                console.log(`🛑 DNA Matcher Bypassed. Loading Sovereign Static Settings.`);
-                console.log(`   User-selected archetype: ${manualArchetype.name}`);
-                console.log(`   Parameters locked: ${manualArchetype.parameters?.distanceMetric}, ` +
-                           `cWeight=${manualArchetype.parameters?.cWeight}, ` +
-                           `vibrancyBoost=${manualArchetype.parameters?.vibrancyBoost}`);
                 return manualArchetype;
             } else {
                 console.warn(`⚠️ Manual archetype not found: ${manualArchetypeId}, falling back to DNA matching`);
@@ -156,16 +149,6 @@ class ArchetypeLoader {
         const archetype = archetypes.find(a => a.id === result.id);
 
         // Enhanced logging for DNA v2.0
-        console.log(`🎯 Matched archetype: ${archetype.name} (score: ${result.score})`);
-        console.log(`   DNA v2.0 Breakdown:`);
-        console.log(`   • Structural:     ${result.breakdown.structural.toFixed(1)}/100 (40% weight)`);
-        console.log(`   • Sector Affinity: ${result.breakdown.sectorAffinity.toFixed(1)}/100 (45% weight)`);
-        console.log(`   • Pattern Match:   ${result.breakdown.pattern.toFixed(1)}/100 (15% weight)`);
-        console.log(`   DNA Signature: L=${dna.global.l.toFixed(1)} C=${dna.global.c.toFixed(1)} ` +
-                    `K=${dna.global.k.toFixed(1)} σL=${dna.global.l_std_dev.toFixed(1)}`);
-        console.log(`   Entropy=${dna.global.hue_entropy.toFixed(3)} ` +
-                    `Temp=${dna.global.temperature_bias.toFixed(2)} ` +
-                    `Dominant=${dna.dominant_sector || 'none'}`);
 
         // Attach matching details to archetype for validation JSON
         archetype.matchScore = result.score;
@@ -207,7 +190,6 @@ class ArchetypeLoader {
             }
         }
 
-        console.log(`🎯 Matched archetype: ${bestMatch.name} (DNA v1.0, distance: ${minDistance.toFixed(2)})`);
 
         // Attach matching details to archetype for validation JSON
         bestMatch.matchDistance = minDistance;

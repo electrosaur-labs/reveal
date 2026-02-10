@@ -29,9 +29,6 @@ const { LABSliderSync } = require('./LABSliderSync');
  * @returns {Promise<Object>} Initialization result
  */
 async function initializeProxyMode(labPixels, width, height, config) {
-    console.log('[ProxyIntegration] Initializing proxy mode...');
-    console.log(`[ProxyIntegration] Source: ${width}x${height}, ${labPixels.length} elements`);
-
     const startTime = performance.now();
 
     try {
@@ -54,7 +51,6 @@ async function initializeProxyMode(labPixels, width, height, config) {
         const proxyEngine = new ProxyEngine();
 
         // 3. Initialize proxy (downsample + initial posterization)
-        console.log('[ProxyIntegration] Creating 512px proxy...');
         const proxyResult = await proxyEngine.initializeProxy(
             labPixels,
             width,
@@ -62,31 +58,20 @@ async function initializeProxyMode(labPixels, width, height, config) {
             config
         );
 
-        console.log(`[ProxyIntegration] ✓ Proxy initialized: ${proxyResult.dimensions.width}x${proxyResult.dimensions.height}, ${proxyResult.palette.length} colors`);
-
         // 4. Attach proxy to session state
         window.sessionState.proxyEngine = proxyEngine;
 
         // 5. Update preview canvas with initial result
-        console.log('[ProxyIntegration] Proxy result:', {
-            hasPreviewBuffer: !!proxyResult.previewBuffer,
-            bufferLength: proxyResult.previewBuffer?.length,
-            paletteLength: proxyResult.palette?.length,
-            dimensions: proxyResult.dimensions
-        });
-
         if (window.updatePreviewCanvas) {
             window.updatePreviewCanvas(proxyResult.previewBuffer, proxyResult);
         }
 
-        // 6. Initialize LAB slider sync (2-second polling, non-intrusive)
+        // 6. Initialize LAB slider sync (manual capture, non-intrusive)
         const labSync = new LABSliderSync();
         await labSync.initialize(window.sessionState);
         window.labSliderSync = labSync;
 
         const elapsed = performance.now() - startTime;
-        console.log(`[ProxyIntegration] ✓ Proxy mode active (${elapsed.toFixed(0)}ms)`);
-        console.log(`[ProxyIntegration] 🎨 Manual Capture ready - adjust LAB sliders, then click "Capture LAB Color"`);
 
         return {
             success: true,
@@ -107,10 +92,6 @@ async function initializeProxyMode(labPixels, width, height, config) {
  * @param {Object} proxyResult - Proxy result metadata
  */
 function updatePreviewCanvas(previewBuffer, proxyResult) {
-    console.log('[ProxyIntegration] Updating preview canvas...');
-    console.log('[ProxyIntegration] Preview buffer length:', previewBuffer?.length);
-    console.log('[ProxyIntegration] First 20 values:', previewBuffer?.slice(0, 20));
-
     const canvas = document.getElementById('previewCanvas');
     if (!canvas) {
         console.warn('[ProxyIntegration] Preview canvas not found');
@@ -118,10 +99,6 @@ function updatePreviewCanvas(previewBuffer, proxyResult) {
     }
 
     const ctx = canvas.getContext('2d');
-
-    // Debug: Check canvas element dimensions
-    console.log(`[ProxyIntegration] Canvas element dimensions: ${canvas.width}×${canvas.height}`);
-    console.log(`[ProxyIntegration] Canvas display size: ${canvas.offsetWidth}×${canvas.offsetHeight}`);
 
     // Get proxy dimensions from result or session state
     const width = proxyResult.dimensions?.width || window.sessionState?.proxyEngine?.separationState?.width;
@@ -136,25 +113,14 @@ function updatePreviewCanvas(previewBuffer, proxyResult) {
     if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
-        console.log(`[ProxyIntegration] Canvas resized to ${width}x${height}`);
     }
 
     // Clear canvas before redrawing
     ctx.clearRect(0, 0, width, height);
-    console.log(`[ProxyIntegration] Canvas cleared`);
-
-    // Sample first few pixels for debugging
-    console.log(`[ProxyIntegration] First pixel: R=${previewBuffer[0]} G=${previewBuffer[1]} B=${previewBuffer[2]} A=${previewBuffer[3]}`);
-    console.log(`[ProxyIntegration] Buffer length: ${previewBuffer.length} (expected: ${width * height * 4})`);
 
     // Draw pixels to canvas using scanline optimization
     // UXP doesn't support putImageData, so we use fillRect with horizontal runs
     // This is MUCH faster than pixel-by-pixel (typically 10-100x fewer draw calls)
-    const drawStart = performance.now();
-    console.log(`[ProxyIntegration] Drawing ${width}x${height} with scanline optimization...`);
-
-    let totalRuns = 0;
-
     for (let y = 0; y < height; y++) {
         let x = 0;
         while (x < width) {
@@ -182,15 +148,9 @@ function updatePreviewCanvas(previewBuffer, proxyResult) {
             ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
             ctx.fillRect(x, y, runLength, 1);
 
-            totalRuns++;
             x += runLength;
         }
     }
-
-    const drawTime = performance.now() - drawStart;
-    console.log(`[ProxyIntegration] ✓ Canvas drawn: ${totalRuns} runs in ${drawTime.toFixed(0)}ms (${(179200 / totalRuns).toFixed(1)}x compression)`);
-
-    console.log(`[ProxyIntegration] ✓ Preview updated (${proxyResult.elapsedMs?.toFixed(1) || '?'}ms)`);
 
     // Update performance indicator if available
     if (document.getElementById('proxyPerformance')) {
@@ -213,8 +173,6 @@ function updatePreviewCanvas(previewBuffer, proxyResult) {
  * Stop proxy mode and cleanup
  */
 function stopProxyMode() {
-    console.log('[ProxyIntegration] Stopping proxy mode...');
-
     if (window.labSliderSync) {
         window.labSliderSync.stop();
         window.labSliderSync = null;
@@ -223,8 +181,6 @@ function stopProxyMode() {
     if (window.sessionState) {
         window.sessionState.reset();
     }
-
-    console.log('[ProxyIntegration] ✓ Proxy mode stopped');
 }
 
 /**

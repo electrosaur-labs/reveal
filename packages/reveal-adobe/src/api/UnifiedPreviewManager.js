@@ -20,8 +20,6 @@ class UnifiedPreviewManager {
         this.zoomRenderer = null;
         this.zoomEventHandlers = [];
         this.fitRenderFn = null;
-
-        console.log('[UnifiedPreviewManager] Initialized');
     }
 
     /**
@@ -36,8 +34,6 @@ class UnifiedPreviewManager {
      */
     async setMode(mode) {
         if (mode === this.mode) return;
-
-        console.log(`[UnifiedPreviewManager] Switching from ${this.mode} to ${mode}`);
 
         if (mode === 'zoom') {
             await this.setupZoomMode();
@@ -58,8 +54,6 @@ class UnifiedPreviewManager {
     async setupZoomMode() {
         const { documentID, originalLayerID, docWidth, docHeight, bitDepth, separationData } =
             this.getMetadata();
-
-        console.log('[UnifiedPreviewManager] Setting up zoom mode...');
 
         this.zoomRenderer = new ZoomPreviewRenderer(
             this.container,
@@ -189,16 +183,12 @@ class UnifiedPreviewManager {
         this.zoomEventHandlers.forEach(({ element, type, handler }) => {
             element.addEventListener(type, handler, type === 'wheel' ? { passive: false } : false);
         });
-
-        console.log('[UnifiedPreviewManager] Attached zoom event handlers');
     }
 
     /**
      * Cleanup zoom mode
      */
     teardownZoomMode() {
-        console.log('[UnifiedPreviewManager] Tearing down zoom mode...');
-
         // Remove all event handlers
         this.zoomEventHandlers.forEach(({ element, type, handler }) => {
             element.removeEventListener(type, handler);
@@ -215,8 +205,6 @@ class UnifiedPreviewManager {
         }
 
         this.container.classList.remove('zoom-mode', 'panning');
-
-        console.log('[UnifiedPreviewManager] Zoom mode torn down');
     }
 
     /**
@@ -241,8 +229,6 @@ class UnifiedPreviewManager {
                 <option value="8">1:8 (Eighth Res)</option>
             `;
         }
-
-        console.log(`[UnifiedPreviewManager] Dropdown updated for ${this.mode} mode`);
     }
 
     /**
@@ -262,18 +248,11 @@ class UnifiedPreviewManager {
     async onDropdownChange(value) {
         const numValue = parseInt(value, 10);
 
-        if (this.mode === 'fit') {
-            // Fit mode: change stride (reassign pixels)
-            console.log(`[UnifiedPreviewManager] Changing stride to ${numValue}`);
-            // This is handled in index.js previewStride handler
-        } else {
+        if (this.mode === 'zoom' && this.zoomRenderer) {
             // Zoom mode: change resolution
-            console.log(`[UnifiedPreviewManager] Changing resolution to 1:${numValue}`);
-            if (this.zoomRenderer) {
-                const centerX = this.zoomRenderer.width / 2;
-                const centerY = this.zoomRenderer.height / 2;
-                await this.zoomRenderer.setResolutionAtPoint(numValue, centerX, centerY);
-            }
+            const centerX = this.zoomRenderer.width / 2;
+            const centerY = this.zoomRenderer.height / 2;
+            await this.zoomRenderer.setResolutionAtPoint(numValue, centerX, centerY);
         }
     }
 
@@ -281,7 +260,6 @@ class UnifiedPreviewManager {
      * Complete cleanup
      */
     destroy() {
-        console.log('[UnifiedPreviewManager] Destroying...');
         this.teardownZoomMode();
     }
 }

@@ -134,11 +134,6 @@ class PosterizationEngine {
             throw new Error(`Invalid centroid strategy: ${strategyName}`);
         }
 
-        logger.log(`\n=== Posterization Engine: ${engineType.toUpperCase()} ===`);
-        logger.log(`  Target colors: ${targetColors}`);
-        logger.log(`  Centroid Strategy: ${strategyName} (user-selected)`);
-        logger.log(`  Grid optimization: ${enableGridOptimization ? 'ON' : 'OFF'}`);
-        logger.log(`  Hue gap analysis: ${enableHueGapAnalysis ? 'ON' : 'OFF (respect exact color count)'}`);
 
         // Build tuning object from options if not provided
         // This allows presets to pass individual parameters (vibrancyBoost, highlightBoost, etc.)
@@ -169,8 +164,6 @@ class PosterizationEngine {
 
         // Log bitDepth source - either from passed tuning object or normalized from options
         const bitDepthSource = options.tuning ? 'tuning.centroid.bitDepth' : '_normalizeBitDepth(options.bitDepth)';
-        logger.log(`[Tuning] bitDepth: ${tuning.centroid.bitDepth} (source: ${bitDepthSource}, options.bitDepth=${options.bitDepth}, tuning provided=${!!options.tuning})`);
-        logger.log(`[Tuning] vibrancyMode: ${tuning.centroid.vibrancyMode}, vibrancyBoost: ${tuning.centroid.vibrancyBoost}`);
 
         // Dispatch to appropriate engine with strategy injection
         switch (engineType) {
@@ -261,7 +254,6 @@ class PosterizationEngine {
      * @returns {Object} - {pixels: Uint8ClampedArray, palette: Array<{r,g,b,count}>}
      */
     static _posterizeClassicRgb(pixels, width, height, colorCount, colorDistance = 'cielab') {
-        logger.log(`Posterizing ${width}x${height} image to ${colorCount} colors (distance: ${colorDistance})...`);
 
         // Validate inputs
         if (colorCount < 2 || colorCount > 16) {
@@ -274,18 +266,15 @@ class PosterizationEngine {
 
         // Extract unique colors and build color list
         const colorList = this._extractColors(pixels, width, height);
-        logger.log(`Extracted ${colorList.length} unique colors`);
 
         // If image already has fewer colors than requested, return as-is
         if (colorList.length <= colorCount) {
-            logger.log(`Image already has ${colorList.length} colors (≤ ${colorCount}), no quantization needed`);
             const palette = this._buildPalette(colorList);
             return { pixels: new Uint8ClampedArray(pixels), palette };
         }
 
         // Apply median cut algorithm to reduce colors
         const palette = this._medianCut(colorList, colorCount);
-        logger.log(`Median cut produced ${palette.length} colors`);
 
         // Map each pixel to nearest palette color
         const posterized = this._mapToPalette(pixels, width, height, palette, colorDistance);
@@ -305,15 +294,12 @@ class PosterizationEngine {
      * @returns {number} - Recommended palette size (3-10)
      */
     static analyzeOptimalColorCount(pixels, width, height) {
-        logger.log(`Analyzing image complexity for ${width}x${height} image...`);
 
         // Extract unique colors
         const colors = this._extractColors(pixels, width, height);
-        logger.log(`Found ${colors.length} unique colors`);
 
         // If very few colors, use them directly
         if (colors.length <= 3) {
-            logger.log(`Image has ≤3 colors, recommending 3-color palette`);
             return 3;
         }
 
@@ -323,7 +309,6 @@ class PosterizationEngine {
         const clusters = this._getDistinctColors(colorList, MIN_DISTANCE);
         const clusterCount = clusters.length;
 
-        logger.log(`Found ${clusterCount} distinct color clusters (MIN_DISTANCE=${MIN_DISTANCE} ΔE)`);
 
         // Map cluster count to palette size (tuned for screen printing workflow)
         let recommendedSize;
@@ -345,7 +330,6 @@ class PosterizationEngine {
             recommendedSize = 10; // Cap at screen printing maximum
         }
 
-        logger.log(`Recommending ${recommendedSize}-color palette (${clusterCount} clusters detected)`);
         return recommendedSize;
     }
 
@@ -416,18 +400,15 @@ class PosterizationEngine {
 
             if (distinctColors.length >= targetCount) {
                 // Success! We have enough distinct colors
-                logger.log(`Found ${distinctColors.length} distinct colors (target: ${targetCount}) after ${attempts} attempt(s)`);
                 // Return exactly targetCount colors (keep the most important ones)
                 return distinctColors.slice(0, targetCount);
             }
 
-            logger.log(`Attempt ${attempts}: Only ${distinctColors.length} distinct colors (target: ${targetCount}), splitting further...`);
         }
 
         // If we couldn't reach target after MAX_ATTEMPTS, return what we have
         const finalPalette = buckets.map(bucket => this._averageBucket(bucket));
         const distinctColors = this._getDistinctColors(finalPalette, MIN_DISTANCE);
-        logger.log(`After ${MAX_ATTEMPTS} attempts, returning ${distinctColors.length} distinct colors (target: ${targetCount})`);
         return distinctColors;
     }
 
@@ -471,7 +452,6 @@ class PosterizationEngine {
                 for (const sector of PROTECTED_SECTORS) {
                     if (this._checkBucketForHueSector(bucket, sector, 2)) {
                         priority *= HUE_PRIORITY_MULTIPLIER;
-                        logger.log(`[Green Rescue] 🌿 Found hue sector ${sector} in bucket ${index} - inflating priority ${HUE_PRIORITY_MULTIPLIER}×`);
                         break; // Only multiply once
                     }
                 }
@@ -558,7 +538,6 @@ class PosterizationEngine {
     static _applyDensityFloor(assignments, palette, threshold = 0.005, protectedIndices = new Set()) {
         // Input validation
         if (!assignments || !palette || palette.length === 0) {
-            logger.log('⚠️ Density floor: Invalid input, skipping');
             return { palette, assignments, actualCount: palette.length };
         }
 
@@ -576,7 +555,6 @@ class PosterizationEngine {
 
             // Validate index bounds
             if (idx < 0 || idx >= palette.length) {
-                logger.log(`⚠️ Density floor: Invalid assignment index ${idx} at pixel ${i}, skipping`);
                 continue;
             }
 
@@ -595,7 +573,6 @@ class PosterizationEngine {
                     viableIndices.push(i);
                 } else {
                     // Protected color with 0% coverage - remove it (creates empty mask)
-                    logger.log(`Pruning protected "Ghost" color: Index ${i} (Coverage: 0.00%) - no pixels assigned`);
                 }
                 return;
             }
@@ -604,7 +581,6 @@ class PosterizationEngine {
             if (coverage >= threshold) {
                 viableIndices.push(i);
             } else {
-                logger.log(`Pruning "Ghost" color: Index ${i} (Coverage: ${(coverage * 100).toPrecision(2)}%)`);
             }
         });
 
@@ -615,7 +591,6 @@ class PosterizationEngine {
 
         // Edge case: All colors pruned (shouldn't happen in practice)
         if (viableIndices.length === 0) {
-            logger.log('⚠️ Density floor: All colors pruned (edge case), keeping original palette');
             return { palette, assignments, actualCount: palette.length };
         }
 
@@ -1259,7 +1234,6 @@ class PosterizationEngine {
             b: sumB / count
         };
 
-        logger.log(`✓ Substrate detected: L=${detectedSubstrate.L.toFixed(1)} a=${detectedSubstrate.a.toFixed(1)} b=${detectedSubstrate.b.toFixed(1)}`);
 
         return detectedSubstrate;
     }
@@ -1397,14 +1371,11 @@ class PosterizationEngine {
             snapped.push(representative);
 
             if (featureGroup.length > 1) {
-                logger.log(`Perceptual snap: Merged ${featureGroup.length} colors at indices [${featureIndices.join(',')}] (ΔE < ${threshold})`);
             }
         }
 
         if (totalMerged > 0) {
-            logger.log(`✓ Perceptual snap: Collapsed ${totalMerged} similar colors (${palette.length} → ${snapped.length})`);
         } else {
-            logger.log(`✓ Perceptual snap: All colors distinct (no merging needed)`);
         }
 
         return snapped;
@@ -1552,7 +1523,6 @@ class PosterizationEngine {
 
         // Log when highlight boost is active
         if (highlightBoostValue > 1.0 && highlightBoostValue >= vibrancyBoost) {
-            logger.log(`[Highlight Protection] ✨ Bright area detected (L=${meanL.toFixed(1)}) - ${highlightBoostValue}× boost applied`);
         }
 
         const baseVariance = grayscaleOnly ? varL : (varL + varA + varB);
@@ -1607,21 +1577,18 @@ class PosterizationEngine {
             // Green colors have a < 0 in perceptual Lab space
             if (targetSectors.includes(sector)) {
                 greenCandidates++;
-                logger.log(`[Green Peek] Found color in sector ${sector}: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}, hue=${normHue.toFixed(0)}°`);
                 return true;
             }
 
             // ADDITIONAL CHECK: Any color with negative a* and positive b* is green-ish
             // This catches greens that might be classified in adjacent sectors
             if (c.a < -3 && c.b > 0 && chroma > 3) {
-                logger.log(`[Green Peek] Found green-axis color: L=${c.L.toFixed(1)}, a=${c.a.toFixed(1)}, b=${c.b.toFixed(1)}, chroma=${chroma.toFixed(1)}`);
                 return true;
             }
         }
 
         // Log diagnostic info if no green found
         if (lowChromaSkips > sampleSize * 0.8) {
-            logger.log(`[Green Peek] Box has mostly low-chroma colors (${lowChromaSkips}/${sampleSize} skipped, threshold=${chromaThreshold})`);
         }
 
         return false;
@@ -1684,18 +1651,14 @@ class PosterizationEngine {
         if (isArchiveMode) {
             if (!greenSector3Covered && !greenSector4Covered) {
                 // Check if box contains ANY green signals (sectors 3 or 4)
-                logger.log(`[Green Peek] Checking box with ${box.colors.length} colors (threshold=${GREEN_PEEK_THRESHOLD}, greenEnergy=${greenEnergy.toFixed(1)}%)`);
                 const hasGreenSignal = this._boxContainsHueSector(box.colors, [3, 4], GREEN_PEEK_THRESHOLD);
 
                 if (hasGreenSignal && greenEnergy > 0.1) {
                     multiplier = GREEN_PEEK_MULTIPLIER;
-                    logger.log(`[Green Peek] 🌿 Box contains hidden green signal (${greenEnergy.toFixed(1)}% image energy) - ${multiplier}× boost`);
                     return basePriority * multiplier;  // Early return with boost
                 } else if (hasGreenSignal) {
-                    logger.log(`[Green Peek] ⚠️ Green signal found but image greenEnergy too low (${greenEnergy.toFixed(1)}%)`);
                 }
             } else {
-                logger.log(`[Green Peek] Skipped - green sectors already covered (3:${greenSector3Covered}, 4:${greenSector4Covered})`);
             }
         }
 
@@ -1730,11 +1693,8 @@ class PosterizationEngine {
                 multiplier = sectorMultiplier;
 
                 if (isRedSector) {
-                    logger.log(`[Red Rescue] 🔴 Forcing split on Red bucket (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
                 } else if (isArchiveMode && isGreenSector) {
-                    logger.log(`[Green Rescue] 🌿 Forcing split on ${sectorNames[boxSector]} bucket (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
                 } else {
-                    logger.log(`[Hue Priority] ⭐ ${sectorNames[boxSector]} sector (${sourceEnergy.toFixed(1)}% energy) - ${multiplier}× boost`);
                 }
             }
         }
@@ -1780,17 +1740,14 @@ class PosterizationEngine {
         }
 
         const avgChroma = chromaCount > 0 ? chromaSum / chromaCount : 0;
-        logger.log(`[Hue Analysis] Analyzing ${totalPixels} total pixels, ${chromaCount} with chroma > ${CHROMA_THRESHOLD} (avg chroma: ${avgChroma.toFixed(1)})`)
 
         // Convert counts to percentages
         const huePercentages = hueCounts.map(count => (count / totalPixels) * 100);
 
-        logger.log(`[Hue Analysis] Image hue distribution (12 sectors, chroma > ${CHROMA_THRESHOLD}):`);
         const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
                             'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
         huePercentages.forEach((pct, idx) => {
             if (pct > 0.5) {  // Show all sectors with >0.5% presence
-                logger.log(`  ${sectorNames[idx].padEnd(9)}: ${pct.toFixed(1)}%`);
             }
         });
 
@@ -1814,7 +1771,6 @@ class PosterizationEngine {
         const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
                             'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
 
-        logger.log(`[Hue Analysis] Palette hue coverage:`);
         for (const color of palette) {
             const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
 
@@ -1825,7 +1781,6 @@ class PosterizationEngine {
                 const clampedIdx = Math.min(sectorIdx, 11);
                 coveredSectors.add(clampedIdx);
                 colorCountsBySector[clampedIdx]++;
-                logger.log(`  ${sectorNames[clampedIdx].padEnd(9)} (${hueNorm.toFixed(1)}°): L=${color.L.toFixed(1)}, a=${color.a.toFixed(1)}, b=${color.b.toFixed(1)}, C=${chroma.toFixed(1)}`);
             }
         }
 
@@ -1860,25 +1815,20 @@ class PosterizationEngine {
                 // Count how many palette colors are in this sector
                 const colorsInSector = paletteColorCountsBySector ? paletteColorCountsBySector[i] : 1;
                 if (colorsInSector < 2) {
-                    logger.log(`  ${sectorNames[i]}: ${imageHues[i].toFixed(1)}% of image but only ${colorsInSector} palette color(s) → needs more shades`);
                     gaps.push(i); // Add as gap to force second color
                 }
             }
         }
 
         if (gaps.length > 0) {
-            logger.log(`[Hue Analysis] ⚠️ Found ${gaps.length} hue gap(s):`);
             gaps.forEach(idx => {
                 if (paletteCoverage.has(idx)) {
                     // Density gap
-                    logger.log(`  ${sectorNames[idx]}: ${imageHues[idx].toFixed(1)}% of image, under-represented in palette (density gap)`);
                 } else {
                     // Complete gap
-                    logger.log(`  ${sectorNames[idx]}: ${imageHues[idx].toFixed(1)}% of image, 0 palette colors`);
                 }
             });
         } else {
-            logger.log(`[Hue Analysis] ✓ No hue gaps detected - palette covers all significant hue sectors`);
         }
 
         return gaps;
@@ -2021,7 +1971,6 @@ class PosterizationEngine {
         let pruned = [...paletteLab];
         let iteration = 0;
 
-        logger.log(`[Palette Pruning] Starting with ${pruned.length} colors, threshold: ΔE ${pruneThreshold.toFixed(1)}, hue lock: ${hueLock}°, shadow protect: L<${shadowProtect}, highlight protect: L>${highlightProtect}, target: ${targetCount}`);
 
         // HUE LOCK PROTECTION + SALIENCY-BASED PRUNING
         // Iterate through pairs, merging only when protection rules allow
@@ -2029,7 +1978,6 @@ class PosterizationEngine {
             for (let j = i + 1; j < pruned.length; j++) {
                 // STOP if we've reached target count
                 if (targetCount > 0 && pruned.length <= targetCount) {
-                    logger.log(`[Palette Pruning] ✓ Reached target count (${pruned.length}), stopping`);
                     return pruned;
                 }
 
@@ -2072,12 +2020,10 @@ class PosterizationEngine {
                     j--; // Adjust index after removal
                     iteration++;
 
-                    logger.log(`[Palette Pruning] Merge ${iteration}: ΔE ${dist.toFixed(1)}, kept saliency ${(s1 > s2 ? s1 : s2).toFixed(1)}`);
                 }
             }
         }
 
-        logger.log(`[Palette Pruning] ✓ Complete: ${paletteLab.length} → ${pruned.length} colors after ${iteration} merge(s)`);
 
         return pruned;
     }
@@ -2161,8 +2107,6 @@ class PosterizationEngine {
         }));
         const diagMap = new Map(gaps.map((gapIdx, i) => [gapIdx, diagnostics[i]]));
 
-        logger.log(`[Hue Gap Refinement] Scanning image for distinct colors in ${gaps.length} missing sector(s)...`);
-        logger.log(`  Thresholds: Chroma ≥ ${CHROMA_THRESHOLD}, ΔE ≥ ${DISTINCTNESS_THRESHOLD}`);
 
         // Scan image for high-chroma colors in missing sectors
         for (let i = 0; i < labPixels.length; i += 3) {
@@ -2216,20 +2160,13 @@ class PosterizationEngine {
         }
 
         // Output diagnostic information for each missing sector
-        logger.log(`[Hue Gap Diagnostics] Analysis complete:`);
         for (const diag of diagnostics) {
             const found = binSamples[sectorNames.indexOf(diag.sector)] !== null;
-            logger.log(`  ${diag.sector} (${diag.totalScanned} pixels scanned):`);
-            logger.log(`    - High chroma (≥${CHROMA_THRESHOLD}): ${diag.highChroma} pixels`);
-            logger.log(`    - Failed distinctness (ΔE <${DISTINCTNESS_THRESHOLD}): ${diag.failedDistinctness} pixels`);
             if (diag.candidates.length > 0) {
-                logger.log(`    - Sample candidates (top ${diag.candidates.length}):`);
                 for (const c of diag.candidates) {
                     const status = c.passed ? '✓' : '✗';
-                    logger.log(`      ${status} L=${c.L}, a=${c.a}, b=${c.b}, C=${c.chroma}, minΔE=${c.minΔE}`);
                 }
             }
-            logger.log(`    - Result: ${found ? '✓ Color found' : '✗ No suitable color'}`);
         }
 
         // Return only the vibrant, distinct missing hues (sorted by chroma)
@@ -2248,12 +2185,10 @@ class PosterizationEngine {
 
             if (coverage < MIN_HUE_COVERAGE) {
                 // This "gap" is just noise - not enough pixels to warrant a screen
-                logger.log(`  🗑️ Skipping ${sectorNames[gapIdx]} - below viability threshold (${diag.totalScanned} pixels, ${(coverage * 100).toFixed(3)}% < ${(MIN_HUE_COVERAGE * 100).toFixed(2)}%)`);
                 skippedForViability++;
                 continue;
             }
 
-            logger.log(`  ✓ Force-including ${sectorNames[gapIdx]}: L=${sample.L.toFixed(1)}, a=${sample.a.toFixed(1)}, b=${sample.b.toFixed(1)}, C=${sample.chroma.toFixed(1)} (ΔE ≥ ${DISTINCTNESS_THRESHOLD}, coverage: ${(coverage * 100).toFixed(2)}%)`);
             forcedColors.push({L: sample.L, a: sample.a, b: sample.b});
         }
 
@@ -2265,9 +2200,7 @@ class PosterizationEngine {
         });
 
         if (forcedColors.length === 0 && skippedForViability > 0) {
-            logger.log(`  ⚠️ All ${skippedForViability} gap candidate(s) below viability threshold - not worth burning screens for dust`);
         } else if (forcedColors.length === 0) {
-            logger.log(`  ⚠️ No distinct colors found - all candidates too similar to existing palette`);
         }
 
         return forcedColors;
@@ -2331,8 +2264,6 @@ class PosterizationEngine {
                     forcedColors.push({ L: bestLight.L, a: bestLight.a, b: bestLight.b });
                     forcedColors.push({ L: bestDark.L, a: bestDark.a, b: bestDark.b });
 
-                    logger.log(`  ✓ Force-including ${sectorNames[sectorIdx]} (LIGHT): L=${bestLight.L.toFixed(1)}, a=${bestLight.a.toFixed(1)}, b=${bestLight.b.toFixed(1)}, C=${maxChromaLight.toFixed(1)}`);
-                    logger.log(`  ✓ Force-including ${sectorNames[sectorIdx]} (DARK): L=${bestDark.L.toFixed(1)}, a=${bestDark.a.toFixed(1)}, b=${bestDark.b.toFixed(1)}, C=${maxChromaDark.toFixed(1)}`);
                 } else {
                     // Normal sector: Add ONE color
                     // STRATEGY: Pick color closest to sector CENTER with high chroma
@@ -2367,7 +2298,6 @@ class PosterizationEngine {
                     const bestHueNorm = bestHue < 0 ? bestHue + 360 : bestHue;
 
                     forcedColors.push({ L: best.L, a: best.a, b: best.b });
-                    logger.log(`  ✓ Force-including ${sectorNames[sectorIdx]}: L=${best.L.toFixed(1)}, a=${best.a.toFixed(1)}, b=${best.b.toFixed(1)}, C=${bestChroma.toFixed(1)}, H=${bestHueNorm.toFixed(1)}° (center: ${sectorCenterAngle}°)`);
                 }
             }
         }
@@ -2397,7 +2327,6 @@ class PosterizationEngine {
     static medianCutInLabSpace(labPixels, targetColors, grayscaleOnly = false, width = null, height = null, substrateLab = null, substrateTolerance = 3.5, vibrancyMode = 'aggressive', vibrancyBoost = 2.0, highlightThreshold = 92, highlightBoost = 3.0, strategy = null, tuning = null) {
         // DEBUG: Log tuning object to verify bitDepth is received
         const tunedBitDepth = tuning && tuning.centroid && tuning.centroid.bitDepth;
-        logger.log(`[MedianCut] Received tuning: bitDepth=${tunedBitDepth}, vibrancyMode=${vibrancyMode}`);
 
         // ARTIST-CENTRIC MODEL: Grid Sampling Optimization
         // Instead of scanning all 640,000 pixels, use stride 4 (every 4th pixel)
@@ -2434,7 +2363,6 @@ class PosterizationEngine {
             colors.sort((a, b) => a.L - b.L);
 
             const sampledPixels = Math.floor(totalPixels / GRID_STRIDE);
-            logger.log(`[MedianCut] Grayscale grid sampling (stride ${GRID_STRIDE}): ${totalPixels} pixels → ${sampledPixels} sampled → ${colors.length} unique L values`);
         } else {
             // Color mode: Deduplicate by full Lab triplet
             // Identical colors (same L, a, b) must be deduplicated to avoid zero variance
@@ -2488,10 +2416,8 @@ class PosterizationEngine {
 
             if (substrateLab && culledCount > 0) {
                 const percent = ((culledCount / sampledPixels) * 100).toFixed(1);
-                logger.log(`[MedianCut] ✓ Substrate culling: Excluded ${culledCount} substrate pixels (${percent}%)`);
             }
 
-            logger.log(`[MedianCut] Color grid sampling (stride ${GRID_STRIDE}): ${totalPixels} pixels → ${sampledPixels} sampled → ${colors.length} unique Lab colors`);
         }
 
         // DEBUG: Check Lab value ranges (avoid stack overflow with large arrays)
@@ -2509,8 +2435,6 @@ class PosterizationEngine {
                 if (colors[i].b > maxB) maxB = colors[i].b;
             }
 
-            logger.log(`[MedianCut] Lab ranges: L[${minL.toFixed(2)}, ${maxL.toFixed(2)}], a[${minA.toFixed(2)}, ${maxA.toFixed(2)}], b[${minB.toFixed(2)}, ${maxB.toFixed(2)}]`);
-            logger.log(`[MedianCut] Color count: ${colors.length}`);
 
             // Check for zero variance (all pixels identical)
             const rangeL = maxL - minL;
@@ -2554,11 +2478,9 @@ class PosterizationEngine {
             });
 
             const topBoxPriority = this._calculateSplitPriority(boxes[0], sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-            logger.log(`[MedianCut] Iteration ${splitIteration}: ${boxes.length} boxes, top priority ${topBoxPriority.toFixed(1)} (${boxes[0].colors.length} pixels)`);
 
             // If largest box has only 1 color, can't split further
             if (boxes[0].colors.length === 1) {
-                logger.log(`[MedianCut] Stopping: Largest box has only 1 pixel`);
                 break;
             }
 
@@ -2577,16 +2499,13 @@ class PosterizationEngine {
                     if (meta2.sector >= 0) coveredSectors.add(meta2.sector);
                 }
 
-                logger.log(`[MedianCut] ✓ Split successful: ${box.colors.length} → ${box1.colors.length} + ${box2.colors.length} pixels`);
             } else {
                 // Split failed, put box back
                 boxes.push(box);
-                logger.log(`[MedianCut] ✗ Split failed: No variance to split on`);
                 break;
             }
         }
 
-        logger.log(`[MedianCut] Final: ${boxes.length} boxes after ${splitIteration} iterations`);
 
         // GREEN-PRIORITY CENTROID: Check if we need to rescue green signals
         // If a box has significant green content, extract green-only centroid
@@ -2597,7 +2516,6 @@ class PosterizationEngine {
         const shouldRescueGreen = !grayscaleOnly && greenEnergy > GREEN_RESCUE_THRESHOLD && is16Bit;
 
         if (shouldRescueGreen) {
-            logger.log(`[Green Rescue] 🌿 Activating Green-Priority Centroid (green energy: ${greenEnergy.toFixed(1)}%)`);
         }
 
         // PRE-SCAN: Find the box with most green content for forced rescue
@@ -2616,7 +2534,6 @@ class PosterizationEngine {
                     return sector === 3 || sector === 4;  // Y-Green or Green
                 });
                 const greenRatio = box.colors.length > 0 ? greenColors.length / box.colors.length : 0;
-                logger.log(`[Green Rescue] Box ${idx} scan: ${greenColors.length} green pixels (${(greenRatio * 100).toFixed(1)}% of box)`);
 
                 if (greenColors.length > bestGreenCount) {
                     bestGreenCount = greenColors.length;
@@ -2626,7 +2543,6 @@ class PosterizationEngine {
             });
 
             if (bestGreenBoxIdx >= 0) {
-                logger.log(`[Green Rescue] Best green box: #${bestGreenBoxIdx} with ${bestGreenCount} green pixels (${(bestGreenRatio * 100).toFixed(1)}%)`);
             }
         }
 
@@ -2645,11 +2561,7 @@ class PosterizationEngine {
             if (filteredBoxes.length >= targetColors) {
                 boxes = filteredBoxes;
                 const filtered = originalBoxCount - boxes.length;
-                logger.log(`🔧 Isolation threshold: Filtered ${filtered} small clusters (< ${(isolationThreshold / 2500 * 100).toFixed(1)}% of pixels)`);
-                logger.log(`   Remaining boxes: ${boxes.length} (down from ${originalBoxCount})`);
             } else {
-                logger.log(`⚠️ Isolation threshold too aggressive: Would reduce ${originalBoxCount} boxes to ${filteredBoxes.length} (need ${targetColors})`);
-                logger.log(`   Keeping all ${originalBoxCount} boxes to ensure minimum palette size`);
             }
         }
 
@@ -2669,7 +2581,6 @@ class PosterizationEngine {
                 });
 
                 if (greenColors.length > 0) {
-                    logger.log(`[Green Rescue] ✅ Box ${idx}: FORCING green centroid from ${greenColors.length} pixels`);
                     return this._calculateLabCentroid(greenColors, grayscaleOnly, strategy, tuning);
                 }
             }
@@ -2818,7 +2729,6 @@ class PosterizationEngine {
             // So: threshold = 0.4 * targetSpacing * 1.73
             const threshold = 0.4 * targetSpacing * Math.sqrt(3.0);
 
-            logger.log(`  Calculated snap threshold: ΔE ${threshold.toFixed(2)} (L spacing: ${targetSpacing.toFixed(2)})`);
             return threshold;
         } else if (isGrayscale) {
             // Fallback for grayscale without L range info
@@ -2843,7 +2753,6 @@ class PosterizationEngine {
             const adaptiveThreshold = 0.4 * targetSpacing;
             const threshold = Math.min(baseThreshold, adaptiveThreshold);
 
-            logger.log(`  Calculated color snap threshold: ΔE ${threshold.toFixed(2)} (adaptive: ${adaptiveThreshold.toFixed(2)}, base: ${baseThreshold.toFixed(2)}, Lab diagonal: ${labDiagonal.toFixed(2)})`);
             return threshold;
         }
 
@@ -2899,7 +2808,6 @@ class PosterizationEngine {
         let densityFloor = options.densityFloor !== undefined ? options.densityFloor : 0.005;
 
         if (isLegacyV1Mode) {
-            logger.log(`🔧 LEGACY V1 MODE: CIE76 detected → Disabling Mk 1.5 "smart" features`);
             snapThreshold = 0.0;              // Kill perceptual snap
             enablePaletteReduction = false;   // Kill palette reduction
             preservedUnifyThreshold = 0.5;    // Kill white/black unification
@@ -2909,10 +2817,6 @@ class PosterizationEngine {
             options.preservedUnifyThreshold = preservedUnifyThreshold;
             options.densityFloor = densityFloor;
 
-            logger.log(`   snapThreshold: ${snapThreshold} (no merging)`);
-            logger.log(`   enablePaletteReduction: ${enablePaletteReduction}`);
-            logger.log(`   preservedUnifyThreshold: ${preservedUnifyThreshold} ΔE`);
-            logger.log(`   densityFloor: ${densityFloor} (disabled)`);
         }
 
 
@@ -2926,17 +2830,13 @@ class PosterizationEngine {
         const highlightBoost = options.highlightBoost !== undefined ? options.highlightBoost : 3.0;
 
         if (grayscaleOnly) {
-            logger.log(`Starting Lab-space posterization: ${targetColors} target colors (GRAYSCALE ONLY)`);
-            logger.log(`  Mode: Spot color separation workflow - quantizing L channel only (a=b=0)`);
         } else {
-            logger.log(`Starting Lab-space posterization: ${targetColors} target colors`);
         }
 
         const preserveList = [];
         if (preserveWhite) preserveList.push('white');
         if (preserveBlack) preserveList.push('black');
         if (preserveList.length > 0) {
-            logger.log(`  Preserve colors: ${preserveList.join(', ')} (excluded from quantization)`);
         }
 
         const startTime = performance.now();
@@ -2961,7 +2861,6 @@ class PosterizationEngine {
             // IMPORTANT: bitDepth tracks the ORIGINAL source bit depth (for decisions like
             // shadow/highlight gates), but the actual pixel data is ALWAYS 16-bit encoding.
 
-            logger.log(`✓ Using 16-bit Lab pixels (original source: ${sourceBitDepth}-bit → Float32 perceptual ranges)`);
             labPixels = new Float32Array(pixels.length);
 
             // 8-BIT PARITY FIX: Compensate for quantization error in 8-bit sources
@@ -2972,9 +2871,7 @@ class PosterizationEngine {
             const highlightThreshold = isEightBitSource ? 97.5 : 98.0;
 
             if (isEightBitSource) {
-                logger.log(`  8-bit source: Using expanded gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThreshold})`);
             } else {
-                logger.log(`  16-bit source: Using standard gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThreshold})`);
             }
 
             // 16-bit Lab constants (engine ONLY accepts 16-bit)
@@ -3036,13 +2933,9 @@ class PosterizationEngine {
                 maxB = Math.max(maxB, labPixels[i + 2]);
             }
 
-            logger.log(`✓ Converted ${pixels.length / 3} Lab pixels from 16-bit encoding to perceptual ranges (source was ${sourceBitDepth}-bit)`);
-            logger.log(`  RAW 16-bit values: L[${minLRaw}, ${maxLRaw}], a[${minARaw}, ${maxARaw}], b[${minBRaw}, ${maxBRaw}]`);
-            logger.log(`  PERCEPTUAL ranges after conversion: L[${minL.toFixed(2)}, ${maxL.toFixed(2)}], a[${minA.toFixed(2)}, ${maxA.toFixed(2)}], b[${minB.toFixed(2)}, ${maxB.toFixed(2)}]`);
         } else {
             // Legacy path: Convert RGB to Lab, checking alpha channel
             const ALPHA_THRESHOLD = 10; // Pixels with alpha < 10 are considered transparent
-            logger.log("Converting RGB → Lab...");
             labPixels = new Float32Array((pixels.length / 4) * 3);
 
             // 8-BIT PARITY FIX: Same thresholds apply to RGB sources
@@ -3090,10 +2983,8 @@ class PosterizationEngine {
 
             if (transparentPixels.size > 0) {
                 const percent = ((transparentPixels.size / (pixels.length / 4)) * 100).toFixed(1);
-                logger.log(`✓ Found ${transparentPixels.size} transparent pixels (${percent}%) - will exclude from quantization`);
             }
 
-            logger.log(`✓ Converted ${pixels.length / 4} pixels to Lab space`);
         }
 
         // Step 1.5: Separate preserved colors (white, black) from quantization
@@ -3160,7 +3051,6 @@ class PosterizationEngine {
 
             // Log black detection diagnostics
             if (preserveBlack && blackLSamples.length > 0) {
-                logger.log(`  Black pixel L values (sample): ${blackLSamples.slice(0, 10).join(', ')}`);
             }
 
             // Log preserved colors
@@ -3169,12 +3059,10 @@ class PosterizationEngine {
             // Log transparent pixels if present
             if (transparentPixels.size > 0) {
                 const percent = ((transparentPixels.size / totalPixels) * 100).toFixed(1);
-                logger.log(`✓ Excluded ${transparentPixels.size} transparent pixels (${percent}%)`);
             }
 
             preservedPixelMap.forEach((indices, colorName) => {
                 const percent = ((indices.size / totalPixels) * 100).toFixed(1);
-                logger.log(`✓ Preserved ${indices.size} ${colorName} pixels (${percent}%)`);
             });
 
             // Reserve palette slots for preserved colors (based on checkboxes, not detected pixels)
@@ -3184,10 +3072,7 @@ class PosterizationEngine {
 
             if (numPreserved > 0) {
                 actualTargetColors = targetColors - numPreserved;
-                logger.log(`  Reserved ${numPreserved} palette slot(s) for preserved colors`);
-                logger.log(`  Quantizing ${nonPreservedIndices.length} pixels to ${actualTargetColors} colors`);
             } else if (transparentPixels.size > 0) {
-                logger.log(`  Quantizing ${nonPreservedIndices.length} non-transparent pixels to ${actualTargetColors} colors`);
             }
         } else {
             // No preservation: all non-transparent pixels participate in quantization
@@ -3222,18 +3107,14 @@ class PosterizationEngine {
             } else if (options.substrateMode === 'white') {
                 // Force white paper substrate
                 substrateLab = { L: 100, a: 0, b: 0 };
-                logger.log(`✓ Using forced white substrate: L=100 a=0 b=0`);
             } else if (options.substrateMode === 'black') {
                 // Force black substrate (shirt, canvas, etc.)
                 substrateLab = { L: 0, a: 0, b: 0 };
-                logger.log(`✓ Using forced black substrate: L=0 a=0 b=0`);
             } else if (options.substrateLab) {
                 // Use provided substrate color (custom Lab values)
                 substrateLab = options.substrateLab;
-                logger.log(`✓ Using provided substrate: L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)}`);
             }
         } else if (isLabInput && substrateDisabled) {
-            logger.log(`Substrate detection: DISABLED (explicitly set to 'none')`);
         }
 
         // SUBSTRATE COMPENSATION: If substrate will be added, increase target by 1
@@ -3245,17 +3126,13 @@ class PosterizationEngine {
         let medianCutTarget = actualTargetColors;
         if (substrateLab) {
             medianCutTarget = actualTargetColors + 1;
-            logger.log(`  Substrate will be added → increasing median cut target: ${actualTargetColors} → ${medianCutTarget} colors`);
         }
 
         // Step 2: Run median cut in Lab space with substrate culling
         if (grayscaleOnly) {
-            logger.log("Running median cut on L channel only (ignoring a/b)...");
         } else {
             if (substrateLab) {
-                logger.log("Running median cut in Lab space with substrate-aware culling...");
             } else {
-                logger.log("Running median cut in Lab space...");
             }
         }
         const initialPaletteLab = this.medianCutInLabSpace(
@@ -3273,7 +3150,6 @@ class PosterizationEngine {
             options.strategy || null,
             options.tuning || null
         );
-        logger.log(`✓ Initial palette: ${initialPaletteLab.length} colors`);
 
         // Step 3: Detect grayscale and apply adaptive perceptual snap
         // "Luma-Aware" Perceptual Snapping per Architect guidance
@@ -3292,7 +3168,6 @@ class PosterizationEngine {
                 maxL = Math.max(maxL, labPixels[i]);
             }
             lRange = maxL - minL;
-            logger.log(`  L channel range: [${minL.toFixed(2)}, ${maxL.toFixed(2)}] = ${lRange.toFixed(2)}`);
         } else {
             // Color mode: Need full Lab space extent
             let minL = Infinity, maxL = -Infinity;
@@ -3314,8 +3189,6 @@ class PosterizationEngine {
                 bRange: maxB - minB
             };
 
-            logger.log(`  Lab space extent: L[${minL.toFixed(2)}, ${maxL.toFixed(2)}], a[${minA.toFixed(2)}, ${maxA.toFixed(2)}], b[${minB.toFixed(2)}, ${maxB.toFixed(2)}]`);
-            logger.log(`  Ranges: ΔL=${colorSpaceExtent.lRange.toFixed(2)}, Δa=${colorSpaceExtent.aRange.toFixed(2)}, Δb=${colorSpaceExtent.bRange.toFixed(2)}`);
         }
 
         const adaptiveThreshold = this._getAdaptiveSnapThreshold(
@@ -3327,14 +3200,8 @@ class PosterizationEngine {
         );
 
         if (grayscaleOnly) {
-            logger.log(`  Grayscale-only mode: Force a=b=0 for all palette colors`);
-            logger.log(`  Adaptive snap threshold: ΔE ${adaptiveThreshold.toFixed(1)}`);
         } else if (isGrayscale) {
-            logger.log(`✓ Grayscale image detected (chroma range: ${colorSpaceAnalysis.chromaRange.toFixed(2)})`);
-            logger.log(`  Adaptive snap threshold: ΔE ${adaptiveThreshold.toFixed(1)} (tightened for luma fidelity)`);
         } else {
-            logger.log(`  Color image (chroma range: ${colorSpaceAnalysis.chromaRange.toFixed(2)})`);
-            logger.log(`  Adaptive snap threshold: ΔE ${adaptiveThreshold.toFixed(1)}`);
         }
 
         let curatedPaletteLab = this.applyPerceptualSnap(
@@ -3345,7 +3212,6 @@ class PosterizationEngine {
             options.strategy || null,
             options.tuning || null
         );
-        logger.log(`✓ Curated palette: ${curatedPaletteLab.length} colors`);
 
         // ARCHITECT'S PALETTE REDUCTION: Prune colors that are too similar
         // User-configurable threshold (6.0-15.0 ΔE, default: 10.0)
@@ -3354,13 +3220,10 @@ class PosterizationEngine {
         if (enablePaletteReduction && curatedPaletteLab.length > targetColors) {
             const prunedPaletteLab = this._prunePalette(curatedPaletteLab, paletteReduction, highlightThreshold, targetColors, options.tuning || null);
             if (prunedPaletteLab.length < curatedPaletteLab.length) {
-                logger.log(`✓ Palette pruned: ${curatedPaletteLab.length} → ${prunedPaletteLab.length} colors (merged similar colors for screen printing)`);
                 curatedPaletteLab = prunedPaletteLab;
             }
         } else if (!enablePaletteReduction) {
-            logger.log(`✓ Palette reduction disabled by user`);
         } else {
-            logger.log(`✓ Palette at or below target (${curatedPaletteLab.length} ≤ ${targetColors}) - skipping pruning`);
         }
 
         // ARTIST-CENTRIC / HUE-AWARE MODEL: Check for hue gaps AFTER perceptual snap & pruning
@@ -3372,8 +3235,6 @@ class PosterizationEngine {
                 logger.warn(`   _allColors exists: ${!!initialPaletteLab._allColors}`);
                 logger.warn(`   _labPixels exists: ${!!initialPaletteLab._labPixels}`);
             } else {
-                logger.log(`\n[Hue-Aware Model] Analyzing palette for missing hue sectors...`);
-                logger.log(`[Hue Analysis] Data available: ${initialPaletteLab._allColors.length} unique colors, ${initialPaletteLab._labPixels.length / 3} total pixels`);
 
                 // Step 1: Analyze image hue distribution (12 sectors)
                 // MUTED IMAGE RESCUE: Use lower chroma threshold for exponential vibrancy mode
@@ -3382,7 +3243,6 @@ class PosterizationEngine {
 
                 // Step 2: Check which sectors the curated palette covers
                 const { coveredSectors, colorCountsBySector } = this._analyzePaletteHueCoverage(curatedPaletteLab, hueChromaThreshold);
-                logger.log(`[Hue Analysis] Curated palette covers ${coveredSectors.size}/12 hue sectors`);
 
                 // Step 3: Identify gaps (sectors with >2% image but 0 palette, OR >20% but only 1 color)
                 const gaps = this._identifyHueGaps(imageHues, coveredSectors, colorCountsBySector);
@@ -3402,11 +3262,8 @@ class PosterizationEngine {
                     if (availableSlots <= 0) {
                         // No slots available, but hue gap analysis is ENABLED
                         // Force-include gaps anyway (will exceed target count)
-                        logger.log(`[Hue Analysis] No available slots (${curatedPaletteLab.length} colors + ${numPreservedSlots} preserved = ${curatedPaletteLab.length + numPreservedSlots}/${actualTargetColors})`);
-                        logger.log(`[Hue Analysis] ⚠️ Will EXCEED target count to ensure hue diversity`);
                         gapsToFill = gaps; // Include ALL gaps (up to reasonable limit)
                         if (gapsToFill.length > 3) {
-                            logger.log(`[Hue Analysis] Limiting to top 3 gaps (found ${gaps.length})`);
                             gapsToFill = gaps.slice(0, 3); // Reasonable limit: max 3 extra colors
                         }
                     } else {
@@ -3415,10 +3272,7 @@ class PosterizationEngine {
                         const skippedGaps = gaps.length - gapsToFill.length;
 
                         if (skippedGaps > 0) {
-                            logger.log(`[Hue Analysis] Found ${gaps.length} gap(s) but only ${availableSlots} slot(s) available`);
-                            logger.log(`[Hue Analysis] Force-including top ${gapsToFill.length} gap(s) by priority...`);
                         } else {
-                            logger.log(`[Hue Analysis] Force-including ${gapsToFill.length} missing hue(s)...`);
                         }
                     }
 
@@ -3435,25 +3289,20 @@ class PosterizationEngine {
 
                         if (minDistanceFromPalette < MIN_GAP_DISTANCE) {
                             const chroma = Math.sqrt(candidate.a * candidate.a + candidate.b * candidate.b);
-                            logger.log(`  ✗ Rejected candidate (ΔE ${minDistanceFromPalette.toFixed(1)} < ${MIN_GAP_DISTANCE}): L=${candidate.L.toFixed(1)}, a=${candidate.a.toFixed(1)}, b=${candidate.b.toFixed(1)}, C=${chroma.toFixed(1)}`);
                             return false;
                         }
                         return true;
                     });
 
                     if (forcedColors.length === 0) {
-                        logger.log(`[Hue Analysis] No distinct colors found for gaps (all candidates < ΔE ${MIN_GAP_DISTANCE} from palette)`);
                     } else {
                         // Add forced colors to curated palette (AFTER snap, so they won't be merged)
                         curatedPaletteLab = curatedPaletteLab.concat(forcedColors);
-                        logger.log(`[Hue Analysis] ✓ Palette expanded: ${curatedPaletteLab.length - forcedColors.length} → ${curatedPaletteLab.length} colors (${candidateColors.length - forcedColors.length} candidates rejected)`);
 
                         // Re-check coverage
                         const { coveredSectors: newCoverage } = this._analyzePaletteHueCoverage(curatedPaletteLab);
-                        logger.log(`[Hue Analysis] Final palette covers ${newCoverage.size}/12 hue sectors\n`);
                     }
                 } else {
-                    logger.log(`[Hue Analysis] ✓ No hue gaps detected - palette covers all significant sectors\n`);
                 }
             }
         }
@@ -3489,14 +3338,11 @@ class PosterizationEngine {
 
                 if (existingMatch) {
                     const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteWhite);
-                    logger.log(`  🔗 White unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)}, threshold=${UNIFY_THRESHOLD})`);
                 } else {
                     preservedColors.push(absoluteWhite);
                     actuallyPreservedWhite = true;
-                    logger.log(`  + Added white to palette (${pixelCount} pixels, ${(coverage * 100).toFixed(2)}%)`);
                 }
             } else {
-                logger.log(`  🗑️ Skipped white - below viability threshold (${pixelCount} pixels, ${(coverage * 100).toFixed(3)}% < ${(MIN_PRESERVED_COVERAGE * 100).toFixed(1)}%)`);
             }
         }
         if (preserveBlack) {
@@ -3517,14 +3363,11 @@ class PosterizationEngine {
 
                 if (existingMatch) {
                     const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteBlack);
-                    logger.log(`  🔗 Black unified with existing color (L=${existingMatch.L.toFixed(1)}, ΔE=${deltaE.toFixed(1)}, threshold=${UNIFY_THRESHOLD})`);
                 } else {
                     preservedColors.push(absoluteBlack);
                     actuallyPreservedBlack = true;
-                    logger.log(`  + Added black to palette (${pixelCount} pixels, ${(coverage * 100).toFixed(2)}%)`);
                 }
             } else {
-                logger.log(`  🗑️ Skipped black - below viability threshold (${pixelCount} pixels, ${(coverage * 100).toFixed(3)}% < ${(MIN_PRESERVED_COVERAGE * 100).toFixed(1)}%)`);
             }
         }
 
@@ -3538,12 +3381,10 @@ class PosterizationEngine {
             // SHADOW GATE FOR SUBSTRATE: If substrate is too dark (L < 6), skip it.
             // Dark substrates are effectively black and we already have preserved black.
             if (substrateLab.L < 6.0) {
-                logger.log(`  ! Substrate (L=${substrateLab.L.toFixed(1)}) is too dark (L < 6) - skipping (Shadow Gate)`);
             }
             // HIGHLIGHT GATE FOR SUBSTRATE: If substrate is too bright (L > 98), skip it.
             // Bright substrates are effectively white/paper and we already have preserved white.
             else if (substrateLab.L > 98.0) {
-                logger.log(`  ! Substrate (L=${substrateLab.L.toFixed(1)}) is too bright (L > 98) - skipping (Highlight Gate)`);
             } else {
                 const DUPLICATE_THRESHOLD = 3.0; // ΔE threshold for considering colors identical
                 let isDuplicate = false;
@@ -3556,21 +3397,18 @@ class PosterizationEngine {
 
                     if (deltaE < DUPLICATE_THRESHOLD) {
                         isDuplicate = true;
-                        logger.log(`  ! Substrate (L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)}) is too similar to preserved color (ΔE=${deltaE.toFixed(2)}) - skipping to avoid duplicate`);
                         break;
                     }
                 }
 
                 if (!isDuplicate) {
                     substrateColors.push(substrateLab);
-                    logger.log(`  + Added substrate to palette: L=${substrateLab.L.toFixed(1)} a=${substrateLab.a.toFixed(1)} b=${substrateLab.b.toFixed(1)} (paper/medium)`);
                 }
             }
         }
 
         // Final palette: quantized colors + preserved colors + substrate
         let finalPaletteLab = [...curatedPaletteLab, ...preservedColors, ...substrateColors];
-        logger.log(`✓ Final palette: ${finalPaletteLab.length} colors (${curatedPaletteLab.length} quantized + ${preservedColors.length} preserved + ${substrateColors.length} substrate)`);
 
         // Step 4: Convert palette back to RGB
         let paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
@@ -3598,9 +3436,7 @@ class PosterizationEngine {
 
         if (useStride) {
             const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
-            logger.log(`Assigning pixels to palette (preview mode with ${ASSIGNMENT_STRIDE}× stride)...`);
         } else {
-            logger.log(`Assigning pixels to palette...`);
         }
 
         // STRIDE-AWARE 2D ASSIGNMENT (Optimized for UXP performance)
@@ -3708,10 +3544,8 @@ class PosterizationEngine {
 
         const endTime = performance.now();
         const duration = ((endTime - startTime) / 1000).toFixed(3);
-        logger.log(`✓ Lab-space posterization complete in ${duration}s`);
 
         if (finalPaletteLab.length < targetColors) {
-            logger.log(`ℹ Final palette: ${finalPaletteLab.length} colors (requested: ${targetColors})`);
         }
 
         // Apply density floor to remove ghost colors (<0.5% coverage by default)
@@ -3735,8 +3569,6 @@ class PosterizationEngine {
 
             if (densityResult.actualCount < finalPaletteLab.length) {
                 const removed = finalPaletteLab.length - densityResult.actualCount;
-                logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < ${(densityFloorThreshold * 100).toFixed(1)}% coverage`);
-                logger.log(`  Final palette: ${densityResult.actualCount} colors (down from ${finalPaletteLab.length})`);
 
                 // Use the cleaned palette and remapped assignments
                 finalPaletteLab = densityResult.palette;
@@ -3746,7 +3578,6 @@ class PosterizationEngine {
                 paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
             }
         } else {
-            logger.log(`✓ Density floor disabled (threshold: ${densityFloorThreshold})`);
         }
 
         // Track substrate index for UI filtering and layer identification
@@ -3798,14 +3629,12 @@ class PosterizationEngine {
      */
     static _posterizeRevealMk1_5(pixels, width, height, targetColors, options = {}) {
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_entry');
-        logger.log(`🔵 CHECKPOINT 1: Entering _posterizeRevealMk1_5`);
 
         // CIE76 LEGACY V1 MODE DETECTION (same as _posterizeReveal)
         const distanceMetric = options.distanceMetric || 'cie76';
         const isLegacyV1Mode = distanceMetric === 'cie76';
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_metric_parsed');
-        logger.log(`🔵 CHECKPOINT 2: distanceMetric=${distanceMetric}, isLegacyV1Mode=${isLegacyV1Mode}`);
 
         let snapThreshold = options.snapThreshold !== undefined ? options.snapThreshold : 8.0;
         let enablePaletteReduction = options.enablePaletteReduction !== undefined ? options.enablePaletteReduction : true;
@@ -3814,10 +3643,8 @@ class PosterizationEngine {
         let densityFloor = options.densityFloor !== undefined ? options.densityFloor : 0.005;
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_thresholds_set');
-        logger.log(`🔵 CHECKPOINT 3: Initial thresholds set`);
 
         if (isLegacyV1Mode) {
-            logger.log(`🔧 LEGACY V1 MODE (Mk 1.5): CIE76 detected → Disabling Mk 1.5 "smart" features`);
             snapThreshold = 0.0;              // Kill perceptual snap
             enablePaletteReduction = false;   // Kill palette reduction
             preservedUnifyThreshold = 0.5;    // Kill white/black unification
@@ -3830,14 +3657,9 @@ class PosterizationEngine {
             options.preservedUnifyThreshold = preservedUnifyThreshold;
             options.densityFloor = densityFloor;
 
-            logger.log(`   snapThreshold: ${snapThreshold} (no merging)`);
-            logger.log(`   enablePaletteReduction: ${enablePaletteReduction} (no pruning)`);
-            logger.log(`   preservedUnifyThreshold: ${preservedUnifyThreshold} (no white/black unification)`);
-            logger.log(`   densityFloor: ${densityFloor} (no ghost removal)`);
         }
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_legacy_mode_done');
-        logger.log(`🔵 CHECKPOINT 4: Legacy V1 mode processing complete`);
 
         const grayscaleOnly = options.grayscaleOnly !== undefined ? options.grayscaleOnly : false;
         const preserveWhite = options.preserveWhite !== undefined ? options.preserveWhite : false;
@@ -3848,50 +3670,38 @@ class PosterizationEngine {
         const highlightBoost = options.highlightBoost !== undefined ? options.highlightBoost : 3.0;
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_options_parsed');
-        logger.log(`🔵 CHECKPOINT 5: Options parsed`);
 
-        logger.log(`\n[Reveal Mk 1.5] Starting deterministic auto-quantizer: ${targetColors} target colors`);
-        logger.log(`  Mode: Automatic outlier detection + median cut`);
 
         const preserveList = [];
         if (preserveWhite) preserveList.push('white');
         if (preserveBlack) preserveList.push('black');
         if (preserveList.length > 0) {
-            logger.log(`  Preserve colors: ${preserveList.join(', ')}`);
         }
 
         const startTime = performance.now();
 
-        logger.log(`🔵 CHECKPOINT 6: Starting performance timer`);
 
         const isLabInput = options.format === 'lab';
         if (!isLabInput) {
             throw new Error('[Reveal Mk 1.5] Requires Lab input format (RGB not supported)');
         }
 
-        logger.log(`🔵 CHECKPOINT 7: Validated Lab input format`);
 
         const sourceBitDepth = options.bitDepth || 16;
         const isEightBitSource = sourceBitDepth <= 8;
 
-        logger.log(`🔵 CHECKPOINT 8: Bit depth=${sourceBitDepth}`);
 
         // Step 1: Convert to perceptual Lab space (reuse _posterizeReveal logic)
-        logger.log(`✓ Using 16-bit Lab pixels (original source: ${sourceBitDepth}-bit → Float32 perceptual ranges)`);
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_float32array');
-        logger.log(`🔵 CHECKPOINT 9: About to allocate Float32Array(${pixels.length})`);
         const labPixels = new Float32Array(pixels.length);
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_float32array_allocated');
-        logger.log(`🔵 CHECKPOINT 10: Float32Array allocated successfully`);
 
         const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
         const highlightThresholdGate = isEightBitSource ? 97.5 : 98.0;
 
         if (isEightBitSource) {
-            logger.log(`  8-bit source: Using expanded gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThresholdGate})`);
         } else {
-            logger.log(`  16-bit source: Using standard gates (Shadow L<${shadowThreshold}, Highlight L>${highlightThresholdGate})`);
         }
 
         const maxValue = 32768;
@@ -3899,7 +3709,6 @@ class PosterizationEngine {
         const abScale = 128 / 16384;
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_pixel_loop');
-        logger.log(`🔵 CHECKPOINT 11: Starting pixel conversion loop (${pixels.length / 3} pixels)`);
 
         for (let i = 0; i < pixels.length; i += 3) {
             labPixels[i] = (pixels[i] / maxValue) * 100;
@@ -3918,8 +3727,6 @@ class PosterizationEngine {
         }
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_pixel_loop_done');
-        logger.log(`🔵 CHECKPOINT 12: Pixel conversion loop complete`);
-        logger.log(`✓ Converted ${pixels.length / 3} Lab pixels to perceptual ranges`);
 
         // ========== [NEW] Hard Chromance Gate: Achromatic Purge ==========
         // Delete color data from low-chroma pixels (halftone noise suppression)
@@ -3927,7 +3734,6 @@ class PosterizationEngine {
 
         if (chromaGateThreshold > 0) {
             let purgedCount = 0;
-            logger.log(`\n[Hard Chromance Gate] Applying achromatic purge (C < ${chromaGateThreshold})`);
 
             for (let i = 0; i < labPixels.length; i += 3) {
                 const a = labPixels[i + 1];
@@ -3943,12 +3749,9 @@ class PosterizationEngine {
             }
 
             const purgedPercent = (purgedCount / (labPixels.length / 3)) * 100;
-            logger.log(`✓ Achromatic purge complete: ${purgedCount} pixels (${purgedPercent.toFixed(1)}%) converted to pure gray`);
-            logger.log(`  Goal: Make low-chroma halftone noise mathematically unable to join chromatic plates`);
         }
         // =================================================================
 
-        logger.log(`🔵 CHECKPOINT 13: Starting peak detection setup`);
 
         // ========== [NEW] Mk 1.5: Auto-detect OR use pre-defined anchors ==========
         // Extract PeakFinder parameters from options (set by archetype)
@@ -3964,11 +3767,9 @@ class PosterizationEngine {
         // Support both forcedCentroids (camelCase) and forced_centroids (snake_case)
         const forcedCentroidsInput = options.forcedCentroids || options.forced_centroids;
 
-        logger.log(`🔵 CHECKPOINT 14: forcedCentroidsInput=${forcedCentroidsInput ? forcedCentroidsInput.length : 'none'}`);
 
         if (forcedCentroidsInput && Array.isArray(forcedCentroidsInput) && forcedCentroidsInput.length > 0) {
             // Use pre-defined anchors from archetype (Golden Master mode)
-            logger.log(`\n[Reveal Mk 1.5] Using ${forcedCentroidsInput.length} pre-defined forced centroids from archetype`);
             try {
                 forcedCentroids = forcedCentroidsInput.map(anchor => {
                     const centroid = {
@@ -3976,13 +3777,11 @@ class PosterizationEngine {
                         a: Number(anchor.a),
                         b: Number(anchor.b)
                     };
-                    logger.log(`  Anchor: L=${centroid.L.toFixed(1)} a=${centroid.a.toFixed(1)} b=${centroid.b.toFixed(1)} (${anchor.name || 'UNNAMED'})`);
                     return centroid;
                 });
                 usedPredefinedAnchors = true;
             } catch (error) {
                 logger.error(`  ✗ Error parsing forcedCentroids: ${error.message}`);
-                logger.log(`  Falling back to auto-detection`);
             }
         }
 
@@ -3996,7 +3795,6 @@ class PosterizationEngine {
                 blacklistedSectors: peakFinderBlacklistedSectors
             });
 
-            logger.log(`  PeakFinder config: maxPeaks=${peakFinderMaxPeaks}, blacklist=[${peakFinderBlacklistedSectors.join(',')}], preferred=${peakFinderPreferredSectors ? '[' + peakFinderPreferredSectors.join(',') + ']' : 'none'}`);
 
             // Pass bitDepth for adaptive thresholds (8.0 for 16-bit, 15.0 for 8-bit)
             detectedPeaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: sourceBitDepth });
@@ -4008,19 +3806,16 @@ class PosterizationEngine {
                 b: peak.b
             }));
 
-            logger.log(`\n[Reveal Mk 1.5] Auto-detected ${forcedCentroids.length} identity peaks`);
         }
         // =============================================================
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_peak_detection_done');
-        logger.log(`🔵 CHECKPOINT 15: Peak detection complete, forcedCentroids=${forcedCentroids.length}`);
 
         // Step 1.5: Handle preserved colors (white/black)
         let preservedPixelMap = new Map();
         let nonPreservedIndices = [];
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_preserved_detection');
-        logger.log(`🔵 CHECKPOINT 16: Starting preserved colors detection`);
 
         const WHITE_L_MIN = 95;
         const BLACK_L_MAX = 10;
@@ -4056,7 +3851,6 @@ class PosterizationEngine {
         const totalPixels = labPixels.length / 3;
         preservedPixelMap.forEach((indices, colorName) => {
             const percent = ((indices.size / totalPixels) * 100).toFixed(1);
-            logger.log(`✓ Preserved ${indices.size} ${colorName} pixels (${percent}%)`);
         });
 
         // ========== [NEW] Slot reservation logic ==========
@@ -4067,14 +3861,8 @@ class PosterizationEngine {
         const numForced = forcedCentroids.length;
         const medianCutTarget = Math.max(1, targetColors - numForced - numPreserved);
 
-        logger.log(`\n[Slot Reservation]`);
-        logger.log(`  Total budget:      ${targetColors} colors`);
-        logger.log(`  Auto-anchors:      ${numForced} slots (identity peaks)`);
-        logger.log(`  Preserved colors:  ${numPreserved} slots`);
-        logger.log(`  Median cut budget: ${medianCutTarget} slots`);
         // ==================================================
 
-        logger.log(`🔵 CHECKPOINT 17: Extracting non-preserved pixels`);
 
         // Extract non-preserved pixels for quantization
         let nonPreservedLabPixels = labPixels;
@@ -4089,10 +3877,8 @@ class PosterizationEngine {
         }
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_median_cut');
-        logger.log(`🔵 CHECKPOINT 18: About to call medianCutInLabSpace with ${medianCutTarget} colors`);
 
         // Step 2: Run median cut with reduced target
-        logger.log(`\nRunning median cut in Lab space (${medianCutTarget} colors)...`);
         const initialPaletteLab = this.medianCutInLabSpace(
             nonPreservedLabPixels,
             medianCutTarget,
@@ -4109,8 +3895,6 @@ class PosterizationEngine {
             options.tuning || null
         );
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_median_cut_done');
-        logger.log(`🔵 CHECKPOINT 19: medianCutInLabSpace completed`);
-        logger.log(`✓ Initial palette: ${initialPaletteLab.length} colors`);
 
         // Step 3: Apply perceptual snap
         const colorSpaceAnalysis = this._analyzeColorSpace(labPixels);
@@ -4155,7 +3939,6 @@ class PosterizationEngine {
             colorSpaceExtent
         );
 
-        logger.log(`  Adaptive snap threshold: ΔE ${adaptiveThreshold.toFixed(1)}`);
 
         let snappedPaletteLab = this.applyPerceptualSnap(
             initialPaletteLab,
@@ -4165,19 +3948,16 @@ class PosterizationEngine {
             options.strategy || null,
             options.tuning || null
         );
-        logger.log(`✓ Snapped palette: ${snappedPaletteLab.length} colors`);
 
         // Step 4: Palette reduction (if over budget after snap)
         if (enablePaletteReduction && snappedPaletteLab.length > medianCutTarget) {
             const prunedPaletteLab = this._prunePalette(snappedPaletteLab, paletteReduction, highlightThreshold, medianCutTarget, options.tuning || null);
             if (prunedPaletteLab.length < snappedPaletteLab.length) {
-                logger.log(`✓ Palette pruned: ${snappedPaletteLab.length} → ${prunedPaletteLab.length} colors`);
                 snappedPaletteLab = prunedPaletteLab;
             }
         }
 
         // ========== [NEW] Anchor injection (after perceptual snap) ==========
-        logger.log(`\n[Anchor Injection]`);
         const mergedPalette = [...snappedPaletteLab];
         let addedCount = 0;
         let skippedCount = 0;
@@ -4189,15 +3969,12 @@ class PosterizationEngine {
             );
 
             if (isDuplicate) {
-                logger.log(`  ✗ Skipped peak (duplicate within ΔE ${anchorDuplicateThreshold})`);
                 skippedCount++;
             } else {
                 mergedPalette.push(forced);
-                logger.log(`  ✓ Added peak: L=${forced.L.toFixed(1)} a=${forced.a.toFixed(1)} b=${forced.b.toFixed(1)}`);
                 addedCount++;
             }
         }
-        logger.log(`  Summary: ${addedCount} peaks added, ${skippedCount} skipped (duplicates)`);
         // ====================================================================
 
         // Step 5: Add preserved colors (white/black)
@@ -4213,7 +3990,6 @@ class PosterizationEngine {
                 preservedColors.push({ L: 100, a: 0, b: 0 });
                 whiteIndex = mergedPalette.length + preservedColors.length - 1;
                 actuallyPreservedWhite = true;
-                logger.log(`✓ Added white to palette (index ${whiteIndex})`);
             }
         }
 
@@ -4223,12 +3999,10 @@ class PosterizationEngine {
                 preservedColors.push({ L: 0, a: 0, b: 0 });
                 blackIndex = mergedPalette.length + preservedColors.length - 1;
                 actuallyPreservedBlack = true;
-                logger.log(`✓ Added black to palette (index ${blackIndex})`);
             }
         }
 
         const finalPaletteLab = [...mergedPalette, ...preservedColors];
-        logger.log(`\n✓ Final palette before density floor: ${finalPaletteLab.length} colors`);
 
         // Step 6: Pixel assignment (with preview stride support)
         const paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
@@ -4243,9 +4017,7 @@ class PosterizationEngine {
 
         if (useStride) {
             const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
-            logger.log(`Assigning pixels to palette (preview mode with ${ASSIGNMENT_STRIDE}× stride)...`);
         } else {
-            logger.log(`Assigning pixels to palette...`);
         }
 
         const paletteLength = finalPaletteLab.length;
@@ -4325,7 +4097,6 @@ class PosterizationEngine {
 
         const endTime = performance.now();
         const duration = ((endTime - startTime) / 1000).toFixed(3);
-        logger.log(`\n✓ Reveal Mk 1.5 complete in ${duration}s`);
 
         // Apply density floor to remove ghost colors (<0.5% coverage by default)
         // Read densityFloor from options (default: 0.005 = 0.5%, Legacy V1: 0.0 = disabled)
@@ -4348,14 +4119,11 @@ class PosterizationEngine {
 
             if (densityResult.actualCount < finalPaletteLab.length) {
                 const removed = finalPaletteLab.length - densityResult.actualCount;
-                logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < ${(densityFloor * 100).toFixed(1)}% coverage`);
-                logger.log(`  Final palette: ${densityResult.actualCount} colors`);
 
                 finalPaletteLabFiltered = densityResult.palette;
                 assignmentsFiltered = densityResult.assignments;
             }
         } else {
-            logger.log(`✓ Density floor disabled (threshold: ${densityFloor})`);
         }
 
         const paletteRgbFiltered = finalPaletteLabFiltered.map(lab => this.labToRgb(lab));
@@ -4426,7 +4194,6 @@ class PosterizationEngine {
         // is done here for legacy compatibility. Engine still expects 16-bit Lab input.
         let rgbPixels;
         if (isLabInput) {
-            logger.log('Converting 16-bit Lab pixels to RGB for Classic engine...');
             rgbPixels = new Uint8ClampedArray((pixels.length / 3) * 4);
 
             // Engine ONLY accepts 16-bit Lab input
@@ -4504,8 +4271,6 @@ class PosterizationEngine {
 
         if (densityResult.actualCount < paletteLab.length) {
             const removed = paletteLab.length - densityResult.actualCount;
-            logger.log(`✓ Density floor: Removed ${removed} ghost color(s) with < 0.5% coverage`);
-            logger.log(`  Final palette: ${densityResult.actualCount} colors (down from ${paletteLab.length})`);
 
             // Use the cleaned palette and remapped assignments
             const cleanPaletteRgb = densityResult.palette.map(lab => this.labToRgb(lab));
@@ -4548,7 +4313,6 @@ class PosterizationEngine {
      * @returns {Object} - {palette, paletteLab, assignments, labPixels, metadata}
      */
     static _posterizeStencil(pixels, width, height, targetColors, options = {}) {
-        logger.log('Stencil engine: Quantizing L-channel only (a=b=0)');
 
         return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
             ...options,

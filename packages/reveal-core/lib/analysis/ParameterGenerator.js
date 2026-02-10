@@ -76,7 +76,6 @@ class DynamicConfigurator {
         );
 
         if (preprocessing.enabled) {
-            console.log(`🔧 Preprocessing: ${preprocessing.intensity} (${preprocessing.reason})`);
         }
 
         // 5. Build complete configuration
@@ -171,8 +170,6 @@ class DynamicConfigurator {
         const l_std_dev = dna.l_std_dev !== undefined ? dna.l_std_dev : 25;
         const meanC = dna.c || 0;
         const peakChroma = dna.maxC || meanC;
-        console.log(`🧬 DNA: L=${dna.l?.toFixed(1) || '?'} C=${meanC.toFixed(1)} σL=${l_std_dev.toFixed(1)} peakC=${peakChroma.toFixed(1)}`);
-        console.log(`🎯 Archetype: ${archetype.name} → ${config.ditherType}, blackBias=${config.blackBias}, ${config.targetColors} colors`);
 
         return config;
     }
@@ -282,19 +279,14 @@ class DynamicConfigurator {
             return; // Skip overrides for specialized archetypes
         }
 
-        console.log(`\n🧬 DNA v2.0 Trait Stack:`);
-        console.log(`   Archetype: ${archetype.name}`);
-        console.log(`   Dominant: ${dna.dominant_sector} (${((dna.sectors[dna.dominant_sector]?.weight || 0) * 100).toFixed(1)}%)`);
 
         // Access DNA v2.0 fields from global object if available, fallback to top-level
         const hue_entropy = dna.global?.hue_entropy ?? dna.hue_entropy;
         const temperature_bias = dna.global?.temperature_bias ?? dna.temperature_bias;
 
         if (hue_entropy !== undefined) {
-            console.log(`   Hue Entropy: ${hue_entropy.toFixed(3)}`);
         }
         if (temperature_bias !== undefined) {
-            console.log(`   Temperature: ${temperature_bias.toFixed(3)} (${temperature_bias > 0 ? 'warm' : 'cool'})`);
         }
 
         // LEVEL 2: DOMINANT SECTOR TRAIT (Surgical Overrides)
@@ -306,8 +298,6 @@ class DynamicConfigurator {
             if (dominantWeight > 0.2) {
                 const trait = this.getDominantSectorTrait(dna.dominant_sector);
                 if (trait) {
-                    console.log(`   🎯 Trait: ${trait.name}`);
-                    console.log(`      ${trait.purpose}`);
 
                     // Apply trait overrides (merge, don't replace)
                     Object.keys(trait.overrides).forEach(key => {
@@ -329,7 +319,6 @@ class DynamicConfigurator {
 
         // Low Entropy (< 0.3): Limited Palette - Focus on tonal ramps
         if (hue_entropy !== undefined && hue_entropy < 0.3) {
-            console.log(`   🎨 Limited Palette (entropy ${hue_entropy.toFixed(3)})`);
             params.lWeight = Math.max(params.lWeight || 1.2, 1.8);  // Prioritize lightness
             params.paletteReduction = Math.max(params.paletteReduction || 6.0, 8.0);  // Aggressive merging
             params.enableHueGapAnalysis = false;  // Don't force hue diversity
@@ -337,7 +326,6 @@ class DynamicConfigurator {
 
         // High Entropy (> 0.8): Rainbow Protection - Preserve diversity
         else if (hue_entropy !== undefined && hue_entropy > 0.8) {
-            console.log(`   🌈 High Diversity (entropy ${hue_entropy.toFixed(3)})`);
             params.enableHueGapAnalysis = true;  // Force hue gap detection
             params.paletteReduction = Math.min(params.paletteReduction || 6.0, 4.0);  // Gentler merging
         }
@@ -349,12 +337,10 @@ class DynamicConfigurator {
                             (dna.sectors?.azure?.weight || 0);
 
         if (coolPresence > 0.05 && temperature_bias !== undefined && temperature_bias > 0.5) {
-            console.log(`   ❄️ Cool Outlier Protection (${(coolPresence * 100).toFixed(1)}% cool in warm image)`);
             params.neutralSovereigntyThreshold = 0;  // Don't neutralize cool colors
             params.enableHueGapAnalysis = true;      // Force cool color slots
         }
 
-        console.log(''); // Blank line for readability
     }
 
     /**
@@ -372,7 +358,6 @@ class DynamicConfigurator {
             const originalCWeight = params.cWeight || 1.0;
             params.cWeight = originalCWeight * params.chromaGate;
 
-            console.log(`🎨 chromaGate: maxC=${dna.maxC.toFixed(1)} > ${highChromaThreshold}, cWeight: ${originalCWeight.toFixed(2)} → ${params.cWeight.toFixed(2)}`);
         }
     }
 

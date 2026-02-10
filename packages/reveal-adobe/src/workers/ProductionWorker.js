@@ -20,8 +20,6 @@ import { SeparationEngine } from '@reveal/core/engines/SeparationEngine.js';
 export async function renderProduction(payload, onProgress) {
     const { labPixels, width, height, config } = payload;
 
-    console.log(`[ProductionWorker] Starting production render: ${width}x${height}`);
-
     try {
         // Progress: Starting
         if (onProgress) onProgress(0.1);
@@ -56,8 +54,6 @@ export async function renderProduction(payload, onProgress) {
         );
 
         if (onProgress) onProgress(1.0);
-
-        console.log(`[ProductionWorker] Production render complete: ${finalResult.palette.length} colors`);
 
         return {
             palette: posterizeResult.labPalette,
@@ -123,8 +119,6 @@ async function applyPostProcessing(separateResult, posterizeResult, config) {
  * @private
  */
 async function applyMinVolumePruning(colorIndices, masks, palette, width, height, minVolumePercent) {
-    console.log(`[ProductionWorker] Applying minVolume: ${minVolumePercent}%`);
-
     const totalPixels = width * height;
     const minPixels = Math.round(totalPixels * minVolumePercent / 100);
 
@@ -146,11 +140,8 @@ async function applyMinVolumePruning(colorIndices, masks, palette, width, height
     });
 
     if (weakIndices.length === 0) {
-        console.log(`[ProductionWorker] No colors below threshold`);
         return { colorIndices, masks, palette };
     }
-
-    console.log(`[ProductionWorker] Pruning ${weakIndices.length} weak colors`);
 
     // Build remapping table
     const remapTable = new Array(palette.length);
@@ -213,8 +204,6 @@ async function applyMinVolumePruning(colorIndices, masks, palette, width, height
         newMasks[colorIdx][i] = 255;
     }
 
-    console.log(`[ProductionWorker] Pruned to ${newPalette.length} colors`);
-
     return {
         colorIndices: newColorIndices,
         masks: newMasks,
@@ -227,8 +216,6 @@ async function applyMinVolumePruning(colorIndices, masks, palette, width, height
  * @private
  */
 async function applySpeckleRescue(masks, width, height, radiusPixels) {
-    console.log(`[ProductionWorker] Applying speckleRescue: ${radiusPixels}px`);
-
     const erodedMasks = [];
 
     for (const mask of masks) {
@@ -244,8 +231,6 @@ async function applySpeckleRescue(masks, width, height, radiusPixels) {
  * @private
  */
 async function applyShadowClamp(masks, clampPercent) {
-    console.log(`[ProductionWorker] Applying shadowClamp: ${clampPercent}%`);
-
     const clampValue = Math.round(clampPercent * 255 / 100);
 
     const clampedMasks = masks.map(mask => {

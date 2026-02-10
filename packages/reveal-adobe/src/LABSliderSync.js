@@ -30,18 +30,12 @@ class LABSliderSync {
      * @param {SessionState} sessionState - Global session state
      */
     async initialize(sessionState) {
-        console.log('[LABSliderSync] Initializing Manual Capture mode...');
-
         this.sessionState = sessionState;
 
         try {
             // Force Photoshop Color Panel to LAB mode
             await this._forceColorPanelToLAB();
-
             this.isEnabled = true;
-            console.log('[LABSliderSync] ✓ Initialized - Manual capture ready');
-            console.log('[LABSliderSync] Adjust LAB sliders, then click "Capture LAB Color" to update palette');
-
         } catch (error) {
             console.error('[LABSliderSync] Initialization failed:', error);
             throw error;
@@ -54,7 +48,6 @@ class LABSliderSync {
     stop() {
         this.isEnabled = false;
         this.lastKnownLAB = null;
-        console.log('[LABSliderSync] Stopped');
     }
 
     /**
@@ -62,8 +55,6 @@ class LABSliderSync {
      * @private
      */
     async _forceColorPanelToLAB() {
-        console.log('[LABSliderSync] Forcing Color Panel to LAB mode...');
-
         const { core } = require('photoshop');
 
         try {
@@ -85,8 +76,6 @@ class LABSliderSync {
                 }], {});
             }, { commandName: "Set Color Panel to LAB" });
 
-            console.log('[LABSliderSync] ✓ Color Panel set to LAB mode');
-
         } catch (error) {
             // Fallback: try alternative method
             console.warn('[LABSliderSync] Primary method failed, trying alternative...');
@@ -106,8 +95,6 @@ class LABSliderSync {
                     }], {});
                 }, { commandName: "Set Foreground Color to LAB" });
 
-                console.log('[LABSliderSync] ✓ Color Panel forced to LAB via foreground color');
-
             } catch (fallbackError) {
                 console.error('[LABSliderSync] Both methods failed:', fallbackError);
                 throw fallbackError;
@@ -123,7 +110,6 @@ class LABSliderSync {
     async captureAndUpdatePalette() {
         // Guard against multiple simultaneous captures
         if (this.isCapturing) {
-            console.log('[LABSliderSync] Capture already in progress, ignoring...');
             return {
                 success: false,
                 error: 'Capture already in progress'
@@ -131,7 +117,6 @@ class LABSliderSync {
         }
 
         this.isCapturing = true;
-        console.log('[LABSliderSync] Capturing foreground LAB color...');
 
         if (!this.sessionState || !this.sessionState.proxyEngine) {
             this.isCapturing = false;
@@ -151,8 +136,6 @@ class LABSliderSync {
                     error: 'Could not read foreground color (ensure Color Panel is in LAB mode)'
                 };
             }
-
-            console.log(`[LABSliderSync] Captured: L=${labColor.L.toFixed(1)}, a=${labColor.a.toFixed(1)}, b=${labColor.b.toFixed(1)}`);
 
             // Update last known color
             this.lastKnownLAB = labColor;
@@ -183,31 +166,19 @@ class LABSliderSync {
      */
     async _getForegroundLAB() {
         try {
-            console.log('[LABSliderSync] Reading foreground color via direct property...');
-
-            // Try using app.foregroundColor directly instead of batchPlay
             const fgColor = app.foregroundColor;
-            console.log('[LABSliderSync] Foreground color object:', fgColor);
-            console.log('[LABSliderSync] Color properties:', Object.keys(fgColor || {}));
 
             if (!fgColor) {
                 console.warn('[LABSliderSync] No foreground color available');
                 return null;
             }
 
-            // Check what color model is available
             if (fgColor.lab) {
-                console.log('[LABSliderSync] Has lab property:', fgColor.lab);
                 return {
                     L: fgColor.lab.l || 0,
                     a: fgColor.lab.a || 0,
                     b: fgColor.lab.b || 0
                 };
-            }
-
-            // If RGB, log it for debugging
-            if (fgColor.rgb) {
-                console.log('[LABSliderSync] Only has RGB:', fgColor.rgb);
             }
 
             console.warn('[LABSliderSync] Foreground color does not have LAB values');
@@ -225,8 +196,6 @@ class LABSliderSync {
      * @private
      */
     async _handleColorChange(labColor) {
-        console.log('[LABSliderSync] Handling color change...');
-
         try {
             // Get current palette from proxy state
             const palette = this.sessionState.getCurrentPalette();
@@ -238,8 +207,6 @@ class LABSliderSync {
 
             // Find nearest color in palette
             const nearestIndex = this._findNearestColorIndex(palette, labColor);
-
-            console.log(`[LABSliderSync] Updating color ${nearestIndex} in palette`);
 
             // Update that color in palette
             const newPalette = [...palette];
@@ -254,11 +221,8 @@ class LABSliderSync {
                 paletteOverride: newPalette
             });
 
-            console.log(`[LABSliderSync] ✓ Color ${nearestIndex} updated`);
-
             // Update preview canvas with new preview buffer
             if (window.updatePreviewCanvas && proxyResult.previewBuffer) {
-                console.log(`[LABSliderSync] Updating preview canvas...`);
                 window.updatePreviewCanvas(proxyResult.previewBuffer, proxyResult);
             }
 
@@ -298,8 +262,6 @@ class LABSliderSync {
      * @param {Object} labColor - New LAB color {L, a, b}
      */
     async updatePaletteColor(colorIndex, labColor) {
-        console.log(`[LABSliderSync] Manual update: color ${colorIndex} → L=${labColor.L.toFixed(1)}, a=${labColor.a.toFixed(1)}, b=${labColor.b.toFixed(1)}`);
-
         const palette = this.sessionState.getCurrentPalette();
 
         if (!palette || colorIndex < 0 || colorIndex >= palette.length) {
@@ -313,8 +275,6 @@ class LABSliderSync {
         await this.sessionState.proxyEngine.updateProxy({
             paletteOverride: newPalette
         });
-
-        console.log('[LABSliderSync] ✓ Manual update complete');
     }
 }
 

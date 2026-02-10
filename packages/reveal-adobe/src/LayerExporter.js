@@ -19,8 +19,6 @@ export class LayerExporter {
      * @returns {Object} Verification report
      */
     async verifyProductionSync() {
-        console.log('[LayerExporter] Running Clean Handshake verification...');
-
         const verification = {
             passed: true,
             issues: []
@@ -106,9 +104,8 @@ export class LayerExporter {
             }
         }
 
-        console.log(`[LayerExporter] Verification ${verification.passed ? 'PASSED ✓' : 'FAILED ✗'}`);
         if (!verification.passed) {
-            console.error('[LayerExporter] Issues:', verification.issues);
+            console.error('[LayerExporter] Verification issues:', verification.issues);
         }
 
         return verification;
@@ -121,8 +118,6 @@ export class LayerExporter {
      */
     async exportToLayers(options = {}) {
         const { createComposite = true } = options;
-
-        console.log('[LayerExporter] Starting layer export...');
 
         // 1. Verification pass
         const verification = await this.verifyProductionSync();
@@ -171,8 +166,6 @@ export class LayerExporter {
             });
 
             layers.push(layer);
-
-            console.log(`[LayerExporter] Created layer: ${layerName}`);
         }
 
         // 5. Create composite reference layer (optional)
@@ -185,8 +178,6 @@ export class LayerExporter {
             );
             layers.push(composite);
         }
-
-        console.log(`[LayerExporter] Export complete: ${layers.length} layers created`);
 
         return {
             layers,
@@ -273,8 +264,6 @@ export class LayerExporter {
     async _createSolidColorLayer(layerName, labColor, maskData, width, height) {
         const { app, imaging } = require('photoshop');
 
-        console.log(`[LayerExporter] Creating layer: ${layerName}`);
-
         const doc = app.activeDocument;
 
         // 1. Create new layer
@@ -339,8 +328,6 @@ export class LayerExporter {
             imageData: psImageData,
             targetMask: true
         });
-
-        console.log(`[LayerExporter] Mask applied: ${width}x${height}`);
     }
 
     /**
@@ -410,8 +397,6 @@ export class LayerExporter {
                 layerDescription: metadataString
             }
         }], {});
-
-        console.log(`[LayerExporter] Metadata injected for layer: ${layer.name}`);
     }
 
     /**
@@ -421,8 +406,6 @@ export class LayerExporter {
     async _createCompositeLayer(palette, colorIndices, width, height) {
         const { app, imaging } = require('photoshop');
         const { PreviewEngine } = await import('@reveal/core/engines/PreviewEngine.js');
-
-        console.log('[LayerExporter] Creating composite preview layer...');
 
         // 1. Generate RGBA preview buffer
         const previewBuffer = PreviewEngine.generatePreview(
@@ -464,8 +447,6 @@ export class LayerExporter {
                 }
             }
         }], {});
-
-        console.log('[LayerExporter] Composite preview layer created');
 
         return compositeLayer;
     }

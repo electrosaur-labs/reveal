@@ -40,7 +40,6 @@ const ImageHeuristicAnalyzer = {
         }
 
         const is16Bit = bitDepth === 16;
-        logger.log(`[ImageHeuristicAnalyzer] Analyzing ${is16Bit ? '16-bit' : '8-bit'} Lab data`);
 
         // Set conversion constants based on bit depth
         // 8-bit:  L: 0-255 → 0-100, a/b: 0-255 (128=neutral)
@@ -82,13 +81,11 @@ const ImageHeuristicAnalyzer = {
             }
         }
 
-        logger.log("[ImageHeuristicAnalyzer] Stats:", stats);
 
         const result = this._matchSignature(stats);
         const elapsed = performance.now() - startTime;
 
         result.timing = elapsed;
-        logger.log(`[ImageHeuristicAnalyzer] Analysis completed in ${elapsed.toFixed(2)}ms`);
 
         return result;
     },
@@ -102,7 +99,6 @@ const ImageHeuristicAnalyzer = {
 
         // Deep shadow / noir detection
         if (hasSignificantInk) {
-            logger.log("[ImageHeuristicAnalyzer] Detected: Deep Shadow / Noir");
             return {
                 label: "Deep Shadow / Noir",
                 presetId: "deep-shadow-noir"
@@ -111,7 +107,6 @@ const ImageHeuristicAnalyzer = {
 
         // CASE C: The "Vibrant Graphic"
         if (stats.maxChroma > 45) {
-            logger.log("[ImageHeuristicAnalyzer] Detected: Vibrant Graphic (high chroma)");
             return {
                 label: "Vibrant Graphic",
                 presetId: "vibrant-graphic"
@@ -120,7 +115,6 @@ const ImageHeuristicAnalyzer = {
 
         // CASE D: High Key / Pastel
         if (stats.highlightCount / totalSamples > 0.5) {
-            logger.log("[ImageHeuristicAnalyzer] Detected: Pastel / High-Key (>50% highlights)");
             return {
                 label: "Pastel / High-Key",
                 presetId: "pastel-high-key"
@@ -128,7 +122,6 @@ const ImageHeuristicAnalyzer = {
         }
 
         // DEFAULT FALLBACK
-        logger.log("[ImageHeuristicAnalyzer] Detected: Standard Default");
         return {
             label: "Standard Default",
             presetId: "standard-image"

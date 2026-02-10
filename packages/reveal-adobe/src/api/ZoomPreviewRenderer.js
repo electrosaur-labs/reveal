@@ -49,9 +49,6 @@ class ZoomPreviewRenderer {
 
         // Solo mode support (highlight only one color)
         this.soloColorIndex = null;
-
-        console.log(`[ZoomRenderer] Viewport size: ${this.width}×${this.height}`);
-        console.log(`[ZoomRenderer] Document size: ${docWidth}×${docHeight}`);
     }
 
     /**
@@ -60,7 +57,6 @@ class ZoomPreviewRenderer {
      */
     setSoloColor(colorIndex) {
         this.soloColorIndex = colorIndex;
-        console.log(`[ZoomRenderer] Solo mode: ${colorIndex !== null ? `color ${colorIndex}` : 'off'}`);
     }
 
     /**
@@ -122,8 +118,6 @@ class ZoomPreviewRenderer {
             const componentSize = highQuality ? 16 : 8;
             const divisor = highQuality ? 32768 : 255; // Normalized Lab range
 
-            console.log(`[ZoomRenderer] Fetching ${componentSize}-bit viewport: (${left}, ${top}) to (${right}, ${bottom}), resolution 1:${this.resolution}`);
-
             this.activePixelData = await photoshop.core.executeAsModal(async () => {
                 return await photoshop.imaging.getPixels({
                     documentID: this.documentID,
@@ -137,8 +131,6 @@ class ZoomPreviewRenderer {
             const pixelBuffer = await this.activePixelData.imageData.getData({ chunky: true });
             const w = this.activePixelData.imageData.width;
             const h = this.activePixelData.imageData.height;
-
-            console.log(`[ZoomRenderer] ✓ Fetched ${w}×${h} pixels (${componentSize}-bit Lab)`);
 
             if (!this.lutReady) this.generateLUT();
 
@@ -223,12 +215,7 @@ class ZoomPreviewRenderer {
 
             // Return promise that resolves when swap is complete
             return new Promise((resolve, reject) => {
-                console.log(`[ZoomRenderer] Setting up image swap - nextImg: ${nextImg ? 'exists' : 'NULL'}, activeImg: ${activeImg ? 'exists' : 'NULL'}`);
-                console.log(`[ZoomRenderer] Next buffer: ${1 - this.activeIndex}, Active buffer: ${this.activeIndex}`);
-                console.log(`[ZoomRenderer] Base64 data length: ${base64Data ? base64Data.length : 0} chars`);
-
                 nextImg.onload = () => {
-                    console.log('[ZoomRenderer] Image onload fired!');
                     try {
                         // Set dimensions for the new image
                         nextImg.style.width = imgWidth;
@@ -246,8 +233,6 @@ class ZoomPreviewRenderer {
                         // Flip the active index
                         this.activeIndex = 1 - this.activeIndex;
 
-                        console.log(`[ZoomRenderer] ✓ Rendered ${w}×${h} at CSS scale ${cssScale} (${highQuality ? 'HQ' : 'Fast'}) [Buffer ${this.activeIndex}]`);
-
                         // If HQ pass finished, brighten badge then fade out
                         if (highQuality && this.hqBadge) {
                             this.hqBadge.style.opacity = '1';
@@ -262,7 +247,6 @@ class ZoomPreviewRenderer {
 
                         // If viewport changed while we were rendering, re-render at new position
                         if (this._renderDirty) {
-                            console.log('[ZoomRenderer] Viewport dirty - re-rendering at new position');
                             this._renderDirty = false;
                             this.fetchAndRender(false).catch(err => {
                                 console.error('[ZoomRenderer] Dirty re-render failed:', err);
@@ -270,7 +254,6 @@ class ZoomPreviewRenderer {
                         } else if (!highQuality) {
                             // Schedule high-quality upgrade only if viewport is stable
                             this.qualityTimeout = setTimeout(() => {
-                                console.log('[ZoomRenderer] Upgrading to 16-bit high-quality render...');
                                 this.fetchAndRender(true);
                             }, 500);
                         }
@@ -292,13 +275,11 @@ class ZoomPreviewRenderer {
                 };
 
                 // Trigger the load into hidden image
-                console.log('[ZoomRenderer] Setting src on nextImg...');
                 nextImg.src = base64Data;
-                console.log('[ZoomRenderer] Src set, waiting for onload...');
             });
 
         } catch (error) {
-            console.error("[ZoomRenderer] ❌ Render failed:", error);
+            console.error("[ZoomRenderer] Render failed:", error);
             // Hide badge on error
             if (this.hqBadge) {
                 this.hqBadge.style.display = 'none';
@@ -313,9 +294,6 @@ class ZoomPreviewRenderer {
         const palette = this.separationData.palette;
         const size = this.lutSize;
         const palLen = palette.length;
-
-        console.log(`[ZoomRenderer] Generating ${size}×${size}×${size} LUT for ${palLen} colors...`);
-        const startTime = performance.now();
 
         this.lut = new Uint8Array(size * size * size * 3);
 
@@ -349,8 +327,6 @@ class ZoomPreviewRenderer {
         }
 
         this.lutReady = true;
-        const elapsed = performance.now() - startTime;
-        console.log(`[ZoomRenderer] ✓ LUT generated in ${elapsed.toFixed(1)}ms`);
     }
 
     async setResolutionAtPoint(newRes, mouseX, mouseY) {

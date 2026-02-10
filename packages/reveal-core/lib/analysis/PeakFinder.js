@@ -68,15 +68,11 @@ class PeakFinder {
         // 8-bit data has quantization noise - use standard threshold (15.0)
         const adaptiveMinDeltaE = bitDepth === 16 ? 8.0 : this.minDeltaE;
 
-        logger.log(`\n[PeakFinder] Scanning for identity peaks...`);
-        logger.log(`  Criteria: C > ${chromaThreshold}, volume < ${(volumeThreshold * 100).toFixed(1)}%`);
-        logger.log(`  Isolation threshold: ΔE > ${adaptiveMinDeltaE} (${bitDepth}-bit source)`);
 
         const buckets = new Map();
         const totalPixels = labPixels.length / 3;
 
         // Stage 1: Spatial/Chromatic Perceptual Bucketing
-        logger.log(`  Stage 1: Bucketing high-chroma pixels (grid=${this.gridSize})`);
         for (let i = 0; i < labPixels.length; i += 3) {
             const L = labPixels[i];
             const a = labPixels[i + 1];
@@ -98,10 +94,8 @@ class PeakFinder {
             }
         }
 
-        logger.log(`  Found ${buckets.size} high-chroma buckets`);
 
         // Stage 2a: Separate candidates (low volume) from dominants (high volume)
-        logger.log(`  Stage 2a: Separating candidates from dominant colors`);
         const candidates = [];
         const dominantColors = [];
 
@@ -131,44 +125,35 @@ class PeakFinder {
             }
         }
 
-        logger.log(`  Found ${candidates.length} low-volume candidates, ${dominantColors.length} dominant colors`);
 
         // Stage 2b: Perceptual Isolation - Filter peaks too close to dominant tonal ramps
         // This prevents "Pink Shadow" noise from hijacking the blue anchor
-        logger.log(`  Stage 2b: Filtering by perceptual isolation (ΔE > ${adaptiveMinDeltaE})`);
         const isolatedCandidates = this._filterByIsolation(candidates, dominantColors, adaptiveMinDeltaE);
 
         if (isolatedCandidates.length < candidates.length) {
             const filtered = candidates.length - isolatedCandidates.length;
-            logger.log(`  ✗ Filtered ${filtered} candidate(s) too close to dominant colors (ΔE < ${adaptiveMinDeltaE})`);
         } else {
-            logger.log(`  ✓ All candidates are perceptually isolated from dominants`);
         }
 
         // Stage 2c: Sector Sanitization - Eliminate known 16-bit noise traps
         // Sectors 3-4 (green/yellow-green) are quantization artifacts in monochrome scans
-        logger.log(`  Stage 2c: Sector sanitization (blacklist: [${this.blacklistedSectors.join(', ')}])`);
         const sanitizedCandidates = this._filterByBlacklist(isolatedCandidates);
 
         if (sanitizedCandidates.length < isolatedCandidates.length) {
             const filtered = isolatedCandidates.length - sanitizedCandidates.length;
-            logger.log(`  ✗ Filtered ${filtered} candidate(s) in blacklisted sectors`);
         }
 
         // Stage 2d: Sector Preference - Enforce preferred sectors if specified
         let finalCandidates = sanitizedCandidates;
         if (this.preferredSectors && this.preferredSectors.length > 0) {
-            logger.log(`  Stage 2d: Applying sector preference (allow only: [${this.preferredSectors.join(', ')}])`);
             finalCandidates = this._filterByPreference(sanitizedCandidates);
 
             if (finalCandidates.length < sanitizedCandidates.length) {
                 const filtered = sanitizedCandidates.length - finalCandidates.length;
-                logger.log(`  ✗ Filtered ${filtered} candidate(s) not in preferred sectors`);
             }
         }
 
         // Stage 3: Sector-Weighted Saliency + Sort by boosted score
-        logger.log(`  Stage 3: Applying sector-weighted saliency (blue priority)`);
 
         // Apply "Interest Boost" to blue sectors (8-9) to outrank noise
         // This ensures blue details (Monroe eyes) win even if pink has higher chroma
@@ -178,7 +163,6 @@ class PeakFinder {
             const score = peak.chroma * interestBoost;
 
             if (isBlueSpectrum) {
-                logger.log(`    ⭐ Blue sector boost (sector ${peak.sector}): C=${peak.chroma.toFixed(1)} × ${interestBoost} = ${score.toFixed(1)}`);
             }
 
             return { ...peak, score };
@@ -189,11 +173,9 @@ class PeakFinder {
             .sort((a, b) => b.score - a.score)
             .slice(0, maxPeaks);
 
-        logger.log(`  Selected top ${topPeaks.length} identity peaks by saliency score`);
 
         topPeaks.forEach((peak, i) => {
             const boost = (peak.sector === 8 || peak.sector === 9) ? ' [BLUE BOOST]' : '';
-            logger.log(`    Peak ${i + 1}: L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)}, C=${peak.chroma.toFixed(1)}, score=${peak.score.toFixed(1)}, vol=${(peak.volume * 100).toFixed(2)}%${boost}`);
         });
 
         return topPeaks;
@@ -250,7 +232,6 @@ class PeakFinder {
             const isIsolated = minDistance > minDeltaE;
 
             if (!isIsolated) {
-                logger.log(`    ✗ Peak L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)} too close to dominant (ΔE=${minDistance.toFixed(1)})`);
             }
 
             return isIsolated;
@@ -293,7 +274,6 @@ class PeakFinder {
             const isBlacklisted = this.blacklistedSectors.includes(peak.sector);
 
             if (isBlacklisted) {
-                logger.log(`    ✗ Skipping sector ${peak.sector} (Noise Blacklist) - L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)}`);
             }
 
             return !isBlacklisted;
@@ -320,7 +300,6 @@ class PeakFinder {
             const isPreferred = this.preferredSectors.includes(peak.sector);
 
             if (!isPreferred) {
-                logger.log(`    ✗ Skipping sector ${peak.sector} (Not in preference list) - L=${peak.L.toFixed(1)} a=${peak.a.toFixed(1)} b=${peak.b.toFixed(1)}`);
             }
 
             return isPreferred;

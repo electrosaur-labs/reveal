@@ -100,15 +100,12 @@ function analyzeImageHueSectors(labPixels) {
     }
 
     const avgChroma = chromaCount > 0 ? chromaSum / chromaCount : 0;
-    logger.log(`[Hue Analysis] Analyzing ${totalPixels} total pixels, ${chromaCount} with chroma > ${DEFAULT_CHROMA_THRESHOLD} (avg chroma: ${avgChroma.toFixed(1)})`);
 
     // Convert counts to percentages
     const huePercentages = hueCounts.map(count => (count / totalPixels) * 100);
 
-    logger.log(`[Hue Analysis] Image hue distribution (12 sectors, chroma > ${DEFAULT_CHROMA_THRESHOLD}):`);
     huePercentages.forEach((pct, idx) => {
         if (pct > 0.5) {  // Show all sectors with >0.5% presence
-            logger.log(`  ${SECTOR_NAMES[idx].padEnd(9)}: ${pct.toFixed(1)}%`);
         }
     });
 
@@ -127,7 +124,6 @@ function analyzePaletteHueCoverage(palette) {
     const coveredSectors = new Set();
     const colorCountsBySector = new Array(12).fill(0); // Count colors per sector
 
-    logger.log(`[Hue Analysis] Palette hue coverage:`);
     for (const color of palette) {
         const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
 
@@ -138,7 +134,6 @@ function analyzePaletteHueCoverage(palette) {
             const clampedIdx = Math.min(sectorIdx, 11);
             coveredSectors.add(clampedIdx);
             colorCountsBySector[clampedIdx]++;
-            logger.log(`  ${SECTOR_NAMES[clampedIdx].padEnd(9)} (${hueNorm.toFixed(1)}°): L=${color.L.toFixed(1)}, a=${color.a.toFixed(1)}, b=${color.b.toFixed(1)}, C=${chroma.toFixed(1)}`);
         }
     }
 
@@ -172,25 +167,20 @@ function identifyHueGaps(imageHues, paletteCoverage, paletteColorCountsBySector 
             // Count how many palette colors are in this sector
             const colorsInSector = paletteColorCountsBySector ? paletteColorCountsBySector[i] : 1;
             if (colorsInSector < 2) {
-                logger.log(`  ${SECTOR_NAMES[i]}: ${imageHues[i].toFixed(1)}% of image but only ${colorsInSector} palette color(s) → needs more shades`);
                 gaps.push(i); // Add as gap to force second color
             }
         }
     }
 
     if (gaps.length > 0) {
-        logger.log(`[Hue Analysis] ⚠️ Found ${gaps.length} hue gap(s):`);
         gaps.forEach(idx => {
             if (paletteCoverage.has(idx)) {
                 // Density gap
-                logger.log(`  ${SECTOR_NAMES[idx]}: ${imageHues[idx].toFixed(1)}% of image, under-represented in palette (density gap)`);
             } else {
                 // Complete gap
-                logger.log(`  ${SECTOR_NAMES[idx]}: ${imageHues[idx].toFixed(1)}% of image, 0 palette colors`);
             }
         });
     } else {
-        logger.log(`[Hue Analysis] ✓ No hue gaps detected - palette covers all significant hue sectors`);
     }
 
     return gaps;
@@ -234,8 +224,6 @@ function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
     }));
     const diagMap = new Map(gaps.map((gapIdx, i) => [gapIdx, diagnostics[i]]));
 
-    logger.log(`[Hue Gap Refinement] Scanning image for distinct colors in ${gaps.length} missing sector(s)...`);
-    logger.log(`  Thresholds: Chroma ≥ ${CHROMA_THRESH}, ΔE ≥ ${DISTINCTNESS_THRESHOLD}`);
 
     // Scan image for high-chroma colors in missing sectors
     for (let i = 0; i < labPixels.length; i += 3) {
@@ -289,20 +277,13 @@ function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
     }
 
     // Output diagnostic information for each missing sector
-    logger.log(`[Hue Gap Diagnostics] Analysis complete:`);
     for (const diag of diagnostics) {
         const found = binSamples[SECTOR_NAMES.indexOf(diag.sector)] !== null;
-        logger.log(`  ${diag.sector} (${diag.totalScanned} pixels scanned):`);
-        logger.log(`    - High chroma (≥${CHROMA_THRESH}): ${diag.highChroma} pixels`);
-        logger.log(`    - Failed distinctness (ΔE <${DISTINCTNESS_THRESHOLD}): ${diag.failedDistinctness} pixels`);
         if (diag.candidates.length > 0) {
-            logger.log(`    - Sample candidates (top ${diag.candidates.length}):`);
             for (const c of diag.candidates) {
                 const status = c.passed ? '✓' : '✗';
-                logger.log(`      ${status} L=${c.L}, a=${c.a}, b=${c.b}, C=${c.chroma}, minΔE=${c.minΔE}`);
             }
         }
-        logger.log(`    - Result: ${found ? '✓ Color found' : '✗ No suitable color'}`);
     }
 
     // Return only the vibrant, distinct missing hues (sorted by chroma)
@@ -321,12 +302,10 @@ function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
 
         if (coverage < MIN_HUE_COVERAGE) {
             // This "gap" is just noise - not enough pixels to warrant a screen
-            logger.log(`  🗑️ Skipping ${SECTOR_NAMES[gapIdx]} - below viability threshold (${diag.totalScanned} pixels, ${(coverage * 100).toFixed(3)}% < ${(MIN_HUE_COVERAGE * 100).toFixed(2)}%)`);
             skippedForViability++;
             continue;
         }
 
-        logger.log(`  ✓ Force-including ${SECTOR_NAMES[gapIdx]}: L=${sample.L.toFixed(1)}, a=${sample.a.toFixed(1)}, b=${sample.b.toFixed(1)}, C=${sample.chroma.toFixed(1)} (ΔE ≥ ${DISTINCTNESS_THRESHOLD}, coverage: ${(coverage * 100).toFixed(2)}%)`);
         forcedColors.push({L: sample.L, a: sample.a, b: sample.b});
     }
 
@@ -338,9 +317,7 @@ function findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
     });
 
     if (forcedColors.length === 0 && skippedForViability > 0) {
-        logger.log(`  ⚠️ All ${skippedForViability} gap candidate(s) below viability threshold - not worth burning screens for dust`);
     } else if (forcedColors.length === 0) {
-        logger.log(`  ⚠️ No distinct colors found - all candidates too similar to existing palette`);
     }
 
     return forcedColors;
@@ -401,8 +378,6 @@ function forceIncludeHueGaps(colors, gaps, imageHues = null) {
                 forcedColors.push({ L: bestLight.L, a: bestLight.a, b: bestLight.b });
                 forcedColors.push({ L: bestDark.L, a: bestDark.a, b: bestDark.b });
 
-                logger.log(`  ✓ Force-including ${SECTOR_NAMES[sectorIdx]} (LIGHT): L=${bestLight.L.toFixed(1)}, a=${bestLight.a.toFixed(1)}, b=${bestLight.b.toFixed(1)}, C=${maxChromaLight.toFixed(1)}`);
-                logger.log(`  ✓ Force-including ${SECTOR_NAMES[sectorIdx]} (DARK): L=${bestDark.L.toFixed(1)}, a=${bestDark.a.toFixed(1)}, b=${bestDark.b.toFixed(1)}, C=${maxChromaDark.toFixed(1)}`);
             } else {
                 // Normal sector: Add ONE color
                 // STRATEGY: Pick color closest to sector CENTER with high chroma
@@ -437,7 +412,6 @@ function forceIncludeHueGaps(colors, gaps, imageHues = null) {
                 const bestHueNorm = bestHue < 0 ? bestHue + 360 : bestHue;
 
                 forcedColors.push({ L: best.L, a: best.a, b: best.b });
-                logger.log(`  ✓ Force-including ${SECTOR_NAMES[sectorIdx]}: L=${best.L.toFixed(1)}, a=${best.a.toFixed(1)}, b=${best.b.toFixed(1)}, C=${bestChroma.toFixed(1)}, H=${bestHueNorm.toFixed(1)}° (center: ${sectorCenterAngle}°)`);
             }
         }
     }

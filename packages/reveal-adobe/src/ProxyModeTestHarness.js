@@ -25,8 +25,6 @@ class ProxyModeTestHarness {
      * Attach test harness to existing UI
      */
     static attach() {
-        console.log('[ProxyModeTestHarness] Attaching test harness...');
-
         // Add test button to main dialog (after btnPosterize)
         const btnPosterize = document.getElementById('btnPosterize');
         if (!btnPosterize) {
@@ -113,16 +111,12 @@ class ProxyModeTestHarness {
 
         canvasContainer.appendChild(canvas);
         btnPosterize.parentElement.insertBefore(canvasContainer, btnPosterize.nextSibling);
-
-        console.log('[ProxyModeTestHarness] ✓ Test harness attached');
     }
 
     /**
      * Run proxy mode test
      */
     static async runProxyTest() {
-        console.log('[ProxyModeTestHarness] Starting proxy mode test...');
-
         const btnTestProxy = document.getElementById('btnTestProxy');
         const btnStopProxy = document.getElementById('btnStopProxy');
 
@@ -132,36 +126,20 @@ class ProxyModeTestHarness {
             btnTestProxy.textContent = 'Initializing...';
             this.showStatus('Reading document...', 'info');
 
-            // 1. Get document info for debugging
+            // 1. Get document info
             const { app } = require('photoshop');
             const doc = app.activeDocument;
-
-            console.log('[ProxyModeTestHarness] Document info:');
-            console.log('  mode:', doc.mode);
-            console.log('  mode type:', typeof doc.mode);
-            console.log('  bitsPerChannel:', doc.bitsPerChannel);
-            console.log('  dimensions:', doc.width, 'x', doc.height);
-            console.log('  layers:', doc.layers?.length);
 
             // Validate document
             const validation = PhotoshopAPI.validateDocument();
 
-            console.log('[ProxyModeTestHarness] Validation result:', validation);
-
             if (!validation.valid) {
-                // Show error but continue anyway for debugging
                 this.showStatus('⚠️ Validation warning (continuing anyway): ' + validation.errors[0], 'warning');
-                console.warn('[ProxyModeTestHarness] Validation errors (bypassing for debug):', validation.errors);
-
-                // Check if it's actually a Lab document by trying to read pixels
-                console.log('[ProxyModeTestHarness] Attempting to read pixels anyway...');
             }
 
             // 2. Read document pixels at 512px (matches proxy resolution)
             this.showStatus('Reading pixels (512px)...', 'info');
             const pixelData = await PhotoshopAPI.getDocumentPixels(512, 512);
-
-            console.log(`[ProxyModeTestHarness] Read ${pixelData.width}x${pixelData.height} pixels`);
 
             // 3. Get current form values for config
             const config = this.getTestConfig();
@@ -190,33 +168,15 @@ class ProxyModeTestHarness {
             const perfContainer = document.getElementById('proxyPerformanceContainer');
             const previewContainer = document.getElementById('proxyPreviewContainer');
 
-            console.log('[ProxyModeTestHarness] perfContainer exists?', !!perfContainer);
-            console.log('[ProxyModeTestHarness] previewContainer exists?', !!previewContainer);
-
             if (perfContainer) perfContainer.style.display = 'block';
-            if (previewContainer) {
-                previewContainer.style.display = 'block';
-                console.log('[ProxyModeTestHarness] Preview container display set to block');
-            }
+            if (previewContainer) previewContainer.style.display = 'block';
 
             // Open Photoshop Color Panel (if possible)
             try {
                 await this.openColorPanel();
             } catch (e) {
-                console.warn('[ProxyModeTestHarness] Could not open Color Panel automatically:', e);
+                // Panel may already be open
             }
-
-            // Log instructions
-            console.log('\n' + '='.repeat(60));
-            console.log('🎨 PROXY MODE ACTIVE - MANUAL CAPTURE');
-            console.log('='.repeat(60));
-            console.log('Instructions:');
-            console.log('1. Open Photoshop Color Panel (Window → Color)');
-            console.log('2. Ensure it\'s in LAB mode');
-            console.log('3. Adjust L, a, or b sliders to desired color');
-            console.log('4. Click "🎨 Capture LAB Color" button');
-            console.log('5. Watch the preview update instantly!');
-            console.log('='.repeat(60) + '\n');
 
         } catch (error) {
             console.error('[ProxyModeTestHarness] Test failed:', error);
@@ -232,8 +192,6 @@ class ProxyModeTestHarness {
      * Capture current LAB color and update palette (Manual Capture mode)
      */
     static async captureLABColor() {
-        console.log('[ProxyModeTestHarness] Manual LAB color capture triggered...');
-
         const btnCapture = document.getElementById('btnCaptureLAB');
 
         try {
@@ -327,17 +285,12 @@ class ProxyModeTestHarness {
         const { app } = require('photoshop');
 
         try {
-            // Try to open Color panel
             await app.batchPlay([{
                 _obj: 'select',
                 _target: [{ _ref: 'menuItemClass', _enum: 'menuItemType', _value: 'color' }]
             }], {});
-
-            console.log('[ProxyModeTestHarness] ✓ Color Panel opened');
-
         } catch (error) {
             // Panel may already be open, or command not available
-            console.log('[ProxyModeTestHarness] Could not open Color Panel automatically');
         }
     }
 
@@ -345,18 +298,7 @@ class ProxyModeTestHarness {
      * Debug: Get current proxy state
      */
     static debugProxyState() {
-        const state = getProxyState();
-        console.log('\n' + '='.repeat(60));
-        console.log('PROXY STATE DEBUG');
-        console.log('='.repeat(60));
-        console.log('Active:', state.active);
-        if (state.active) {
-            console.log('Dimensions:', state.dimensions);
-            console.log('Color Count:', state.colorCount);
-            console.log('LAB Sync Enabled:', state.labSyncEnabled);
-            console.log('Parameters:', state.parameters);
-        }
-        console.log('='.repeat(60) + '\n');
+        return getProxyState();
     }
 }
 

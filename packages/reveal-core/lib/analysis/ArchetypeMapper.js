@@ -69,7 +69,6 @@ class ArchetypeMapper {
         if (dna.maxC !== undefined && dna.maxC > 90.0) {
             const jethroArchetype = this.archetypes.find(a => a.id === 'jethro_monroe_clinical');
             if (jethroArchetype) {
-                console.log(`🎯 High-Chroma Peak Override: maxC=${dna.maxC.toFixed(1)} > 90.0 → Forcing Sovereign Lock`);
                 return {
                     id: jethroArchetype.id,
                     score: 95.0, // High confidence for override
@@ -104,7 +103,6 @@ class ArchetypeMapper {
         if (isBlueOutlier) {
             const blueRescue = this.archetypes.find(a => a.id === 'blue_rescue');
             if (blueRescue) {
-                console.log(`🔵 Blue Outlier Override: Forcing Blue Rescue (${(blueWeight * 100).toFixed(1)}% cool @ ${blueChroma.toFixed(1)}C in ${dna.dominant_sector} image)`);
                 return {
                     id: blueRescue.id,
                     score: 90.0, // High confidence for override

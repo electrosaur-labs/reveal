@@ -49,8 +49,6 @@ class ViewportManager {
         if (this.cropEngine) {
             this.cropEngine.setViewportDimensions(this.viewportWidth, this.viewportHeight);
         }
-
-        console.log(`[ViewportManager] Viewport dimensions updated: ${this.viewportWidth}x${this.viewportHeight}`);
     }
 
     /**
@@ -114,9 +112,6 @@ class ViewportManager {
         const fullWidth = this.cropEngine.sourceWidth;
         const fullHeight = this.cropEngine.sourceHeight;
 
-        const prevX = this.center.x;
-        const prevY = this.center.y;
-
         // Convert delta to normalized space
         const normDeltaX = deltaX / fullWidth;
         const normDeltaY = deltaY / fullHeight;
@@ -127,8 +122,6 @@ class ViewportManager {
 
         // CRITICAL FIX: Update CropEngine viewport position for Navigator Map
         this._syncCropEngineViewport();
-
-        console.log(`[ViewportManager] pan(${deltaX},${deltaY}) srcDim=${fullWidth}x${fullHeight} center:(${prevX.toFixed(3)},${prevY.toFixed(3)})→(${this.center.x.toFixed(3)},${this.center.y.toFixed(3)})`);
     }
 
     /**
@@ -143,8 +136,6 @@ class ViewportManager {
 
         // CRITICAL FIX: Update CropEngine viewport position for Navigator Map
         this._syncCropEngineViewport();
-
-        console.log(`[ViewportManager] Jumped to normalized (${this.center.x.toFixed(3)}, ${this.center.y.toFixed(3)})`);
     }
 
     /**
@@ -160,7 +151,6 @@ class ViewportManager {
         const fullHeight = this.cropEngine.actualDocHeight;
 
         if (!fullWidth || !fullHeight) {
-            console.error('[ViewportManager] actualDocWidth/Height not set on CropEngine!');
             return;
         }
 
@@ -181,8 +171,6 @@ class ViewportManager {
         this.cropEngine.viewportY = startY;
         this.cropEngine.viewportWidth = this.viewportWidth;
         this.cropEngine.viewportHeight = this.viewportHeight;
-
-        console.log(`[ViewportManager] Synced CropEngine viewport: (${startX}, ${startY}) ${this.viewportWidth}x${this.viewportHeight} (doc: ${fullWidth}x${fullHeight})`);
     }
 
     /**
@@ -206,7 +194,6 @@ class ViewportManager {
      */
     centerViewport() {
         this.center = { x: 0.5, y: 0.5 };
-        console.log('[ViewportManager] Centered viewport');
     }
 
     /**
@@ -215,7 +202,6 @@ class ViewportManager {
      */
     toggleViewMode() {
         this.viewMode = this.viewMode === '1:1' ? 'fit' : '1:1';
-        console.log(`[ViewportManager] Toggled to ${this.viewMode} mode`);
         return this.viewMode;
     }
 
@@ -226,7 +212,6 @@ class ViewportManager {
      */
     updateMechanicalParams(params) {
         Object.assign(this.mechanicalParams, params);
-        console.log('[ViewportManager] Updated mechanical params:', this.mechanicalParams);
     }
 
     /**
@@ -235,10 +220,7 @@ class ViewportManager {
      * @returns {Object} Navigator map data
      */
     getNavigatorMap(thumbnailSize = 200) {
-        console.log('🟢🟢🟢 [ViewportManager.getNavigatorMap] CALLED 🟢🟢🟢');
-        console.log('[ViewportManager] cropEngine exists:', !!this.cropEngine);
         if (!this.cropEngine) {
-            console.error('[ViewportManager] ❌❌❌ cropEngine is NULL!');
             return null;
         }
         return this.cropEngine.getNavigatorMap(thumbnailSize);

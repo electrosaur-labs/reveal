@@ -30,7 +30,6 @@ function loadPresets() {
             }
         });
 
-        console.log(`[presetLoader] Loaded ${Object.keys(presets).length} presets from ${presetsDir}`);
     } catch (error) {
         console.error('[presetLoader] Error reading presets directory:', error.message);
     }

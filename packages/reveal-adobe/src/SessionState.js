@@ -55,7 +55,6 @@ class SessionState {
      */
     updateParameter(key, value) {
         this.parameters[key] = value;
-        console.log(`[SessionState] Parameter updated: ${key} = ${value}`);
     }
 
     /**
@@ -64,7 +63,6 @@ class SessionState {
      */
     updateParameters(changes) {
         Object.assign(this.parameters, changes);
-        console.log(`[SessionState] Parameters updated:`, Object.keys(changes));
     }
 
     /**
@@ -139,7 +137,6 @@ class SessionState {
             height: metadata.height,
             bitDepth: metadata.bitDepth || 16
         };
-        console.log(`[SessionState] Source metadata set: ${metadata.width}x${metadata.height}, ${metadata.bitDepth}-bit`);
     }
 
     /**
@@ -149,7 +146,6 @@ class SessionState {
         this.proxyEngine = null;
         this.productionRenderPending = false;
         this.productionResult = null;
-        console.log('[SessionState] Session reset');
     }
 
     /**

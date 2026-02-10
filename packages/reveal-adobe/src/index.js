@@ -42,16 +42,12 @@ try {
     GoldenStatsCapture = require("./core/GoldenStatsCapture");
 } catch (e) {
     // GoldenStatsCapture may not exist in this package
-    logger.log("GoldenStatsCapture not found (optional)");
 }
 
 /**
  * Initialize the plugin
  */
 function initPlugin() {
-    logger.log('Reveal plugin loaded');
-    logger.log(`Build ID: ${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev'}`);
-    logger.log(`Build Time: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'development'}`);
 }
 
 // Store posterization results for preview
@@ -93,12 +89,10 @@ function resolveDistanceMetric(metricSetting, dna = null) {
         const peakChroma = useDNA.maxC || 0;
         const isPhotographic = useDNA.archetype === 'Photographic';
         const resolved = (peakChroma > 80 || isPhotographic) ? 'cie94' : 'cie76';
-        logger.log(`Smart Reveal: peakC=${peakChroma.toFixed(1)}, archetype=${useDNA.archetype || 'unknown'} → ${resolved === 'cie94' ? 'Photo/Tonal' : 'Poster/Graphic'}`);
         return resolved;
     }
 
     // No DNA available - default to cie94 (safer for unknown images)
-    logger.log('Smart Reveal: No DNA analysis available, defaulting to Photo/Tonal (CIE94)');
     return 'cie94';
 }
 
@@ -106,16 +100,11 @@ function resolveDistanceMetric(metricSetting, dna = null) {
  * Show custom error dialog (more readable than alert)
  */
 function showError(title, message, errorList = null) {
-    logger.log(`showError called: "${title}" - "${message}"`);
-    logger.log("Error list:", errorList);
-
     const errorDialog = document.getElementById('errorDialog');
     const errorTitle = document.getElementById('errorTitle');
     const errorMessage = document.getElementById('errorMessage');
     const errorDetails = document.getElementById('errorDetails');
     const errorListEl = document.getElementById('errorList');
-
-    logger.log("Error dialog element:", errorDialog);
 
     if (!errorDialog) {
         logger.error("Error dialog not found!");
@@ -144,27 +133,11 @@ function showError(title, message, errorList = null) {
 
     // Show error dialog as modal
     errorDialog.showModal();
-    logger.log("✓ Error dialog opened as modal");
-
-    // DEBUG: Log computed styles
-    logger.log('\n=== ERROR DIALOG STYLE DEBUG ===');
-    logger.log('Error Dialog computed styles:');
-    logger.log(`  computed color: ${window.getComputedStyle(errorDialog).color}`);
-    logger.log(`  computed background: ${window.getComputedStyle(errorDialog).backgroundColor}`);
-    logger.log(`  inline style: ${errorDialog.getAttribute('style')}`);
-
-    if (errorMessage) {
-        logger.log('Error Message computed styles:');
-        logger.log(`  computed color: ${window.getComputedStyle(errorMessage).color}`);
-        logger.log(`  inline style: ${errorMessage.getAttribute('style')}`);
-    }
-    logger.log('=== END ERROR DEBUG ===\n');
 
     // Set up OK button to close
     const btnErrorOk = document.getElementById('btnErrorOk');
     if (btnErrorOk) {
         btnErrorOk.onclick = () => {
-            logger.log("Error dialog OK clicked");
             errorDialog.close();
         };
     }
@@ -178,8 +151,6 @@ function showError(title, message, errorList = null) {
  * @param {string} details - Optional details (e.g., error code)
  */
 function showErrorDialog(title, message, details = null) {
-    logger.log(`showErrorDialog called: ${title} - ${message}`);
-
     const errorDialog = document.getElementById('errorDialog');
     const errorTitle = document.getElementById('errorTitle');
     const errorMessage = document.getElementById('errorMessage');
@@ -209,21 +180,6 @@ function showErrorDialog(title, message, details = null) {
 
     // Show dialog as modal
     errorDialog.showModal();
-    logger.log("✓ Error dialog opened as modal");
-
-    // DEBUG: Log computed styles
-    logger.log('\n=== ERROR DIALOG STYLE DEBUG (showErrorDialog) ===');
-    logger.log('Error Dialog computed styles:');
-    logger.log(`  computed color: ${window.getComputedStyle(errorDialog).color}`);
-    logger.log(`  computed background: ${window.getComputedStyle(errorDialog).backgroundColor}`);
-    logger.log(`  inline style: ${errorDialog.getAttribute('style')}`);
-
-    if (errorMessage) {
-        logger.log('Error Message computed styles:');
-        logger.log(`  computed color: ${window.getComputedStyle(errorMessage).color}`);
-        logger.log(`  inline style: ${errorMessage.getAttribute('style')}`);
-    }
-    logger.log('=== END ERROR DEBUG ===\n');
 
     // Set up OK button handler
     const btnOk = document.getElementById('btnErrorOk');
@@ -242,11 +198,8 @@ function showErrorDialog(title, message, details = null) {
  * @param {number} separationStartTime - Timestamp when separation started
  */
 function showSuccessDialog(layerCount, palette, separationStartTime) {
-    logger.log(`showSuccessDialog called: ${layerCount} layers, palette:`, palette);
-
     try {
         const successDialog = document.getElementById('successDialog');
-        logger.log('Success dialog element:', successDialog);
 
         if (!successDialog) {
             logger.error('Success dialog element not found!');
@@ -259,8 +212,6 @@ function showSuccessDialog(layerCount, palette, separationStartTime) {
         const btnCaptureStats = document.getElementById('btnCaptureGoldenStats');
         const captureStatus = document.getElementById('captureStatus');
 
-        logger.log('Got all elements:', { layerCountEl, btnDone, btnCaptureStats, captureStatus });
-
         if (!layerCountEl || !btnDone || !btnCaptureStats || !captureStatus) {
             logger.error('Missing required elements!');
             alert(`Separation complete! Created ${layerCount} layers.`);
@@ -272,47 +223,13 @@ function showSuccessDialog(layerCount, palette, separationStartTime) {
 
         // Show dialog using UXP dialog.showModal()
         // Close first if already open to avoid "already open" error
-        logger.log('Showing success dialog with showModal()...');
-
-        // LOG CANVAS AND TEXT COLORS BEFORE SHOWING
-        logger.log('\n=== DIALOG STYLE DEBUG ===');
-        logger.log('Success Dialog styles:');
-        logger.log(`  inline style: ${successDialog.getAttribute('style')}`);
-        logger.log(`  computed color: ${window.getComputedStyle(successDialog).color}`);
-        logger.log(`  computed background: ${window.getComputedStyle(successDialog).backgroundColor}`);
-
-        const successTitle = successDialog.querySelector('.success-title');
-        if (successTitle) {
-            logger.log('Success Title styles:');
-            logger.log(`  inline style: ${successTitle.getAttribute('style')}`);
-            logger.log(`  computed color: ${window.getComputedStyle(successTitle).color}`);
-        }
-
-        const successMessage = successDialog.querySelector('.success-message');
-        if (successMessage) {
-            logger.log('Success Message styles:');
-            logger.log(`  inline style: ${successMessage.getAttribute('style')}`);
-            logger.log(`  computed color: ${window.getComputedStyle(successMessage).color}`);
-        }
-
-        const successInfo = successDialog.querySelector('.success-info');
-        if (successInfo) {
-            logger.log('Success Info styles:');
-            logger.log(`  inline style: ${successInfo.getAttribute('style')}`);
-            logger.log(`  computed color: ${window.getComputedStyle(successInfo).color}`);
-        }
-        logger.log('=== END DEBUG ===\n');
-
         if (successDialog.open) {
-            logger.log('Dialog already open, closing first...');
             successDialog.close();
         }
         successDialog.showModal();
-        logger.log('Success dialog should now be visible');
 
         // Done button - close dialog properly
         btnDone.onclick = () => {
-            logger.log('Done button clicked');
             successDialog.close();
         };
 
@@ -361,14 +278,6 @@ function showSuccessDialog(layerCount, palette, separationStartTime) {
             const suggestedFilename = fixtureName.replace('.png', '-golden.json').replace('.psd', '-golden.json');
             const json = GoldenStatsCapture.exportToJSON(stats);
 
-            logger.log('==========================================');
-            logger.log(`GOLDEN OUTPUT: ${suggestedFilename}`);
-            logger.log('==========================================');
-            logger.log(json);
-            logger.log('==========================================');
-            logger.log(`Save as: tests/fixtures/golden-outputs/${suggestedFilename}`);
-            logger.log('==========================================');
-
             captureStatus.innerHTML = `✓ JSON written to console!<br>Save as: ${suggestedFilename}`;
             captureStatus.style.color = '#2d9d78';
             captureStatus.style.fontWeight = '500';
@@ -387,8 +296,6 @@ function showSuccessDialog(layerCount, palette, separationStartTime) {
         }
     };
 
-        logger.log('Success dialog setup complete');
-
     } catch (error) {
         logger.error('Error in showSuccessDialog:', error);
         alert(`Separation complete! Created ${layerCount} layers.\n\nError showing success dialog: ${error.message}`);
@@ -400,7 +307,6 @@ function showSuccessDialog(layerCount, palette, separationStartTime) {
  * UXP canvas is limited - use optimized scanline drawing
  */
 function pixelsToDataURL(pixels, width, height) {
-    logger.log(`Converting ${width}x${height} pixels to data URL...`);
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -440,7 +346,6 @@ function pixelsToDataURL(pixels, width, height) {
     }
 
     const dataURL = canvas.toDataURL('image/png');
-    logger.log(`✓ Converted to data URL (${dataURL.length} chars)`);
     return dataURL;
 }
 
@@ -570,14 +475,12 @@ async function showPhotoshopColorPicker(initialColor = { r: 255, g: 255, b: 255 
                 }
             }], {});
 
-            logger.log(`  Set foreground to RGB(${initialColor.r}, ${initialColor.g}, ${initialColor.b})`);
 
             // Step 2: Show color picker (uses foreground color as initial color)
             const response = await action.batchPlay([{
                 _obj: "showColorPicker"
             }], {});
 
-            logger.log(`  Color picker response:`, response);
 
             // Step 3: Read the new foreground color after picker closes
             // If user clicked OK, foreground color will be updated
@@ -589,7 +492,6 @@ async function showPhotoshopColorPicker(initialColor = { r: 255, g: 255, b: 255 
                     green: Math.round(newColor.rgb.green),
                     blue: Math.round(newColor.rgb.blue)
                 };
-                logger.log(`  New foreground color: RGB(${result.red}, ${result.green}, ${result.blue})`);
             }
         }, { commandName: "Show Color Picker" });
     } catch (error) {
@@ -630,10 +532,7 @@ function initializePreviewCanvas(width, height, palette, assignments) {
         return null;
     }
 
-    logger.log(`Initializing preview: ${width}×${height} pixels`);
-
     // Store preview state globally
-    logger.log(`[DEBUG] Creating window.previewState with ${assignments.length} assignments and ${palette.length} colors`);
     window.previewState = {
         width: width,
         height: height,
@@ -665,7 +564,6 @@ function initializePreviewCanvas(width, height, palette, assignments) {
         }
 
         if (state.activeSoloIndex !== null) {
-            logger.log('Preview image clicked - returning to full preview');
             state.activeSoloIndex = null;
 
             // Re-render in both modes
@@ -681,7 +579,6 @@ function initializePreviewCanvas(width, height, palette, assignments) {
         }
     });
 
-    logger.log(`✓ Preview initialized: ${width}×${height}`);
     return window.previewState;
 }
 
@@ -719,9 +616,6 @@ function renderPreview() {
     const width = state.width;
     const height = state.height;
 
-    logger.log(`Rendering preview (solo mode: ${activeSoloIndex !== null}, deleted: ${deletedIndices.size})`);
-    logger.log(`  Image: ${width}×${height}`);
-    logger.log(`  Palette (${palette.length} colors): ${palette.join(', ')}`);
 
     // Debug: Check assignment distribution for 2-color images
     if (palette.length <= 3) {
@@ -729,14 +623,12 @@ function renderPreview() {
         for (let i = 0; i < assignments.length; i++) {
             counts[assignments[i]] = (counts[assignments[i]] || 0) + 1;
         }
-        logger.log(`  Assignment distribution: ${JSON.stringify(counts)}`);
     }
 
     // Build remap table for deleted colors (maps to nearest surviving color)
     let remapTable = null;
     if (deletedIndices.size > 0) {
         remapTable = buildRemapTable(palette, deletedIndices);
-        logger.log(`  Remapping ${deletedIndices.size} deleted colors to nearest survivors`);
     }
 
     // Build RGBA pixel array
@@ -802,7 +694,6 @@ function renderPreview() {
     img.dataset.naturalWidth = width;
     img.dataset.naturalHeight = height;
 
-    logger.log(`✓ Preview rendered ${width}×${height} as JPEG (${Math.round(jpegData.data.length / 1024)}KB)`);
 }
 
 /**
@@ -810,7 +701,6 @@ function renderPreview() {
  * Shows compositional overview with red viewport rectangle
  */
 function renderNavigatorMap() {
-    logger.log('[Navigator] Rendering Navigator Map...');
 
     if (!window.viewportManager) {
         logger.error('[Navigator] ViewportManager not initialized');
@@ -851,7 +741,6 @@ function renderNavigatorMap() {
         img.width = thumbnailWidth;
         img.height = thumbnailHeight;
 
-        logger.log(`[Navigator] ✓ Thumbnail rendered: ${thumbnailWidth}x${thumbnailHeight} (${Math.round(jpegData.data.length / 1024)}KB)`);
 
         // Update viewport rectangle using bounds from CropEngine
         updateNavigatorViewport(viewportBounds);
@@ -920,7 +809,6 @@ function attachArrowKeyNavigation() {
     window._arrowKeyHandler = handler;
     document.addEventListener('keydown', handler);
 
-    logger.log('[Navigator] ✓ Arrow key navigation attached');
 }
 
 /**
@@ -928,7 +816,6 @@ function attachArrowKeyNavigation() {
  * Converts click coordinates to normalized position and updates viewport
  */
 function attachNavigatorClickHandler() {
-    logger.log('🔷 [attachNavigatorClickHandler] CALLED - Implementing Architect\'s Center-Drag Pattern');
 
     const navigatorContainer = document.getElementById('navigatorMapContainer');
     const img = document.getElementById('navigatorCanvas');
@@ -972,7 +859,6 @@ function attachNavigatorClickHandler() {
         navigatorContainer.style.cursor = 'grabbing';
         e.preventDefault();
 
-        logger.log('[Navigator] 🔴 Drag started - Center-Drag mode active');
     };
 
     // ARCHITECT'S FIX: Center-Drag logic with accurate coordinate math
@@ -1030,7 +916,6 @@ function attachNavigatorClickHandler() {
             // CRITICAL: Final render at latest center position
             await render1to1Preview();
 
-            logger.log('[Navigator] 🟢 Drag ended - Navigator refreshed + preview rendered');
         }
     };
 
@@ -1062,7 +947,6 @@ function attachNavigatorClickHandler() {
         const normX = constrainedX / imgRect.width;
         const normY = constrainedY / imgRect.height;
 
-        logger.log(`[Navigator] Clicked at normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
 
         // Update viewport center (this syncs CropEngine via _syncCropEngineViewport)
         window.viewportManager.jumpToNormalized(normX, normY);
@@ -1088,7 +972,6 @@ function attachNavigatorClickHandler() {
         click: clickHandler
     };
 
-    logger.log('[Navigator] ✓ Architect\'s Center-Drag pattern implemented');
 }
 
 /**
@@ -1117,7 +1000,6 @@ function attachPreviewClickHandler() {
             return;
         }
 
-        logger.log('[Preview] Clicked - deselecting swatch');
 
         // Clear selection
         state.activeSoloIndex = null;
@@ -1130,7 +1012,6 @@ function attachPreviewClickHandler() {
     previewImg.addEventListener('click', clickHandler);
     window._previewClickHandler = clickHandler;
 
-    logger.log('[Preview] ✓ Click handler attached to deselect swatches');
 }
 
 /**
@@ -1233,7 +1114,6 @@ function attach1to1PreviewDragHandler() {
         pointerup: pointerupHandler
     };
 
-    logger.log('[1:1 Drag] ✓ Drag-to-pan handler attached');
 }
 
 /**
@@ -1291,7 +1171,6 @@ function rebuildPreviewStrideForMode(mode) {
         window._previewStrideChangeHandler = async () => {
             if (!window.previewState) return;
             const value = parseInt(previewStrideSelect.value, 10);
-            logger.log(`Resolution changing to 1:${value}`);
             const state = window.previewState;
             if (state.zoomRenderer) {
                 const centerX = state.zoomRenderer.width / 2;
@@ -1319,7 +1198,6 @@ function rebuildPreviewStrideForMode(mode) {
             const height = posterizationData.originalHeight;
 
             const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
-            logger.log(`Preview stride change: ${labels[stride] || stride} (stride=${stride}), ${width}x${height}, palette=${paletteLab.length}`);
             document.body.style.cursor = 'wait';
 
             setTimeout(() => {
@@ -1330,7 +1208,6 @@ function rebuildPreviewStrideForMode(mode) {
                     );
                     window.previewState.assignments = assignments;
                     renderPreview();
-                    logger.log(`✓ Preview updated: stride=${stride}, bitDepth=${bitDepth}`);
                 } catch (err) {
                     logger.error('Stride change error:', err);
                 }
@@ -1341,7 +1218,6 @@ function rebuildPreviewStrideForMode(mode) {
 
     // 4. Attach fresh handler
     previewStrideSelect.addEventListener('change', window._previewStrideChangeHandler);
-    logger.log(`[Dropdown] ✓ Rebuilt previewStride for ${mode} mode`);
 }
 
 // 🏛️ POST-PROCESSING FILTER IMPLEMENTATIONS (top-level for access from both showPaletteEditor and render1to1Preview)
@@ -1354,7 +1230,6 @@ function rebuildPreviewStrideForMode(mode) {
 function applyShadowClamp(assignments, paletteSize, clampPercent) {
     if (clampPercent === 0) return assignments;
 
-    logger.log(`   [filter] Applying shadowClamp: ${clampPercent}% density floor`);
 
     const clampThreshold = clampPercent / 100;
     const colorCounts = new Array(paletteSize).fill(0);
@@ -1371,19 +1246,16 @@ function applyShadowClamp(assignments, paletteSize, clampPercent) {
     colorCoverages.forEach((coverage, colorIdx) => {
         if (coverage > 0 && coverage < clampThreshold) {
             thinColors.add(colorIdx);
-            logger.log(`      Color ${colorIdx} below density floor: ${(coverage * 100).toFixed(2)}% < ${clampPercent}%`);
         } else if (coverage > 0) {
             strongColors.push(colorIdx);
         }
     });
 
     if (thinColors.size === 0) {
-        logger.log(`   [filter] shadowClamp: No thin colors to clamp`);
         return assignments;
     }
 
     if (strongColors.length === 0) {
-        logger.log(`   [filter] shadowClamp: No strong colors to remap to, skipping`);
         return assignments;
     }
 
@@ -1400,7 +1272,6 @@ function applyShadowClamp(assignments, paletteSize, clampPercent) {
         }
     }
 
-    logger.log(`   [filter] shadowClamp: Remapped ${thinColors.size} thin colors to strong neighbors`);
     return result;
 }
 
@@ -1411,7 +1282,6 @@ function applyShadowClamp(assignments, paletteSize, clampPercent) {
 function applyMinVolume(assignments, labPalette, minVolumePercent) {
     if (minVolumePercent === 0) return assignments;
 
-    logger.log(`   [filter] Applying minVolume: ${minVolumePercent}% threshold`);
 
     const paletteSize = labPalette.length;
     const totalPixels = assignments.length;
@@ -1427,14 +1297,12 @@ function applyMinVolume(assignments, labPalette, minVolumePercent) {
     colorCounts.forEach((count, colorIdx) => {
         if (count > 0 && count < minPixels) {
             weakColors.add(colorIdx);
-            logger.log(`      Color ${colorIdx} is weak: ${count} pixels (${(count/totalPixels*100).toFixed(2)}%) < ${minVolumePercent}%`);
         } else if (count >= minPixels) {
             strongColors.push(colorIdx);
         }
     });
 
     if (weakColors.size === 0) {
-        logger.log(`   [filter] minVolume: No weak colors to prune`);
         return assignments;
     }
 
@@ -1458,7 +1326,6 @@ function applyMinVolume(assignments, labPalette, minVolumePercent) {
         });
 
         remapTable[weakIdx] = nearestStrongIdx;
-        logger.log(`      Remapping color ${weakIdx} → ${nearestStrongIdx} (ΔE=${minDistance.toFixed(1)})`);
     });
 
     const result = new Uint8Array(assignments);
@@ -1469,7 +1336,6 @@ function applyMinVolume(assignments, labPalette, minVolumePercent) {
         }
     }
 
-    logger.log(`   [filter] minVolume: Pruned ${weakColors.size} weak colors, remapped to ${strongColors.length} strong colors`);
     return result;
 }
 
@@ -1480,7 +1346,6 @@ function applyMinVolume(assignments, labPalette, minVolumePercent) {
 function applySpeckleRescue(assignments, width, height, radiusPixels) {
     if (radiusPixels === 0) return assignments;
 
-    logger.log(`   [filter] Applying speckleRescue: ${radiusPixels}px cluster removal`);
 
     const result = new Uint8Array(assignments);
     let removedCount = 0;
@@ -1530,7 +1395,6 @@ function applySpeckleRescue(assignments, width, height, radiusPixels) {
         }
     }
 
-    logger.log(`   [filter] speckleRescue: Cleaned ${removedCount} isolated pixels`);
     return result;
 }
 
@@ -1539,8 +1403,6 @@ function applySpeckleRescue(assignments, width, height, radiusPixels) {
  * Fetches ONLY the viewport window at full resolution from Photoshop
  */
 async function render1to1Preview() {
-    logger.log('[1:1] Rendering 1:1 preview (Smart Loading)...');
-
     if (!window.viewportManager || !window.cropEngine) {
         logger.error('[1:1] ViewportManager or CropEngine not initialized');
         return;
@@ -1576,7 +1438,6 @@ async function render1to1Preview() {
         // SMART LOADING: Fetch ONLY the viewport window at full resolution
         const cropData = await PhotoshopAPI.getHighResCrop(cropX, cropY, viewportWidth, viewportHeight);
 
-        logger.log(`[1:1] ✓ Fetched high-res crop: ${cropData.width}x${cropData.height}`);
 
         // Get the posterization palette from window.selectedPreview
         if (!window.selectedPreview || !window.selectedPreview.paletteLab || !window.selectedPreview.palette) {
@@ -1589,7 +1450,6 @@ async function render1to1Preview() {
 
         // Map high-res crop pixels to existing palette
         const usedMetric = posterizationData.params.distanceMetric || 'cie76';
-        logger.log(`[1:1] Mapping ${cropData.width}x${cropData.height} pixels to ${labPalette.length} colors (${usedMetric})...`);
 
         let colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
             cropData.pixels,
@@ -1602,7 +1462,6 @@ async function render1to1Preview() {
             }
         );
 
-        logger.log(`[1:1] ✓ Mapped pixels to palette`);
 
         // Cache unfiltered crop data for real-time slider scrubbing
         // This allows renderCropWithFilters() to re-apply filters instantly without re-fetching from PS
@@ -1620,7 +1479,6 @@ async function render1to1Preview() {
         const shadowClamp = parseFloat(document.getElementById('shadowClamp')?.value ?? 0);
 
         if (shadowClamp > 0 || minVolume > 0 || speckleRescue > 0) {
-            logger.log(`[1:1] Applying mechanical filters: shadowClamp=${shadowClamp}%, minVolume=${minVolume}%, speckleRescue=${speckleRescue}px`);
 
             if (shadowClamp > 0) {
                 colorIndices = applyShadowClamp(colorIndices, labPalette.length, shadowClamp);
@@ -1632,7 +1490,6 @@ async function render1to1Preview() {
                 colorIndices = applySpeckleRescue(colorIndices, cropData.width, cropData.height, speckleRescue);
             }
 
-            logger.log(`[1:1] ✓ Mechanical filters applied`);
         }
 
         // Check if color isolation mode is active (swatch clicked)
@@ -1641,9 +1498,7 @@ async function render1to1Preview() {
         const substrateIndex = window.selectedPreview?.substrateIndex;
 
         if (soloColorIndex !== null && soloColorIndex !== undefined) {
-            logger.log(`[1:1] Color isolation mode: showing only color index ${soloColorIndex}`);
         } else {
-            logger.log(`[1:1] Showing all colors (no swatch selected)`);
         }
 
         // Generate preview from mapped indices
@@ -1729,8 +1584,6 @@ async function render1to1Preview() {
         img.width = cropData.width;
         img.height = cropData.height;
 
-
-        logger.log(`[1:1] ✓ Rendered TRUE 1:1 preview: ${cropData.width}x${cropData.height} from req(${cropX},${cropY}) actual(${cropData.cropX},${cropData.cropY}) (${Math.round(jpegData.data.length / 1024)}KB)`);
 
     } catch (error) {
         logger.error('[1:1] Failed to render:', error);
@@ -1863,10 +1716,6 @@ function updateNavigatorViewport(bounds) {
         const offsetX = imgRect.left - containerRect.left;
         const offsetY = imgRect.top - containerRect.top;
 
-        logger.log('[Navigator] Container:', containerRect.width, 'x', containerRect.height,
-                   'Img:', imgRect.width, 'x', imgRect.height,
-                   'Offset:', offsetX, offsetY);
-        logger.log('[Navigator] Positioning viewport rect:', bounds);
 
         // Position the red rectangle using bounds from CropEngine PLUS centering offset
         viewportDiv.style.left = `${bounds.x + offsetX}px`;
@@ -1874,7 +1723,6 @@ function updateNavigatorViewport(bounds) {
         viewportDiv.style.width = `${bounds.width}px`;
         viewportDiv.style.height = `${bounds.height}px`;
 
-        logger.log(`[Navigator] ✓ Viewport rect positioned: ${bounds.x + offsetX},${bounds.y + offsetY} ${bounds.width}x${bounds.height}`);
     } catch (error) {
         logger.error('[Navigator] Failed to update viewport rect:', error);
     }
@@ -1891,14 +1739,12 @@ async function setPreviewMode(mode) {
     }
 
     if (state.viewMode === mode) {
-        logger.log(`Already in ${mode} mode`);
         return;
     }
 
     const container = document.getElementById('previewContainer');
     const imageEl = document.getElementById('previewImg');
 
-    logger.log(`Switching preview mode: ${state.viewMode} → ${mode}`);
 
     if (mode === 'zoom') {
         // ZOOM MODE: Initialize ZoomPreviewRenderer
@@ -1908,7 +1754,6 @@ async function setPreviewMode(mode) {
             const qualityGroup = document.getElementById('previewQualityGroup');
             if (qualityGroup) {
                 qualityGroup.style.display = 'flex';
-                logger.log('✓ Preview Quality shown (from 1:1)');
             }
         }
 
@@ -1926,14 +1771,10 @@ async function setPreviewMode(mode) {
         const docHeight = docInfo.height;
         const bitDepth = posterizationData.bitDepth || 8;
 
-        logger.log(`Zoom mode - Document: ${docWidth}×${docHeight}, Layer: ${originalLayerID}, BitDepth: ${bitDepth}`);
-        logger.log(`Container size BEFORE: ${container.clientWidth}×${container.clientHeight}`);
 
         // Create separation data for ZoomPreviewRenderer
         const selectedPreview = posterizationData.selectedPreview;
-        logger.log(`Palette debug: ${selectedPreview.paletteLab.length} colors`);
         if (selectedPreview.paletteLab.length > 0) {
-            logger.log(`First color format:`, selectedPreview.paletteLab[0]);
         }
 
         const separationData = {
@@ -1943,7 +1784,6 @@ async function setPreviewMode(mode) {
         // Add zoom mode class (container stays responsive via flex layout)
         container.classList.add('zoom-mode');
 
-        logger.log(`Container size: ${container.clientWidth}×${container.clientHeight}`);
 
         // Get both buffer images for double buffering
         const imageEl2 = document.getElementById('previewImgBuffer2');
@@ -1984,17 +1824,13 @@ async function setPreviewMode(mode) {
 
         // Preserve solo mode if active
         if (state.activeSoloIndex !== null) {
-            logger.log(`Preserving solo mode: color ${state.activeSoloIndex}`);
             state.zoomRenderer.setSoloColor(state.activeSoloIndex);
         }
 
-        logger.log(`Renderer viewport: ${state.zoomRenderer.width}×${state.zoomRenderer.height}`);
 
         // Initialize renderer (centers viewport, fetches first render)
-        logger.log('Initializing renderer...');
         try {
             await state.zoomRenderer.init();
-            logger.log('✓ Renderer initialized');
         } catch (err) {
             logger.error('Failed to initialize renderer:', err);
             throw err;
@@ -2017,7 +1853,6 @@ async function setPreviewMode(mode) {
                     (Math.abs(newWidth - state.zoomRenderer.width) > 10 ||
                      Math.abs(newHeight - state.zoomRenderer.height) > 10)) {
 
-                    logger.log(`Container resized: ${state.zoomRenderer.width}×${state.zoomRenderer.height} → ${newWidth}×${newHeight}`);
 
                     // Update renderer dimensions
                     state.zoomRenderer.width = newWidth;
@@ -2033,14 +1868,11 @@ async function setPreviewMode(mode) {
             }
         });
         state._resizeObserver.observe(container);
-        logger.log('✓ Resize observer attached');
 
         state.viewMode = 'zoom';
-        logger.log('✓ Zoom mode initialized');
 
     } else if (mode === '1:1') {
         // 1:1 CLINICAL LOUPE MODE (Phase 1: UI toggle only)
-        logger.log('Switching to 1:1 Clinical Loupe mode...');
 
         // Show/hide appropriate UI elements
         const navigatorMap = document.getElementById('navigatorMapContainer');
@@ -2048,54 +1880,37 @@ async function setPreviewMode(mode) {
 
         if (navigatorMap) {
             navigatorMap.style.display = 'block';
-            logger.log('✓ Navigator Map shown');
         }
         if (qualityGroup) {
             qualityGroup.style.display = 'none';
-            logger.log('✓ Preview Quality hidden');
         }
 
         state.viewMode = '1:1';
 
         // Render Navigator Map thumbnail
-        logger.log('⭐ About to call renderNavigatorMap()');
         renderNavigatorMap();
-        logger.log('⭐ Finished renderNavigatorMap()');
 
         // Phase 4: Attach Navigator click handler for panning
-        logger.log('⭐ About to call attachNavigatorClickHandler()');
         attachNavigatorClickHandler();
-        logger.log('⭐ Finished attachNavigatorClickHandler()');
 
         // Phase 4+: Attach arrow key navigation
-        logger.log('⭐ About to call attachArrowKeyNavigation()');
         attachArrowKeyNavigation();
-        logger.log('⭐ Finished attachArrowKeyNavigation()');
 
         // Attach preview click handler to deselect swatches
-        logger.log('⭐ About to call attachPreviewClickHandler()');
         attachPreviewClickHandler();
-        logger.log('⭐ Finished attachPreviewClickHandler()');
 
         // Attach preview drag handler for panning
-        logger.log('⭐ About to call attach1to1PreviewDragHandler()');
         attach1to1PreviewDragHandler();
-        logger.log('⭐ Finished attach1to1PreviewDragHandler()');
 
         // Phase 3: Render 1:1 pixels to main preview
-        logger.log('⭐ About to call render1to1Preview()');
         await render1to1Preview();
-        logger.log('⭐ Finished render1to1Preview()');
 
-        logger.log('✓ 1:1 mode initialized');
 
     } else if (mode === 'fit') {
         // FIT MODE: Cleanup ZoomPreviewRenderer or 1:1 mode, restore renderPreview
-        logger.log('Starting fit mode restoration...');
 
         // Cleanup 1:1 mode if active
         if (state.viewMode === '1:1') {
-            logger.log('Cleaning up 1:1 mode...');
 
             // Hide Navigator Map
             const navigatorMap = document.getElementById('navigatorMapContainer');
@@ -2103,11 +1918,9 @@ async function setPreviewMode(mode) {
 
             if (navigatorMap) {
                 navigatorMap.style.display = 'none';
-                logger.log('✓ Navigator Map hidden');
             }
             if (qualityGroup) {
                 qualityGroup.style.display = 'flex';
-                logger.log('✓ Preview Quality shown');
             }
 
             // (Dropdown is rebuilt on fit entry below, no need to restore here)
@@ -2123,16 +1936,13 @@ async function setPreviewMode(mode) {
                     previewContainer.removeEventListener('pointercancel', handlers.pointerup);
                     previewContainer.style.cursor = '';
                     window._1to1DragHandlers = null;
-                    logger.log('✓ 1:1 drag handlers removed');
                 }
             }
 
-            logger.log('✓ 1:1 mode cleanup complete');
         }
 
         // Cleanup zoom renderer
         if (state.zoomRenderer) {
-            logger.log('Cleaning up zoom renderer...');
             // Clear quality timeout
             if (state.zoomRenderer.qualityTimeout) {
                 clearTimeout(state.zoomRenderer.qualityTimeout);
@@ -2160,27 +1970,21 @@ async function setPreviewMode(mode) {
             }
 
             state.zoomRenderer = null;
-            logger.log('✓ Renderer cleaned up');
         }
 
         // Remove zoom event handlers
-        logger.log('Detaching zoom handlers...');
         detachPreviewZoomHandlers();
 
         // Disconnect resize observer
         if (state._resizeObserver) {
             state._resizeObserver.disconnect();
             state._resizeObserver = null;
-            logger.log('✓ Resize observer disconnected');
         }
 
         // Remove zoom mode class
-        logger.log('Removing zoom-mode class...');
         container.classList.remove('zoom-mode');
 
         // Reset first image to normal (fit mode) styles
-        logger.log('Resetting image 1 styles...');
-        logger.log(`  Before: position=${imageEl.style.position}, transform=${imageEl.style.transform}, opacity=${imageEl.style.opacity}`);
         imageEl.style.position = '';
         imageEl.style.top = '';
         imageEl.style.left = '';
@@ -2193,12 +1997,10 @@ async function setPreviewMode(mode) {
         imageEl.style.maxWidth = '100%';
         imageEl.style.maxHeight = '100%';
         imageEl.style.objectFit = 'contain';
-        logger.log(`  After: position=${imageEl.style.position}, transform=${imageEl.style.transform}, opacity=${imageEl.style.opacity}`);
 
         // Hide and reset second buffer image
         const imageEl2 = document.getElementById('previewImgBuffer2');
         if (imageEl2) {
-            logger.log('Resetting image 2 styles...');
             imageEl2.onload = null;
             imageEl2.onerror = null;
             imageEl2.src = ''; // Clear any pending image loads
@@ -2226,10 +2028,8 @@ async function setPreviewMode(mode) {
         state.viewMode = 'fit';
 
         // Re-render preview in fit mode
-        logger.log('Re-rendering preview in fit mode...');
         renderPreview();
 
-        logger.log('✓ Fit mode restored');
     }
 }
 
@@ -2422,7 +2222,6 @@ function attachPreviewZoomHandlers() {
     container.addEventListener('wheel', state._previewZoomHandlers.wheel, { passive: false });
     document.addEventListener('keydown', state._previewZoomHandlers.keydown);
 
-    logger.log('✓ Preview zoom handlers attached');
 }
 
 /**
@@ -2441,7 +2240,6 @@ function detachPreviewZoomHandlers() {
     document.removeEventListener('keydown', state._previewZoomHandlers.keydown);
 
     delete state._previewZoomHandlers;
-    logger.log('✓ Preview zoom handlers detached');
 }
 
 /**
@@ -2511,7 +2309,6 @@ function clearSwatchSelection() {
     const state = window.previewState;
     if (!state || state.activeSoloIndex === null) return;
 
-    logger.log('Clearing swatch selection (clicked outside)');
     state.activeSoloIndex = null;
     updateSwatchHighlights();
 
@@ -2522,11 +2319,9 @@ function clearSwatchSelection() {
         // Clear solo mode in zoom renderer
         state.zoomRenderer.setSoloColor(null);
         state.zoomRenderer.fetchAndRender();
-        logger.log('✓ Zoom solo mode cleared');
     } else if (state.viewMode === '1:1') {
         // Clear solo mode in 1:1 preview
         render1to1Preview();
-        logger.log('✓ 1:1 solo mode cleared');
     }
 }
 
@@ -2606,7 +2401,6 @@ function updateSwatchVisuals() {
 function handleSwatchClick(featureIndex) {
     const state = window.previewState;
     if (!state) {
-        logger.log("Preview not available");
         return;
     }
 
@@ -2622,7 +2416,6 @@ function handleSwatchClick(featureIndex) {
     // Select this color (clicking same swatch keeps it selected)
     // To deselect, click outside the swatches or click a different swatch
     state.activeSoloIndex = paletteIndex;
-    logger.log(`Selected swatch ${featureIndex + 1} (palette index ${paletteIndex})`);
 
     // Update swatch highlighting
     updateSwatchHighlights();
@@ -2634,11 +2427,9 @@ function handleSwatchClick(featureIndex) {
         // In zoom mode: Update renderer's solo color and re-render
         state.zoomRenderer.setSoloColor(paletteIndex);
         state.zoomRenderer.fetchAndRender();
-        logger.log(`✓ Zoom solo mode: showing only color ${featureIndex + 1}`);
     } else if (state.viewMode === '1:1') {
         // In 1:1 mode: Re-render with color isolation
         render1to1Preview();
-        logger.log(`✓ 1:1 solo mode: showing only color ${featureIndex + 1}`);
     }
 }
 
@@ -2649,7 +2440,6 @@ function handleSwatchClick(featureIndex) {
 function handleSwatchDelete(swatchIndex) {
     const state = window.previewState;
     if (!state) {
-        logger.log("Preview not available");
         return;
     }
 
@@ -2670,7 +2460,6 @@ function handleSwatchDelete(swatchIndex) {
     if (deletedIndices.has(paletteIndex)) {
         // Restore color
         deletedIndices.delete(paletteIndex);
-        logger.log(`Restored swatch ${swatchIndex + 1} (palette index ${paletteIndex})`);
     } else {
         // Delete color
         const survivorCount = totalColors - deletedIndices.size;
@@ -2688,12 +2477,10 @@ function handleSwatchDelete(swatchIndex) {
         }
 
         deletedIndices.add(paletteIndex);
-        logger.log(`Deleted swatch ${swatchIndex + 1} (palette index ${paletteIndex}, ${survivorCount - 1} survivors remaining)`);
 
         // Clear solo mode if deleted color was active
         if (state.activeSoloIndex === paletteIndex) {
             state.activeSoloIndex = null;
-            logger.log('  Cleared solo mode (deleted color was active)');
         }
     }
 
@@ -2708,13 +2495,11 @@ function handleSwatchDelete(swatchIndex) {
  * Show palette editor section and hide preview section
  */
 function showPaletteEditor(selectedPalette) {
-    logger.log("Showing palette editor with colors:", selectedPalette.hexColors);
 
     // Close the main dialog
     const mainDialog = document.getElementById('mainDialog');
     if (mainDialog) {
         mainDialog.close();
-        logger.log("✓ Closed main dialog");
     }
 
     // Open the palette dialog
@@ -2736,8 +2521,6 @@ function showPaletteEditor(selectedPalette) {
             maxHeight: 1000
         }
     });
-
-    logger.log("✓ Palette dialog opened (1200×800, resizable)");
 
     // UXP workaround: CSS flexbox doesn't properly fill dialog space on resize
     // Use ResizeObserver to manually set panel heights based on dialog size
@@ -2766,7 +2549,6 @@ function showPaletteEditor(selectedPalette) {
         formSection.style.height = `${availableHeight - 24}px`; // minus form-section margin
         mainFlex.style.height = `${availableHeight - 24}px`;
 
-        logger.log(`📐 Panel layout updated: dialog=${Math.round(dialogRect.width)}×${Math.round(dialogRect.height)}, content height=${Math.round(availableHeight)}px`);
         // Note: No re-rendering needed - CSS handles scaling on the img element
     }
 
@@ -2779,7 +2561,6 @@ function showPaletteEditor(selectedPalette) {
             updatePanelLayout();
         });
         resizeObserver.observe(paletteDialog);
-        logger.log("✓ ResizeObserver attached for panel layout");
     }
 
     // Render palette swatches (extracted to function for re-rendering after color changes)
@@ -2818,7 +2599,6 @@ function showPaletteEditor(selectedPalette) {
         }).join('');
 
         container.innerHTML = swatchesHTML;
-        logger.log(`Injected ${selectedPalette.hexColors.length} editable swatches via innerHTML`);
 
         // Re-attach click handlers after re-render
         attachSwatchClickHandlers();
@@ -2838,7 +2618,6 @@ function showPaletteEditor(selectedPalette) {
 
         // Force browser reflow by reading dimensions
         const height = container.offsetHeight;
-        logger.log(`[UXP FIX] Container recalculated height: ${height}px`);
 
         // Force visibility on all swatches by reading their offsetHeight
         const swatches = container.querySelectorAll('.editable-swatch-container');
@@ -2847,15 +2626,10 @@ function showPaletteEditor(selectedPalette) {
             swatch.offsetHeight;
         });
 
-        logger.log(`[UXP FIX] Forced recalculation on ${swatches.length} swatches`);
 
         // Log first swatch dimensions to verify fix
         if (swatches.length > 0) {
             const firstSwatch = swatches[0];
-            logger.log(`[UXP FIX] First swatch dimensions:`, {
-                offsetWidth: firstSwatch.offsetWidth,
-                offsetHeight: firstSwatch.offsetHeight
-            });
         }
     });
 
@@ -2865,7 +2639,6 @@ function showPaletteEditor(selectedPalette) {
 
         // Handler: Lab text click → Color Picker
         const labTexts = container.querySelectorAll('.clickable-lab');
-        logger.log(`Found ${labTexts.length} Lab text elements for color picker`);
 
         labTexts.forEach(labText => {
             // Add hover effects via event listeners (UXP doesn't allow inline handlers)
@@ -2883,13 +2656,11 @@ function showPaletteEditor(selectedPalette) {
                 const currentHex = labText.dataset.hex;
                 const currentRgb = hexToRgb(currentHex);
 
-                logger.log(`🎨 Opening Color Picker for Feature ${featureIndex + 1}: ${currentHex} (RGB: ${currentRgb.r}, ${currentRgb.g}, ${currentRgb.b})`);
 
                 // Highlight this color in canvas preview (solo mode)
                 if (window.previewState) {
                     window.previewState.activeSoloIndex = featureIndex;
                     renderPreview();
-                    logger.log(`✓ Highlighted color ${featureIndex + 1} in canvas preview`);
                 }
 
                 try {
@@ -2898,24 +2669,20 @@ function showPaletteEditor(selectedPalette) {
 
                     // User cancelled?
                     if (!result) {
-                        logger.log(`⚠️ Color picker cancelled by user`);
                         // Keep solo mode active (user may want to try again)
                         return;
                     }
 
                     // Convert RGB result to hex
                     const newHex = rgbToHex(result.red, result.green, result.blue);
-                    logger.log(`✓ Color picker returned: ${newHex} (RGB: ${result.red}, ${result.green}, ${result.blue})`);
 
                     // No change?
                     if (newHex === currentHex) {
-                        logger.log(`  No change - keeping ${currentHex}`);
                         return;
                     }
 
                     // Convert to Lab for perceptual distance check
                     const newLab = PosterizationEngine.rgbToLab({ r: result.red, g: result.green, b: result.blue });
-                    logger.log(`  Lab values: L${Math.round(newLab.L)} a${Math.round(newLab.a)} b${Math.round(newLab.b)}`);
 
                     // Check perceptual distance against other colors (Palette Sovereignty)
                     const MIN_DISTANCE = 12; // L-weighted ΔE threshold
@@ -2933,22 +2700,17 @@ function showPaletteEditor(selectedPalette) {
                             tooSimilar = true;
                             similarTo = i + 1;
                             minDistance = distance;
-                            logger.log(`⚠️ Warning: ${newHex} is too similar to Feature ${similarTo} (${otherHex}) - ΔE=${distance.toFixed(1)}`);
                             break;
                         }
                     }
 
                     // Show warning if too similar (but still allow)
                     if (tooSimilar) {
-                        logger.log(`⚠️ Palette Sovereignty warning: ΔE=${minDistance.toFixed(1)} (threshold: ${MIN_DISTANCE})`);
                         alert(`⚠️ Warning: This color is very similar to Feature ${similarTo} (ΔE=${minDistance.toFixed(1)}). Colors may not separate cleanly in final output.`);
                     }
 
                     // Update palette data using feature index (maintains alignment with originalHexColors)
                     selectedPalette.hexColors[featureIndex] = newHex;
-                    logger.log(`✓ Updated Feature ${featureIndex + 1}: ${currentHex} → ${newHex}`);
-                    logger.log(`  Lab: L${newLab.L.toFixed(1)} a${newLab.a.toFixed(1)} b${newLab.b.toFixed(1)}`);
-                    logger.log(`  Entire feature group will remap to new ink (editing bones, not pixels)`);
 
                     // Convert featureIndex to full palette index (accounting for substrate)
                     const substrateIndex = selectedPalette.substrateIndex;
@@ -2960,19 +2722,15 @@ function showPaletteEditor(selectedPalette) {
                     // Update full palette (used for preview rendering and layer creation)
                     selectedPalette.allHexColors[paletteIndex] = newHex;
                     selectedPalette.paletteLab[paletteIndex] = newLab;  // CRITICAL: Update Lab palette (used for layer creation)
-                    logger.log(`  Full palette index: ${paletteIndex}`);
 
                     // Re-render entire palette to show new color, re-sort by L, and update all Lab values
-                    logger.log(`🔄 Re-rendering palette with updated color...`);
                     renderPaletteSwatches();
                     updateSwatchVisuals();
 
                     // Update canvas preview with new color (use FULL palette to match assignments)
-                    logger.log(`🔄 Updating canvas preview with new color...`);
                     if (window.previewState) {
                         window.previewState.palette = selectedPalette.allHexColors;
                         renderPreview();
-                        logger.log(`✓ Canvas preview updated with new color`);
                     }
 
                 } catch (error) {
@@ -2984,7 +2742,6 @@ function showPaletteEditor(selectedPalette) {
 
         // Handler: Swatch click → Highlight color in canvas preview
         const swatches = container.querySelectorAll('.editable-swatch');
-        logger.log(`Found ${swatches.length} swatches for preview highlighting`);
 
         swatches.forEach(swatch => {
             swatch.addEventListener('click', (event) => {
@@ -2994,13 +2751,11 @@ function showPaletteEditor(selectedPalette) {
 
                 // Alt+Click: Toggle delete state
                 if (event.altKey) {
-                    logger.log(`🗑️ Swatch ${featureIndex + 1} Alt+Clicked - toggling delete state`);
                     handleSwatchDelete(featureIndex);
                     return;
                 }
 
                 // Normal click: Select this swatch (not toggle - click again to keep selected)
-                logger.log(`🔍 Swatch ${featureIndex + 1} clicked - highlighting in preview`);
                 handleSwatchClick(featureIndex);
             });
         });
@@ -3012,7 +2767,6 @@ function showPaletteEditor(selectedPalette) {
                 clearSwatchSelection();
             });
             previewContainer._clickHandlerAttached = true;
-            logger.log('✓ Attached click handler to preview container (clears swatch selection)');
         }
 
     }
@@ -3041,7 +2795,6 @@ function showPaletteEditor(selectedPalette) {
             const valueDisplay = document.getElementById(`${id}Value`);
 
             if (!slider) {
-                logger.log(`⚠️ Production Quality slider not found: ${id}`);
                 return;
             }
 
@@ -3077,7 +2830,6 @@ function showPaletteEditor(selectedPalette) {
 
                 // Prevent overlapping reruns
                 if (rerunInProgress) {
-                    logger.log(`⏳ ${name} changed to ${value} - rerun already in progress, ignoring`);
                     return;
                 }
 
@@ -3085,23 +2837,19 @@ function showPaletteEditor(selectedPalette) {
                 const now = Date.now();
                 const timeSinceLastRerun = now - lastRerunTime;
                 if (timeSinceLastRerun < MIN_RERUN_INTERVAL && lastRerunTime > 0) {
-                    logger.log(`⏳ ${name} changed to ${value} - throttled (${timeSinceLastRerun}ms since last rerun)`);
                     // Still debounce, but will be checked again when timer fires
                 }
 
-                logger.log(`🎚️ ${name} changed to ${value} - scheduling re-posterization`);
 
                 // Debounce to prevent rapid-fire reruns (increased to 1 second)
                 rerunDebounceTimer = setTimeout(async () => {
                     // Check throttle again when timer fires
                     const timeSinceLastCheck = Date.now() - lastRerunTime;
                     if (timeSinceLastCheck < MIN_RERUN_INTERVAL && lastRerunTime > 0) {
-                        logger.log(`⏳ Throttled: Only ${timeSinceLastCheck}ms since last rerun, skipping`);
                         return;
                     }
 
                     if (rerunInProgress) {
-                        logger.log(`⏳ Rerun already in progress, skipping`);
                         return;
                     }
 
@@ -3111,9 +2859,7 @@ function showPaletteEditor(selectedPalette) {
 
                     try {
                         const config = getFormValues();
-                        logger.log(`🔄 Starting re-posterization...`);
                         await rerunPosterization(config);
-                        logger.log(`✓ Re-posterization complete with ${name}=${value}`);
                     } catch (error) {
                         logger.error(`❌ Failed to re-posterize with ${name}:`, error);
                         logger.error(`   Stack:`, error.stack);
@@ -3129,7 +2875,6 @@ function showPaletteEditor(selectedPalette) {
             // Store references for cleanup on next call
             window._productionQualityHandlers[id] = { input: inputHandler, change: changeHandler };
 
-            logger.log(`✓ Attached re-posterization listener to ${id}`);
         });
     }
 
@@ -3137,8 +2882,6 @@ function showPaletteEditor(selectedPalette) {
     // This is "polishing the tire", not "re-inventing the wheel"
     async function rerunPosterization(config) {
         try {
-            logger.log('🔄 Applying mechanical filters to FROZEN palette...');
-            logger.log(`   minVolume: ${config.minVolume}%, speckleRescue: ${config.speckleRescue}px, shadowClamp: ${config.shadowClamp}%`);
 
             // 🏛️ FROZEN PALETTE PROTOCOL: Use immutable palette, never re-generate
             const frozenPalette = window._frozenPalette;
@@ -3155,8 +2898,6 @@ function showPaletteEditor(selectedPalette) {
             const labPixels = new Uint16Array(originalData.labPixels);
             const { width, height } = originalData;
 
-            logger.log(`   🔒 Using FROZEN palette (${frozenPalette.labPalette.length} colors) - NO re-generation`);
-            logger.log(`   Mechanical params: minVolume=${config.minVolume}%, speckleRescue=${config.speckleRescue}px, shadowClamp=${config.shadowClamp}%`);
 
             // Re-separate with FIXED palette using SeparationEngine only
             // Signature: (rawBytes, labPalette, onProgress, width, height, options)
@@ -3172,7 +2913,6 @@ function showPaletteEditor(selectedPalette) {
                 }
             );
 
-            logger.log(`   ✓ Re-separated ${width}×${height} pixels with frozen palette (${assignments.length} assignments)`);
 
             // Apply post-processing filters in strategic order (per Architect directive)
             let processedAssignments = assignments;
@@ -3216,13 +2956,11 @@ function showPaletteEditor(selectedPalette) {
 
             // Use FROZEN hex colors (never recalculate)
             const hexColors = frozenPalette.hexColors;
-            logger.log(`   ✓ Using frozen ${hexColors.length} hex colors (immutable)`);
 
             // Update window.selectedPreview.assignments only (palette stays frozen)
             window.selectedPreview.assignments = processedAssignments;
 
             // DON'T update selectedPalette - it stays frozen!
-            logger.log(`   ✓ Updated assignments only - palette remains FROZEN`)
 
             // Update preview - check if we're in 1:1 mode
             if (window.previewState) {
@@ -3233,25 +2971,17 @@ function showPaletteEditor(selectedPalette) {
                 try {
                     // Update preview based on current view mode
                     if (window.previewState.viewMode === '1:1') {
-                        logger.log(`   Updating 1:1 preview...`);
                         await render1to1Preview();
-                        logger.log(`   ✓ 1:1 preview updated`);
 
                         // Update Navigator Map thumbnail
-                        logger.log(`   Updating Navigator Map...`);
                         renderNavigatorMap();
-                        logger.log(`   ✓ Navigator Map updated`);
                     } else if (window.previewState.viewMode === 'zoom') {
                         // Zoom mode: trigger a re-render of current viewport
-                        logger.log(`   Updating zoom preview...`);
                         if (window.previewState.zoomRenderer) {
                             await window.previewState.zoomRenderer.fetchAndRender();
                         }
-                        logger.log(`   ✓ Zoom preview updated`);
                     } else {
-                        logger.log(`   Updating fit preview...`);
                         renderPreview();
-                        logger.log(`   ✓ Fit preview updated`);
                     }
                 } catch (previewError) {
                     logger.error(`   ❌ Failed to update preview:`, previewError);
@@ -3259,7 +2989,6 @@ function showPaletteEditor(selectedPalette) {
                 }
             }
 
-            logger.log(`✓ Post-processing complete: ${hexColors.length} FROZEN colors (palette never changed)`);
 
         } catch (error) {
             logger.error(`❌ Re-posterization failed:`, error);
@@ -3274,7 +3003,6 @@ function showPaletteEditor(selectedPalette) {
     // Hide "Posterize" button, show "Apply Separation" and "Back" buttons
     const btnPosterize = document.getElementById('btnPosterize');
     if (btnPosterize) btnPosterize.style.display = 'none';
-    logger.log(`✓ Hidden posterize button`);
 
     const btnApplySeparation = document.getElementById('btnApplySeparation');
     btnApplySeparation.style.display = 'block';
@@ -3283,22 +3011,18 @@ function showPaletteEditor(selectedPalette) {
     // CRITICAL: Reset button state from any previous runs
     btnApplySeparation.disabled = false;
     btnApplySeparation.textContent = "Separate with this palette →";
-    logger.log(`✓ Reset button state: enabled, text="${btnApplySeparation.textContent}"`);
 
     const btnBack = document.getElementById('btnBack');
     if (btnBack) {
         btnBack.style.display = 'block';
-        logger.log(`✓ Showing back button`);
     }
 
     // Ensure buttons container is visible
     const buttonsContainer = document.querySelector('.reveal-buttons');
     if (buttonsContainer) {
         buttonsContainer.style.display = 'flex';
-        logger.log(`✓ Buttons container display: ${buttonsContainer.style.display}`);
     }
 
-    logger.log(`✓ Showing btnApplySeparation - display: ${btnApplySeparation.style.display}, text: "${btnApplySeparation.textContent}"`);
 
     // Note: Debug dimension checks removed - palette editor is now in separate paletteDialog
 
@@ -3310,7 +3034,6 @@ function showPaletteEditor(selectedPalette) {
 
     // Attach fresh event listener to cloned button (no duplicates)
     btnApply.addEventListener("click", async () => {
-        logger.log("Apply Separation button clicked!");
 
         // GUARD CLAUSE: Prevent concurrent executions
         if (btnApply.disabled) {
@@ -3321,7 +3044,6 @@ function showPaletteEditor(selectedPalette) {
         // LOCK: Disable button immediately
         btnApply.disabled = true;
         btnApply.textContent = "Applying Separation...";
-        logger.log('✓ Button locked - separation starting');
 
         // Validation checks
         if (!posterizationData) {
@@ -3341,8 +3063,6 @@ function showPaletteEditor(selectedPalette) {
         }
 
         // PALETTE SOVEREIGNTY: Use user-edited hex values as absolute truth
-        logger.log("Applying separation with Sovereign Palette:", selectedPreview.hexColors);
-        logger.log("✓ User-edited colors are law - generating plates with exact hex values");
 
         // Filter out soft-deleted colors before separation
         let hexColors = selectedPreview.hexColors;
@@ -3351,16 +3071,12 @@ function showPaletteEditor(selectedPalette) {
 
         if (window.previewState && window.previewState.deletedIndices.size > 0) {
             const deletedIndices = window.previewState.deletedIndices;
-            logger.log(`🗑️ Filtering out ${deletedIndices.size} soft-deleted colors before separation`);
 
             // Filter all palette arrays to exclude deleted colors
             hexColors = selectedPreview.hexColors.filter((_, idx) => !deletedIndices.has(idx));
             originalHexColors = selectedPreview.originalHexColors.filter((_, idx) => !deletedIndices.has(idx));
             paletteLab = selectedPreview.paletteLab.filter((_, idx) => !deletedIndices.has(idx));
 
-            logger.log(`  Original palette: ${selectedPreview.hexColors.length} colors`);
-            logger.log(`  Filtered palette: ${hexColors.length} colors`);
-            logger.log(`  Deleted colors: ${Array.from(deletedIndices).map(i => selectedPreview.hexColors[i]).join(', ')}`);
         }
 
         // Track separation start time for golden stats
@@ -3378,12 +3094,10 @@ function showPaletteEditor(selectedPalette) {
 
             await core.executeAsModal(async (executionContext) => {
                 // Phase 4.1: Separate the image (ASYNC with progress)
-                logger.log("Step 1: Separating image into color layers...");
 
                 // Get dithering setting from UI
                 const ditherTypeEl = document.getElementById('ditherType');
                 const ditherType = ditherTypeEl ? ditherTypeEl.value : 'none';
-                logger.log(`Dithering: ${ditherType}`);
 
                 // Get distance metric setting from UI and resolve "auto" if needed
                 const distanceMetricEl = document.getElementById('distanceMetric');
@@ -3395,7 +3109,6 @@ function showPaletteEditor(selectedPalette) {
                     'cie2000': 'Museum Grade (CIE2000)'
                 };
                 const metricLabel = metricLabels[distanceMetric] || distanceMetric;
-                logger.log(`Color matching: ${distanceMetricSetting === 'auto' ? 'Smart Reveal → ' : ''}${metricLabel}`);
 
                 // Get mesh setting from UI (for mesh-aware dithering)
                 const meshSizeEl = document.getElementById('meshSize');
@@ -3414,9 +3127,7 @@ function showPaletteEditor(selectedPalette) {
                 if (meshValue > 0) {
                     const maxLPI = Math.floor(meshValue / 7);
                     const cellSize = Math.ceil(documentPPI / maxLPI);
-                    logger.log(`Mesh-aware: ${meshValue} TPI @ ${documentPPI} PPI → ${maxLPI} LPI max, ${cellSize}px cell size`);
                 } else {
-                    logger.log(`Mesh: Pixel-level (no constraint)`);
                 }
 
                 // Use original colors for assignment, edited colors for rendering
@@ -3433,7 +3144,6 @@ function showPaletteEditor(selectedPalette) {
                         onProgress: (percent) => {
                             // Throttle logging to 25% intervals
                             if (percent % 25 === 0) {
-                                logger.log(`Preview separation progress: ${percent}%`);
                             }
                         },
                         ditherType: ditherType,
@@ -3443,18 +3153,14 @@ function showPaletteEditor(selectedPalette) {
                     }
                 );
 
-                logger.log(`Generated ${layers.length} separated layers`);
 
                 // Phase 4.2: Create layers in Photoshop
-                logger.log("Step 2: Creating layers in Photoshop...");
 
                 // Get full-resolution document pixels
                 const docInfo = PhotoshopAPI.getDocumentInfo();
-                logger.log(`Document: ${docInfo.width}x${docInfo.height}`);
 
                 // Re-separate at full resolution (ASYNC with progress)
                 fullResPixels = await PhotoshopAPI.getDocumentPixels(docInfo.width, docInfo.height);
-                logger.log(`Full-resolution separation: ${fullResPixels.width}x${fullResPixels.height}`);
 
                 fullResLayers = await SeparationEngine.separateImage(
                     fullResPixels.pixels,
@@ -3467,7 +3173,6 @@ function showPaletteEditor(selectedPalette) {
                         onProgress: (percent) => {
                             // Throttle logging to 25% intervals
                             if (percent % 25 === 0) {
-                                logger.log(`Full-res separation progress: ${percent}%`);
                             }
                         },
                         ditherType: ditherType,
@@ -3479,7 +3184,6 @@ function showPaletteEditor(selectedPalette) {
 
                 // Sort layers for screen printing: Light to Dark (Bottom to Top)
                 // Substrate always goes at bottom regardless of lightness
-                logger.log('Sorting layers for screen printing (light→dark)...');
 
                 // Separate substrate layer from ink layers
                 let substrateLayer = null;
@@ -3494,7 +3198,6 @@ function showPaletteEditor(selectedPalette) {
                 const totalPixels = fullResPixels.width * fullResPixels.height;
                 const SUBSTRATE_MIN_COVERAGE = 5.0; // Minimum 5% coverage to be considered substrate
 
-                logger.log(`Analyzing ${fullResLayers.length} layers for substrate detection:`);
                 for (const layer of fullResLayers) {
                     // Calculate coverage percentage for this layer
                     // Count non-zero pixels in mask
@@ -3504,7 +3207,6 @@ function showPaletteEditor(selectedPalette) {
                     }
                     const coveragePercent = (coveragePixels / totalPixels) * 100;
 
-                    logger.log(`  Layer: ${layer.name} | L=${layer.labColor.L.toFixed(2)} a=${layer.labColor.a.toFixed(2)} b=${layer.labColor.b.toFixed(2)} | Coverage: ${coveragePercent.toFixed(1)}%`);
 
                     // Check for pure white (L=100, a=0, b=0)
                     // Tolerance: L > 99 (near white), a/b within 2 (allows for slight tinting)
@@ -3516,7 +3218,6 @@ function showPaletteEditor(selectedPalette) {
                     const isWhite = whiteL && whiteA && whiteB && whiteCoverage;
 
                     if (layer.labColor.L > 95) {
-                        logger.log(`    White check: L>${99}? ${whiteL} (L=${layer.labColor.L.toFixed(2)}) | a<2? ${whiteA} (a=${layer.labColor.a.toFixed(2)}) | b<2? ${whiteB} (b=${layer.labColor.b.toFixed(2)}) | coverage>=${SUBSTRATE_MIN_COVERAGE}%? ${whiteCoverage} (${coveragePercent.toFixed(1)}%)`);
                     }
 
                     // Check for pure black (L=0, a=0, b=0)
@@ -3530,7 +3231,6 @@ function showPaletteEditor(selectedPalette) {
                     const isBlack = blackL && blackA && blackB && blackCoverage;
 
                     if (layer.labColor.L < 10) {
-                        logger.log(`    Black check: L<${5}? ${blackL} (L=${layer.labColor.L.toFixed(2)}) | a<5? ${blackA} (a=${layer.labColor.a.toFixed(2)}) | b<5? ${blackB} (b=${layer.labColor.b.toFixed(2)}) | coverage>=${SUBSTRATE_MIN_COVERAGE}%? ${blackCoverage} (${coveragePercent.toFixed(1)}%)`);
                     }
 
                     // Check for detected substrate from posterization
@@ -3541,16 +3241,12 @@ function showPaletteEditor(selectedPalette) {
 
                     if (isWhite) {
                         whiteLayer = layer;
-                        logger.log(`    → Identified as WHITE layer`);
                     } else if (isBlack) {
                         blackLayer = layer;
-                        logger.log(`    → Identified as BLACK layer`);
                     } else if (matchesDetectedSubstrate) {
                         detectedSubstrateLayer = layer;
-                        logger.log(`    → Identified as DETECTED SUBSTRATE`);
                     } else {
                         inkLayers.push(layer);
-                        logger.log(`    → Added to INK LAYERS`);
                     }
                 }
 
@@ -3559,9 +3255,7 @@ function showPaletteEditor(selectedPalette) {
                 const autoDetectedBlack = selectedPreview.substrateLab && selectedPreview.substrateLab.L < 5;
 
                 if (autoDetectedWhite) {
-                    logger.log(`  Auto-detected substrate is WHITE (L=${selectedPreview.substrateLab.L.toFixed(1)})`);
                 } else if (autoDetectedBlack) {
-                    logger.log(`  Auto-detected substrate is BLACK (L=${selectedPreview.substrateLab.L.toFixed(1)})`);
                 }
 
                 // Determine substrate with priority:
@@ -3572,7 +3266,6 @@ function showPaletteEditor(selectedPalette) {
                     // White paper detected - use white layer if available, otherwise use brightest layer
                     if (whiteLayer) {
                         substrateLayer = whiteLayer;
-                        logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [WHITE PAPER - exact match]`);
                     } else {
                         // Find the brightest layer (highest L) to use as white substrate proxy
                         const allLayers = [...inkLayers];
@@ -3594,54 +3287,41 @@ function showPaletteEditor(selectedPalette) {
                             if (idx >= 0) inkLayers.splice(idx, 1);
 
                             substrateLayer = brightestLayer;
-                            logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [WHITE PAPER - brightest layer proxy]`);
                         } else {
-                            logger.log(`  ⚠ White substrate detected but no suitable bright layer found (brightest L=${brightestL?.toFixed(1) || 'N/A'})`);
                         }
                     }
                     // Black becomes an ink layer if white is substrate
                     if (blackLayer && substrateLayer !== blackLayer) {
                         if (!inkLayers.includes(blackLayer)) {
                             inkLayers.push(blackLayer);
-                            logger.log(`  Demoted black to ink layer: ${blackLayer.name}`);
                         }
                     }
                 } else if (whiteLayer) {
                     substrateLayer = whiteLayer;
-                    logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [WHITE PAPER]`);
                     // Black becomes an ink layer if white is substrate
                     if (blackLayer) {
                         inkLayers.push(blackLayer);
-                        logger.log(`  Demoted black to ink layer: ${blackLayer.name}`);
                     }
                     // Detected substrate also becomes an ink layer if white takes priority
                     if (detectedSubstrateLayer) {
                         inkLayers.push(detectedSubstrateLayer);
-                        logger.log(`  Demoted detected substrate to ink layer: ${detectedSubstrateLayer.name}`);
                     } else if (selectedPreview.substrateLab) {
-                        logger.log(`  ⚠ Detected substrate from posterization was skipped (likely <0.1% coverage) - not creating layer`);
                     }
                 } else if (autoDetectedBlack && blackLayer) {
                     // Black paper explicitly detected
                     substrateLayer = blackLayer;
-                    logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [BLACK PAPER - auto-detected]`);
                     if (detectedSubstrateLayer && detectedSubstrateLayer !== blackLayer) {
                         inkLayers.push(detectedSubstrateLayer);
-                        logger.log(`  Demoted detected substrate to ink layer: ${detectedSubstrateLayer.name}`);
                     }
                 } else if (blackLayer) {
                     substrateLayer = blackLayer;
-                    logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [BLACK PAPER]`);
                     // Detected substrate becomes an ink layer if black takes priority
                     if (detectedSubstrateLayer) {
                         inkLayers.push(detectedSubstrateLayer);
-                        logger.log(`  Demoted detected substrate to ink layer: ${detectedSubstrateLayer.name}`);
                     } else if (selectedPreview.substrateLab) {
-                        logger.log(`  ⚠ Detected substrate from posterization was skipped (likely <0.1% coverage) - not creating layer`);
                     }
                 } else if (detectedSubstrateLayer) {
                     substrateLayer = detectedSubstrateLayer;
-                    logger.log(`  Found substrate layer: ${substrateLayer.name} (L=${substrateLayer.labColor.L.toFixed(1)}) [AUTO-DETECTED]`);
                 }
 
                 // Sort ink layers by L value: HIGH to LOW (light to dark)
@@ -3650,21 +3330,18 @@ function showPaletteEditor(selectedPalette) {
                 // So we create light layers first (high L), dark layers last (low L)
                 inkLayers.sort((a, b) => b.labColor.L - a.labColor.L);
 
-                logger.log('Layer order (bottom→top):');
                 const orderedLayers = [];
                 let layerIndex = 0;
 
                 // Substrate ALWAYS at bottom (if it exists)
                 if (substrateLayer) {
                     orderedLayers.push(substrateLayer);
-                    logger.log(`  ${layerIndex + 1}. ${substrateLayer.name} (SUBSTRATE - always at bottom)`);
                     layerIndex++;
                 }
 
                 // Then ink layers sorted by L value (light to dark)
                 inkLayers.forEach((layer) => {
                     orderedLayers.push(layer);
-                    logger.log(`  ${layerIndex + 1}. ${layer.name} (L=${layer.labColor.L.toFixed(1)})`);
                     layerIndex++;
                 });
                 const doc = PhotoshopAPI.getActiveDocument();
@@ -3685,17 +3362,14 @@ function showPaletteEditor(selectedPalette) {
                     historySuspendedByUs = true;
                 } catch (err) {
                     // History might already be suspended - log but continue
-                    logger.log(`⚠ Could not suspend history (may already be suspended): ${err.message}`);
                 }
 
                 try {
                     // CRITICAL: Show all layers before cleanup (might be hidden from previous run)
-                    logger.log(`Ensuring all layers are visible before cleanup...`);
                     try {
                         for (const layer of doc.layers) {
                             if (!layer.visible) {
                                 layer.visible = true;
-                                logger.log(`✓ Showed hidden layer: "${layer.name}"`);
                             }
                         }
                     } catch (err) {
@@ -3704,16 +3378,13 @@ function showPaletteEditor(selectedPalette) {
 
                     // CRITICAL: Delete all existing separation layers before creating new ones
                     // This prevents duplicates/conflicts when running the plugin multiple times
-                    logger.log(`Deleting existing layers (current count: ${doc.layers.length})...`);
                     await PhotoshopAPI.deleteAllLayersExceptBackground();
-                    logger.log(`✓ Cleaned up existing layers (remaining: ${doc.layers.length})`);
 
                     // Store reference to the original source layer (what remains after cleanup)
                     // This is the layer we'll hide after creating separation layers
                     // Note: Can't rely on isBackgroundLayer since user might have a regular layer
                     const originalLayer = doc.layers.length > 0 ? doc.layers[doc.layers.length - 1] : null;
                     if (originalLayer) {
-                        logger.log(`Original source layer: "${originalLayer.name}" (ID: ${originalLayer.id})`);
                     } else {
                         logger.warn(`⚠ No original layer found after cleanup - this shouldn't happen!`);
                     }
@@ -3721,13 +3392,11 @@ function showPaletteEditor(selectedPalette) {
                     // Detect document bit depth to route to appropriate layer creation method
                     const docBitDepth = String(doc.bitsPerChannel).toLowerCase();
                     const is16bit = docBitDepth.includes('16') || doc.bitsPerChannel === 16;
-                    logger.log(`Document bit depth: ${doc.bitsPerChannel} → Using ${is16bit ? '16-bit' : '8-bit'} layer creation method`);
 
                     let skippedCount = 0;
 
                     for (let i = 0; i < orderedLayers.length; i++) {
                         const layerData = orderedLayers[i];
-                        logger.log(`Creating layer ${i + 1}/${orderedLayers.length}: ${layerData.name}`);
 
                         // Add maskProfile to layerData (from form values)
                         const layerDataWithProfile = {
@@ -3742,7 +3411,6 @@ function showPaletteEditor(selectedPalette) {
 
                         // Handle skipped layers (empty masks)
                         if (createdLayer === null) {
-                            logger.log(`  ⚠ Layer "${layerData.name}" was skipped (empty mask)`);
                             skippedCount++;
                         }
                     }
@@ -3759,14 +3427,12 @@ function showPaletteEditor(selectedPalette) {
                     }
 
                     // Hide the original source layer so only separation layers are visible
-                    logger.log(`Hiding original source layer...`);
                     try {
                         if (originalLayer) {
                             // Verify layer still exists (wasn't deleted during separation)
                             const layerStillExists = doc.layers.find(l => l.id === originalLayer.id);
                             if (layerStillExists) {
                                 originalLayer.visible = false;
-                                logger.log(`✓ Original layer "${originalLayer.name}" hidden`);
                             } else {
                                 logger.warn(`⚠ Original layer was deleted during separation`);
                             }
@@ -3792,10 +3458,8 @@ function showPaletteEditor(selectedPalette) {
                 commandName: "Reveal"
             });
 
-            logger.log("✓ Separation complete!");
 
             // CLEANUP: Release resources proactively
-            logger.log("Cleaning up resources...");
             if (fullResPixels && fullResPixels.pixels) {
                 fullResPixels.pixels = null;
             }
@@ -3804,18 +3468,15 @@ function showPaletteEditor(selectedPalette) {
                     layer.mask = null;
                 }
             });
-            logger.log("✓ Resources released");
 
             // Close palette dialog
             const paletteDialog = document.getElementById('paletteDialog');
             if (paletteDialog) {
                 paletteDialog.close();
-                logger.log('✓ Palette dialog closed');
             }
 
             // Note: Button stays disabled since dialog is closed
             // It will be reset when dialog reopens
-            logger.log('✓ Separation complete - dialog closed');
 
             // Success dialog removed - was originally for golden stats capture
             // Separation complete, dialog closes automatically
@@ -3847,12 +3508,10 @@ function showPaletteEditor(selectedPalette) {
                 errorMessage.toLowerCase().includes('user stopped');
 
             if (isCancellation) {
-                logger.log("⚠️ User cancelled separation - cleaning up gracefully");
 
                 // Just reset button state, don't show error dialog
                 btnApply.disabled = false;
                 btnApply.textContent = "Separate with this palette →";
-                logger.log('✓ Button unlocked after cancellation');
 
                 // Exit cleanly without showing error
                 return;
@@ -3883,14 +3542,12 @@ function showPaletteEditor(selectedPalette) {
             // UNLOCK: Re-enable button after error
             btnApply.disabled = false;
             btnApply.textContent = "Separate with this palette →";
-            logger.log('✓ Button unlocked after error');
         }
     });
 
     // Update dialog title
     document.querySelector('.reveal-title').textContent = 'Reveal - Customize Palette & Separate';
 
-    logger.log("Palette editor displayed with", selectedPalette.hexColors.length, "colors");
 
     // Note: Diagnostic dimension checks removed - palette editor is now in separate dialog
 }
@@ -3927,7 +3584,6 @@ function showPreviewSection() {
     const dialog = document.getElementById('mainDialog');
     if (dialog) {
         dialog.style.width = '520px';  // Force explicit width
-        logger.log("Set dialog width to 520px");
     } else {
         logger.error("Could not find mainDialog element!");
     }
@@ -3974,7 +3630,6 @@ function showPreviewSection() {
  * Display posterization previews
  */
 function displayPreviews(originalPixels, originalWidth, originalHeight, previews, docInfo) {
-    logger.log("Displaying previews (UXP canvas doesn't support toDataURL)");
 
     // Remove preview images (UXP limitation - canvas.toDataURL() not supported)
     // Just hide them to avoid layout collapse
@@ -3994,13 +3649,10 @@ function displayPreviews(originalPixels, originalWidth, originalHeight, previews
 
     // CRITICAL WORKAROUND: Show preview section FIRST, then create swatches
     // UXP refuses to render dynamically created content in hidden containers
-    logger.log("About to call showPreviewSection() BEFORE creating swatches");
     showPreviewSection();
-    logger.log("showPreviewSection() completed, now creating swatches");
 
     // Display posterized previews - show color palettes
     previews.forEach(preview => {
-        logger.log(`Creating swatches for ${preview.colorCount} colors:`, preview.hexColors);
 
         // Display color palette swatches
         const paletteDiv = document.getElementById(`palette${preview.colorCount}`);
@@ -4009,7 +3661,6 @@ function displayPreviews(originalPixels, originalWidth, originalHeight, previews
             return;
         }
 
-        logger.log(`Found palette div: palette${preview.colorCount}`);
 
         // WORKAROUND: UXP layout bug with createElement/appendChild
         // Use innerHTML injection instead - renders everything in one pass
@@ -4029,12 +3680,9 @@ function displayPreviews(originalPixels, originalWidth, originalHeight, previews
         `).join('');
 
         paletteDiv.innerHTML = swatchesHTML;
-        logger.log(`Injected ${preview.hexColors.length} swatches via innerHTML for palette${preview.colorCount}`);
 
-        logger.log(`Palette ${preview.colorCount} now has ${paletteDiv.children.length} swatches`);
     });
 
-    logger.log("Swatches created, checking dimensions...");
 
     // Debug: Check if preview grid is visible
     const dialog = document.getElementById('mainDialog');
@@ -4042,23 +3690,9 @@ function displayPreviews(originalPixels, originalWidth, originalHeight, previews
     const previewSection = document.getElementById('previewSection');
     const previewItems = document.querySelectorAll('.preview-item');
 
-    logger.log("Dialog offsetWidth:", dialog.offsetWidth);
-    logger.log("Dialog computed width:", window.getComputedStyle(dialog).width);
-    logger.log("Preview section classes:", previewSection.className);
-    logger.log("Preview section display style:", window.getComputedStyle(previewSection).display);
-    logger.log("Preview section offsetHeight:", previewSection.offsetHeight);
-    logger.log("Preview section scrollHeight:", previewSection.scrollHeight);
 
-    logger.log("Preview grid display style:", window.getComputedStyle(previewGrid).display);
-    logger.log("Preview grid computed width:", window.getComputedStyle(previewGrid).width);
-    logger.log("Preview grid offsetHeight:", previewGrid.offsetHeight);
-    logger.log("Preview grid offsetWidth:", previewGrid.offsetWidth);
-    logger.log("Preview grid children:", previewGrid.children.length);
-
-    logger.log("Preview items count:", previewItems.length);
     previewItems.forEach((item, i) => {
         const styles = window.getComputedStyle(item);
-        logger.log(`  Item ${i}: display=${styles.display}, height=${item.offsetHeight}px, width=${item.offsetWidth}px, visibility=${styles.visibility}`);
     });
 
     // Check if grid items have the palette divs populated
@@ -4066,24 +3700,11 @@ function displayPreviews(originalPixels, originalWidth, originalHeight, previews
     const palette5 = document.getElementById('palette5');
     const palette7 = document.getElementById('palette7');
 
-    logger.log("Palette3 children:", palette3.children.length);
-    logger.log("Palette5 children:", palette5.children.length);
-    logger.log("Palette7 children:", palette7.children.length);
 
     // Check swatch dimensions
     if (palette3.children.length > 0) {
         const firstSwatch = palette3.children[0].querySelector('.color-swatch');
         if (firstSwatch) {
-            logger.log("First swatch computed styles:", {
-                width: window.getComputedStyle(firstSwatch).width,
-                height: window.getComputedStyle(firstSwatch).height,
-                backgroundColor: window.getComputedStyle(firstSwatch).backgroundColor,
-                display: window.getComputedStyle(firstSwatch).display
-            });
-            logger.log("First swatch offset dimensions:", {
-                offsetWidth: firstSwatch.offsetWidth,
-                offsetHeight: firstSwatch.offsetHeight
-            });
         }
     }
 }
@@ -4204,17 +3825,14 @@ function mapAnalyzerSettings(analyzerSettings) {
  * @param {Object} settings - Settings object with form IDs as keys
  */
 function applyAnalyzedSettings(settings) {
-    logger.log("[Analyze] Applying settings:", settings);
 
     Object.keys(settings).forEach(key => {
         const element = document.getElementById(key);
         if (!element) {
-            logger.log(`  ⚠️ Element not found: ${key} (skipping)`);
             return;
         }
 
         const value = settings[key];
-        logger.log(`  Setting ${key} = ${value}`);
 
         try {
             if (element.type === 'checkbox') {
@@ -4250,7 +3868,6 @@ function applyAnalyzedSettings(settings) {
         }
     });
 
-    logger.log("✓ All analyzed settings applied");
 }
 
 /**
@@ -4282,7 +3899,6 @@ Object.keys(PARAMETER_PRESETS).forEach(id => {
     if (!preset.id || !preset.name || !preset.settings) {
         logger.error(`Invalid preset: ${id} - missing required fields`);
     }
-    logger.log(`✓ Loaded preset: "${preset.name}" (${id})`);
 });
 
 /**
@@ -4323,7 +3939,6 @@ Object.keys(ARCHETYPES).forEach(id => {
     if (!archetype.id || !archetype.name || !archetype.parameters) {
         logger.error(`Invalid archetype: ${id} - missing required fields`);
     }
-    logger.log(`✓ Loaded archetype: "${archetype.name}" (${id})`);
 });
 
 /**
@@ -4370,7 +3985,6 @@ function setupZoomPreviewControls() {
 
         zoomDownsampleFactor.addEventListener('change', async (e) => {
             const resolution = parseInt(e.target.value);
-            logger.log(`Resolution changing to 1:${resolution}...`);
 
             // Show busy cursor on viewport
             if (viewportContainer) {
@@ -4383,7 +3997,6 @@ function setupZoomPreviewControls() {
                 const centerX = renderer.width / 2;
                 const centerY = renderer.height / 2;
                 await renderer.setResolutionAtPoint(resolution, centerX, centerY);
-                logger.log(`✓ Resolution changed to 1:${resolution} (scale: ${1/resolution})`);
             } finally {
                 // Restore cursor
                 if (viewportContainer) {
@@ -4393,7 +4006,6 @@ function setupZoomPreviewControls() {
             }
         });
 
-        logger.log('✓ Resolution dropdown initialized: 1:1');
     }
 
     // Wheel zoom-to-cursor
@@ -4419,7 +4031,6 @@ function setupZoomPreviewControls() {
 
             // Zoom to cursor position
             await renderer.setResolutionAtPoint(nextRes, mouseX, mouseY);
-            logger.log(`✓ Zoomed to 1:${nextRes} at cursor (${mouseX}, ${mouseY})`);
 
             // Update dropdown to match
             if (zoomDownsampleFactor) {
@@ -4427,7 +4038,6 @@ function setupZoomPreviewControls() {
             }
         }, { passive: false });
 
-        logger.log('✓ Wheel zoom-to-cursor initialized');
     }
 
     // Mouse drag panning
@@ -4468,7 +4078,6 @@ function setupZoomPreviewControls() {
             }
         });
 
-        logger.log('✓ Mouse drag panning initialized');
     }
 
     // Recenter button (Home key)
@@ -4483,7 +4092,6 @@ function setupZoomPreviewControls() {
             renderer.applyBounds();
             renderer.fetchAndRender();
 
-            logger.log(`Recentered viewport to (${renderer.viewportX}, ${renderer.viewportY})`);
         }
     });
 
@@ -4500,7 +4108,6 @@ function setupZoomPreviewControls() {
             }
             zoomPreviewState = null;
 
-            logger.log("✓ Zoom preview closed and cleaned up");
         });
     }
 
@@ -4546,9 +4153,6 @@ function setupZoomPreviewControls() {
  * Used by both btnAnalyzeAndSet and archetype selector dropdown
  */
 async function handleAnalyzeImage() {
-    logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    logger.log("ANALYSE IMAGE - Starting analysis...");
-    logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     try {
         // Get Lab pixels from current document (800px for analysis)
@@ -4561,15 +4165,12 @@ async function handleAnalyzeImage() {
             };
         }, { commandName: "Analyze Document DNA" });
 
-        logger.log(`✓ Retrieved ${result.pixels.length} bytes (${result.width}×${result.height})`);
 
         // Generate DNA from Lab pixels
         const startTime = Date.now();
         const dna = DNAGenerator.generate(result.pixels, result.width, result.height, 40);
         const dnaTime = Date.now() - startTime;
 
-        logger.log("✓ Image DNA extracted:", dna);
-        logger.log(`  DNA generation time: ${dnaTime.toFixed(2)}ms`);
 
         // Run ParameterGenerator to get dynamic configuration (with entropy analysis)
         // Pass manualArchetypeId if user has manually selected an archetype
@@ -4580,14 +4181,11 @@ async function handleAnalyzeImage() {
             preprocessingIntensity: 'auto',  // Let entropy analysis decide
             manualArchetypeId: lastSelectedArchetypeId  // Bypass DNA matching if manual selection
         });
-        logger.log("✓ Generated dynamic config:", config);
 
         // Log preprocessing decision from entropy analysis
         if (config.preprocessing) {
             const pp = config.preprocessing;
-            logger.log(`✓ Preprocessing analysis: ${pp.enabled ? pp.intensity : 'off'} (${pp.reason})`);
             if (pp.entropyScore !== undefined) {
-                logger.log(`  Entropy score: ${pp.entropyScore.toFixed(1)}`);
             }
         }
 
@@ -4599,7 +4197,6 @@ async function handleAnalyzeImage() {
         };
         // Store complete config including all parameters (even those not in UI)
         lastGeneratedConfig = config;
-        logger.log(`✓ Stored DNA for Smart Reveal: peakC=${dna.maxC?.toFixed(1)}, archetype=${lastImageDNA.archetype}`);
 
         // Determine preprocessing dropdown value based on analysis
         // Show the actual decision so user knows what will happen
@@ -4665,28 +4262,6 @@ async function handleAnalyzeImage() {
             maskProfile: config.maskProfile || 'Gray Gamma 2.2'
         };
 
-        logger.log("  Setting ALL UI parameters from Expert System:");
-        logger.log("  Core:", {
-            targetColors: config.targetColors,
-            ditherType: config.ditherType
-        });
-        logger.log("  Saliency:", {
-            lWeight: config.lWeight,
-            cWeight: config.cWeight,
-            blackBias: config.blackBias
-        });
-        logger.log("  Vibrancy:", {
-            mode: config.vibrancyMode,
-            boost: config.vibrancyBoost
-        });
-        logger.log("  Highlights:", {
-            threshold: config.highlightThreshold,
-            boost: config.highlightBoost
-        });
-        logger.log("  Merging:", {
-            paletteReduction: config.paletteReduction
-        });
-        logger.log("  Substrate:", config.substrateMode);
 
         // Apply ALL DNA-based settings to UI
         applyAnalyzedSettings(uiSettings);
@@ -4711,23 +4286,9 @@ async function handleAnalyzeImage() {
         const alertMsg = `Image Analysis Complete\n\nProfile: ${config.name}\nArchetype: ${config.meta?.archetype || 'Unknown'}\nColors: ${config.targetColors}\nDither: ${config.ditherType}\nPreprocessing: ${preprocessingInfo}\n\nParameters have been configured.\nClick "Posterize" to generate separations.`;
 
         // Log full details to console
-        logger.log(`\nDNA ANALYSIS COMPLETE`);
-        logger.log(`Image DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
-        logger.log(`Archetype: ${config.meta?.archetype || 'unknown'}`);
-        logger.log(`Config: ${config.name}`);
-        logger.log(`  Target Colors: ${config.targetColors}`);
-        logger.log(`  Black Bias: ${config.blackBias.toFixed(1)}`);
-        logger.log(`  Vibrancy Boost: ${config.saturationBoost.toFixed(2)}`);
-        logger.log(`  Dither Type: ${config.ditherType}`);
-        logger.log(`  Smart Reveal → ${smartMetricLabel} (${smartMetric})`);
-        logger.log(`  Preprocessing: ${preprocessingInfo}`);
-        logger.log(`Analysis Time: ${dnaTime.toFixed(2)}ms`);
 
         alert(alertMsg);
 
-        logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        logger.log("✓ ANALYSE IMAGE - Complete");
-        logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
         // Update archetype selector to show "auto" since we just analyzed
         const archetypeSelector = document.getElementById("archetypeSelector");
@@ -4748,26 +4309,19 @@ async function handleAnalyzeImage() {
  * Show the main dialog
  */
 async function showDialog() {
-    logger.log("showDialog() called");
     try {
         const dialog = document.getElementById("mainDialog");
-        logger.log("Dialog element found:", dialog ? "yes" : "no");
 
         if (!dialog) {
             logger.error("Dialog element not found! DOM might not be ready.");
             throw new Error("Dialog element not found");
         }
 
-        logger.log("Dialog object type:", typeof dialog);
-        logger.log("Dialog showModal method:", typeof dialog.showModal);
 
         // CRITICAL: Validate document BEFORE showing dialog
-        logger.log("Validating document...");
         const validation = PhotoshopAPI.validateDocument();
 
         if (!validation.valid) {
-            logger.log("Document validation failed - showing error without opening dialog");
-            logger.log("Errors:", validation.errors);
 
             // Use alert instead of modal dialog to avoid UXP crashes during entrypoint
             const errorMessage = "Your document doesn't meet the requirements for Reveal:\n\n" +
@@ -4777,17 +4331,14 @@ async function showDialog() {
             return; // Don't open dialog
         }
 
-        logger.log("Document validation passed!");
 
         // CRITICAL: Reset UI state to initial view (parameter entry)
         // This ensures re-invoking the plugin starts fresh
-        logger.log("Resetting UI to initial state...");
 
         // Show parameter entry section wrapper
         const parameterEntrySection = document.getElementById('parameterEntrySection');
         if (parameterEntrySection) {
             parameterEntrySection.style.display = 'block';
-            logger.log("✓ Parameter entry section shown");
         }
 
         // Show version badge
@@ -4815,17 +4366,14 @@ async function showDialog() {
 
         // Clear preview state from previous session
         if (window.previewState) {
-            logger.log("Clearing preview state...");
             window.previewState = null;
         }
 
-        logger.log("UI reset complete - showing parameter entry screen");
 
         // CRITICAL: Set up event listeners BEFORE showing dialog
         // showModal() blocks until dialog closes, so code after it won't run until then!
         // Only attach listeners once to prevent accumulation on dialog reopen
         if (!listenersAttached) {
-            logger.log("Attaching event listeners (first time only)...");
 
             // Set up collapsible sections
             const sectionTitles = document.querySelectorAll('.section-title');
@@ -4854,10 +4402,8 @@ async function showDialog() {
 
             // Set up preview item selection
             const previewItems = document.querySelectorAll('.preview-item[data-color-count]');
-            logger.log(`Found ${previewItems.length} preview items for click handlers`);
             previewItems.forEach(item => {
                 item.addEventListener('click', (event) => {
-                    logger.log(`Preview item clicked! Target:`, event.target, `Current target:`, event.currentTarget);
                     const colorCount = item.dataset.colorCount;
                     const radio = document.getElementById(`color${colorCount}`);
 
@@ -4866,7 +4412,6 @@ async function showDialog() {
                     item.classList.add('selected');
                     radio.checked = true;
 
-                    logger.log(`Selected ${colorCount} colors via preview item click`);
                 });
             });
 
@@ -4882,7 +4427,6 @@ async function showDialog() {
             const btnPaletteCancel = document.getElementById("btnPaletteCancel");
             if (btnPaletteCancel) {
                 btnPaletteCancel.addEventListener("click", () => {
-                    logger.log("Palette Cancel button clicked - dismissing plugin");
 
                     // Cleanup zoom renderer if in zoom mode
                     if (window.previewState && window.previewState.viewMode === 'zoom') {
@@ -4907,7 +4451,6 @@ async function showDialog() {
                     const paletteDialog = document.getElementById('paletteDialog');
                     if (paletteDialog) {
                         paletteDialog.close();
-                        logger.log("✓ Palette dialog closed - plugin dismissed");
                     }
                 });
             }
@@ -4916,7 +4459,6 @@ async function showDialog() {
             const btnBack = document.getElementById("btnBack");
             if (btnBack) {
                 btnBack.addEventListener("click", () => {
-                    logger.log("Back button clicked - returning to posterization settings");
 
                     // Cleanup zoom renderer if in zoom mode
                     if (window.previewState && window.previewState.viewMode === 'zoom') {
@@ -4942,14 +4484,12 @@ async function showDialog() {
                     const paletteDialog = document.getElementById('paletteDialog');
                     if (paletteDialog) {
                         paletteDialog.close();
-                        logger.log("✓ Closed palette dialog");
                     }
 
                     // Show Posterize button (it was hidden when palette editor opened)
                     const btnPosterize = document.getElementById('btnPosterize');
                     if (btnPosterize) {
                         btnPosterize.style.display = '';
-                        logger.log("✓ Posterize button restored");
                     }
 
                     // Reopen main dialog with size options (NON-MODAL for LAB slider access)
@@ -4966,13 +4506,11 @@ async function showDialog() {
                                 maxHeight: 900
                             }
                         });
-                        logger.log("✓ Reopened main dialog (non-modal)");
                     }
 
                     // Note: Keep posterizationData intact so user doesn't lose their work
                     // They can modify settings and re-posterize if desired
 
-                    logger.log("✓ Returned to posterization settings");
                 });
             }
 
@@ -4981,7 +4519,6 @@ async function showDialog() {
             const btnRunNetwisdomTests = document.getElementById("btnRunNetwisdomTests");
             if (btnRunNetwisdomTests) {
                 btnRunNetwisdomTests.addEventListener("click", async () => {
-                    logger.log("🔬 Running pixel data → mask test...");
                     btnRunNetwisdomTests.disabled = true;
                     btnRunNetwisdomTests.textContent = "Running Test...";
 
@@ -5025,7 +4562,6 @@ async function showDialog() {
             const btnTestLabUniformity = document.getElementById("btnTestLabUniformity");
             if (btnTestLabUniformity) {
                 btnTestLabUniformity.addEventListener("click", async () => {
-                    logger.log("🔬 Testing Lab uniformity (write/read round-trip)...");
                     btnTestLabUniformity.disabled = true;
                     btnTestLabUniformity.textContent = "Running Test...";
 
@@ -5035,7 +4571,6 @@ async function showDialog() {
                         const testLab = { L: 204, a: 128, b: 128 };
 
                         // 1. Create Lab document
-                        logger.log('Creating Lab document...');
                         await action.batchPlay([{
                             "_obj": "make",
                             "_target": [{ "_ref": "document" }],
@@ -5053,7 +4588,6 @@ async function showDialog() {
                         const doc = app.activeDocument;
 
                         // 2. Write UNIFORM Lab data
-                        logger.log(`Writing uniform Lab data (L=${testLab.L}, a=${testLab.a}, b=${testLab.b})...`);
                         const labData = new Uint8Array(width * height * 3);
                         for (let i = 0; i < width * height; i++) {
                             const idx = i * 3;
@@ -5075,7 +4609,6 @@ async function showDialog() {
                         imageData.dispose();
 
                         // 3. Read it back
-                        logger.log('Reading Lab data back...');
                         const pixelData = await imaging.getPixels({
                             documentID: doc.id,
                             componentSize: 8,
@@ -5098,18 +4631,15 @@ async function showDialog() {
                             uniqueValues.add(val);
                         }
 
-                        logger.log(`Unique Lab values after round-trip: ${uniqueValues.size}`);
 
                         // Log the values for debugging
                         if (uniqueValues.size <= 10) {
-                            uniqueValues.forEach(v => logger.log(`  Lab value: ${v}`));
                         }
 
                         // 5. Close document (may fail if already closed)
                         try {
                             await doc.close();
                         } catch (closeError) {
-                            logger.log(`Note: Could not close test document (may already be closed)`);
                         }
 
                         // Show results
@@ -5151,17 +4681,8 @@ async function showDialog() {
                 const formParams = getFormValues();
 
                 // DIAGNOSTIC: Log what we're merging
-                logger.log("📋 Config merge diagnostic:");
-                logger.log("  lastGeneratedConfig exists:", !!lastGeneratedConfig);
                 if (lastGeneratedConfig) {
-                    logger.log("  lastGeneratedConfig.id:", lastGeneratedConfig.id);
-                    logger.log("  lastGeneratedConfig.distanceMetric:", lastGeneratedConfig.distanceMetric);
-                    logger.log("  lastGeneratedConfig.cWeight:", lastGeneratedConfig.cWeight);
-                    logger.log("  lastGeneratedConfig.vibrancyBoost:", lastGeneratedConfig.vibrancyBoost);
                 }
-                logger.log("  formParams.distanceMetric:", formParams.distanceMetric);
-                logger.log("  formParams.cWeight:", formParams.cWeight);
-                logger.log("  formParams.vibrancyBoost:", formParams.vibrancyBoost);
 
                 const params = {
                     ...lastGeneratedConfig,  // Start with complete config from ParameterGenerator
@@ -5170,66 +4691,34 @@ async function showDialog() {
                 const grayscaleOnly = params.colorMode === 'bw';  // Determine from dropdown
 
                 // Log final merged parameters
-                logger.log("📦 Final merged parameters:");
-                logger.log("  id:", params.id);
-                logger.log("  distanceMetric:", params.distanceMetric);
-                logger.log("  cWeight:", params.cWeight);
-                logger.log("  vibrancyBoost:", params.vibrancyBoost);
-                logger.log("  targetColors:", params.targetColors);
-                logger.log("  paletteReduction:", params.paletteReduction);
                 if (lastGeneratedConfig) {
-                    logger.log("  Config-only parameters (not in UI):", {
-                        vibrancyThreshold: lastGeneratedConfig.vibrancyThreshold,
-                        neutralSovereigntyThreshold: lastGeneratedConfig.neutralSovereigntyThreshold,
-                        neutralCentroidClampThreshold: lastGeneratedConfig.neutralCentroidClampThreshold
-                    });
                 }
 
                 try {
                     // Validate document (includes Lab mode check)
-                    logger.log("Validating document...");
                     const validation = PhotoshopAPI.validateDocument();
-                    logger.log("Validation result:", validation);
 
                     if (!validation.valid) {
-                        logger.log("Document validation failed, showing error");
-                        logger.log("Errors:", validation.errors);
-                        validation.errors.forEach((err, i) => logger.log(`  Error ${i+1}: ${err}`));
                         showError("Document Error", "Your document doesn't meet the requirements for Reveal:", validation.errors);
                         return;
                     }
 
-                    logger.log("Document validation passed!");
 
                     // Get document info
                     const docInfo = PhotoshopAPI.getDocumentInfo();
-                    logger.log("Document info:", docInfo);
 
                     // Show processing message
                     buttonElement.disabled = true;
                     buttonElement.textContent = "Analyzing...";
 
                     // Read document pixels for preview (800px max for performance)
-                    logger.log(`Reading document pixels (max 800px)...`);
                     const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
-                    logger.log(`Read ${pixelData.width}x${pixelData.height} pixels (${pixelData.scale.toFixed(2)}x scale)`);
-                    logger.log(`Pixel data: 16-bit Lab (source was ${pixelData.bitDepth}-bit)`);
 
                     // DIAGNOSTIC: Check ORIGINAL buffer before copying
-                    logger.log(`🔍 DIAGNOSTIC - Original pixelData.pixels:`);
-                    logger.log(`   Type: ${pixelData.pixels.constructor.name}`);
-                    logger.log(`   Length: ${pixelData.pixels.length}`);
-                    logger.log(`   First pixel (ORIGINAL): L=${pixelData.pixels[0]} a=${pixelData.pixels[1]} b=${pixelData.pixels[2]}`);
-                    logger.log(`   Pixel at index 1000: L=${pixelData.pixels[3000]} a=${pixelData.pixels[3001]} b=${pixelData.pixels[3002]}`);
-                    logger.log(`   Pixel at index 10000: L=${pixelData.pixels[30000]} a=${pixelData.pixels[30001]} b=${pixelData.pixels[30002]}`);
 
                     // CRITICAL: Copy pixel buffer IMMEDIATELY before any processing
                     // Photoshop may clear/reuse the buffer after the API call returns
                     const pixelsCopy = new Uint16Array(pixelData.pixels);
-                    logger.log(`📦 Copied pixel buffer: ${pixelsCopy.length} elements`);
-                    logger.log(`   First pixel (COPY): L=${pixelsCopy[0]} a=${pixelsCopy[1]} b=${pixelsCopy[2]}`);
-                    logger.log(`   Second pixel (COPY): L=${pixelsCopy[3]} a=${pixelsCopy[4]} b=${pixelsCopy[5]}`);
-                    logger.log(`   Third pixel (COPY): L=${pixelsCopy[6]} a=${pixelsCopy[7]} b=${pixelsCopy[8]}`);
 
                     // Apply preprocessing (bilateral filter for noise reduction) if enabled
                     // Engine always operates in 16-bit Lab space
@@ -5242,20 +4731,15 @@ async function showDialog() {
                         const dnaForPreprocessing = lastImageDNA || {};
 
                         // Calculate entropy from 16-bit Lab L channel
-                        logger.log(`Entropy input: pixels type=${pixelData.pixels?.constructor?.name}, length=${pixelData.pixels?.length}, width=${pixelData.width}, height=${pixelData.height}`);
-                        logger.log(`Expected length: ${pixelData.width * pixelData.height * 3}`);
                         if (pixelData.pixels && pixelData.pixels.length > 0) {
-                            logger.log(`First 6 values: ${Array.from(pixelData.pixels.slice(0, 6)).join(', ')}`);
                         }
                         const entropyScore = BilateralFilter.calculateEntropyScoreLab(
                             pixelData.pixels, pixelData.width, pixelData.height
                         );
-                        logger.log(`Entropy result: ${entropyScore}`);
 
                         // Get preprocessing config based on DNA and entropy
                         // Detect bit depth from pixel data type
                         const is16Bit = pixelData.pixels instanceof Uint16Array;
-                        logger.log(`Bit depth for preprocessing: ${is16Bit ? '16-bit' : '8-bit'}`);
 
                         let preprocessConfig;
                         if (preprocessingIntensity === 'auto') {
@@ -5285,8 +4769,6 @@ async function showDialog() {
                         }
 
                         if (preprocessConfig.enabled) {
-                            logger.log(`🔧 Preprocessing: ${preprocessConfig.intensity} (${preprocessConfig.reason})`);
-                            logger.log(`   Entropy: ${preprocessConfig.entropyScore?.toFixed(1) || 'N/A'}, Radius: ${preprocessConfig.radius}, SigmaR: ${preprocessConfig.sigmaR}`);
 
                             // Apply bilateral filter in 16-bit Lab space
                             BilateralFilter.applyBilateralFilterLab(
@@ -5297,12 +4779,9 @@ async function showDialog() {
                                 preprocessConfig.sigmaR
                             );
 
-                            logger.log(`✓ Preprocessing complete`);
                         } else {
-                            logger.log(`⏭️ Preprocessing skipped: ${preprocessConfig.reason}`);
                         }
                     } else {
-                        logger.log(`⏭️ Preprocessing: Off (user disabled)`);
                     }
 
                     // TEMP: Store preprocessed image data (config will be stored later after tuning is defined)
@@ -5314,16 +4793,13 @@ async function showDialog() {
                         bitDepth: pixelData.bitDepth,
                         format: pixelData.format
                     };
-                    logger.log(`✓ Stored preprocessed image data for re-posterization (${pixelData.width}×${pixelData.height})`);
 
                     // Determine color count (manual override or auto-detect)
                     let colorCount;
                     if (params.targetColors > 0) {
                         colorCount = params.targetColors;
-                        logger.log(`Using manual color count: ${colorCount} colors`);
                         buttonElement.textContent = `Posterizing to ${colorCount} colors...`;
                     } else {
-                        logger.log("Auto-detecting optimal color count...");
                         buttonElement.textContent = "Analyzing complexity...";
 
                         colorCount = PosterizationEngine.analyzeOptimalColorCount(
@@ -5332,7 +4808,6 @@ async function showDialog() {
                             pixelData.height
                         );
 
-                        logger.log(`✓ Auto-detected: ${colorCount} colors recommended`);
                         buttonElement.textContent = `Posterizing to ${colorCount} colors...`;
                     }
 
@@ -5384,7 +4859,6 @@ async function showDialog() {
                         grayscaleOnly: grayscaleOnly,
                         tuning: tuning  // Now defined!
                     };
-                    logger.log(`✓ Stored posterization config (tuning included)`);
 
                     const result = PosterizationEngine.posterize(
                         pixelData.pixels,
@@ -5420,12 +4894,7 @@ async function showDialog() {
                         }
                     );
 
-                    logger.log(`⚠️ POSTERIZATION RESULT: Requested ${colorCount} colors, got ${result.palette.length} colors`);
                     const hexColors = PosterizationEngine.paletteToHex(result.palette);
-                    logger.log(`\n${'='.repeat(60)}`);
-                    logger.log('POSTERIZATION RESULTS');
-                    logger.log('='.repeat(60));
-                    logger.log(`Colors found: ${hexColors.length}`);
 
                     // Show palette in Lab space (primary) with hex (secondary)
                     if (result.paletteLab) {
@@ -5434,26 +4903,20 @@ async function showDialog() {
                             const hue = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
                             return `Lab(${lab.L.toFixed(0)},${lab.a.toFixed(0)},${lab.b.toFixed(0)})`;
                         }).join(', ');
-                        logger.log(`Palette (Lab): ${labSummary}`);
                     }
-                    logger.log(`Palette (RGB): ${hexColors.join(", ")}`);
 
                     // Analyze palette composition (Lab first, then RGB hex)
-                    logger.log('\nPalette Details:');
                     hexColors.forEach((color, i) => {
                         if (result.paletteLab && result.paletteLab[i]) {
                             const lab = result.paletteLab[i];
                             const chroma = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
                             const hue = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
-                            logger.log(`  ${i + 1}. Lab(${lab.L.toFixed(1)}, ${lab.a.toFixed(1)}, ${lab.b.toFixed(1)}) C=${chroma.toFixed(1)} H=${hue.toFixed(0)}° → ${color}`);
                         } else {
-                            logger.log(`  ${i + 1}. ${color}`);
                         }
                     });
 
                     // Count pixel assignments per color
                     if (result.assignments) {
-                        logger.log('\nPixel distribution:');
                         const counts = new Array(hexColors.length).fill(0);
                         for (let i = 0; i < result.assignments.length; i++) {
                             counts[result.assignments[i]]++;
@@ -5462,19 +4925,15 @@ async function showDialog() {
                             const percent = ((count / result.assignments.length) * 100).toFixed(1);
                             if (result.paletteLab && result.paletteLab[i]) {
                                 const lab = result.paletteLab[i];
-                                logger.log(`  Color ${i + 1} Lab(${lab.L.toFixed(1)}, ${lab.a.toFixed(1)}, ${lab.b.toFixed(1)}) ${hexColors[i]}: ${count} pixels (${percent}%)`);
                             } else {
-                                logger.log(`  Color ${i + 1} (${hexColors[i]}): ${count} pixels (${percent}%)`);
                             }
                         });
                     }
 
                     // Log curation info if colors were merged
                     if (result.metadata.finalColors < result.metadata.targetColors) {
-                        logger.log(`\nℹ️ Curated from ${result.metadata.targetColors} to ${result.metadata.finalColors} perceptually distinct features (Fidelity to Feature)`);
                     }
 
-                    logger.log('='.repeat(60) + '\n');
 
                     // Filter out substrate from UI display (but keep in full palette for separation)
                     // Substrate is the paper/medium, not an ink color
@@ -5482,7 +4941,6 @@ async function showDialog() {
                         ? hexColors.filter((_, i) => i !== result.substrateIndex)
                         : hexColors;
 
-                    logger.log(`Substrate handling: ${result.substrateIndex !== null ? `Substrate at index ${result.substrateIndex}, showing ${inkHexColors.length} ink colors` : 'No substrate detected'}`);
 
                     // Store results for later use
                     const selectedPreview = {
@@ -5509,11 +4967,8 @@ async function showDialog() {
                         inkHexColors: inkHexColors,         // Immutable ink-only colors
                         substrateIndex: result.substrateIndex
                     };
-                    logger.log(`🔒 FROZEN PALETTE: Locked ${hexColors.length} colors as immutable`);
 
                     // Use the pixel copy we made at the beginning (before any processing)
-                    logger.log(`📦 Storing original pixel buffer copy: ${pixelsCopy.length} elements`);
-                    logger.log(`   First 3 pixels (from original copy): L=${pixelsCopy[0]} a=${pixelsCopy[1]} b=${pixelsCopy[2]}`);
 
                     posterizationData = {
                         params,
@@ -5530,21 +4985,17 @@ async function showDialog() {
                     buttonElement.textContent = buttonOriginalText;
 
                     // Show palette editor first (sets up UI layout)
-                    logger.log(`Showing palette editor with ${result.palette.length} colors`);
                     showPaletteEditor(selectedPreview);
 
                     // CRITICAL: Wait for UXP layout to complete before rendering preview
                     // UXP needs time to calculate element dimensions after DOM changes
-                    logger.log('✓ Posterization complete - waiting for layout...');
                     setTimeout(async () => {
                         // Check if img is ready (in paletteDialog)
                         const img = document.getElementById('previewImg');
                         if (img) {
-                            logger.log(`[After delay] Img offsetHeight BEFORE init: ${img.offsetHeight}`);
                         }
 
                         // Initialize preview AFTER palette dialog layout is complete
-                        logger.log('Initializing preview...');
                         initializePreviewCanvas(
                             pixelData.width,
                             pixelData.height,
@@ -5554,11 +5005,9 @@ async function showDialog() {
 
                         // Render initial preview
                         renderPreview();
-                        logger.log('✓ Preview rendered');
 
                         // Initialize ViewportManager for 1:1 mode (Phase 2)
                         try {
-                            logger.log('[Phase 2] Initializing ViewportManager...');
 
                             // Create CropEngine with PRE-COMPUTED separation state
                             // CRITICAL: Use the frozen palette from main pipeline (not re-posterize)
@@ -5595,31 +5044,10 @@ async function showDialog() {
                             viewportManager.jumpToNormalized(0.5, 0.5);
 
                             // DIAGNOSTIC: Log ALL dimension values for debugging viewport issues
-                            logger.log('╔══════════════════════════════════════════════════════╗');
-                            logger.log('║  VIEWPORT INITIALIZATION DIAGNOSTIC                  ║');
-                            logger.log('╠══════════════════════════════════════════════════════╣');
-                            logger.log(`║  pixelData.width (downsampled):  ${pixelData.width}`);
-                            logger.log(`║  pixelData.height (downsampled): ${pixelData.height}`);
-                            logger.log(`║  pixelData.originalWidth (doc):  ${pixelData.originalWidth}`);
-                            logger.log(`║  pixelData.originalHeight (doc): ${pixelData.originalHeight}`);
-                            logger.log(`║  pixelData.scale:                ${pixelData.scale}`);
-                            logger.log(`║  cropEngine.sourceWidth:         ${cropEngine.sourceWidth}`);
-                            logger.log(`║  cropEngine.sourceHeight:        ${cropEngine.sourceHeight}`);
-                            logger.log(`║  cropEngine.actualDocWidth:      ${cropEngine.actualDocWidth}`);
-                            logger.log(`║  cropEngine.actualDocHeight:     ${cropEngine.actualDocHeight}`);
-                            logger.log(`║  viewportManager.viewportWidth:  ${viewportManager.viewportWidth}`);
-                            logger.log(`║  viewportManager.viewportHeight: ${viewportManager.viewportHeight}`);
-                            logger.log(`║  docInfo.width:                  ${docInfo.width}`);
-                            logger.log(`║  docInfo.height:                 ${docInfo.height}`);
-                            logger.log(`║  docInfo.resolution:             ${docInfo.resolution}`);
-                            logger.log('╚══════════════════════════════════════════════════════╝');
 
-                            logger.log('[Phase 2] ✓ ViewportManager initialized and centered');
 
                             // Initialize Navigator Map with current image
-                            logger.log('[Phase 2] Rendering initial Navigator Map...');
                             renderNavigatorMap();
-                            logger.log('[Phase 2] ✓ Navigator Map rendered');
                         } catch (error) {
                             logger.error('[Phase 2] Failed to initialize ViewportManager:', error);
                         }
@@ -5637,12 +5065,10 @@ async function showDialog() {
 
                             window._viewModeChangeHandler = async (e) => {
                                 const mode = e.target.value;
-                                logger.log(`View mode changing to: ${mode}`);
 
                                 document.body.style.cursor = 'wait';
                                 try {
                                     await setPreviewMode(mode);
-                                    logger.log(`✓ View mode switched to ${mode}`);
                                 } catch (error) {
                                     logger.error('Failed to switch view mode:', error);
                                     showErrorDialog("View Mode Error", error.message, error.stack);
@@ -5693,7 +5119,6 @@ async function showDialog() {
                     });
                 }
             });
-            logger.log("✓ Spectrum slider value displays attached");
 
             // Collapsible section toggle functionality
             const collapsibleHeaders = document.querySelectorAll('.collapsible-header');
@@ -5703,7 +5128,6 @@ async function showDialog() {
                     section.classList.toggle('open');
                 });
             });
-            logger.log(`✓ Collapsible section toggles attached (${collapsibleHeaders.length} sections)`);
 
             // Conditional UI disabling - Centroid Strategy
             const centroidStrategy = document.getElementById("centroidStrategy");
@@ -5741,7 +5165,6 @@ async function showDialog() {
                 centroidStrategy.addEventListener("change", updateSaliencyControls);
                 updateSaliencyControls(); // Set initial state
             }
-            logger.log("✓ Conditional UI disabling attached (Centroid Strategy)");
 
             // Conditional UI disabling - Substrate Awareness
             const substrateMode = document.getElementById("substrateMode");
@@ -5766,13 +5189,11 @@ async function showDialog() {
                 substrateMode.addEventListener("change", updateSubstrateToleranceControl);
                 updateSubstrateToleranceControl(); // Set initial state
             }
-            logger.log("✓ Conditional UI disabling attached (Substrate Awareness)");
 
             // Reset to Defaults button
             const btnResetDefaults = document.getElementById("btnResetDefaults");
             if (btnResetDefaults) {
                 btnResetDefaults.addEventListener("click", () => {
-                    logger.log("Resetting all parameters to defaults...");
 
                     // Default values object
                     const defaults = {
@@ -5807,12 +5228,10 @@ async function showDialog() {
                     Object.keys(resetDefaults).forEach(key => {
                         const element = document.getElementById(key);
                         if (!element) {
-                            logger.log(`  Element not found: ${key}`);
                             return;
                         }
 
                         const value = resetDefaults[key];
-                        logger.log(`  Resetting ${key} = ${value}`);
 
                         if (element.type === 'checkbox') {
                             element.checked = value;
@@ -5838,9 +5257,7 @@ async function showDialog() {
                         }
                     });
 
-                    logger.log("✓ All parameters reset to defaults");
                 });
-                logger.log("✓ Reset to Defaults button attached");
             }
 
             // Archetype Selector - populate dropdown and add event listener
@@ -5864,21 +5281,17 @@ async function showDialog() {
                     archetypeSelector.appendChild(option);
                 });
 
-                logger.log(`✓ Populated archetype selector with ${Object.keys(ARCHETYPES).length} archetypes`);
 
                 // Add change event listener
                 archetypeSelector.addEventListener('change', async () => {
                     const selectedValue = archetypeSelector.value;
-                    logger.log(`Archetype selector changed to: ${selectedValue}`);
 
                     if (selectedValue === 'auto') {
                         // "Analyze Image..." - trigger DNA analysis
-                        logger.log("Triggering DNA analysis...");
                         lastSelectedArchetypeId = null;  // Clear manual selection
                         await handleAnalyzeImage();
                     } else if (selectedValue === 'manual') {
                         // "Manual Input" - reset to defaults
-                        logger.log("Resetting to manual input (defaults)...");
                         lastSelectedArchetypeId = null;  // Clear manual selection
 
                         // Use the same defaults as btnResetDefaults
@@ -5947,21 +5360,14 @@ async function showDialog() {
                         lastGeneratedConfig = null;
                         lastImageDNA = null;
 
-                        logger.log("✓ Reset to manual input defaults");
                     } else {
                         // Archetype selected - load parameters from archetype
-                        logger.log(`🔍 TRACE: Entering archetype selection for: ${selectedValue}`);
                         const archetype = ARCHETYPES[selectedValue];
-                        logger.log(`🔍 TRACE: Archetype found:`, archetype ? 'YES' : 'NO');
-                        logger.log(`🔍 TRACE: Has parameters:`, archetype?.parameters ? 'YES' : 'NO');
 
                         if (archetype && archetype.parameters) {
-                            logger.log(`Loading parameters from archetype: ${archetype.name}`);
                             lastSelectedArchetypeId = selectedValue;  // Store manual selection ID
-                            logger.log(`🔍 TRACE: Set lastSelectedArchetypeId to: ${lastSelectedArchetypeId}`);
 
                             const params = archetype.parameters;
-                            logger.log(`🔍 TRACE: params object:`, params);
 
                             // Map archetype parameters to UI controls
                             const paramMapping = {
@@ -5996,14 +5402,11 @@ async function showDialog() {
                             };
 
                             // Apply parameters to UI
-                            logger.log(`🔍 TRACE: Starting UI application loop for ${Object.keys(paramMapping).length} parameters`);
 
                             try {
                                 Object.keys(paramMapping).forEach(key => {
-                                    logger.log(`🔍 TRACE: Processing parameter: ${key}`);
                                 const element = document.getElementById(key);
                                 if (!element) {
-                                    logger.log(`  Element not found for parameter: ${key}`);
                                     return;
                                 }
 
@@ -6011,10 +5414,6 @@ async function showDialog() {
 
                                 // Special diagnostic for paletteReduction
                                 if (key === 'paletteReduction') {
-                                    logger.log(`🔍 PALETTE REDUCTION TRACE:`);
-                                    logger.log(`  Value from archetype: ${value}`);
-                                    logger.log(`  Element type: ${element.tagName}`);
-                                    logger.log(`  Current element value BEFORE: ${element.value}`);
                                 }
 
                                 if (element.type === 'checkbox') {
@@ -6038,29 +5437,23 @@ async function showDialog() {
 
                                     // Special diagnostic for paletteReduction AFTER setting
                                     if (key === 'paletteReduction') {
-                                        logger.log(`  Element value AFTER setting: ${element.value}`);
-                                        logger.log(`  Display value: ${valueDisplay ? valueDisplay.textContent : 'N/A'}`);
                                     }
                                 }
 
                                     // Log if paletteReduction wasn't handled by any branch
                                     if (key === 'paletteReduction' && element.tagName !== 'SP-SLIDER' && element.tagName !== 'SELECT' && element.type !== 'checkbox') {
-                                        logger.log(`  ⚠️ WARNING: paletteReduction element is ${element.tagName} with type ${element.type}, not handled!`);
                                     }
                                 });
 
-                                logger.log(`🔍 TRACE: Finished UI application loop successfully`);
                             } catch (error) {
                                 logger.error(`❌ ERROR in UI application loop:`, error);
                                 logger.error(`   Error message: ${error.message}`);
                                 logger.error(`   Error stack:`, error.stack);
                             }
 
-                            logger.log(`🔍 TRACE: Finished applying ${Object.keys(paramMapping).length} parameters to UI`);
 
                             // Store the complete config for posterization (includes parameters not in UI)
                             // CRITICAL: Must include archetype ID and metadata to prevent parameter dilution
-                            logger.log(`🔍 TRACE: About to set lastGeneratedConfig...`);
                             lastGeneratedConfig = {
                                 // Identity (prevents DNA hijacking)
                                 id: archetype.id,
@@ -6077,15 +5470,12 @@ async function showDialog() {
                                 }
                             };
 
-                            logger.log(`✓ Loaded ${Object.keys(paramMapping).length} parameters from archetype: ${archetype.name}`);
-                            logger.log(`✓ Stored complete config: id=${lastGeneratedConfig.id}, distanceMetric=${lastGeneratedConfig.distanceMetric}, cWeight=${lastGeneratedConfig.cWeight}`);
                         } else {
                             logger.error(`Archetype not found or missing parameters: ${selectedValue}`);
                         }
                     }
                 });
 
-                logger.log("✓ Archetype selector event listener attached");
             }
 
             // Preview Quality dropdown - initial setup for fit mode
@@ -6112,7 +5502,6 @@ async function showDialog() {
                         btnAnalyzeAndSet.style.opacity = "1";
                     }
                 });
-                logger.log("✓ Analyse Image button handler attached");
             }
 
 
@@ -6125,7 +5514,6 @@ async function showDialog() {
                     const presetId = presetSelector.value;
 
                     if (!presetId) {
-                        logger.log("Preset selector cleared");
                         return;
                     }
 
@@ -6135,11 +5523,6 @@ async function showDialog() {
                         return;
                     }
 
-                    logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    logger.log(`📋 PRESET - Applying "${preset.name}"`);
-                    logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    logger.log(`  ${preset.description}`);
-                    logger.log("  Settings:", preset.settings);
 
                     // Apply preset settings
                     applyAnalyzedSettings(preset.settings);
@@ -6148,10 +5531,7 @@ async function showDialog() {
                     presetSelector.value = "";
 
                     // Log confirmation to console (no alert dialog)
-                    logger.log(`✓ PRESET - "${preset.name}" applied`);
-                    logger.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
                 });
-                logger.log("✓ Preset selector handler attached");
             } */
 
             // Palette Reduction checkbox toggle
@@ -6169,7 +5549,6 @@ async function showDialog() {
 
                 enablePaletteReductionCheckbox.addEventListener("change", updateReductionState);
                 updateReductionState(); // Set initial state
-                logger.log("✓ Palette Reduction toggle attached");
             }
 
             // NOTE: Apply Separation button handler is attached in showPaletteEditor()
@@ -6177,9 +5556,7 @@ async function showDialog() {
 
             // Mark listeners as attached so they don't get duplicated on dialog reopen
             listenersAttached = true;
-            logger.log("✓ All event listeners attached");
         } else {
-            logger.log("Event listeners already attached, skipping setup");
         }
 
         // Set up View Mode switching (Phase 1: UI state machine)
@@ -6188,7 +5565,6 @@ async function showDialog() {
 
         // NOW show the dialog (after all event listeners are set up)
         // NON-MODAL to allow access to Photoshop Color Panel for LAB slider sync
-        logger.log("All event listeners set up, now showing dialog (non-modal)...");
         dialog.show({
             resize: "both",
             size: {
@@ -6200,7 +5576,6 @@ async function showDialog() {
                 maxHeight: 900
             }
         });
-        logger.log("Dialog closed");
 
     } catch (error) {
         logger.error("Error showing dialog:", error);
@@ -6216,7 +5591,6 @@ let listenersAttached = false; // Track if event listeners have been set up
 
 function ensureInitialized() {
     if (!isInitialized) {
-        logger.log("First-time initialization...");
         isInitialized = true;
     }
 }
@@ -6235,7 +5609,6 @@ initPlugin();
 
 // Initialize test client if in test mode
 if (typeof __TEST_MODE__ !== 'undefined' && __TEST_MODE__) {
-    logger.log('[Reveal] Test mode enabled - loading test client');
     try {
         require('./test-client');
     } catch (error) {

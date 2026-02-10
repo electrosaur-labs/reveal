@@ -222,7 +222,6 @@ function shouldPreprocess(dna, entropyScore, is16Bit = false) {
     if (dna.detailRescue !== undefined && dna.detailRescue > 0) {
         const originalThreshold = veryLowThreshold;
         veryLowThreshold = Math.max(0, veryLowThreshold - dna.detailRescue);
-        console.log(`🔍 detailRescue: Entropy threshold ${originalThreshold} → ${veryLowThreshold} (reduced by ${dna.detailRescue})`);
     }
 
     // Vector/Flat: NEVER filter - preserves sharp edges

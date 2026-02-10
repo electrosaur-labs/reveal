@@ -87,7 +87,6 @@ class SeparationEngine {
         if (meshCount) {
             const maxLPI = meshCount / 7;
             scale = Math.max(1, Math.round(dpi / maxLPI));
-            logger.log(`LPI-Aware Dithering: Mesh=${meshCount} TPI, MaxLPI=${maxLPI.toFixed(1)}, Scale=${scale}px (Macro-Cell size)`);
         }
 
         // If no width/height or ditherType is 'none', use fast nearest-neighbor
@@ -107,7 +106,6 @@ class SeparationEngine {
         }
 
         // Fallback to nearest-neighbor for unknown types
-        logger.log(`Unknown dithering type: ${ditherType}, falling back to nearest-neighbor`);
         return this._mapPixelsNearestNeighbor(rawBytes, labPalette, onProgress);
     }
 
@@ -130,7 +128,6 @@ class SeparationEngine {
         const CHUNK_SIZE = 65536; // 64k pixels per UI yield (optimized for throughput)
 
         const metricLabel = distanceConfig.isCIE2000 ? 'CIE2000' : (distanceConfig.isCIE94 ? 'CIE94' : 'CIE76 (L-weighted)');
-        logger.log(`Mapping ${pixelCount} pixels using ${metricLabel} [NATIVE 16-BIT] (async batching: ${Math.ceil(pixelCount / CHUNK_SIZE)} chunks)...`);
 
         // NATIVE 16-BIT: Convert palette to 16-bit integer space ONCE
         // This eliminates per-pixel floating-point conversion (the "Normalization Leak")
@@ -265,7 +262,6 @@ class SeparationEngine {
             await new Promise(resolve => setTimeout(resolve, 0));
         }
 
-        logger.log(`✓ Mapped ${pixelCount} pixels to palette (${metricLabel})`);
         return colorIndices;
     }
 
@@ -301,7 +297,6 @@ class SeparationEngine {
         const SNAP_THRESHOLD_SQ = SNAP_THRESHOLD * SNAP_THRESHOLD;
 
         const metricLabel = distanceConfig.isCIE94 ? 'CIE94' : 'CIE76 (L-weighted)';
-        logger.log(`Mapping ${pixelCount} pixels using ${metricLabel} (early exit < ${SNAP_THRESHOLD})...`);
 
         // OPTIMIZATION 3: Exact Match Cache
         // Pre-compute hash map for O(1) exact color lookup
@@ -430,7 +425,6 @@ class SeparationEngine {
         const earlyExitPct = ((earlyExitCount / pixelCount) * 100).toFixed(1);
         const exactMatchPct = ((exactMatchCount / pixelCount) * 100).toFixed(1);
         const spatialHitPct = ((spatialHitCount / pixelCount) * 100).toFixed(1);
-        logger.log(`✓ Mapped all pixels to palette using ${metricLabel} (${earlyExitCount} early exits = ${earlyExitPct}%, ${exactMatchCount} exact = ${exactMatchPct}%, ${spatialHitCount} spatial = ${spatialHitPct}%)`);
         return colorIndices;
     }
 
@@ -595,7 +589,6 @@ class SeparationEngine {
 
         // No weak colors to prune
         if (weakIndices.length === 0) {
-            console.log(`✅ minVolume=${minVolume}%: All ${labPalette.length} colors above threshold`);
             return {
                 prunedPalette: labPalette,
                 remappedIndices: colorIndices,
@@ -606,7 +599,6 @@ class SeparationEngine {
 
         // No strong colors to merge into (shouldn't happen, but safety check)
         if (strongIndices.length === 0) {
-            console.log(`⚠️ minVolume=${minVolume}%: ALL colors below threshold! Skipping pruning.`);
             return {
                 prunedPalette: labPalette,
                 remappedIndices: colorIndices,
@@ -621,8 +613,6 @@ class SeparationEngine {
 
         if (finalColorCount < MIN_COLORS) {
             const needed = MIN_COLORS - finalColorCount;
-            console.log(`⚠️ minVolume=${minVolume}%: Would prune to ${finalColorCount} colors (below ${MIN_COLORS} minimum)`);
-            console.log(`   Keeping ${needed} largest weak colors to maintain ${MIN_COLORS}-color minimum`);
 
             // Sort weak colors by volume (descending) and promote the largest ones
             const sortedWeak = weakIndices
@@ -635,11 +625,9 @@ class SeparationEngine {
                 strongIndices.push(promotedIdx);
                 const weakPos = weakIndices.indexOf(promotedIdx);
                 weakIndices.splice(weakPos, 1);
-                console.log(`   Promoted color ${promotedIdx} (${sortedWeak[i].volume.toFixed(2)}%) to preserve minimum`);
             }
         }
 
-        console.log(`🗑️ minVolume=${minVolume}%: Pruning ${weakIndices.length} weak colors from ${labPalette.length}`);
 
         // 3. Create remapping table: weakIndex → strongIndex
         const remapTable = new Array(labPalette.length);
@@ -678,7 +666,6 @@ class SeparationEngine {
                 deltaE: Math.sqrt(bestDistSq)
             });
 
-            console.log(`  • Color ${weakIdx} (${volumes[weakIdx].toFixed(2)}%) → Color ${bestStrongIdx} (ΔE=${Math.sqrt(bestDistSq).toFixed(1)})`);
         }
 
         // Keep strong colors unchanged
@@ -708,7 +695,6 @@ class SeparationEngine {
             remappedIndices[i] = compactMapping[remappedIndices[i]];
         }
 
-        console.log(`✅ Palette pruned: ${labPalette.length} → ${prunedPalette.length} colors`);
 
         return {
             prunedPalette,
@@ -736,21 +722,16 @@ class SeparationEngine {
      * @returns {Promise<Array>} - Separated layer data [{name, labColor, hex, mask}, ...]
      */
     static async separateImage(rawBytes, width, height, hexColors, _unused = null, labPalette = null, options = {}) {
-        logger.log(`Starting separation: ${width}x${height} → ${hexColors.length} colors (Pure Lab workflow, async)`);
 
         if (!labPalette || labPalette.length === 0) {
             throw new Error("Separation requires a valid Lab Palette for perceptual accuracy.");
         }
 
-        logger.log(`Lab Palette (${labPalette.length} colors):`, labPalette.map(c =>
-            `L:${c.L.toFixed(1)} a:${c.a.toFixed(1)} b:${c.b.toFixed(1)}`
-        ));
 
         // Extract options (pass full options object to preserve all parameters)
         const onProgress = options.onProgress || null;
         const ditherType = options.ditherType || 'none';
         const distanceMetric = options.distanceMetric || 'cie76';
-        logger.log(`Dithering type: ${ditherType}, Distance metric: ${distanceMetric}`);
 
         const colorIndices = await this.mapPixelsToPaletteAsync(
             rawBytes,
@@ -765,7 +746,6 @@ class SeparationEngine {
 
         labPalette.forEach((labColor, index) => {
             const hex = hexColors[index];
-            logger.log(`Processing Layer ${index + 1}: L:${labColor.L.toFixed(1)}`);
 
             const mask = this.generateLayerMask(colorIndices, index, width, height);
 
@@ -785,7 +765,6 @@ class SeparationEngine {
                 }
 
                 if (clampedCount > 0) {
-                    logger.log(`  🔒 shadowClamp: Clamped ${clampedCount} pixels to ${options.shadowClamp}% minimum`);
                 }
             }
 
@@ -795,7 +774,6 @@ class SeparationEngine {
                 const pruned = this._despeckleMask(mask, width, height, threshold);
 
                 if (pruned.clustersRemoved > 0) {
-                    logger.log(`  🧹 speckleRescue: Removed ${pruned.clustersRemoved} clusters (${pruned.pixelsRemoved} pixels) below ${threshold}px threshold`);
                 }
             }
 
@@ -806,13 +784,11 @@ class SeparationEngine {
             }
 
             const coveragePercent = (opaquePixelCount / (width * height) * 100);
-            logger.log(`  Layer has ${opaquePixelCount} pixels (${coveragePercent.toFixed(1)}% coverage)`);
 
             // Skip empty or near-empty layers
             // Minimum threshold: 0.1% coverage (prevents artifacts from palette reduction, substrate detection, etc.)
             const MIN_COVERAGE_PERCENT = 0.1;
             if (opaquePixelCount === 0 || coveragePercent < MIN_COVERAGE_PERCENT) {
-                logger.log(`  ⚠ Skipping layer (${coveragePercent.toFixed(3)}% coverage < ${MIN_COVERAGE_PERCENT}% threshold)`);
                 return; // Skip this layer
             }
 
@@ -832,7 +808,6 @@ class SeparationEngine {
             });
         });
 
-        logger.log(`✓ Created ${layers.length} Lab-native layer definitions`);
         return layers;
     }
 }

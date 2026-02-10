@@ -34,7 +34,6 @@ class ProxyEngine {
      * @returns {Promise<Object>} Proxy state
      */
     async initializeProxy(labPixels, width, height, initialConfig) {
-        console.log(`[ProxyEngine] Initializing proxy from ${width}x${height} source`);
         const startTime = performance.now();
 
         // 1. Bilinear downsample to 512px
@@ -52,13 +51,6 @@ class ProxyEngine {
             initialConfig
         );
 
-        console.log('[ProxyEngine] Posterization result:', {
-            hasPaletteLab: !!posterizeResult.paletteLab,
-            paletteLab: posterizeResult.paletteLab,
-            paletteLabLength: posterizeResult.paletteLab?.length,
-            hasPalette: !!posterizeResult.palette,
-            paletteLength: posterizeResult.palette?.length
-        });
 
         // 3. Run separation - get color indices
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -108,7 +100,6 @@ class ProxyEngine {
         );
 
         const elapsed = performance.now() - startTime;
-        console.log(`[ProxyEngine] Initialized: ${proxyW}x${proxyH}, ${this.separationState.palette.length} colors in ${elapsed.toFixed(1)}ms`);
 
         return {
             previewBuffer,
@@ -159,7 +150,6 @@ class ProxyEngine {
         );
 
         const elapsed = performance.now() - startTime;
-        console.log(`[ProxyEngine] Updated in ${elapsed.toFixed(1)}ms`);
 
         return {
             previewBuffer,
@@ -255,11 +245,9 @@ class ProxyEngine {
         });
 
         if (weakIndices.length === 0) {
-            console.log(`[ProxyEngine] minVolume: No colors below ${minVolumePercent}% threshold`);
             return;
         }
 
-        console.log(`[ProxyEngine] minVolume: Pruning ${weakIndices.length} weak colors (threshold: ${minPixels} pixels)`);
 
         // Remap weak colors to nearest strong colors
         const strongIndices = [];
@@ -330,7 +318,6 @@ class ProxyEngine {
         // Rebuild masks
         await this._rebuildMasks();
 
-        console.log(`[ProxyEngine] minVolume: Pruned to ${newPalette.length} colors`);
     }
 
     /**
@@ -339,11 +326,9 @@ class ProxyEngine {
      */
     async _applySpeckleRescue(radiusPixels) {
         if (radiusPixels === 0) {
-            console.log(`[ProxyEngine] speckleRescue: Radius 0, skipping`);
             return;
         }
 
-        console.log(`[ProxyEngine] speckleRescue: Eroding with radius ${radiusPixels}px`);
 
         const { width, height } = this.separationState;
 
@@ -354,7 +339,6 @@ class ProxyEngine {
             this.separationState.masks[colorIdx] = eroded;
         }
 
-        console.log(`[ProxyEngine] speckleRescue: Erosion complete`);
     }
 
     /**
@@ -363,13 +347,11 @@ class ProxyEngine {
      */
     async _applyShadowClamp(clampPercent) {
         if (clampPercent === 0) {
-            console.log(`[ProxyEngine] shadowClamp: 0%, skipping`);
             return;
         }
 
         const clampValue = Math.round(clampPercent * 255 / 100);
 
-        console.log(`[ProxyEngine] shadowClamp: Clamping to ${clampValue}/255 (${clampPercent}%)`);
 
         // Clamp mask values below threshold to threshold
         this.separationState.masks.forEach(mask => {
@@ -381,7 +363,6 @@ class ProxyEngine {
             }
         });
 
-        console.log(`[ProxyEngine] shadowClamp: Clamping complete`);
     }
 
     /**
@@ -389,7 +370,6 @@ class ProxyEngine {
      * @private
      */
     async _recomputeSeparation() {
-        console.log(`[ProxyEngine] Recomputing separation with updated palette`);
 
         // Get new color indices
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -416,7 +396,6 @@ class ProxyEngine {
         this.separationState.colorIndices = colorIndices;
         this.separationState.masks = masks;
 
-        console.log(`[ProxyEngine] Separation recomputed`);
     }
 
     /**
