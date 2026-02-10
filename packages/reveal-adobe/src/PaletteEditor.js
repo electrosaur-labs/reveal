@@ -88,6 +88,17 @@ function showPaletteEditor(selectedPalette) {
         resizeObserver.observe(paletteDialog);
     }
 
+    // Snapshot entry state for "Reset to Defaults"
+    const entryState = {
+        hexColors: [...selectedPalette.hexColors],
+        allHexColors: [...selectedPalette.allHexColors],
+        paletteLab: selectedPalette.paletteLab.map(c => ({...c})),
+        palette: selectedPalette.palette.map(c => ({...c})),
+        minVolume: parseFloat(document.getElementById('minVolume')?.value || '0'),
+        speckleRescue: parseFloat(document.getElementById('speckleRescue')?.value || '0'),
+        shadowClamp: parseFloat(document.getElementById('shadowClamp')?.value || '0')
+    };
+
     // Render palette swatches (extracted to function for re-rendering after color changes)
     function renderPaletteSwatches() {
         const container = document.getElementById('editablePaletteContainer');
@@ -474,6 +485,53 @@ function showPaletteEditor(selectedPalette) {
     const buttonsContainer = document.querySelector('.reveal-buttons');
     if (buttonsContainer) {
         buttonsContainer.style.display = 'flex';
+    }
+
+    // Reset to Defaults handler
+    const btnReset = document.getElementById('btnPaletteReset');
+    if (btnReset) {
+        const btnResetClone = btnReset.cloneNode(true);
+        btnReset.parentNode.replaceChild(btnResetClone, btnReset);
+
+        btnResetClone.addEventListener('click', async () => {
+            // Restore palette data from entry snapshot
+            selectedPalette.hexColors = [...entryState.hexColors];
+            selectedPalette.allHexColors = [...entryState.allHexColors];
+            selectedPalette.paletteLab = entryState.paletteLab.map(c => ({...c}));
+            selectedPalette.palette = entryState.palette.map(c => ({...c}));
+
+            // Clear UI state
+            if (window.previewState) {
+                window.previewState.deletedIndices = new Set();
+                window.previewState.activeSoloIndex = null;
+                window.previewState.palette = [...entryState.allHexColors];
+            }
+
+            // Reset production quality sliders to entry values
+            const sliderResets = [
+                { id: 'minVolume', value: entryState.minVolume, format: v => v.toFixed(1) },
+                { id: 'speckleRescue', value: entryState.speckleRescue, format: v => v.toFixed(0) },
+                { id: 'shadowClamp', value: entryState.shadowClamp, format: v => v.toFixed(1) }
+            ];
+            sliderResets.forEach(({ id, value, format }) => {
+                const slider = document.getElementById(id);
+                const display = document.getElementById(`${id}Value`);
+                if (slider) slider.value = value;
+                if (display) display.textContent = format(value);
+            });
+
+            // Rebuild swatch UI
+            renderPaletteSwatches();
+            updateSwatchVisuals();
+
+            // Regenerate assignments and preview with entry slider values
+            try {
+                const config = getFormValues();
+                await rerunPosterization(config);
+            } catch (error) {
+                logger.error('Reset re-posterization failed:', error);
+            }
+        });
     }
 
     // CRITICAL: Clone and replace button to remove ALL old event listeners
