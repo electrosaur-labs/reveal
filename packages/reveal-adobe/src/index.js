@@ -2965,6 +2965,7 @@ function showPaletteEditor(selectedPalette) {
                     // Re-render entire palette to show new color, re-sort by L, and update all Lab values
                     logger.log(`🔄 Re-rendering palette with updated color...`);
                     renderPaletteSwatches();
+                    updateSwatchVisuals();
 
                     // Update canvas preview with new color (use FULL palette to match assignments)
                     logger.log(`🔄 Updating canvas preview with new color...`);

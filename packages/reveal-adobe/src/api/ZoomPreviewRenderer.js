@@ -124,16 +124,6 @@ class ZoomPreviewRenderer {
 
             console.log(`[ZoomRenderer] Fetching ${componentSize}-bit viewport: (${left}, ${top}) to (${right}, ${bottom}), resolution 1:${this.resolution}`);
 
-            // DIAGNOSTIC: Show viewport bounds on-screen
-            let diagEl = document.getElementById('_diagZoom');
-            if (!diagEl) {
-                diagEl = document.createElement('div');
-                diagEl.id = '_diagZoom';
-                diagEl.style.cssText = 'position:absolute;top:4px;left:4px;background:rgba(255,0,0,0.8);color:#fff;font:bold 11px monospace;padding:2px 6px;z-index:999;pointer-events:none;';
-                this.container.appendChild(diagEl);
-            }
-            diagEl.textContent = `BOUNDS:(${left},${top})-(${right},${bottom}) VP:(${Math.round(this.viewportX)},${Math.round(this.viewportY)}) RES:1:${this.resolution} DOC:${this.docWidth}x${this.docHeight}`;
-
             this.activePixelData = await photoshop.core.executeAsModal(async () => {
                 return await photoshop.imaging.getPixels({
                     documentID: this.documentID,
