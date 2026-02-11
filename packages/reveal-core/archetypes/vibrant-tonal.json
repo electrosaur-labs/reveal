@@ -22,7 +22,7 @@
     "targetColorsSlider": 8,
     "ditherType": "blue-noise",
     "distanceMetric": "cie94",
-    "lWeight": 1.2,
+    "lWeight": 1.8,
     "cWeight": 6.5,
     "blackBias": 4.0,
     "vibrancyMode": "exponential",

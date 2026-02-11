@@ -19,6 +19,21 @@
             font-size: 14px;
         }
 
+        .busy-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(45, 45, 45, 0.7);
+            cursor: wait;
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .busy-overlay.active {
+            display: flex;
+        }
+
         /* CRITICAL: ALL DIALOGS MUST HAVE BLACK TEXT ON WHITE BACKGROUND */
         /* This fixes persistent readability issues in UXP */
         dialog {
@@ -952,6 +967,7 @@
 </head>
 <body>
     <dialog id="mainDialog" class="reveal-dialog">
+        <div id="busyOverlay" class="busy-overlay"></div>
         <!-- Fixed header - always visible at top -->
         <div class="reveal-header">
             <h1 class="reveal-title" style="margin-bottom: 8px;">Reveal - Posterization Parameters</h1>

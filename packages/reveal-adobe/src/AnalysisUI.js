@@ -168,7 +168,8 @@ async function auditionArchetypes(lab16, lab8, width, height, dna) {
  * Used by both btnAnalyzeAndSet and archetype selector dropdown
  */
 async function handleAnalyzeImage() {
-
+    const overlay = document.getElementById('busyOverlay');
+    if (overlay) overlay.classList.add('active');
     try {
         const result = await core.executeAsModal(async () => {
             const pixelData = await PhotoshopAPI.getDocumentPixels(800, 800);
@@ -273,6 +274,7 @@ async function handleAnalyzeImage() {
         }
 
         // Build enhanced alert message
+        if (overlay) overlay.classList.remove('active');
         const alertMsg = buildAnalysisAlert(config, auditionResults);
         alert(alertMsg);
 
@@ -282,6 +284,7 @@ async function handleAnalyzeImage() {
         }
 
     } catch (error) {
+        if (overlay) overlay.classList.remove('active');
         logger.error("Image analysis failed:", error);
         alert(
             `Image analysis failed:\n\n${error.message}\n\n` +

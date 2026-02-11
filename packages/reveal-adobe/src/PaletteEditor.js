@@ -13,6 +13,7 @@ const { core, action, imaging, app } = require("photoshop");
 const Reveal = require("@reveal/core");
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 const SeparationEngine = Reveal.engines.SeparationEngine;
+const LabDistance = Reveal.LabDistance;
 const logger = Reveal.logger;
 
 const pluginState = require('./PluginState');
@@ -24,6 +25,46 @@ const { detachPreviewZoomHandlers } = require('./ViewModeController');
 const { showErrorDialog } = require('./DialogHelpers');
 const { getFormValues } = require('./FormHelpers');
 const PhotoshopAPI = require("./api/PhotoshopAPI");
+
+/**
+ * Merge palette entries that are perceptually indistinguishable (ΔE < threshold).
+ * First-encountered color wins; later duplicates collapse into it.
+ * Returns a new set of arrays — never mutates the originals.
+ *
+ * NOTE: paletteLab may contain a trailing substrate entry beyond hexColors.length.
+ * Only ink entries (0..hexColors.length-1) are compared for merging;
+ * any trailing entries (substrate) are preserved unchanged.
+ */
+function preFlightPaletteMerge(paletteLab, hexColors, originalHexColors, threshold = 2.0) {
+    const mergedLab = [];
+    const mergedHex = [];
+    const mergedOriginalHex = [];
+
+    for (let i = 0; i < hexColors.length; i++) {
+        let foundMatch = false;
+        for (let j = 0; j < mergedLab.length; j++) {
+            if (LabDistance.cie76(paletteLab[i], mergedLab[j]) < threshold) {
+                foundMatch = true;
+                break;
+            }
+        }
+        if (!foundMatch) {
+            mergedLab.push(paletteLab[i]);
+            mergedHex.push(hexColors[i]);
+            mergedOriginalHex.push(originalHexColors[i]);
+        }
+    }
+
+    // Preserve trailing palette entries beyond ink range (e.g., substrate)
+    const trailingLab = paletteLab.slice(hexColors.length);
+
+    return {
+        paletteLab: [...mergedLab, ...trailingLab],
+        hexColors: mergedHex,
+        originalHexColors: mergedOriginalHex,
+        mergeCount: hexColors.length - mergedLab.length
+    };
+}
 
 /**
  * Show palette editor section and hide preview section
@@ -517,7 +558,7 @@ function showPaletteEditor(selectedPalette) {
                 const slider = document.getElementById(id);
                 const display = document.getElementById(`${id}Value`);
                 if (slider) slider.value = value;
-                if (display) display.textContent = format(value);
+                if (display && value !== undefined) display.textContent = format(value);
             });
 
             // Rebuild swatch UI
@@ -576,6 +617,16 @@ function showPaletteEditor(selectedPalette) {
             originalHexColors = selectedPreview.originalHexColors.filter((_, idx) => !deletedIndices.has(idx));
             paletteLab = selectedPreview.paletteLab.filter((_, idx) => !deletedIndices.has(idx));
 
+        }
+
+        // Pre-flight merge: collapse near-duplicate colors the user may have edited
+        const mergeResult = preFlightPaletteMerge(paletteLab, hexColors, originalHexColors);
+        if (mergeResult.mergeCount > 0) {
+            const saved = mergeResult.mergeCount;
+            logger.log(`Pre-flight merge: collapsed ${saved} near-duplicate color${saved > 1 ? 's' : ''}`);
+            hexColors = mergeResult.hexColors;
+            originalHexColors = mergeResult.originalHexColors;
+            paletteLab = mergeResult.paletteLab;
         }
 
         const separationStartTime = Date.now();

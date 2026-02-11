@@ -514,7 +514,14 @@ function attachAllEventListeners(dialog, handlePosterization) {
             if (selectedValue === 'auto') {
                 // "Analyze Image..." - trigger DNA analysis
                 pluginState.lastSelectedArchetypeId = null;  // Clear manual selection
-                await handleAnalyzeImage();
+                archetypeSelector.disabled = true;
+                archetypeSelector.style.opacity = '0.6';
+                try {
+                    await handleAnalyzeImage();
+                } finally {
+                    archetypeSelector.disabled = false;
+                    archetypeSelector.style.opacity = '1';
+                }
             } else if (selectedValue === 'manual') {
                 // "Manual Input" - reset to defaults
                 pluginState.lastSelectedArchetypeId = null;  // Clear manual selection
@@ -716,17 +723,14 @@ function attachAllEventListeners(dialog, handlePosterization) {
             btnAnalyzeAndSet.disabled = true;
             btnAnalyzeAndSet.textContent = "Analysing...";
             btnAnalyzeAndSet.style.opacity = "0.6";
-            document.body.style.cursor = "wait";
-
             try {
                 // Call shared analysis function
                 await handleAnalyzeImage();
             } finally {
-                // Restore button and cursor state
+                // Restore button state
                 btnAnalyzeAndSet.disabled = false;
                 btnAnalyzeAndSet.textContent = originalText;
                 btnAnalyzeAndSet.style.opacity = "1";
-                document.body.style.cursor = "";
             }
         });
     }

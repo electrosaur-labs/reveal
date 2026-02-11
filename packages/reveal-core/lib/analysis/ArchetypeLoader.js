@@ -4,40 +4,70 @@
  *
  * Works in both Node.js (batch processing) and browser/UXP (Adobe plugin) environments
  * Supports both DNA v1.0 (4D) and DNA v2.0 (7D + 12-sector hue analysis)
+ *
+ * Discovery: Both environments auto-discover all *.json files in archetypes/.
+ * - Node.js: fs.readdirSync at runtime
+ * - Webpack/UXP: require.context() resolved at build time
  */
 
 const ArchetypeMapper = require('./ArchetypeMapper');
 
 // Conditional imports for Node.js environment only
+// Note: webpack fallback { fs: false } provides an empty object {}, not false,
+// so we must check for actual functionality, not just truthiness.
 let fs, path;
 try {
     fs = require('fs');
     path = require('path');
+    if (typeof fs.readdirSync !== 'function') fs = null;
+    if (typeof path.join !== 'function') path = null;
 } catch (e) {
     // Browser/UXP environment - fs/path not available
-    // Archetypes will be loaded from pre-imported JSON
+    fs = null;
+    path = null;
 }
+
+// Webpack: auto-discover all archetype JSON files at build time
+// require.context(directory, useSubdirs, regExp) — excludes schema.json
+let archetypeContext;
+try {
+    archetypeContext = require.context('../../archetypes', false, /^\.\/(?!schema\b).*\.json$/);
+} catch (e) {
+    // Node.js: require.context not available (webpack-only API)
+    archetypeContext = null;
+}
+
+const DEFAULT_WEIGHTS = { l: 0.5, c: 1.5, k: 1.0, l_std_dev: 2.0 };
 
 class ArchetypeLoader {
     static archetypes = null;
 
     /**
+     * Ensure archetype has default weights for DNA v1.0 backward compatibility
+     */
+    static _applyDefaults(archetype) {
+        if (!archetype.weights) {
+            archetype.weights = { ...DEFAULT_WEIGHTS };
+        }
+        return archetype;
+    }
+
+    /**
      * Load all archetype JSON files
-     * @returns {Array} Array of archetype objects
+     * @returns {Array} Array of archetype objects sorted alphabetically by ID
      */
     static loadArchetypes() {
         if (this.archetypes) {
             return this.archetypes;
         }
 
-        // Check if running in Node.js environment
         if (fs && path) {
-            // Node.js: Load from filesystem
+            // Node.js: scan archetypes directory at runtime
             const archetypesDir = path.join(__dirname, '../../archetypes');
 
             if (!fs.existsSync(archetypesDir)) {
                 console.warn(`⚠️ Archetypes directory not found: ${archetypesDir}`);
-                return this.getBuiltInArchetypes();
+                return this.getFallbackArchetype();
             }
 
             const files = fs.readdirSync(archetypesDir)
@@ -45,62 +75,25 @@ class ArchetypeLoader {
 
             this.archetypes = files.map(file => {
                 const content = fs.readFileSync(path.join(archetypesDir, file), 'utf8');
-                const archetype = JSON.parse(content);
-
-                // Set default weights if not specified
-                if (!archetype.weights) {
-                    archetype.weights = {
-                        l: 0.5,
-                        c: 1.5,
-                        k: 1.0,
-                        l_std_dev: 2.0
-                    };
-                }
-
-                return archetype;
+                return this._applyDefaults(JSON.parse(content));
             });
-
-            console.log(`✓ Loaded ${this.archetypes.length} archetypes from ${archetypesDir}`);
+        } else if (archetypeContext) {
+            // Webpack/UXP: use require.context (resolved at build time)
+            this.archetypes = archetypeContext.keys().map(key =>
+                this._applyDefaults(archetypeContext(key))
+            );
         } else {
-            // Browser/UXP: Use built-in archetypes
-            this.archetypes = this.getBuiltInArchetypes();
-            console.log(`✓ Loaded ${this.archetypes.length} built-in archetypes`);
+            console.warn('⚠️ No archetype discovery method available, using fallback');
+            return [this.getFallbackArchetype()];
         }
 
-        return this.archetypes;
-    }
+        // Sort alphabetically by ID for deterministic ordering
+        this.archetypes.sort((a, b) => a.id.localeCompare(b.id));
 
-    /**
-     * Get built-in archetypes for browser/UXP environments
-     * These are the core archetypes bundled with the code
-     */
-    static getBuiltInArchetypes() {
-        // Import archetypes directly for browser/UXP builds
-        return [
-            require('../../archetypes/subtle-naturalist.json'),
-            require('../../archetypes/structural-outlier-rescue.json'),
-            require('../../archetypes/blue-rescue.json'),
-            require('../../archetypes/silver-gelatin.json'),
-            require('../../archetypes/neon-graphic.json'),
-            require('../../archetypes/cinematic-moody.json'),
-            require('../../archetypes/muted-vintage.json'),
-            require('../../archetypes/pastel-high-key.json'),
-            require('../../archetypes/noir-shadow.json'),
-            require('../../archetypes/pure-graphic.json'),
-            require('../../archetypes/vibrant-tonal.json'),
-            require('../../archetypes/warm-tonal-optimized.json')
-        ].map(archetype => {
-            // Set default weights if not specified (DNA v1.0 backward compatibility)
-            if (!archetype.weights) {
-                archetype.weights = {
-                    l: 0.5,
-                    c: 1.5,
-                    k: 1.0,
-                    l_std_dev: 2.0
-                };
-            }
-            return archetype;
-        });
+        console.log(`✓ Loaded ${this.archetypes.length} archetypes` +
+            (fs ? ` from ${path.join(__dirname, '../../archetypes')}` : ' (bundled)'));
+
+        return this.archetypes;
     }
 
     /**

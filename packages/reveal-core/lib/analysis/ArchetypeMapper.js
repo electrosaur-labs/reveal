@@ -158,28 +158,33 @@ class ArchetypeMapper {
                 sectorAffinity += 30;
             }
 
-            // Chroma alignment
-            if (profile.chromaProfile === 'extreme' && sector.cMax > 70) {
-                sectorAffinity += 25;
-            } else if (profile.chromaProfile === 'moderate' && sector.cMax >= 20 && sector.cMax <= 60) {
-                sectorAffinity += 15;
-            } else if (profile.chromaProfile === 'low' && sector.cMax < 30) {
-                sectorAffinity += 15;
-            } else if (profile.chromaProfile === 'very_low' && sector.cMax < 20) {
-                sectorAffinity += 20;
-            } else if (profile.chromaProfile === 'achromatic' && sector.cMax < 5) {
-                sectorAffinity += 30;
-            }
+            // Chroma and tonal bonuses only apply to preferred sectors
+            // (prevents non-target sectors from inflating scores)
+            const isPreferred = archetype.preferred_sectors?.includes(sectorName);
+            if (!archetype.preferred_sectors || isPreferred) {
+                // Chroma alignment
+                if (profile.chromaProfile === 'extreme' && sector.cMax > 70) {
+                    sectorAffinity += 25;
+                } else if (profile.chromaProfile === 'moderate' && sector.cMax >= 20 && sector.cMax <= 60) {
+                    sectorAffinity += 15;
+                } else if (profile.chromaProfile === 'low' && sector.cMax < 30) {
+                    sectorAffinity += 15;
+                } else if (profile.chromaProfile === 'very_low' && sector.cMax < 20) {
+                    sectorAffinity += 20;
+                } else if (profile.chromaProfile === 'achromatic' && sector.cMax < 5) {
+                    sectorAffinity += 30;
+                }
 
-            // Lightness alignment
-            if (profile.tonalRange === 'dark' && sector.lMean < 50) {
-                sectorAffinity += 10;
-            } else if (profile.tonalRange === 'mid' && sector.lMean >= 40 && sector.lMean <= 65) {
-                sectorAffinity += 10;
-            } else if (profile.tonalRange === 'mid-bright' && sector.lMean >= 50 && sector.lMean <= 70) {
-                sectorAffinity += 10;
-            } else if (profile.tonalRange === 'bright' && sector.lMean > 55) {
-                sectorAffinity += 10;
+                // Lightness alignment
+                if (profile.tonalRange === 'dark' && sector.lMean < 50) {
+                    sectorAffinity += 10;
+                } else if (profile.tonalRange === 'mid' && sector.lMean >= 40 && sector.lMean <= 65) {
+                    sectorAffinity += 10;
+                } else if (profile.tonalRange === 'mid-bright' && sector.lMean >= 50 && sector.lMean <= 70) {
+                    sectorAffinity += 10;
+                } else if (profile.tonalRange === 'bright' && sector.lMean > 55) {
+                    sectorAffinity += 10;
+                }
             }
 
             // Weighted voting (sectors with more pixels vote stronger)
@@ -202,8 +207,9 @@ class ArchetypeMapper {
         }
 
         if (profile.expects_dominance) {
-            // Single sector dominates (> 40%)
-            const hasDominance = dna.global.primary_sector_weight > 0.4;
+            // Single sector dominates (> 40%) AND is a preferred sector
+            const hasDominance = dna.global.primary_sector_weight > 0.4 &&
+                archetype.preferred_sectors?.includes(dna.dominant_sector);
             if (hasDominance) affinity += 15;
         }
 
