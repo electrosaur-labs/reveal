@@ -3,7 +3,6 @@
  * Tests validation of DNA v1.0 and v2.0 objects
  */
 
-const { describe, it, expect } = require('vitest');
 const DNAValidator = require('../../lib/validation/DNAValidator');
 
 describe('DNAValidator', () => {

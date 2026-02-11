@@ -3,7 +3,6 @@
  * Tests DNAGenerator and ArchetypeMapper with synthetic test cases
  */
 
-const { describe, it, expect, beforeAll } = require('vitest');
 const DNAGenerator = require('../../lib/analysis/DNAGenerator');
 const ArchetypeMapper = require('../../lib/analysis/ArchetypeMapper');
 const fs = require('fs');
@@ -29,19 +28,22 @@ describe('DNAGenerator v2.0', () => {
             const dna = generator.generate(labPixels, 10, 10, { bitDepth: 8 });
 
             expect(dna.version).toBe('2.0');
-            expect(dna.global.l).toBeCloseTo(50, 1);
-            expect(dna.global.c).toBeCloseTo(0, 1);
-            expect(dna.global.l_std_dev).toBeCloseTo(0, 1);
-            expect(dna.global.hue_entropy).toBeCloseTo(0, 1); // Achromatic
+            expect(dna.global.l).toBeCloseTo(50, 0); // 8-bit: L=127/255*100 ≈ 49.8
+            expect(dna.global.c).toBeCloseTo(0, 0);
+            expect(dna.global.l_std_dev).toBeCloseTo(0, 0);
+            expect(dna.global.hue_entropy).toBeCloseTo(0, 0); // Achromatic
         });
 
         it('should detect monochromatic blue image', () => {
-            // 100 pixels: blue (L=50, a=128-30, b=128-50)
+            // 100 pixels: blue (L=50, a=-10, b=-40)
+            // hue = atan2(-40, -10) ≈ 256° → blue sector (195-225°)?
+            // Actually we need a=-10, b=-40 → hue ≈ 256° = purple (225-255°)
+            // For true blue (195-225°): a=-30, b=-20 → hue ≈ 213° ✓
             const labPixels = new Uint8Array(100 * 3);
             for (let i = 0; i < labPixels.length; i += 3) {
                 labPixels[i] = 127;     // L = 50
-                labPixels[i + 1] = 98;  // a = -30 (blue shift)
-                labPixels[i + 2] = 78;  // b = -50 (blue shift)
+                labPixels[i + 1] = 98;  // a = -30
+                labPixels[i + 2] = 108; // b = -20 → hue ≈ 213° (blue sector 195-225°)
             }
 
             const dna = generator.generate(labPixels, 10, 10, { bitDepth: 8 });

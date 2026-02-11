@@ -163,7 +163,8 @@ class DynamicConfigurator {
                 matchVersion: archetype.matchVersion || '1.0',
                 matchDistance: archetype.matchDistance || 0,  // DNA v1.0 legacy
                 matchScore: archetype.matchScore,              // DNA v2.0 total score
-                matchBreakdown: archetype.matchBreakdown       // DNA v2.0 score components
+                matchBreakdown: archetype.matchBreakdown,      // DNA v2.0 score components
+                matchRanking: archetype.matchRanking           // DNA v2.0 full ranked list
             },
 
             // Preprocessing

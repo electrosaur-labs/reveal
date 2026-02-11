@@ -339,11 +339,35 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, StdDev=${dna.l_std_dev}, maxC=${dna.maxC}`);
 
     // 4. Generate configuration
-    const config = DynamicConfigurator.generate(dna);
+    const config = DynamicConfigurator.generate(dna, {
+        imageData: null,
+        width,
+        height,
+        preprocessingIntensity: 'auto'
+    });
+    dna.archetype = config.meta?.archetypeId;
     console.log(chalk.green(`  Archetype: ${config.meta?.archetype || 'unknown'}`));
     console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
-    // 4.5. Pre-posterization median filter (salt & pepper noise removal)
+    // 4a. Bilateral prefilter (edge-preserving noise reduction)
+    const BilateralFilter = require('../../reveal-core/lib/preprocessing/BilateralFilter');
+    const is16Bit = depth === 16;
+    const entropyScore = BilateralFilter.calculateEntropyScoreLab(lab16bit, width, height);
+    const preprocessDecision = BilateralFilter.shouldPreprocess(dna, entropyScore, is16Bit);
+
+    if (preprocessDecision.shouldProcess) {
+        console.log(chalk.yellow(`  ⚡ Bilateral filter: entropy=${entropyScore.toFixed(1)}, radius=${preprocessDecision.radius}, sigmaR=${preprocessDecision.sigmaR}`));
+        console.log(chalk.yellow(`     Reason: ${preprocessDecision.reason}`));
+        BilateralFilter.applyBilateralFilterLab(
+            lab16bit, width, height,
+            preprocessDecision.radius,
+            preprocessDecision.sigmaR
+        );
+    } else {
+        console.log(`  [Preprocess] Skipped — entropy=${entropyScore.toFixed(1)}, reason=${preprocessDecision.reason}`);
+    }
+
+    // 4b. Pre-posterization median filter (salt & pepper noise removal)
     const MedianFilter = require('../../reveal-core/lib/preprocessing/MedianFilter');
     if (MedianFilter.shouldApply(dna, config)) {
         console.log(chalk.yellow(`  🧂 Median filter: removing sensor salt before posterization`));
@@ -623,6 +647,17 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
             inputBitDepth: depth,
             outputFile: `${basename}.psd`
         },
+        archetype: {
+            id: config.meta.archetypeId,
+            name: config.meta.archetype,
+            score: config.meta.matchScore,
+            breakdown: config.meta.matchBreakdown
+        },
+        deltaE: metrics.global_fidelity.avgDeltaE,
+        ranking: (config.meta.matchRanking || []).map(m => ({
+            id: m.id,
+            score: m.score
+        })),
         dna,
         configuration: config,
         palette,

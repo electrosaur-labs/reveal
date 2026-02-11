@@ -88,8 +88,7 @@ class ArchetypeLoader {
             require('../../archetypes/noir-shadow.json'),
             require('../../archetypes/pure-graphic.json'),
             require('../../archetypes/vibrant-tonal.json'),
-            require('../../archetypes/warm-tonal-optimized.json'),
-            require('../../archetypes/terracotta-ochre.json')
+            require('../../archetypes/warm-tonal-optimized.json')
         ].map(archetype => {
             // Set default weights if not specified (DNA v1.0 backward compatibility)
             if (!archetype.weights) {
@@ -152,7 +151,8 @@ class ArchetypeLoader {
      */
     static _matchDnaV2(dna, archetypes) {
         const mapper = new ArchetypeMapper(archetypes);
-        const result = mapper.getBestMatch(dna);
+        const allMatches = mapper.getTopMatches(dna, archetypes.length);
+        const result = allMatches[0];
 
         const archetype = archetypes.find(a => a.id === result.id);
 
@@ -172,6 +172,7 @@ class ArchetypeLoader {
         archetype.matchScore = result.score;
         archetype.matchBreakdown = result.breakdown;
         archetype.matchVersion = '2.0';
+        archetype.matchRanking = allMatches;
 
         return archetype;
     }
