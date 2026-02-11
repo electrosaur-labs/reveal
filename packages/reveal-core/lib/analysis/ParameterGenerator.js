@@ -130,6 +130,10 @@ class DynamicConfigurator {
             // Mask profile
             maskProfile: params.maskProfile || 'Gray Gamma 2.2',
 
+            // Engine selection
+            engineType: params.engineType,
+            centroidStrategy: params.centroidStrategy,
+
             // Neutral clamping (DNA v2.0 feature)
             neutralCentroidClampThreshold: params.neutralCentroidClampThreshold || 0.5,
             neutralSovereigntyThreshold: params.neutralSovereigntyThreshold || 0,

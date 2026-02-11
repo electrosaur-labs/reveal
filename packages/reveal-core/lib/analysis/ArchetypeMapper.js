@@ -66,18 +66,26 @@ class ArchetypeMapper {
         // Catches graphics with halftone backgrounds where average chroma is artificially
         // low due to neutral grays, but peak chroma reveals vibrant outliers.
         // Example: Jethro Monroe scan with maxC=91.3 but avgC=16.1 (gray halftone dilution)
+        //
+        // Temperature Guard: If image is overwhelmingly warm (e.g. terracotta, earthen
+        // pigments), the high chroma comes from rich warm pigments, not cool outliers.
+        // Allow normal scoring so warm archetypes like Terracotta Ochre can win.
         if (dna.maxC !== undefined && dna.maxC > 90.0) {
-            const jethroArchetype = this.archetypes.find(a => a.id === 'jethro_monroe_clinical');
-            if (jethroArchetype) {
-                return {
-                    id: jethroArchetype.id,
-                    score: 95.0, // High confidence for override
-                    breakdown: {
-                        structural: 95.0,
-                        sectorAffinity: 95.0,
-                        pattern: 95.0
-                    }
-                };
+            const isOverwhelminglyWarm = dna.global.temperature_bias > 0.6 ||
+                                         dna.dominant_sector === 'orange';
+            if (!isOverwhelminglyWarm) {
+                const jethroArchetype = this.archetypes.find(a => a.id === 'jethro_monroe_clinical');
+                if (jethroArchetype) {
+                    return {
+                        id: jethroArchetype.id,
+                        score: 95.0, // High confidence for override
+                        breakdown: {
+                            structural: 95.0,
+                            sectorAffinity: 95.0,
+                            pattern: 95.0
+                        }
+                    };
+                }
             }
         }
 

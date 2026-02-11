@@ -102,7 +102,12 @@ async function handleAnalyzeImage() {
             preserveBlack: config.preserveBlack !== false,
             ignoreTransparent: config.ignoreTransparent !== false,
             enableHueGapAnalysis: config.enableHueGapAnalysis !== false,
-            maskProfile: config.maskProfile || 'Gray Gamma 2.2'
+            maskProfile: config.maskProfile || 'Gray Gamma 2.2',
+
+            // Production Quality Controls
+            minVolume: config.minVolume ?? 1.5,
+            speckleRescue: config.speckleRescue ?? 4,
+            shadowClamp: config.shadowClamp ?? 6.0
         };
 
         applyAnalyzedSettings(uiSettings);

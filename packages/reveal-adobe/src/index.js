@@ -34,6 +34,9 @@ const { attachAllEventListeners } = require('./EventSetup');
  * Initialize the plugin
  */
 function initPlugin() {
+    logger.log('Reveal plugin loaded');
+    logger.log(`Build ID: ${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev'}`);
+    logger.log(`Build Time: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'development'}`);
 }
 
 /**
