@@ -47,6 +47,10 @@ npm run test:watch          # Watch mode
 npm run test:coverage       # Coverage report
 ```
 
+## First Steps for Any New Session
+
+**Always read `.claude-context.md` first** — it contains the current session state, recent changes, known issues, and next steps. This is the single most important file for getting oriented.
+
 ## Architecture
 
 ### Core + Adapter Pattern
@@ -163,6 +167,19 @@ reveal-project/
 - Shadow tints (warm/cool hues in dark areas)
 
 **When to modify:** Adding new archetype detection, tuning signature thresholds
+
+### 4a. ArchetypeMapper (`packages/reveal-core/lib/analysis/ArchetypeMapper.js`)
+
+**Purpose:** Match DNA signatures to archetype definitions using weighted scoring
+
+**Scoring formula (40/45/15 split):**
+- **40% Structural DNA:** L (lightness), C (chroma), K (blackness), L-StdDev (contrast)
+- **45% Sector Affinity:** 12-sector hue weights and chroma distribution
+- **15% Pattern/Signature:** Entropy and color temperature
+
+**Archetypes:** 12 active archetypes loaded from `packages/reveal-core/archetypes/*.json` (registered in `ArchetypeLoader.getBuiltInArchetypes()`). Additional JSON files may exist on disk but only loaded ones participate in matching.
+
+**Key design:** No override gates — all archetypes compete purely through the 40/45/15 scoring. Previous hard-coded priority gates (blue rescue, high-chroma) were removed as they caused systemic misassignment.
 
 ### 5. ParameterGenerator (`packages/reveal-core/lib/analysis/ParameterGenerator.js`)
 
@@ -284,11 +301,13 @@ CLI BATCH ONLY:
 - Brown-Dampener: 8-bit quantization noise in warm tones is penalized
 - Aggressive Vibrancy: a* multiplied by 1.6× to rescue reds
 
-### 4. 3-Level Perceptual Rescue System
+### 4. DNA-Driven Parameter Selection
 
-**Level 1 - DNA:** Archetype detection drives all parameter selection
-**Level 2 - Entropy:** Bilateral filter adapts to image noise characteristics
-**Level 3 - Complexity:** Distance metric selection (CIE94 for photos, CIE76 for graphics)
+The system uses a 3-level perceptual rescue cascade — no manual tuning required:
+
+**Level 1 - DNA:** ArchetypeMapper scores image against 12 archetypes (40/45/15 weighting). Winner drives all downstream parameters.
+**Level 2 - Entropy:** Bilateral filter activates only when image entropy exceeds threshold (edge-preserving noise reduction).
+**Level 3 - Complexity:** Distance metric auto-selected (CIE2000 for subtle naturalist, CIE94 for vibrant, CIE76 for graphics).
 
 ### 5. 16-bit Archival Support (Green Rescue)
 
@@ -312,6 +331,22 @@ CLI BATCH ONLY:
 - `peakChroma > 80 OR isPhotographic → CIE94`
 - `archivalImage AND 16-bit → CIE2000`
 - Default: CIE76
+
+## Mechanical Knobs (Separation Post-Processing)
+
+Three user-facing parameters in the separation pipeline, applied per-layer after mask generation:
+
+| Knob | Range | Purpose | Code Location |
+|------|-------|---------|---------------|
+| **minVolume** | 0-5% | Ghost plate removal — merges colors below coverage threshold into nearest strong neighbor | `SeparationEngine.pruneWeakColors()` |
+| **speckleRescue** | 0-10px | Halftone solidity — morphological despeckle removes isolated pixel clusters below threshold | `SeparationEngine.generateSeparations()` → `_despeckleMask()` |
+| **shadowClamp** | 0-20% | Ink body control — clamps barely-visible mask values to printable minimum density | `SeparationEngine.generateSeparations()` |
+
+## Known Pitfalls
+
+### Distance Metric Scale Mismatch
+
+When using spatial locality optimizations with distance thresholds (e.g., snap-to-last-winner), thresholds must be calibrated per metric. CIE76/CIE94 return squared distances in 16-bit range (0–3.2 billion), while CIE2000 returns perceptual dE² (0–10,000). A threshold tuned for CIE76 will cause CIE2000 to always snap to the first candidate, mapping every pixel to index 0. See `SeparationEngine._mapPixelsNearestNeighbor()` for the metric-aware implementation.
 
 ## Common Development Patterns
 
@@ -456,4 +491,7 @@ git commit -m "feat(reveal-core): description"
 | **Parameter Mapping** | `packages/reveal-core/lib/analysis/ParameterGenerator.js` | Expert system (DNA→Config) |
 | **Distance Metrics** | `packages/reveal-core/lib/color/LabDistance.js` | CIE76/CIE94/CIE2000 |
 | **Photoshop Plugin** | `packages/reveal-adobe/src/index.js` | UXP adapter and UI |
+| **Archetype Mapper** | `packages/reveal-core/lib/analysis/ArchetypeMapper.js` | 40/45/15 DNA scoring |
+| **Archetype Defs** | `packages/reveal-core/archetypes/*.json` | Archetype centroids and weights |
 | **Batch Processor** | `packages/reveal-batch/src/reveal-batch.js` | CLI pipeline |
+| **Per-Image Pipeline** | `packages/reveal-batch/src/posterize-psd.js` | Single-image processing (bilateral → posterize → separate) |

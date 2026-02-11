@@ -61,69 +61,7 @@ class ArchetypeMapper {
     }
 
     getBestMatch(dna) {
-        // HIGH-CHROMA PRIORITY GATE: Clinical Graphic Override
-        // Force Sovereign 10-Color Lock for images with extreme peak chroma.
-        // Catches graphics with halftone backgrounds where average chroma is artificially
-        // low due to neutral grays, but peak chroma reveals vibrant outliers.
-        // Example: Jethro Monroe scan with maxC=91.3 but avgC=16.1 (gray halftone dilution)
-        //
-        // Temperature Guard: If image is overwhelmingly warm (e.g. terracotta, earthen
-        // pigments), the high chroma comes from rich warm pigments, not cool outliers.
-        // Allow normal scoring so warm archetypes like Terracotta Ochre can win.
-        if (dna.maxC !== undefined && dna.maxC > 90.0) {
-            const isOverwhelminglyWarm = dna.global.temperature_bias > 0.6 ||
-                                         dna.dominant_sector === 'orange';
-            if (!isOverwhelminglyWarm) {
-                const jethroArchetype = this.archetypes.find(a => a.id === 'jethro_monroe_clinical');
-                if (jethroArchetype) {
-                    return {
-                        id: jethroArchetype.id,
-                        score: 95.0, // High confidence for override
-                        breakdown: {
-                            structural: 95.0,
-                            sectorAffinity: 95.0,
-                            pattern: 95.0
-                        }
-                    };
-                }
-            }
-        }
-
-        // PRODUCTION OVERRIDE: Blue Outlier Rescue (Horse/Sky Issue)
-        // Force Blue Rescue if blue sector is significant but dominated by warm tones
-        // CHROMA-AWARE GATING: Distinguish intentional blue (sky) from sensor noise (salt)
-        const blueWeight = (dna.sectors?.blue?.weight || 0) +
-                          (dna.sectors?.cyan?.weight || 0) +
-                          (dna.sectors?.azure?.weight || 0);
-        const dominantIsWarm = ['orange', 'yellow', 'red', 'chartreuse'].includes(dna.dominant_sector);
-
-        // Clinical Fix: Check chroma to distinguish sky (high-chroma) from salt (low-chroma)
-        const blueChroma = Math.max(
-            dna.sectors?.blue?.cMax || 0,
-            dna.sectors?.cyan?.cMax || 0,
-            dna.sectors?.azure?.cMax || 0
-        );
-        const intentionalBlue = blueChroma > 25; // Noise is rarely this vibrant
-
-        // Hybrid Gate: Require BOTH weight AND chroma
-        const isBlueOutlier = blueWeight > 0.10 && dominantIsWarm && intentionalBlue;
-
-        if (isBlueOutlier) {
-            const blueRescue = this.archetypes.find(a => a.id === 'blue_rescue');
-            if (blueRescue) {
-                return {
-                    id: blueRescue.id,
-                    score: 90.0, // High confidence for override
-                    breakdown: {
-                        structural: 85.0,
-                        sectorAffinity: 95.0,
-                        pattern: 90.0
-                    }
-                };
-            }
-        }
-
-        // Normal scoring path
+        // Pure scoring path — no override gates
         const results = this.archetypes.map(archetype => {
             const structuralScore = this.calculateStructuralScore(dna, archetype);
             const sectorScore = this.calculateSectorAffinity(dna, archetype);
@@ -146,6 +84,39 @@ class ArchetypeMapper {
         });
 
         return results.sort((a, b) => b.score - a.score)[0];
+    }
+
+    /**
+     * Get top N archetype matches sorted by score descending.
+     * Pure scoring — no override gates.
+     *
+     * @param {Object} dna - DNA v2.0 object
+     * @param {number} [n=3] - Number of top matches to return
+     * @returns {Array<{id, score, breakdown}>} Top N matches
+     */
+    getTopMatches(dna, n = 3) {
+        const results = this.archetypes.map(archetype => {
+            const structuralScore = this.calculateStructuralScore(dna, archetype);
+            const sectorScore = this.calculateSectorAffinity(dna, archetype);
+            const patternScore = this.calculatePatternScore(dna, archetype);
+
+            const totalScore = (structuralScore * 0.40) +
+                               (sectorScore * 0.45) +
+                               (patternScore * 0.15);
+
+            return {
+                id: archetype.id,
+                score: parseFloat(totalScore.toFixed(2)),
+                breakdown: {
+                    structural: parseFloat(structuralScore.toFixed(1)),
+                    sectorAffinity: parseFloat(sectorScore.toFixed(1)),
+                    pattern: parseFloat(patternScore.toFixed(1))
+                }
+            };
+        });
+
+        results.sort((a, b) => b.score - a.score);
+        return results.slice(0, n);
     }
 
     // 40% Weight: Structural Distance (Weighted Euclidean)

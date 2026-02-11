@@ -211,6 +211,7 @@ async function showDialog() {
                         }
 
                         if (preprocessConfig.enabled) {
+                            console.log(`[Preprocess] APPLIED — entropy=${preprocessConfig.entropyScore?.toFixed(1)}, radius=${preprocessConfig.radius}, sigmaR=${preprocessConfig.sigmaR}, reason=${preprocessConfig.reason}`);
 
                             // Apply bilateral filter in 16-bit Lab space
                             BilateralFilter.applyBilateralFilterLab(
@@ -222,8 +223,10 @@ async function showDialog() {
                             );
 
                         } else {
+                            console.log(`[Preprocess] SKIPPED — entropy=${preprocessConfig.entropyScore?.toFixed(1)}, reason=${preprocessConfig.reason}`);
                         }
                     } else {
+                        console.log(`[Preprocess] OFF — preprocessingIntensity=${preprocessingIntensity}`);
                     }
 
                     // TEMP: Store preprocessed image data (config will be stored later after tuning is defined)

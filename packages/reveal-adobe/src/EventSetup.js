@@ -716,15 +716,17 @@ function attachAllEventListeners(dialog, handlePosterization) {
             btnAnalyzeAndSet.disabled = true;
             btnAnalyzeAndSet.textContent = "Analysing...";
             btnAnalyzeAndSet.style.opacity = "0.6";
+            document.body.style.cursor = "wait";
 
             try {
                 // Call shared analysis function
                 await handleAnalyzeImage();
             } finally {
-                // Restore button state
+                // Restore button and cursor state
                 btnAnalyzeAndSet.disabled = false;
                 btnAnalyzeAndSet.textContent = originalText;
                 btnAnalyzeAndSet.style.opacity = "1";
+                document.body.style.cursor = "";
             }
         });
     }

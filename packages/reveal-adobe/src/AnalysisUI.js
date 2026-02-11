@@ -8,13 +8,160 @@ const { core } = require("photoshop");
 
 const Reveal = require("@reveal/core");
 const ParameterGenerator = require("@reveal/core/lib/analysis/ParameterGenerator");
+const ArchetypeMapper = Reveal.ArchetypeMapper;
+const SeparationEngine = Reveal.engines.SeparationEngine;
 const logger = Reveal.logger;
 
 const pluginState = require('./PluginState');
-const { applyAnalyzedSettings } = require('./FormHelpers');
+const { applyAnalyzedSettings, ARCHETYPES } = require('./FormHelpers');
 const { resolveDistanceMetric } = require('./ColorUtils');
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 const DNAGenerator = require("./DNAGenerator");
+
+/**
+ * Compute E_rev (chroma-weighted CIE76 error) on 8-bit Lab arrays.
+ * Inlined here because MetricsCalculator lives in reveal-batch (not bundled).
+ *
+ * @param {Uint8Array} originalLab8 - Original 8-bit Lab (3 bytes/pixel)
+ * @param {Uint8Array} processedLab8 - Reconstructed 8-bit Lab (3 bytes/pixel)
+ * @param {number} width
+ * @param {number} height
+ * @param {number} stride - Sample every Nth pixel in each dimension
+ * @returns {number} E_rev score
+ */
+function computeERev(originalLab8, processedLab8, width, height, stride) {
+    // Pass 1: find cMax
+    let cMax = 0;
+    for (let y = 0; y < height; y += stride) {
+        for (let x = 0; x < width; x += stride) {
+            const idx = (y * width + x) * 3;
+            const a = originalLab8[idx + 1] - 128;
+            const b = originalLab8[idx + 2] - 128;
+            const c = Math.sqrt(a * a + b * b);
+            if (c > cMax) cMax = c;
+        }
+    }
+    if (cMax < 1) cMax = 1;
+
+    // Pass 2: weighted error
+    let sumWE = 0, sumW = 0;
+    for (let y = 0; y < height; y += stride) {
+        for (let x = 0; x < width; x += stride) {
+            const idx = (y * width + x) * 3;
+            const L1 = (originalLab8[idx] / 255) * 100;
+            const a1 = originalLab8[idx + 1] - 128;
+            const b1 = originalLab8[idx + 2] - 128;
+            const L2 = (processedLab8[idx] / 255) * 100;
+            const a2 = processedLab8[idx + 1] - 128;
+            const b2 = processedLab8[idx + 2] - 128;
+
+            const C_i = Math.sqrt(a1 * a1 + b1 * b1);
+            const dL = L1 - L2, da = a1 - a2, db = b1 - b2;
+            const dE = Math.sqrt(dL * dL + da * da + db * db);
+            const w = 1 + 10 * (C_i / cMax);
+            sumWE += w * dE;
+            sumW += w;
+        }
+    }
+    return sumW > 0 ? sumWE / sumW : 0;
+}
+
+/**
+ * Run a single archetype trial: posterize → separate → E_rev
+ *
+ * @param {Uint16Array} lab16 - 16-bit Lab pixels (engine encoding)
+ * @param {Uint8Array} lab8 - 8-bit Lab pixels (for E_rev)
+ * @param {number} width
+ * @param {number} height
+ * @param {Object} dna - DNA v2.0 object
+ * @param {string} archetypeId - Archetype to trial
+ * @param {number} stride - E_rev sampling stride
+ * @returns {Promise<number>} E_rev score
+ */
+async function runArchetypeTrial(lab16, lab8, width, height, dna, archetypeId, stride) {
+    const pixelCount = width * height;
+    const trialConfig = ParameterGenerator.generate(dna, { manualArchetypeId: archetypeId });
+
+    const posterizeResult = await Reveal.posterizeImage(
+        lab16, width, height, 8,
+        {
+            targetColorsSlider: 8,
+            blackBias: trialConfig.blackBias,
+            ditherType: trialConfig.ditherType,
+            format: 'lab',
+            bitDepth: 8,
+            engineType: 'reveal',
+            centroidStrategy: 'SALIENCY',
+            lWeight: trialConfig.lWeight,
+            cWeight: trialConfig.cWeight,
+            substrateMode: 'auto',
+            substrateTolerance: 2.0,
+            vibrancyMode: trialConfig.vibrancyMode,
+            vibrancyBoost: trialConfig.vibrancyBoost || trialConfig.saturationBoost,
+            highlightThreshold: trialConfig.highlightThreshold || 85,
+            highlightBoost: trialConfig.highlightBoost || 1.0,
+            enablePaletteReduction: true,
+            paletteReduction: trialConfig.paletteReduction || 10.0,
+            hueLockAngle: trialConfig.hueLockAngle || 20,
+            shadowPoint: trialConfig.shadowPoint || 15,
+            colorMode: 'color',
+            preserveWhite: true,
+            preserveBlack: true,
+            ignoreTransparent: true,
+            enableHueGapAnalysis: trialConfig.enableHueGapAnalysis !== false,
+        }
+    );
+
+    const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+        lab16, posterizeResult.paletteLab, null, width, height,
+        { ditherType: 'none', distanceMetric: trialConfig.distanceMetric || 'cie76' }
+    );
+
+    // Reconstruct 8-bit Lab from color indices
+    const processedLab8 = new Uint8Array(pixelCount * 3);
+    for (let i = 0; i < pixelCount; i++) {
+        const color = posterizeResult.paletteLab[colorIndices[i]];
+        processedLab8[i * 3]     = Math.round((color.L / 100) * 255);
+        processedLab8[i * 3 + 1] = Math.round(color.a + 128);
+        processedLab8[i * 3 + 2] = Math.round(color.b + 128);
+    }
+
+    return computeERev(lab8, processedLab8, width, height, stride);
+}
+
+/**
+ * Audition top archetype candidates and compute E_rev for each.
+ *
+ * @param {Uint16Array} lab16 - 16-bit Lab pixels
+ * @param {Uint8Array} lab8 - 8-bit Lab pixels
+ * @param {number} width
+ * @param {number} height
+ * @param {Object} dna - DNA v2.0 object
+ * @returns {Promise<Array<{id, name, description, eRev, dnaScore}>>} Sorted by E_rev ascending
+ */
+async function auditionArchetypes(lab16, lab8, width, height, dna) {
+    // Build archetype array from the plugin's ARCHETYPES constant
+    const archetypeList = Object.values(ARCHETYPES).filter(a => a.id && a.centroid);
+    const mapper = new ArchetypeMapper(archetypeList);
+    const topMatches = mapper.getTopMatches(dna, 3);
+
+    const trials = [];
+    for (const match of topMatches) {
+        const archetype = archetypeList.find(a => a.id === match.id);
+        const eRev = await runArchetypeTrial(lab16, lab8, width, height, dna, match.id, 2);
+        trials.push({
+            id: match.id,
+            name: archetype?.name || match.id,
+            description: archetype?.description || '',
+            eRev: parseFloat(eRev.toFixed(2)),
+            dnaScore: match.score
+        });
+    }
+
+    // Sort by E_rev ascending (lowest error = best fit)
+    trials.sort((a, b) => a.eRev - b.eRev);
+    return trials;
+}
 
 /**
  * Handle Analyze Image - Extract DNA and configure parameters
@@ -112,22 +259,21 @@ async function handleAnalyzeImage() {
 
         applyAnalyzedSettings(uiSettings);
 
-        const smartMetric = resolveDistanceMetric('auto', pluginState.lastImageDNA);
-        const smartMetricLabels = { 'cie76': 'Poster/Graphic', 'cie94': 'Photographic', 'cie2000': 'Museum Grade' };
-        const smartMetricLabel = smartMetricLabels[smartMetric] || smartMetric;
-
-        let preprocessingInfo = 'Off';
-        if (config.preprocessing) {
-            if (config.preprocessing.enabled) {
-                const entropy = config.preprocessing.entropyScore?.toFixed(0) || '?';
-                preprocessingInfo = `${config.preprocessing.intensity} (entropy: ${entropy})`;
-            } else {
-                preprocessingInfo = `Skipped (${config.preprocessing.reason})`;
-            }
+        // Audition top 3 archetype candidates with E_rev scoring
+        const lab8 = PhotoshopAPI.lab16to8(result.pixels);
+        let auditionResults = null;
+        try {
+            auditionResults = await auditionArchetypes(
+                result.pixels, lab8, result.width, result.height, dna
+            );
+            // Store for potential UI use
+            pluginState.lastAuditionResults = auditionResults;
+        } catch (auditionErr) {
+            logger.error("Archetype audition failed (non-fatal):", auditionErr);
         }
 
-        const alertMsg = `Image Analysis Complete\n\nProfile: ${config.name}\nArchetype: ${config.meta?.archetype || 'Unknown'}\nColors: ${config.targetColors}\nDither: ${config.ditherType}\nPreprocessing: ${preprocessingInfo}\n\nParameters have been configured.\nClick "Posterize" to generate separations.`;
-
+        // Build enhanced alert message
+        const alertMsg = buildAnalysisAlert(config, auditionResults);
         alert(alertMsg);
 
         const archetypeSelector = document.getElementById("archetypeSelector");
@@ -144,6 +290,43 @@ async function handleAnalyzeImage() {
     }
 }
 
+/**
+ * Build the analysis-complete alert message.
+ * Shows primary archetype fit with E_rev and up to 2 contenders.
+ */
+function buildAnalysisAlert(config, auditionResults) {
+    if (!auditionResults || auditionResults.length === 0) {
+        // Fallback: old-style message if audition failed
+        return `DNA Analysis Complete\n\n` +
+            `Archetype: ${config.meta?.archetype || 'Unknown'}\n` +
+            `Colors: ${config.targetColors}  |  Dither: ${config.ditherType}\n\n` +
+            `Parameters have been configured.\n` +
+            `Click "Posterize" to generate separations.`;
+    }
+
+    const primary = auditionResults[0];
+    const contenders = auditionResults.slice(1);
+
+    let msg = `DNA Analysis Complete\n\n`;
+    msg += `Primary Fit: ${primary.name} (E_rev: ${primary.eRev.toFixed(2)})\n`;
+    msg += `${primary.description}\n`;
+
+    if (contenders.length > 0) {
+        msg += `\nOther Strong Contenders:\n`;
+        for (const c of contenders) {
+            msg += `  - ${c.name} (E_rev: ${c.eRev.toFixed(2)})\n`;
+        }
+    }
+
+    msg += `\n(You can manually select these from the dropdown if you prefer a different style.)\n`;
+    msg += `\nParameters configured for ${primary.name}.\n`;
+    msg += `Click "Posterize" to generate separations.`;
+
+    return msg;
+}
+
 module.exports = {
-    handleAnalyzeImage
+    handleAnalyzeImage,
+    auditionArchetypes,
+    buildAnalysisAlert
 };

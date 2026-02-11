@@ -12,11 +12,11 @@
     "primary_sector_weight": 0.15
   },
   "weights": {
-    "l": 0.5,
-    "c": 2.0,
-    "k": 1.5,
-    "l_std_dev": 2.0,
-    "hue_entropy": 2.0
+    "l": 0.3,
+    "c": 1.0,
+    "k": 0.8,
+    "l_std_dev": 1.5,
+    "hue_entropy": 1.5
   },
   "parameters": {
     "targetColorsSlider": 8,
