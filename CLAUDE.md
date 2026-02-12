@@ -177,7 +177,7 @@ reveal-project/
 - **45% Sector Affinity:** 12-sector hue weights and chroma distribution
 - **15% Pattern/Signature:** Entropy and color temperature
 
-**Archetypes:** 12 active archetypes loaded from `packages/reveal-core/archetypes/*.json` (registered in `ArchetypeLoader.getBuiltInArchetypes()`). Additional JSON files may exist on disk but only loaded ones participate in matching.
+**Archetypes:** Auto-discovered from `packages/reveal-core/archetypes/*.json` (excluding `schema.json`). Node.js uses `fs.readdirSync`; webpack/UXP uses `require.context()`. All JSON files in the directory participate in matching — add/remove archetypes by adding/removing files.
 
 **Key design:** No override gates — all archetypes compete purely through the 40/45/15 scoring. Previous hard-coded priority gates (blue rescue, high-chroma) were removed as they caused systemic misassignment.
 
@@ -305,7 +305,7 @@ CLI BATCH ONLY:
 
 The system uses a 3-level perceptual rescue cascade — no manual tuning required:
 
-**Level 1 - DNA:** ArchetypeMapper scores image against 12 archetypes (40/45/15 weighting). Winner drives all downstream parameters.
+**Level 1 - DNA:** ArchetypeMapper scores image against all archetypes (40/45/15 weighting). Winner drives all downstream parameters.
 **Level 2 - Entropy:** Bilateral filter activates only when image entropy exceeds threshold (edge-preserving noise reduction).
 **Level 3 - Complexity:** Distance metric auto-selected (CIE2000 for subtle naturalist, CIE94 for vibrant, CIE76 for graphics).
 
