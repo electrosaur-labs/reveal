@@ -12,6 +12,8 @@
     "test:adobe": "npm test -w @reveal/adobe",
     "build": "npm run build --workspaces --if-present",
     "build:adobe": "npm run build -w @reveal/adobe",
+    "build:navigator": "npm run build -w @reveal/navigator",
+    "test:navigator": "npm test -w @reveal/navigator",
     "clean": "npm run clean --workspaces --if-present"
   },
   "keywords": [

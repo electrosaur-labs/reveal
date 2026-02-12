@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Navigator</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Adobe Clean', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #323232;
+            color: #e0e0e0;
+            font-size: 12px;
+            overflow: auto;
+        }
+
+        #root {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            gap: 6px;
+            min-height: 0;
+        }
+
+        /* ─── Zone 1: Active Document Header ─── */
+        #doc-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 0;
+            border-bottom: 1px solid #444;
+        }
+
+        #doc-name {
+            flex: 1;
+            font-size: 12px;
+            font-weight: 500;
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #doc-layer {
+            font-size: 10px;
+            color: #888;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 120px;
+        }
+
+        #btn-sync {
+            background: none;
+            border: 1px solid #555;
+            color: #aaa;
+            width: 24px;
+            height: 24px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 22px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        #btn-sync:hover { background: #505050; color: #ddd; }
+        #btn-sync:active { background: #404040; }
+        #btn-sync:disabled { opacity: 0.3; cursor: default; }
+
+        /* ─── Zone 2: Preview + Wayfinding Core ─── */
+        #preview-container {
+            flex: 1 1 0;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #preview-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            image-rendering: pixelated;
+        }
+
+        #preview-placeholder {
+            color: #666;
+            font-size: 11px;
+            text-align: center;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        #archetype-badge {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            background: rgba(0,0,0,0.65);
+            color: #ccc;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 2px;
+            display: none;
+        }
+
+        /* ─── Archetype Carousel ─── */
+        #carousel {
+            display: flex;
+            gap: 4px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 4px 0;
+            scrollbar-width: thin;
+            scrollbar-color: #555 transparent;
+            flex-shrink: 0;
+            max-height: 90px;
+        }
+
+        .carousel-card {
+            flex: 0 0 auto;
+            width: 110px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 6px;
+            cursor: pointer;
+            transition: border-color 0.15s;
+        }
+
+        .carousel-card:hover {
+            border-color: #777;
+            background: #333;
+        }
+
+        .carousel-card.active {
+            border-color: #4da6ff;
+            background: #2d3545;
+        }
+
+        .card-name {
+            font-size: 10px;
+            font-weight: 500;
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .card-score-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+
+        .card-score-bar {
+            flex: 1;
+            height: 3px;
+            background: #444;
+            border-radius: 1px;
+            overflow: hidden;
+        }
+
+        .card-score-fill {
+            height: 100%;
+            background: #4da6ff;
+            border-radius: 1px;
+        }
+
+        .card-score-val {
+            font-size: 9px;
+            color: #888;
+            min-width: 18px;
+            text-align: right;
+        }
+
+        .card-swatches, .card-hue {
+            display: flex;
+            gap: 2px;
+        }
+
+        .card-swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 1px;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: inline-block;
+        }
+
+        /* ─── Preview Stats Panel ─── */
+        #preview-stats {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 5px 4px;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            background: #2a2a2a;
+        }
+
+        .stat-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: #999;
+        }
+
+        .stat-row .stat-label {
+            color: #666;
+            font-size: 10px;
+            min-width: 0;
+        }
+
+        .stat-row .stat-val {
+            color: #ccc;
+        }
+
+        .stat-row .stat-highlight {
+            color: #8bb8e8;
+            font-weight: 500;
+        }
+
+        .stat-row .stat-score {
+            color: #e0c97f;
+            font-weight: 500;
+        }
+
+        .stat-row .stat-breakdown {
+            color: #888;
+            font-size: 10px;
+        }
+
+        .stat-row .stat-dim {
+            color: #777;
+        }
+
+        .stat-sep {
+            color: #555;
+            margin: 0 1px;
+        }
+
+        /* ─── Zone 3: Structural HUD Footer ─── */
+        #hud-footer {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        #radar-container {
+            flex: 0 0 auto;
+        }
+
+        #hud-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        #status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 10px;
+            color: #777;
+        }
+
+        #status-text { flex: 1; }
+        #accuracy-text { color: #999; }
+
+        #dominant-sector {
+            font-size: 10px;
+            color: #888;
+        }
+
+        /* ─── Error Overlay ─── */
+        #error-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+
+        #error-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #e0e0e0;
+            padding: 16px;
+            max-width: 280px;
+            width: 90%;
+        }
+
+        #error-box h3 {
+            font-size: 13px;
+            margin-bottom: 8px;
+            color: #ff6b6b;
+        }
+
+        #error-box p {
+            font-size: 12px;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            color: #ccc;
+        }
+
+        #error-box button {
+            background: #505050;
+            border: 1px solid #666;
+            color: #e0e0e0;
+            padding: 5px 16px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            float: right;
+        }
+
+        #error-box button:hover { background: #606060; }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <!-- Zone 1: Active Document Status -->
+        <div id="doc-header">
+            <span id="doc-name">No document</span>
+            <span id="doc-layer"></span>
+            <button id="btn-sync" title="Re-sync from canvas">&#x21bb;</button>
+        </div>
+
+        <!-- Zone 2: Preview + Wayfinding Core -->
+        <div id="preview-container">
+            <img id="preview-img" style="display:none;" />
+            <div id="preview-placeholder">Open a Lab document to begin navigation.</div>
+            <div id="archetype-badge"></div>
+        </div>
+
+        <!-- Stats panel below preview -->
+        <div id="preview-stats" style="display:none;">
+            <div class="stat-row" id="stat-row-poster">
+                <span class="stat-val" id="stat-colors"></span>
+                <span class="stat-sep">&middot;</span>
+                <span class="stat-highlight" id="stat-delta"></span>
+                <span class="stat-sep">&middot;</span>
+                <span class="stat-dim" id="stat-time"></span>
+            </div>
+            <div class="stat-row" id="stat-row-match">
+                <span class="stat-label">Match</span>
+                <span class="stat-score" id="stat-score"></span>
+                <span class="stat-breakdown" id="stat-breakdown"></span>
+            </div>
+            <div class="stat-row" id="stat-row-dna">
+                <span class="stat-label">DNA</span>
+                <span class="stat-dim" id="stat-dna"></span>
+            </div>
+        </div>
+
+        <!-- Archetype Carousel -->
+        <div id="carousel"></div>
+
+        <!-- Zone 3: Structural HUD Footer -->
+        <div id="hud-footer">
+            <div id="radar-container"></div>
+            <div id="hud-info">
+                <div id="status-bar">
+                    <span id="status-text">Waiting for document...</span>
+                    <span id="accuracy-text"></span>
+                </div>
+                <div id="dominant-sector"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Overlay (hidden by default) -->
+    <div id="error-overlay">
+        <div id="error-box">
+            <h3 id="error-title">Error</h3>
+            <p id="error-message"></p>
+            <button id="btn-error-ok">OK</button>
+        </div>
+    </div>
+
+    <script src="index.js"></script>
+</body>
+</html>

@@ -42,13 +42,25 @@ class ProxyEngine {
 
         this.proxyBuffer = proxyBuffer;
 
+        // Proxy-safe config:
+        // - format: 'lab' — CRITICAL: input is 16-bit Lab, not RGB
+        // - Disable aggressive merging that collapses palette at 512px
+        const proxyConfig = {
+            ...initialConfig,
+            format: 'lab',
+            snapThreshold: 0,
+            enablePaletteReduction: false,
+            densityFloor: 0,
+            preservedUnifyThreshold: 0.5
+        };
+
         // 2. Run initial posterization (full pipeline)
         const posterizeResult = await PosterizationEngine.posterize(
             proxyBuffer,
             proxyW,
             proxyH,
-            initialConfig.targetColors,
-            initialConfig
+            proxyConfig.targetColors,
+            proxyConfig
         );
 
 
@@ -95,6 +107,93 @@ class ProxyEngine {
         const previewBuffer = this._generatePreviewFromIndices(
             this.separationState.colorIndices,
             this.separationState.rgbPalette,
+            proxyW,
+            proxyH
+        );
+
+        const elapsed = performance.now() - startTime;
+
+        return {
+            previewBuffer,
+            palette: this.separationState.palette,
+            dimensions: { width: proxyW, height: proxyH },
+            statistics: this.separationState.statistics,
+            elapsedMs: elapsed
+        };
+    }
+
+    /**
+     * Re-posterize the existing proxyBuffer with a new config.
+     * Skips downsampling — uses the stored 512px buffer directly.
+     * Used for archetype swaps where the source pixels haven't changed.
+     *
+     * @param {Object} config - New posterization config
+     * @returns {Promise<Object>} Updated proxy state
+     */
+    async rePosterize(config) {
+        if (!this.proxyBuffer || !this.separationState) {
+            throw new Error('Proxy not initialized — call initializeProxy first');
+        }
+
+        const startTime = performance.now();
+        const proxyW = this.separationState.width;
+        const proxyH = this.separationState.height;
+
+        // Proxy-safe config:
+        // - format: 'lab' — CRITICAL: input is 16-bit Lab, not RGB
+        // - Disable aggressive merging that collapses palette at 512px
+        const proxyConfig = {
+            ...config,
+            format: 'lab',
+            snapThreshold: 0,
+            enablePaletteReduction: false,
+            densityFloor: 0,
+            preservedUnifyThreshold: 0.5
+        };
+
+        // 1. Posterize existing proxyBuffer with proxy-safe config
+        const posterizeResult = await PosterizationEngine.posterize(
+            this.proxyBuffer,
+            proxyW,
+            proxyH,
+            proxyConfig.targetColors,
+            proxyConfig
+        );
+
+        // 2. Separation
+        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+            this.proxyBuffer,
+            posterizeResult.paletteLab,
+            null,
+            proxyW,
+            proxyH,
+            {
+                ditherType: config.ditherType || 'none',
+                distanceMetric: config.distanceMetric || 'cie76'
+            }
+        );
+
+        // 3. Masks
+        const masks = [];
+        for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
+            masks.push(SeparationEngine.generateLayerMask(colorIndices, i, proxyW, proxyH));
+        }
+
+        // 4. Update cached state (proxyBuffer unchanged)
+        this.separationState = {
+            palette: posterizeResult.paletteLab,
+            rgbPalette: posterizeResult.palette,
+            colorIndices,
+            masks,
+            width: proxyW,
+            height: proxyH,
+            statistics: posterizeResult.statistics || {}
+        };
+
+        // 5. Generate preview
+        const previewBuffer = this._generatePreviewFromIndices(
+            colorIndices,
+            posterizeResult.palette,
             proxyW,
             proxyH
         );
