@@ -1,5 +1,6 @@
 {
   "id": "hard_commercial",
+  "version": "1.0.0",
   "name": "Punchy / Commercial",
   "description": "High contrast, saturated commercial photography. Optimized for edge-sharpness and vibrant results.",
   "centroid": {
@@ -7,33 +8,33 @@
     "c": 30,
     "k": 75,
     "l_std_dev": 20,
-    "hue_entropy": 0.70,
-    "temperature_bias": 0.0,
-    "primary_sector_weight": 0.20
+    "hue_entropy": 0.7,
+    "temperature_bias": 0,
+    "primary_sector_weight": 0.2
   },
   "weights": {
     "l": 0.5,
-    "c": 1.0,
-    "k": 2.0,
-    "l_std_dev": 1.0,
-    "hue_entropy": 1.0
+    "c": 1,
+    "k": 2,
+    "l_std_dev": 1,
+    "hue_entropy": 1
   },
   "parameters": {
     "targetColorsSlider": 8,
     "ditherType": "Atkinson",
     "distanceMetric": "cie94",
-    "lWeight": 1.0,
+    "lWeight": 1,
     "cWeight": 1.5,
-    "blackBias": 4.0,
+    "blackBias": 4,
     "substrateMode": "auto",
-    "substrateTolerance": 2.0,
+    "substrateTolerance": 2,
     "vibrancyMode": "moderate",
     "vibrancyBoost": 1.1,
     "vibrancyThreshold": 5,
     "highlightThreshold": 90,
     "highlightBoost": 1.3,
     "enablePaletteReduction": true,
-    "paletteReduction": 12.0,
+    "paletteReduction": 12,
     "hueLockAngle": 25,
     "shadowPoint": 15,
     "colorMode": "color",

@@ -497,14 +497,16 @@ function attachAllEventListeners(dialog, handlePosterization) {
             }
         });
 
-        // Add archetype options
-        Object.keys(ARCHETYPES).forEach(archetypeId => {
-            const archetype = ARCHETYPES[archetypeId];
-            const option = document.createElement('option');
-            option.value = archetypeId;
-            option.textContent = archetype.name;
-            archetypeSelector.appendChild(option);
-        });
+        // Add archetype options (sorted alphabetically by display name)
+        Object.keys(ARCHETYPES)
+            .sort((a, b) => ARCHETYPES[a].name.localeCompare(ARCHETYPES[b].name))
+            .forEach(archetypeId => {
+                const archetype = ARCHETYPES[archetypeId];
+                const option = document.createElement('option');
+                option.value = archetypeId;
+                option.textContent = archetype.name;
+                archetypeSelector.appendChild(option);
+            });
 
 
         // Add change event listener

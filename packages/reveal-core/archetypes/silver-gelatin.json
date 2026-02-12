@@ -1,5 +1,6 @@
 {
   "id": "silver_gelatin",
+  "version": "1.0.0",
   "name": "Silver Gelatin / Tonal B&W",
   "description": "Pure grayscale master. Hard-locks neutral centroids to prevent chromatic noise.",
   "centroid": {
@@ -8,32 +9,32 @@
     "k": 100,
     "l_std_dev": 28,
     "hue_entropy": 0.05,
-    "temperature_bias": 0.0,
+    "temperature_bias": 0,
     "primary_sector_weight": 0.95
   },
   "weights": {
     "l": 0.5,
-    "c": 5.0,
-    "k": 1.0,
-    "l_std_dev": 2.0,
-    "hue_entropy": 5.0
+    "c": 5,
+    "k": 1,
+    "l_std_dev": 2,
+    "hue_entropy": 5
   },
   "parameters": {
     "targetColorsSlider": 8,
     "ditherType": "atkinson",
     "distanceMetric": "cie94",
-    "lWeight": 2.0,
+    "lWeight": 2,
     "cWeight": 0.5,
-    "blackBias": 5.0,
+    "blackBias": 5,
     "vibrancyMode": "linear",
-    "vibrancyBoost": 1.0,
+    "vibrancyBoost": 1,
     "vibrancyThreshold": 0,
     "highlightThreshold": 94,
     "highlightBoost": 1.2,
     "enablePaletteReduction": true,
-    "paletteReduction": 6.0,
+    "paletteReduction": 6,
     "substrateMode": "white",
-    "substrateTolerance": 2.0,
+    "substrateTolerance": 2,
     "shadowPoint": 5,
     "enableHueGapAnalysis": false,
     "hueLockAngle": 10,
@@ -43,9 +44,9 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 35,
-    "neutralCentroidClampThreshold": 1.0,
+    "neutralCentroidClampThreshold": 1,
     "preprocessingIntensity": "medium",
-    "shadowClamp": 6.0,
+    "shadowClamp": 6,
     "speckleRescue": 4,
     "minVolume": 0.5
   }

@@ -1,0 +1,61 @@
+{
+  "id": "warm_naturalist",
+  "version": "1.1.0",
+  "name": "Warm Naturalist",
+  "description": "Warm multi-hue subjects (food, toys, wildlife). Orange/red dominant with moderate chroma spread. Requires high entropy (diverse hues) and strong warm temperature bias. Yellow-dominant images belong to thermonuclear_yellow instead.",
+  "preferred_sectors": [
+    "orange",
+    "red",
+    "magenta"
+  ],
+  "centroid": {
+    "l": 57,
+    "c": 45,
+    "k": 100,
+    "l_std_dev": 21,
+    "hue_entropy": 0.65,
+    "temperature_bias": 0.87,
+    "primary_sector_weight": 0.35
+  },
+  "weights": {
+    "l": 2,
+    "c": 4,
+    "k": 1,
+    "l_std_dev": 1.5,
+    "hue_entropy": 3.5,
+    "temperature_bias": 5,
+    "primary_sector_weight": 2
+  },
+  "parameters": {
+    "targetColorsSlider": 8,
+    "ditherType": "blue-noise",
+    "distanceMetric": "cie94",
+    "lWeight": 0.6,
+    "cWeight": 2.2,
+    "blackBias": 4,
+    "vibrancyMode": "moderate",
+    "vibrancyBoost": 1.4,
+    "vibrancyThreshold": 10,
+    "highlightThreshold": 90,
+    "highlightBoost": 1.2,
+    "enablePaletteReduction": true,
+    "paletteReduction": 6,
+    "substrateMode": "auto",
+    "substrateTolerance": 2.5,
+    "shadowPoint": 12,
+    "enableHueGapAnalysis": true,
+    "hueLockAngle": 25,
+    "colorMode": "color",
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "maskProfile": "Gray Gamma 2.2",
+    "neutralSovereigntyThreshold": 10,
+    "neutralCentroidClampThreshold": 2.5,
+    "preprocessingIntensity": "light",
+    "shadowClamp": 6,
+    "speckleRescue": 4,
+    "medianPass": false,
+    "minVolume": 1
+  }
+}

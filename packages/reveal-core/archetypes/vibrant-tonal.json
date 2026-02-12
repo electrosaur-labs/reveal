@@ -1,5 +1,6 @@
 {
   "id": "vibrant_tonal",
+  "version": "1.1.0",
   "name": "Vibrant Tonal / Neon-High-Chroma",
   "description": "Finds vibrant details inside underexposed frames. High c-weight prioritizes chroma spikes over volume.",
   "centroid": {
@@ -7,14 +8,14 @@
     "c": 45,
     "k": 95,
     "l_std_dev": 25,
-    "hue_entropy": 0.40,
-    "temperature_bias": 0.0,
-    "primary_sector_weight": 0.30
+    "hue_entropy": 0.4,
+    "temperature_bias": 0,
+    "primary_sector_weight": 0.3
   },
   "weights": {
     "l": 0.2,
-    "c": 6.0,
-    "k": 1.0,
+    "c": 6,
+    "k": 1,
     "l_std_dev": 0.5,
     "primary_sector_weight": 2.5
   },
@@ -24,14 +25,14 @@
     "distanceMetric": "cie94",
     "lWeight": 1.8,
     "cWeight": 6.5,
-    "blackBias": 4.0,
+    "blackBias": 4,
     "vibrancyMode": "exponential",
     "vibrancyBoost": 1.8,
-    "vibrancyThreshold": 5.0,
+    "vibrancyThreshold": 5,
     "highlightThreshold": 95,
     "highlightBoost": 1.4,
     "enablePaletteReduction": true,
-    "paletteReduction": 6.0,
+    "paletteReduction": 6,
     "substrateMode": "auto",
     "substrateTolerance": 2.5,
     "shadowPoint": 10,
@@ -45,9 +46,9 @@
     "neutralSovereigntyThreshold": 10,
     "neutralCentroidClampThreshold": 2.5,
     "preprocessingIntensity": "heavy",
-    "shadowClamp": 6.0,
+    "shadowClamp": 6,
     "chromaGate": 1.5,
     "speckleRescue": 4,
-    "minVolume": 1.0
+    "minVolume": 1
   }
 }

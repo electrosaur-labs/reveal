@@ -1,5 +1,6 @@
 {
   "id": "subtle_naturalist",
+  "version": "1.0.0",
   "name": "Subtle Naturalist / Architectural",
   "description": "Baseline for 16-bit photographic scans. High entropy target protects clinical color diversity.",
   "centroid": {
@@ -8,12 +9,12 @@
     "k": 94.2,
     "l_std_dev": 28.6,
     "hue_entropy": 0.75,
-    "temperature_bias": 0.0,
+    "temperature_bias": 0,
     "primary_sector_weight": 0.15
   },
   "weights": {
     "l": 0.3,
-    "c": 1.0,
+    "c": 1,
     "k": 0.8,
     "l_std_dev": 1.5,
     "hue_entropy": 1.5
@@ -29,11 +30,11 @@
     "vibrancyBoost": 1.05,
     "vibrancyThreshold": 18,
     "highlightThreshold": 96,
-    "highlightBoost": 1.0,
+    "highlightBoost": 1,
     "enablePaletteReduction": true,
     "paletteReduction": 8.5,
     "substrateMode": "auto",
-    "substrateTolerance": 2.0,
+    "substrateTolerance": 2,
     "shadowPoint": 12,
     "enableHueGapAnalysis": true,
     "hueLockAngle": 15,
@@ -45,8 +46,8 @@
     "neutralSovereigntyThreshold": 0,
     "neutralCentroidClampThreshold": 0.8,
     "preprocessingIntensity": "light",
-    "shadowClamp": 6.0,
-    "detailRescue": 5.0,
+    "shadowClamp": 6,
+    "detailRescue": 5,
     "speckleRescue": 4,
     "medianPass": false,
     "minVolume": 1.5

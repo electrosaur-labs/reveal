@@ -1,23 +1,26 @@
 {
   "id": "thermonuclear_yellow",
+  "version": "1.1.0",
   "name": "Thermonuclear Yellow",
   "description": "Maximum aggression for high-chroma yellows. Uses a high primary-sector trigger to keep yellows sovereign.",
-  "preferred_sectors": ["yellow"],
+  "preferred_sectors": [
+    "yellow"
+  ],
   "centroid": {
     "l": 60,
     "c": 95,
     "k": 50,
     "l_std_dev": 15,
-    "hue_entropy": 0.20,
-    "temperature_bias": 0.90,
-    "primary_sector_weight": 0.60
+    "hue_entropy": 0.2,
+    "temperature_bias": 0.9,
+    "primary_sector_weight": 0.6
   },
   "weights": {
     "l": 0.3,
-    "c": 3.0,
-    "k": 1.0,
-    "l_std_dev": 5.0,
-    "primary_sector_weight": 5.0
+    "c": 3,
+    "k": 1,
+    "l_std_dev": 5,
+    "primary_sector_weight": 5
   },
   "parameters": {
     "targetColorsSlider": 8,
@@ -25,16 +28,16 @@
     "distanceMetric": "cie76",
     "lWeight": 0.5,
     "cWeight": 6.5,
-    "blackBias": 4.0,
+    "blackBias": 4,
     "vibrancyMode": "exponential",
     "vibrancyBoost": 2.2,
     "vibrancyThreshold": 0,
     "highlightThreshold": 97,
-    "highlightBoost": 2.0,
+    "highlightBoost": 2,
     "enablePaletteReduction": true,
-    "paletteReduction": 6.0,
+    "paletteReduction": 6,
     "substrateMode": "auto",
-    "substrateTolerance": 2.0,
+    "substrateTolerance": 2,
     "shadowPoint": 5,
     "enableHueGapAnalysis": false,
     "hueLockAngle": 45,
@@ -43,8 +46,9 @@
     "preserveBlack": true,
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
-    "neutralSovereigntyThreshold": 40,
-    "neutralCentroidClampThreshold": 15.0,
-    "preprocessingIntensity": "medium"
+    "neutralSovereigntyThreshold": 25,
+    "neutralCentroidClampThreshold": 15,
+    "preprocessingIntensity": "medium",
+    "speckleRescue": 4
   }
 }

@@ -1,23 +1,29 @@
 {
   "id": "neon_graphic",
+  "version": "1.0.0",
   "name": "Neon / Fluorescent Graphic",
   "description": "Aggressive hue-locking for saturated flat art. Prevents bleed between vibrant spot colors.",
-  "preferred_sectors": ["yellow", "orange", "red", "magenta"],
+  "preferred_sectors": [
+    "yellow",
+    "orange",
+    "red",
+    "magenta"
+  ],
   "centroid": {
     "l": 60,
     "c": 90,
     "k": 50,
     "l_std_dev": 4,
-    "hue_entropy": 0.50,
-    "temperature_bias": 0.0,
-    "primary_sector_weight": 0.40
+    "hue_entropy": 0.5,
+    "temperature_bias": 0,
+    "primary_sector_weight": 0.4
   },
   "weights": {
     "l": 0.5,
-    "c": 2.0,
-    "k": 1.0,
-    "l_std_dev": 4.0,
-    "primary_sector_weight": 3.0
+    "c": 2,
+    "k": 1,
+    "l_std_dev": 4,
+    "primary_sector_weight": 3
   },
   "parameters": {
     "targetColorsSlider": 8,
@@ -25,12 +31,12 @@
     "distanceMetric": "cie76",
     "lWeight": 0.5,
     "cWeight": 6.5,
-    "blackBias": 1.0,
+    "blackBias": 1,
     "vibrancyMode": "exponential",
     "vibrancyBoost": 1.8,
     "vibrancyThreshold": 0,
     "highlightThreshold": 98,
-    "highlightBoost": 1.0,
+    "highlightBoost": 1,
     "enablePaletteReduction": true,
     "paletteReduction": 6.5,
     "substrateMode": "auto",
@@ -44,12 +50,12 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 25,
-    "neutralCentroidClampThreshold": 15.0,
+    "neutralCentroidClampThreshold": 15,
     "preprocessingIntensity": "none",
     "chromaGate": 1.8,
-    "detailRescue": 8.0,
+    "detailRescue": 8,
     "speckleRescue": 4,
-    "shadowClamp": 6.0,
+    "shadowClamp": 6,
     "minVolume": 0.5
   }
 }

@@ -1,8 +1,13 @@
 {
   "id": "muted_vintage",
+  "version": "1.0.0",
   "name": "Muted / Vintage",
   "description": "Mid-bright, desaturated. Ideal for faded posters and WPA aesthetics.",
-  "preferred_sectors": ["orange", "chartreuse", "rose"],
+  "preferred_sectors": [
+    "orange",
+    "chartreuse",
+    "rose"
+  ],
   "centroid": {
     "l": 60,
     "c": 10,
@@ -14,9 +19,9 @@
   },
   "weights": {
     "l": 0.5,
-    "c": 1.0,
-    "k": 1.0,
-    "l_std_dev": 3.0,
+    "c": 1,
+    "k": 1,
+    "l_std_dev": 3,
     "hue_entropy": 1.5
   },
   "parameters": {
@@ -24,17 +29,17 @@
     "ditherType": "BlueNoise",
     "distanceMetric": "cie94",
     "lWeight": 0.8,
-    "cWeight": 1.0,
-    "blackBias": 2.0,
+    "cWeight": 1,
+    "blackBias": 2,
     "substrateMode": "auto",
-    "substrateTolerance": 4.0,
+    "substrateTolerance": 4,
     "vibrancyMode": "linear",
-    "vibrancyBoost": 1.0,
+    "vibrancyBoost": 1,
     "vibrancyThreshold": 15,
     "highlightThreshold": 90,
     "highlightBoost": 1.1,
     "enablePaletteReduction": true,
-    "paletteReduction": 10.0,
+    "paletteReduction": 10,
     "hueLockAngle": 18,
     "shadowPoint": 12,
     "colorMode": "color",
@@ -44,7 +49,7 @@
     "enableHueGapAnalysis": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 15,
-    "neutralCentroidClampThreshold": 3.0,
+    "neutralCentroidClampThreshold": 3,
     "preprocessingIntensity": "light"
   }
 }

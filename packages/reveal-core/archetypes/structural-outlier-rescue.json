@@ -1,5 +1,6 @@
 {
   "id": "structural_outlier_rescue",
+  "version": "1.0.0",
   "name": "Subtle Naturalist / Structural Rescue",
   "description": "Surgical recovery for monochromatic, high-detail images. Prevents saliency shadow.",
   "centroid": {
@@ -8,32 +9,32 @@
     "k": 100,
     "l_std_dev": 26,
     "hue_entropy": 0.25,
-    "temperature_bias": 0.0,
-    "primary_sector_weight": 0.60
+    "temperature_bias": 0,
+    "primary_sector_weight": 0.6
   },
   "weights": {
-    "l": 1.0,
-    "c": 3.0,
+    "l": 1,
+    "c": 3,
     "k": 1.5,
     "l_std_dev": 1.5,
-    "hue_entropy": 3.0
+    "hue_entropy": 3
   },
   "parameters": {
     "targetColorsSlider": 8,
     "ditherType": "atkinson",
     "distanceMetric": "cie2000",
-    "lWeight": 2.0,
+    "lWeight": 2,
     "cWeight": 4.5,
-    "blackBias": 8.0,
+    "blackBias": 8,
     "vibrancyMode": "subtle",
     "vibrancyBoost": 1.05,
     "vibrancyThreshold": 18,
     "highlightThreshold": 97,
-    "highlightBoost": 2.0,
+    "highlightBoost": 2,
     "enablePaletteReduction": true,
-    "paletteReduction": 6.0,
+    "paletteReduction": 6,
     "substrateMode": "auto",
-    "substrateTolerance": 1.0,
+    "substrateTolerance": 1,
     "shadowPoint": 8,
     "enableHueGapAnalysis": true,
     "hueLockAngle": 15,
@@ -45,8 +46,8 @@
     "neutralSovereigntyThreshold": 0,
     "neutralCentroidClampThreshold": 0.2,
     "preprocessingIntensity": "light",
-    "shadowClamp": 6.0,
+    "shadowClamp": 6,
     "speckleRescue": 4,
-    "minVolume": 1.0
+    "minVolume": 1
   }
 }

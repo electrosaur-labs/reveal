@@ -1,8 +1,13 @@
 {
   "id": "blue_rescue",
+  "version": "1.0.0",
   "name": "Blue Rescue / Outlier Recovery",
   "description": "Forces engine to find cool-spectrum outliers in warm or neutral images.",
-  "preferred_sectors": ["blue", "cyan", "azure"],
+  "preferred_sectors": [
+    "blue",
+    "cyan",
+    "azure"
+  ],
   "centroid": {
     "l": 40,
     "c": 35,
@@ -13,9 +18,9 @@
     "primary_sector_weight": 0.35
   },
   "weights": {
-    "l": 1.0,
-    "c": 2.0,
-    "k": 2.0,
+    "l": 1,
+    "c": 2,
+    "k": 2,
     "l_std_dev": 1.5,
     "temperature_bias": 2.5
   },
@@ -32,7 +37,7 @@
     "highlightThreshold": 95,
     "highlightBoost": 1.2,
     "enablePaletteReduction": false,
-    "paletteReduction": 0.0,
+    "paletteReduction": 0,
     "substrateMode": "auto",
     "substrateTolerance": 3.5,
     "shadowPoint": 10,
@@ -46,9 +51,9 @@
     "neutralSovereigntyThreshold": 0,
     "neutralCentroidClampThreshold": 0.5,
     "preprocessingIntensity": "light",
-    "shadowClamp": 6.0,
+    "shadowClamp": 6,
     "speckleRescue": 4,
     "medianPass": false,
-    "minVolume": 1.0
+    "minVolume": 1
   }
 }

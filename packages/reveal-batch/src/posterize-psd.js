@@ -656,7 +656,8 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         deltaE: metrics.global_fidelity.avgDeltaE,
         ranking: (config.meta.matchRanking || []).map(m => ({
             id: m.id,
-            score: m.score
+            score: m.score,
+            breakdown: m.breakdown
         })),
         dna,
         configuration: config,

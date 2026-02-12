@@ -1,5 +1,6 @@
 {
   "id": "soft_ethereal",
+  "version": "1.0.0",
   "name": "Soft / Ethereal",
   "description": "Mid-bright, low contrast. Protects soft gradients in high-key photography.",
   "centroid": {
@@ -7,16 +8,16 @@
     "c": 20,
     "k": 40,
     "l_std_dev": 18,
-    "hue_entropy": 0.50,
-    "temperature_bias": 0.0,
-    "primary_sector_weight": 0.20
+    "hue_entropy": 0.5,
+    "temperature_bias": 0,
+    "primary_sector_weight": 0.2
   },
   "weights": {
-    "l": 1.0,
+    "l": 1,
     "c": 1.5,
-    "k": 1.0,
-    "l_std_dev": 2.0,
-    "hue_entropy": 1.0
+    "k": 1,
+    "l_std_dev": 2,
+    "hue_entropy": 1
   },
   "parameters": {
     "targetColorsSlider": 8,
@@ -24,16 +25,16 @@
     "distanceMetric": "cie94",
     "lWeight": 1.2,
     "cWeight": 1.2,
-    "blackBias": 3.0,
+    "blackBias": 3,
     "vibrancyMode": "linear",
     "vibrancyBoost": 1.1,
     "vibrancyThreshold": 15,
     "highlightThreshold": 95,
     "highlightBoost": 1.2,
     "enablePaletteReduction": true,
-    "paletteReduction": 9.0,
+    "paletteReduction": 9,
     "substrateMode": "auto",
-    "substrateTolerance": 2.0,
+    "substrateTolerance": 2,
     "shadowPoint": 10,
     "enableHueGapAnalysis": true,
     "hueLockAngle": 15,

@@ -1,21 +1,23 @@
 {
   "id": "bright_desaturated",
+  "version": "1.1.0",
   "name": "Bright Desaturated / High-Key Contrast",
   "description": "Bright, washed-out photographic images with extreme contrast and minimal color.",
+  "preferred_sectors": [],
   "centroid": {
     "l": 75,
     "c": 12,
     "k": 95,
     "l_std_dev": 24,
-    "hue_entropy": 0.30,
-    "temperature_bias": 0.0,
-    "primary_sector_weight": 0.50
+    "hue_entropy": 0.3,
+    "temperature_bias": 0,
+    "primary_sector_weight": 0.5
   },
   "weights": {
-    "l": 1.5,
-    "c": 2.0,
+    "l": 2.5,
+    "c": 0.5,
     "k": 2.5,
-    "l_std_dev": 1.0,
+    "l_std_dev": 0.5,
     "hue_entropy": 1.5
   },
   "parameters": {
@@ -24,16 +26,16 @@
     "distanceMetric": "cie2000",
     "lWeight": 1.2,
     "cWeight": 0.8,
-    "blackBias": 3.0,
+    "blackBias": 3,
     "substrateMode": "white",
-    "substrateTolerance": 4.0,
+    "substrateTolerance": 4,
     "vibrancyMode": "subtle",
     "vibrancyBoost": 0.9,
     "vibrancyThreshold": 20,
     "highlightThreshold": 92,
     "highlightBoost": 1.8,
     "enablePaletteReduction": true,
-    "paletteReduction": 7.0,
+    "paletteReduction": 7,
     "hueLockAngle": 20,
     "shadowPoint": 8,
     "colorMode": "color",
@@ -43,10 +45,10 @@
     "enableHueGapAnalysis": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 20,
-    "neutralCentroidClampThreshold": 4.0,
+    "neutralCentroidClampThreshold": 4,
     "preprocessingIntensity": "light",
-    "shadowClamp": 6.0,
+    "shadowClamp": 6,
     "speckleRescue": 4,
-    "minVolume": 1.0
+    "minVolume": 1
   }
 }

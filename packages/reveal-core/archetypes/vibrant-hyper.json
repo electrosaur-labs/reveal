@@ -1,5 +1,6 @@
 {
   "id": "vibrant_hyper",
+  "version": "1.0.0",
   "name": "Vibrant / Graphic",
   "description": "Maximizes chroma over tonal precision. Ideal for pop art and bright concert posters.",
   "centroid": {
@@ -11,8 +12,8 @@
   "weights": {
     "l": 0.5,
     "c": 1.5,
-    "k": 1.0,
-    "l_std_dev": 2.0
+    "k": 1,
+    "l_std_dev": 2
   },
   "parameters": {
     "targetColorsSlider": 8,
@@ -20,16 +21,16 @@
     "distanceMetric": "cie76",
     "lWeight": 0.8,
     "cWeight": 4.5,
-    "blackBias": 2.0,
+    "blackBias": 2,
     "vibrancyMode": "aggressive",
     "vibrancyBoost": 1.6,
     "vibrancyThreshold": 0,
     "highlightThreshold": 95,
-    "highlightBoost": 1.0,
+    "highlightBoost": 1,
     "enablePaletteReduction": true,
-    "paletteReduction": 12.0,
+    "paletteReduction": 12,
     "substrateMode": "auto",
-    "substrateTolerance": 2.0,
+    "substrateTolerance": 2,
     "shadowPoint": 5,
     "enableHueGapAnalysis": true,
     "hueLockAngle": 30,
@@ -39,7 +40,7 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 18,
-    "neutralCentroidClampThreshold": 10.0,
+    "neutralCentroidClampThreshold": 10,
     "preprocessingIntensity": "none"
   }
 }

@@ -1,5 +1,6 @@
 {
   "id": "standard_balanced",
+  "version": "1.0.0",
   "name": "Standard / Balanced",
   "description": "Baseline metrics for standard photographic scenes.",
   "centroid": {
@@ -10,24 +11,24 @@
   },
   "weights": {
     "l": 0.5,
-    "c": 1.0,
+    "c": 1,
     "k": 1.5,
-    "l_std_dev": 2.0
+    "l_std_dev": 2
   },
   "parameters": {
     "targetColorsSlider": 8,
     "ditherType": "none",
     "distanceMetric": "cie94",
-    "lWeight": 1.0,
-    "cWeight": 1.0,
-    "blackBias": 5.0,
+    "lWeight": 1,
+    "cWeight": 1,
+    "blackBias": 5,
     "vibrancyMode": "linear",
-    "vibrancyBoost": 1.0,
+    "vibrancyBoost": 1,
     "vibrancyThreshold": 8,
     "highlightThreshold": 95,
     "highlightBoost": 1.5,
     "enablePaletteReduction": true,
-    "paletteReduction": 8.0,
+    "paletteReduction": 8,
     "substrateMode": "auto",
     "substrateTolerance": 3.5,
     "shadowPoint": 15,
@@ -39,7 +40,7 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 10,
-    "neutralCentroidClampThreshold": 2.0,
+    "neutralCentroidClampThreshold": 2,
     "preprocessingIntensity": "auto",
     "speckleRescue": 4
   }

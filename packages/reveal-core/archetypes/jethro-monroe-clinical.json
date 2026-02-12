@@ -1,8 +1,12 @@
 {
   "id": "jethro_monroe_clinical",
+  "version": "1.0.0",
   "name": "Jethro Monroe / Sovereign 10-Color Lock",
   "description": "Hard-coded v1 physics with Mk 1.5 stability. 10-color partition.",
-  "preferred_sectors": ["blue", "cyan"],
+  "preferred_sectors": [
+    "blue",
+    "cyan"
+  ],
   "centroid": {
     "l": 45,
     "c": 12,
@@ -13,31 +17,31 @@
     "primary_sector_weight": 0.85
   },
   "weights": {
-    "l": 1.0,
+    "l": 1,
     "c": 2.5,
-    "k": 1.0,
-    "l_std_dev": 2.0,
-    "temperature_bias": 1.0
+    "k": 1,
+    "l_std_dev": 2,
+    "temperature_bias": 1
   },
   "parameters": {
     "centroidStrategy": "SALIENCY",
     "targetColorsSlider": 10,
     "distanceMetric": "cie76",
-    "lWeight": 1.0,
+    "lWeight": 1,
     "cWeight": 2.5,
     "vibrancyMode": "aggressive",
-    "vibrancyBoost": 2.0,
-    "paletteReduction": 12.0,
+    "vibrancyBoost": 2,
+    "paletteReduction": 12,
     "enablePaletteReduction": true,
-    "neutralCentroidClampThreshold": 15.0,
-    "isolationThreshold": 25.0,
+    "neutralCentroidClampThreshold": 15,
+    "isolationThreshold": 25,
     "preserveWhite": true,
     "preserveBlack": true,
     "preservedUnifyThreshold": 0.5,
     "enableHueGapAnalysis": true,
     "bitsPerChannel": 16,
     "ditherType": "none",
-    "blackBias": 8.0,
+    "blackBias": 8,
     "highlightThreshold": 95,
     "highlightBoost": 1.5,
     "substrateMode": "none",
@@ -48,9 +52,9 @@
     "ignoreTransparent": true,
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 0,
-    "densityFloor": 0.0,
+    "densityFloor": 0,
     "preprocessingIntensity": "off",
-    "shadowClamp": 6.0,
+    "shadowClamp": 6,
     "speckleRescue": 4,
     "chromaGate": 1.5,
     "minVolume": 0.8

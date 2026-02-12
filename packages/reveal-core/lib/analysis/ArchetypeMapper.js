@@ -17,11 +17,6 @@ class ArchetypeMapper {
                 tonalRange: 'dark',          // lMean < 50
                 expects_outlier: true        // Small weight but high chroma
             },
-            'warm_tonal_optimized': {
-                chromaProfile: 'moderate',   // cMax 25-60
-                tonalRange: 'mid-bright',    // lMean 50-70
-                expects_diversity: false     // Focused on yellow/orange
-            },
             'thermonuclear_yellow': {
                 chromaProfile: 'extreme',    // cMax > 70
                 tonalRange: 'bright',        // lMean > 55
@@ -45,7 +40,8 @@ class ArchetypeMapper {
             'structural_outlier_rescue': {
                 chromaProfile: 'very_low',   // cMax < 20
                 tonalRange: 'mid-bright',    // lMean > 50
-                expects_monochrome: true     // hue_entropy < 0.3
+                expects_monochrome: true,    // hue_entropy < 0.3
+                rewards_high_texture: true   // Boost for high-relief subjects (σL > 18)
             },
             'silver_gelatin': {
                 chromaProfile: 'achromatic', // cMax < 5
@@ -56,6 +52,22 @@ class ArchetypeMapper {
                 chromaProfile: 'moderate',   // cMax 15-50
                 tonalRange: 'mid',           // lMean 40-65
                 expects_diversity: true      // hue_entropy > 0.6
+            },
+            'warm_naturalist': {
+                chromaProfile: 'moderate',   // cMax 40-85
+                tonalRange: 'mid',           // lMean 45-65
+                expects_diversity: true      // hue_entropy > 0.7 (multi-hue subjects)
+            },
+            'bright_desaturated': {
+                chromaProfile: 'very_low',   // cMax < 20
+                tonalRange: 'bright',        // lMean > 55
+                max_l_std_dev_gate: 15.0     // Penalty-only: block high-texture subjects
+            },
+            'chromatic_polyphony': {
+                chromaProfile: 'any',        // No chroma preference
+                tonalRange: 'any',           // No tonal preference
+                expects_high_entropy: true,  // hue_entropy > 0.85
+                max_sector_gate: 0.25        // Hard gate: no sector can hold > 25%
             }
         };
     }
@@ -211,6 +223,48 @@ class ArchetypeMapper {
             const hasDominance = dna.global.primary_sector_weight > 0.4 &&
                 archetype.preferred_sectors?.includes(dna.dominant_sector);
             if (hasDominance) affinity += 15;
+        }
+
+        if (profile.max_chroma_gate) {
+            // Hard gate: penalize if global chroma exceeds threshold
+            if (dna.global.c > profile.max_chroma_gate) {
+                affinity -= 30; // Not desaturated enough
+            } else {
+                affinity += 20; // Bonus for truly low-chroma images
+            }
+        }
+
+        if (profile.max_l_std_dev_gate) {
+            // Penalty-only gate: block high-texture images from flat archetypes
+            if (dna.global.l_std_dev > profile.max_l_std_dev_gate) {
+                affinity -= 30; // Too much texture for flat archetype
+            }
+            // No bonus for passing — prevents poaching from other archetypes
+        }
+
+        if (profile.rewards_high_texture) {
+            // Boost for high-relief subjects (sculptures, textured objects)
+            if (dna.global.l_std_dev > 18.0) {
+                affinity += 20;
+            }
+        }
+
+        if (profile.max_sector_gate) {
+            // Hard gate: penalize if ANY sector exceeds the max allowed weight
+            if (dna.global.primary_sector_weight > profile.max_sector_gate) {
+                affinity -= 30; // Strong penalty for sector-dominant images
+            } else {
+                affinity += 20; // Bonus for truly spread-thin images
+            }
+        }
+
+        if (profile.expects_high_entropy) {
+            // Bonus for very high entropy images (> 0.85)
+            if (dna.global.hue_entropy > 0.85) {
+                affinity += 25;
+            } else if (dna.global.hue_entropy < 0.75) {
+                affinity -= 20; // Hard penalty for low-entropy images
+            }
         }
 
         return Math.max(0, Math.min(100, affinity));

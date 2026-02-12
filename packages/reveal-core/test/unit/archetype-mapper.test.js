@@ -257,7 +257,8 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(['warm_tonal_optimized', 'thermonuclear_yellow']).toContain(result.id);
+            // warm_tonal_optimized retired — yellow dominance now routes to
+            // thermonuclear_yellow, warm_naturalist, or another warm archetype
             expect(result.breakdown.pattern).toBeGreaterThan(50); // Warm bias bonus
         });
 
