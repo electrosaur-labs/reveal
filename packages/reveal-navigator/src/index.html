@@ -19,26 +19,37 @@
             background: #323232;
             color: #e0e0e0;
             font-size: 12px;
-            overflow: auto;
+            overflow: hidden;
         }
 
+        /* ─── Two-Column Root: Main (left) | HUD (right) ─── */
         #root {
             width: 100%;
             height: 100%;
+            display: flex;
+            flex-direction: row;
+            min-height: 0;
+        }
+
+        /* ─── Left Panel: Full workflow column ─── */
+        #main-panel {
+            flex: 1 1 0;
             display: flex;
             flex-direction: column;
             padding: 8px;
             gap: 6px;
             min-height: 0;
+            min-width: 0;
         }
 
-        /* ─── Zone 1: Active Document Header ─── */
+        /* ─── Document Header ─── */
         #doc-header {
             display: flex;
             align-items: center;
             gap: 6px;
             padding: 4px 0;
             border-bottom: 1px solid #444;
+            flex-shrink: 0;
         }
 
         #doc-name {
@@ -78,7 +89,7 @@
         #btn-sync:active { background: #404040; }
         #btn-sync:disabled { opacity: 0.3; cursor: default; }
 
-        /* ─── Zone 2: Preview + Wayfinding Core ─── */
+        /* ─── Preview (maximized) ─── */
         #preview-container {
             flex: 1 1 0;
             min-height: 0;
@@ -119,7 +130,144 @@
             display: none;
         }
 
-        /* ─── Archetype Carousel ─── */
+        /* ─── Preview Stats Panel ─── */
+        #preview-stats {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 5px 4px;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            background: #2a2a2a;
+        }
+
+        .stat-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: #999;
+        }
+
+        .stat-row .stat-label {
+            color: #666;
+            font-size: 10px;
+            min-width: 0;
+        }
+
+        .stat-row .stat-val {
+            color: #ccc;
+        }
+
+        .stat-row .stat-highlight {
+            color: #8bb8e8;
+            font-weight: 500;
+        }
+
+        .stat-row .stat-score {
+            color: #e0c97f;
+            font-weight: 500;
+        }
+
+        .stat-row .stat-breakdown {
+            color: #888;
+            font-size: 10px;
+        }
+
+        .stat-row .stat-dim {
+            color: #777;
+        }
+
+        .stat-sep {
+            color: #555;
+            margin: 0 1px;
+        }
+
+        /* ─── Mechanical Knobs Panel ─── */
+        #knobs-panel {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 5px 4px;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            background: #2a2a2a;
+        }
+
+        .knob-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 1px;
+        }
+
+        .knob-label {
+            color: #666;
+            font-size: 10px;
+        }
+
+        .knob-val {
+            color: #ccc;
+            font-size: 10px;
+            min-width: 32px;
+            text-align: right;
+        }
+
+        .knob-revert {
+            display: none;
+            background: none;
+            border: none;
+            color: #f0a030;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 0 2px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .knob-revert:hover {
+            color: #ffc060;
+        }
+
+        #knobs-panel sp-slider {
+            width: 100%;
+            margin-bottom: 4px;
+            --spectrum-slider-track-color: #555;
+            --spectrum-slider-fill-track-color: #4da6ff;
+        }
+
+        #knobs-panel sp-slider:last-child {
+            margin-bottom: 0;
+        }
+
+        #btn-reset-archetype {
+            display: none;
+            width: 100%;
+            margin-top: 4px;
+        }
+
+        #btn-restore-tweaks {
+            display: none;
+            width: 100%;
+            margin-top: 4px;
+            background: #3a3520;
+            border: 1px solid #7a6a30;
+            color: #f0d070;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        #btn-restore-tweaks:hover {
+            background: #4a4528;
+            border-color: #9a8a40;
+        }
+
+        /* ─── Archetype Carousel (horizontal scroll) ─── */
         #carousel {
             display: flex;
             gap: 4px;
@@ -204,73 +352,96 @@
             display: inline-block;
         }
 
-        /* ─── Preview Stats Panel ─── */
-        #preview-stats {
+        .card-customized {
+            color: #f0a030;
+            margin-left: 4px;
+            font-weight: bold;
+        }
+
+        /* ─── Palette Surgeon ─── */
+        #palette-surgeon {
             flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
+            display: none;
             padding: 5px 4px;
             border: 1px solid #3a3a3a;
             border-radius: 3px;
             background: #2a2a2a;
         }
 
-        .stat-row {
+        .surgeon-header {
+            font-size: 10px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+
+        .surgeon-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .surgeon-swatch {
             display: flex;
             align-items: center;
-            gap: 6px;
-            font-size: 11px;
+            gap: 3px;
+            padding: 2px 4px;
+            border: 1px solid transparent;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .surgeon-swatch:hover {
+            border-color: #666;
+            background: #333;
+        }
+
+        .surgeon-swatch.surgeon-selected {
+            border-color: #4da6ff;
+            background: #2d3545;
+        }
+
+        .surgeon-color {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border-radius: 2px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .surgeon-pct {
+            font-size: 10px;
             color: #999;
         }
 
-        .stat-row .stat-label {
-            color: #666;
-            font-size: 10px;
-            min-width: 0;
-        }
-
-        .stat-row .stat-val {
-            color: #ccc;
-        }
-
-        .stat-row .stat-highlight {
-            color: #8bb8e8;
-            font-weight: 500;
-        }
-
-        .stat-row .stat-score {
-            color: #e0c97f;
-            font-weight: 500;
-        }
-
-        .stat-row .stat-breakdown {
-            color: #888;
-            font-size: 10px;
-        }
-
-        .stat-row .stat-dim {
-            color: #777;
-        }
-
-        .stat-sep {
-            color: #555;
-            margin: 0 1px;
-        }
-
-        /* ─── Zone 3: Structural HUD Footer ─── */
-        #hud-footer {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        /* ─── Finalize Row ─── */
+        #finalize-row {
             flex-shrink: 0;
+            padding: 4px 0;
+            text-align: center;
+        }
+
+        #finalize-row sp-action-button {
+            width: 100%;
+        }
+
+        /* ─── Right Panel: Knobs + HUD ─── */
+        #hud-panel {
+            flex: 0 0 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 8px;
+            border-left: 1px solid #444;
+            background: #2a2a2a;
+            min-height: 0;
+            overflow-y: auto;
         }
 
         #radar-container {
             flex: 0 0 auto;
             position: relative;
-            width: 100px;
-            height: 100px;
+            width: 300px;
+            height: 300px;
         }
 
         #radar-img {
@@ -279,21 +450,21 @@
         }
 
         #hud-info {
-            flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 4px;
+            width: 100%;
         }
 
         #status-bar {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 2px;
             font-size: 10px;
             color: #777;
         }
 
-        #status-text { flex: 1; }
+        #status-text { }
         #accuracy-text { color: #999; }
 
         #dominant-sector {
@@ -356,47 +527,85 @@
 </head>
 <body>
     <div id="root">
-        <!-- Zone 1: Active Document Status -->
-        <div id="doc-header">
-            <span id="doc-name">No document</span>
-            <span id="doc-layer"></span>
-            <button id="btn-sync" title="Re-sync from canvas">&#x21bb;</button>
+        <!-- Left Panel: Full workflow -->
+        <div id="main-panel">
+            <!-- Document Header -->
+            <div id="doc-header">
+                <span id="doc-name">No document</span>
+                <span id="doc-layer"></span>
+                <button id="btn-sync" title="Re-sync from canvas">&#x21bb;</button>
+            </div>
+
+            <!-- Preview (maximized) -->
+            <div id="preview-container">
+                <img id="preview-img" style="display:none;" />
+                <div id="preview-placeholder">Open a Lab document to begin navigation.</div>
+                <div id="archetype-badge"></div>
+            </div>
+
+            <!-- Stats panel -->
+            <div id="preview-stats" style="display:none;">
+                <div class="stat-row" id="stat-row-poster">
+                    <span class="stat-val" id="stat-colors"></span>
+                    <span class="stat-sep">&middot;</span>
+                    <span class="stat-highlight" id="stat-delta"></span>
+                    <span class="stat-sep">&middot;</span>
+                    <span class="stat-dim" id="stat-time"></span>
+                </div>
+                <div class="stat-row" id="stat-row-match">
+                    <span class="stat-label">Match</span>
+                    <span class="stat-score" id="stat-score"></span>
+                    <span class="stat-breakdown" id="stat-breakdown"></span>
+                </div>
+                <div class="stat-row" id="stat-row-dna">
+                    <span class="stat-label">DNA</span>
+                    <span class="stat-dim" id="stat-dna"></span>
+                </div>
+            </div>
+
+            <!-- Palette Surgeon (color isolation + merge) -->
+            <div id="palette-surgeon"></div>
+
+            <!-- Archetype Carousel (horizontal scroll) -->
+            <div id="carousel"></div>
+
+            <!-- Finalize Flight Plan -->
+            <div id="finalize-row" style="display:none;">
+                <sp-action-button id="btn-finalize" variant="accent">Finalize Flight Plan</sp-action-button>
+            </div>
         </div>
 
-        <!-- Zone 2: Preview + Wayfinding Core -->
-        <div id="preview-container">
-            <img id="preview-img" style="display:none;" />
-            <div id="preview-placeholder">Open a Lab document to begin navigation.</div>
-            <div id="archetype-badge"></div>
-        </div>
+        <!-- Right Panel: Knobs + HUD -->
+        <div id="hud-panel">
+            <!-- Mechanical Knobs -->
+            <div id="knobs-panel" style="display:none;">
+                <div class="knob-row">
+                    <span class="knob-label">Min Volume</span>
+                    <button class="knob-revert" id="revert-minVolume" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="minVolume-val">1.5%</span>
+                </div>
+                <sp-slider id="knob-minVolume" min="0" max="5" step="0.1" value="1.5" variant="filled"></sp-slider>
 
-        <!-- Stats panel below preview -->
-        <div id="preview-stats" style="display:none;">
-            <div class="stat-row" id="stat-row-poster">
-                <span class="stat-val" id="stat-colors"></span>
-                <span class="stat-sep">&middot;</span>
-                <span class="stat-highlight" id="stat-delta"></span>
-                <span class="stat-sep">&middot;</span>
-                <span class="stat-dim" id="stat-time"></span>
-            </div>
-            <div class="stat-row" id="stat-row-match">
-                <span class="stat-label">Match</span>
-                <span class="stat-score" id="stat-score"></span>
-                <span class="stat-breakdown" id="stat-breakdown"></span>
-            </div>
-            <div class="stat-row" id="stat-row-dna">
-                <span class="stat-label">DNA</span>
-                <span class="stat-dim" id="stat-dna"></span>
-            </div>
-        </div>
+                <div class="knob-row">
+                    <span class="knob-label">Speckle Rescue</span>
+                    <button class="knob-revert" id="revert-speckleRescue" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="speckleRescue-val">4px</span>
+                </div>
+                <sp-slider id="knob-speckleRescue" min="0" max="10" step="1" value="4" variant="filled"></sp-slider>
 
-        <!-- Archetype Carousel -->
-        <div id="carousel"></div>
+                <div class="knob-row">
+                    <span class="knob-label">Shadow Clamp</span>
+                    <button class="knob-revert" id="revert-shadowClamp" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="shadowClamp-val">8.0%</span>
+                </div>
+                <sp-slider id="knob-shadowClamp" min="0" max="20" step="0.5" value="8" variant="filled"></sp-slider>
 
-        <!-- Zone 3: Structural HUD Footer -->
-        <div id="hud-footer">
+                <button id="btn-reset-archetype" title="Reset all knobs to archetype defaults">Reset Archetype</button>
+                <button id="btn-restore-tweaks" title="Restore your previous slider tweaks for this archetype">Restore My Tweaks</button>
+            </div>
+
             <div id="radar-container">
-                <img id="radar-img" width="100" height="100" />
+                <img id="radar-img" width="300" height="300" />
             </div>
             <div id="hud-info">
                 <div id="status-bar">

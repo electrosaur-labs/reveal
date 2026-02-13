@@ -36,10 +36,10 @@ const AXES = [
 ];
 
 const AXIS_COUNT = AXES.length;
-const SIZE = 100;               // Pixel buffer and display size
+const SIZE = 300;               // Pixel buffer and display size
 const CENTER = SIZE / 2;
-const RADIUS = 36;
-const LABEL_RADIUS = RADIUS + 12;
+const RADIUS = 108;
+const LABEL_RADIUS = RADIUS + 24;
 
 // Background matches panel: #323232
 const BG_R = 0x32, BG_G = 0x32, BG_B = 0x32;
@@ -76,12 +76,23 @@ class RadarHUD {
             const dna = this._session.getDNA();
             if (dna) this.render(dna);
         });
+        // Re-render after every knob/structural change so the effective
+        // polygon tracks the live posterization result
+        this._session.on('previewUpdated', () => {
+            const dna = this._session.getDNA();
+            if (dna) this.render(dna);
+        });
     }
 
     // ─── Render ─────────────────────────────────────────────
 
     /**
      * Render the radar for a DNA v2.0 object.
+     * Three layers (back to front):
+     *   1. Gold polygon   — archetype centroid target
+     *   2. Blue polygon   — source image DNA (fixed)
+     *   3. Green polygon  — effective posterization result (tracks knobs)
+     *
      * @param {Object} dna - DNA with .global containing 7D values
      */
     render(dna) {
@@ -97,18 +108,19 @@ class RadarHUD {
         // 1. Grid (rings + axis lines)
         this._drawGrid(buf, false);
 
-        // 2. Archetype centroid polygon (gold, behind DNA)
+        // 2. Archetype centroid polygon (gold, behind everything)
         this._drawArchetypeOverlay(buf);
 
-        // 3. DNA polygon fill (semi-transparent blue)
+        // 3. Source DNA polygon fill (semi-transparent blue)
         this._fillPolygon(buf, points, 77, 166, 255, 51);
-
-        // 4. DNA polygon outline (solid blue)
         this._strokePolygon(buf, points, 77, 166, 255);
 
-        // 5. Data point dots (filled blue circles)
+        // 4. Effective posterization polygon (green, tracks live knob state)
+        this._drawEffectiveOverlay(buf);
+
+        // 5. Source DNA data point dots (filled blue circles, on top)
         for (const pt of points) {
-            this._fillCircle(buf, pt.x, pt.y, 3, 77, 166, 255);
+            this._fillCircle(buf, pt.x, pt.y, 6, 77, 166, 255);
         }
 
         this._display(buf);
@@ -166,6 +178,95 @@ class RadarHUD {
         } catch (_) {
             // Non-fatal
         }
+    }
+
+    // ─── Effective Posterization Overlay ─────────────────────
+
+    /**
+     * Draw a green polygon showing the 7D profile of the current
+     * posterized output. Computed from palette + pixel counts so it
+     * responds in real time to mechanical knob changes.
+     */
+    _drawEffectiveOverlay(buf) {
+        const proxy = this._session.proxyEngine;
+        if (!proxy || !proxy.separationState) return;
+
+        const { palette, colorIndices } = proxy.separationState;
+        if (!palette || !colorIndices || palette.length === 0) return;
+
+        const totalPixels = colorIndices.length;
+
+        // Count pixels per color
+        const counts = new Array(palette.length).fill(0);
+        for (let i = 0; i < totalPixels; i++) {
+            const ci = colorIndices[i];
+            if (ci < counts.length) counts[ci]++;
+        }
+
+        // Weighted stats from palette
+        let sumL = 0, sumC = 0, sumB = 0;
+        let minL = 100;
+        for (let i = 0; i < palette.length; i++) {
+            const w = counts[i] / totalPixels;
+            const L = palette[i].L;
+            const a = palette[i].a;
+            const b = palette[i].b;
+            const C = Math.sqrt(a * a + b * b);
+
+            sumL += w * L;
+            sumC += w * C;
+            sumB += w * b;
+            if (counts[i] > 0 && L < minL) minL = L;
+        }
+
+        // σL: weighted standard deviation of lightness
+        let sumSqDev = 0;
+        for (let i = 0; i < palette.length; i++) {
+            const w = counts[i] / totalPixels;
+            const dL = palette[i].L - sumL;
+            sumSqDev += w * dL * dL;
+        }
+
+        // Hue entropy: -Σ(p_i * ln(p_i)) normalized to 0-1
+        // Max entropy = ln(palette.length)
+        let entropy = 0;
+        const activeColors = palette.filter((_, i) => counts[i] > 0).length;
+        if (activeColors > 1) {
+            const maxEnt = Math.log(activeColors);
+            for (let i = 0; i < palette.length; i++) {
+                const p = counts[i] / totalPixels;
+                if (p > 0) entropy -= p * Math.log(p);
+            }
+            entropy = maxEnt > 0 ? entropy / maxEnt : 0;
+        }
+
+        // Primary sector weight: largest single-color proportion
+        let maxProp = 0;
+        for (let i = 0; i < palette.length; i++) {
+            const p = counts[i] / totalPixels;
+            if (p > maxProp) maxProp = p;
+        }
+
+        // Temperature bias: weighted average b* normalized to -1..+1
+        // b > 0 = warm, b < 0 = cool
+        const tempBias = Math.max(-1, Math.min(1, sumB / 60));
+
+        const effective = {
+            l: sumL,
+            c: sumC,
+            hue_entropy: entropy,
+            temperature_bias: tempBias,
+            l_std_dev: Math.sqrt(sumSqDev),
+            primary_sector_weight: maxProp,
+            k: minL
+        };
+
+        const values = this._normalizeValues(effective);
+        const points = this._valuesToPoints(values);
+
+        // Green fill + outline
+        this._fillPolygon(buf, points, 100, 220, 130, 51);
+        this._strokePolygon(buf, points, 100, 220, 130);
     }
 
     // ─── Polygon Helpers ────────────────────────────────────
@@ -338,7 +439,7 @@ class RadarHUD {
             el.style.position = 'absolute';
             el.style.left = lx + 'px';
             el.style.top = ly + 'px';
-            el.style.fontSize = '7px';
+            el.style.fontSize = '11px';
             el.style.color = '#888';
             el.style.pointerEvents = 'none';
             el.style.whiteSpace = 'nowrap';

@@ -14,6 +14,8 @@ const PhotoshopBridge = require("./bridge/PhotoshopBridge");
 const Preview = require("./components/Preview");
 const ArchetypeCarousel = require("./components/ArchetypeCarousel");
 const RadarHUD = require("./components/RadarHUD");
+const MechanicalKnobs = require("./components/MechanicalKnobs");
+const PaletteSurgeon = require("./components/PaletteSurgeon");
 
 const logger = Reveal.logger;
 
@@ -21,6 +23,8 @@ let sessionState = null;
 let preview = null;
 let carousel = null;
 let radar = null;
+let knobs = null;
+let surgeon = null;
 let isIngesting = false;
 let currentDocId = null;    // Track which document we've ingested
 let panelVisible = false;
@@ -72,6 +76,53 @@ function initPlugin() {
             logger.log('[Navigator] Radar init failed: ' + err.message);
         }
 
+        // Wire Mechanical Knobs (non-fatal)
+        try {
+            knobs = new MechanicalKnobs(
+                document.getElementById('knobs-panel'),
+                sessionState
+            );
+        } catch (err) {
+            logger.log('[Navigator] Knobs init failed: ' + err.message);
+        }
+
+        // Wire Palette Surgeon (non-fatal)
+        try {
+            surgeon = new PaletteSurgeon(
+                document.getElementById('palette-surgeon'),
+                sessionState
+            );
+        } catch (err) {
+            logger.log('[Navigator] PaletteSurgeon init failed: ' + err.message);
+        }
+
+        // Wire Reset Archetype button (master knob reset)
+        const btnReset = document.getElementById('btn-reset-archetype');
+        if (btnReset) {
+            btnReset.addEventListener('click', () => {
+                sessionState.resetAllKnobs();
+            });
+            // Show/hide based on knob customization state
+            sessionState.on('knobsCustomizedChanged', (data) => {
+                btnReset.style.display = data.customized ? 'block' : 'none';
+            });
+        }
+
+        // Wire Restore My Tweaks button (Option B: Snapshot)
+        const btnRestore = document.getElementById('btn-restore-tweaks');
+        if (btnRestore) {
+            btnRestore.addEventListener('click', () => {
+                sessionState.restoreTweaks();
+            });
+            sessionState.on('tweaksAvailable', (data) => {
+                btnRestore.style.display = data.available ? 'block' : 'none';
+            });
+            // Hide on knob customization (user is already tweaking — no need to restore)
+            sessionState.on('knobsCustomizedChanged', (data) => {
+                if (data.customized) btnRestore.style.display = 'none';
+            });
+        }
+
         // Show dominant sector in HUD info
         sessionState.on('imageLoaded', (data) => {
             const sectorEl = document.getElementById('dominant-sector');
@@ -86,6 +137,10 @@ function initPlugin() {
             const placeholder = document.getElementById('preview-placeholder');
             if (img) img.style.display = 'block';
             if (placeholder) placeholder.style.display = 'none';
+
+            // Show finalize button
+            const finalizeRow = document.getElementById('finalize-row');
+            if (finalizeRow) finalizeRow.style.display = '';
         });
 
         // Update stats panel below preview on every posterization
@@ -129,6 +184,12 @@ function initPlugin() {
                 const overlay = document.getElementById('error-overlay');
                 if (overlay) overlay.style.display = 'none';
             });
+        }
+
+        // Wire Finalize button
+        const btnFinalize = document.getElementById('btn-finalize');
+        if (btnFinalize) {
+            btnFinalize.addEventListener('click', () => handleFinalize());
         }
 
         // Listen for document changes (open, switch, close)
@@ -318,6 +379,41 @@ function updateDNADisplay() {
 function setStatus(text) {
     const el = document.getElementById('status-text');
     if (el) el.textContent = text;
+}
+
+// ─── Finalize ────────────────────────────────────────────
+
+async function handleFinalize() {
+    if (!sessionState) return;
+
+    const config = sessionState.exportProductionConfig();
+    const json = JSON.stringify(config, null, 2);
+
+    // Copy to clipboard
+    try {
+        await navigator.clipboard.writeText(json);
+    } catch (err) {
+        logger.log('[Navigator] Clipboard write failed: ' + err.message);
+    }
+
+    // Emit for future integration with reveal-adobe worker
+    sessionState.emit('flightPlanReady', config);
+
+    // Update status with summary
+    const overrideCount = Object.keys(config.paletteOverrides || {}).length;
+    const paletteCount = config.palette ? config.palette.length : '?';
+    const summary = [
+        config.activeArchetypeId || 'unknown',
+        `${paletteCount} colors`,
+        `vol:${config.minVolume}`,
+        `sp:${config.speckleRescue}`,
+        `sc:${config.shadowClamp}`
+    ];
+    if (overrideCount > 0) {
+        summary.push(`${overrideCount} override${overrideCount > 1 ? 's' : ''}`);
+    }
+    setStatus('Flight plan: ' + summary.join(' \u00b7 '));
+    logger.log('[Navigator] Flight plan exported to clipboard');
 }
 
 // ─── UXP Entrypoints ────────────────────────────────────

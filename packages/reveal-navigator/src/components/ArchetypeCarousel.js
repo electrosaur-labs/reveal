@@ -4,7 +4,7 @@
  * Tiered preview strategy:
  *   Tier 1: All cards show name + score + hue indicator
  *   Tier 2: Active card shows real palette swatches + stats from proxy
- *   Tier 3: 400ms hover triggers ghost preview via swapArchetype
+ *   Tier 3: Hover highlight only (no auto-swap)
  *
  * Vanilla+ pattern: subscribes to SessionState events.
  */
@@ -49,6 +49,11 @@ class ArchetypeCarousel {
         });
         // Rebuild swatches AFTER posterization completes (not before)
         this._session.on('previewUpdated', (data) => this._refreshActiveSwatches(data));
+
+        // Dirty indicator — orange dot when knobs are customized
+        this._session.on('knobsCustomizedChanged', (data) => {
+            this._updateCustomizedBadge(data.customized);
+        });
     }
 
     /**
@@ -207,6 +212,29 @@ class ArchetypeCarousel {
                 }
             }
         });
+    }
+
+    /**
+     * Show or remove the orange "customized" dot on the active card's name.
+     * @param {boolean} customized
+     */
+    _updateCustomizedBadge(customized) {
+        const activeCard = this._container.querySelector('.carousel-card.active');
+        if (!activeCard) return;
+
+        const nameEl = activeCard.querySelector('.card-name');
+        if (!nameEl) return;
+
+        // Remove existing badge if any
+        const existing = nameEl.querySelector('.card-customized');
+        if (existing) existing.remove();
+
+        if (customized) {
+            const dot = document.createElement('span');
+            dot.className = 'card-customized';
+            dot.textContent = '\u2022';
+            nameEl.appendChild(dot);
+        }
     }
 
     _scrollToActive() {

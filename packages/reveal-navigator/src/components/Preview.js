@@ -38,6 +38,7 @@ class Preview {
         this._session.on('previewUpdated', (data) => this._onPreviewUpdated(data));
         this._session.on('processingStart', () => this._onProcessingStart());
         this._session.on('error', (err) => this._onError(err));
+        this._session.on('highlightChanged', (data) => this._onHighlightChanged(data));
     }
 
     _onProxyReady(data) {
@@ -53,11 +54,45 @@ class Preview {
     _onPreviewUpdated(data) {
         try {
             if (!this._dimensions) return;
-            this._renderBuffer(data.previewBuffer, this._dimensions.width, this._dimensions.height);
+
+            // If a color is highlighted, regenerate isolation preview from updated separation
+            const highlightIdx = this._session.state.highlightColorIndex;
+            if (highlightIdx >= 0) {
+                const hlBuf = this._session.generateHighlightPreview(highlightIdx);
+                if (hlBuf) {
+                    this._renderBuffer(hlBuf, this._dimensions.width, this._dimensions.height);
+                } else {
+                    this._renderBuffer(data.previewBuffer, this._dimensions.width, this._dimensions.height);
+                }
+            } else {
+                this._renderBuffer(data.previewBuffer, this._dimensions.width, this._dimensions.height);
+            }
+
             this._setStatus(`${data.elapsedMs.toFixed(0)}ms`);
             this._setAccuracy(data.accuracyDeltaE);
         } catch (err) {
             this._showError('Update failed: ' + err.message);
+        }
+    }
+
+    _onHighlightChanged(data) {
+        try {
+            if (!this._dimensions) return;
+
+            if (data.colorIndex >= 0) {
+                const hlBuf = this._session.generateHighlightPreview(data.colorIndex);
+                if (hlBuf) {
+                    this._renderBuffer(hlBuf, this._dimensions.width, this._dimensions.height);
+                }
+            } else {
+                // Restore normal preview
+                const normalBuf = this._session.getPreview();
+                if (normalBuf) {
+                    this._renderBuffer(normalBuf, this._dimensions.width, this._dimensions.height);
+                }
+            }
+        } catch (err) {
+            this._showError('Highlight failed: ' + err.message);
         }
     }
 
