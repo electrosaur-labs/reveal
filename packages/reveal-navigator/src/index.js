@@ -11,6 +11,7 @@ const { app, action } = require("photoshop");
 const Reveal = require("@reveal/core");
 const SessionState = require("./state/SessionState");
 const PhotoshopBridge = require("./bridge/PhotoshopBridge");
+const ProductionWorker = require("./bridge/ProductionWorker");
 const Preview = require("./components/Preview");
 const ArchetypeCarousel = require("./components/ArchetypeCarousel");
 const RadarHUD = require("./components/RadarHUD");
@@ -26,6 +27,7 @@ let radar = null;
 let knobs = null;
 let surgeon = null;
 let isIngesting = false;
+let isProductionRunning = false;
 let currentDocId = null;    // Track which document we've ingested
 let panelVisible = false;
 
@@ -191,6 +193,13 @@ function initPlugin() {
         if (btnFinalize) {
             btnFinalize.addEventListener('click', () => handleFinalize());
         }
+
+        // Escape key → deselect Palette Surgeon
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && surgeon) {
+                surgeon.deselect();
+            }
+        });
 
         // Listen for document changes (open, switch, close)
         setupDocumentChangeListener();
@@ -384,36 +393,68 @@ function setStatus(text) {
 // ─── Finalize ────────────────────────────────────────────
 
 async function handleFinalize() {
-    if (!sessionState) return;
+    if (!sessionState || !sessionState.proxyEngine) return;
+    if (isProductionRunning) return;
 
-    const config = sessionState.exportProductionConfig();
-    const json = JSON.stringify(config, null, 2);
+    const labPalette = sessionState.getPalette();
+    if (!labPalette || labPalette.length === 0) {
+        showErrorDialog('No Palette', 'Navigate an archetype first.');
+        return;
+    }
 
-    // Copy to clipboard
+    isProductionRunning = true;
+
+    // Disable UI immediately
+    const btn = document.getElementById('btn-finalize');
+    const carouselEl = document.getElementById('carousel');
+    const progressEl = document.getElementById('finalize-progress');
+    if (btn) btn.disabled = true;
+    if (carouselEl) carouselEl.style.pointerEvents = 'none';
+    if (progressEl) {
+        progressEl.style.display = 'block';
+        progressEl.textContent = 'Reading full-res pixels...';
+    }
+
+    // Yield to repaint before heavy I/O
+    await new Promise(r => setTimeout(r, 50));
+
     try {
-        await navigator.clipboard.writeText(json);
+        const worker = new ProductionWorker(sessionState, (step, total, msg) => {
+            if (progressEl) progressEl.textContent = msg;
+        });
+
+        const result = await worker.execute();
+
+        const state = sessionState.getState();
+        const lines = [
+            `Created ${result.layerCount} layers in ${(result.elapsedMs / 1000).toFixed(1)}s`,
+            `Archetype: ${state.activeArchetypeId || 'unknown'}`,
+            `Knobs: Vol ${state.minVolume}% | Spkl ${state.speckleRescue}px | Shd ${state.shadowClamp}%`
+        ];
+        const overrideCount = sessionState.paletteOverrides.size;
+        if (overrideCount > 0) lines.push(`Palette overrides: ${overrideCount}`);
+
+        logger.log(`[Navigator] Production render complete: ${result.layerCount} layers, ${result.elapsedMs}ms`);
+
+        // Collapse panel — work is done
+        _collapsePanel(lines);
+
     } catch (err) {
-        logger.log('[Navigator] Clipboard write failed: ' + err.message);
+        logger.log('[Navigator] Production render failed: ' + err.message);
+        showErrorDialog('Production Failed', err.message);
+        // Restore UI on failure
+        if (btn) btn.disabled = false;
+        if (carouselEl) carouselEl.style.pointerEvents = '';
+        if (progressEl) progressEl.style.display = 'none';
+    } finally {
+        isProductionRunning = false;
     }
+}
 
-    // Emit for future integration with reveal-adobe worker
-    sessionState.emit('flightPlanReady', config);
-
-    // Update status with summary
-    const overrideCount = Object.keys(config.paletteOverrides || {}).length;
-    const paletteCount = config.palette ? config.palette.length : '?';
-    const summary = [
-        config.activeArchetypeId || 'unknown',
-        `${paletteCount} colors`,
-        `vol:${config.minVolume}`,
-        `sp:${config.speckleRescue}`,
-        `sc:${config.shadowClamp}`
-    ];
-    if (overrideCount > 0) {
-        summary.push(`${overrideCount} override${overrideCount > 1 ? 's' : ''}`);
-    }
-    setStatus('Flight plan: ' + summary.join(' \u00b7 '));
-    logger.log('[Navigator] Flight plan exported to clipboard');
+/** Clear the panel completely after successful render. */
+function _collapsePanel() {
+    const root = document.getElementById('root');
+    if (root) root.style.display = 'none';
 }
 
 // ─── UXP Entrypoints ────────────────────────────────────

@@ -494,6 +494,40 @@ class SessionState extends EventEmitter {
     }
 
     /**
+     * Revert a single palette color override (undo Palette Surgeon edit).
+     * Removes the override and triggers proxy re-separation with original palette.
+     *
+     * @param {number} colorIndex - Palette index to revert
+     * @returns {Promise<Object|null>} Updated preview data, or null if not overridden
+     */
+    async revertPaletteColor(colorIndex) {
+        if (!this.paletteOverrides.has(colorIndex)) return null;
+
+        this.paletteOverrides.delete(colorIndex);
+
+        const overriddenPalette = this._buildOverriddenPalette();
+
+        this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+
+        if (!this.proxyEngine) return null;
+
+        const result = await this.proxyEngine.updateProxy({
+            paletteOverride: overriddenPalette
+        });
+
+        this.previewBuffer = result.previewBuffer;
+        this.state.proxyBufferReady = true;
+
+        this.emit('previewUpdated', {
+            previewBuffer: result.previewBuffer,
+            palette: result.palette,
+            elapsedMs: result.elapsedMs
+        });
+
+        return result;
+    }
+
+    /**
      * Merge one palette color into another.
      * Removes source color and re-maps its pixels to target.
      *

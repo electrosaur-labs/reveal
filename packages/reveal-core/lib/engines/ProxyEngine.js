@@ -21,7 +21,8 @@ class ProxyEngine {
 
     constructor() {
         this.proxyBuffer = null;        // 512px 16-bit LAB buffer
-        this.separationState = null;    // Cached palette + indices + masks
+        this.separationState = null;    // Cached palette + indices + masks (may be mutated by knobs)
+        this._baselineState = null;     // Clean snapshot from last posterize (never mutated by knobs)
         this.sourceMetadata = null;     // Original dimensions, DNA
     }
 
@@ -94,6 +95,9 @@ class ProxyEngine {
             height: proxyH,
             statistics: posterizeResult.statistics || {}
         };
+
+        // Snapshot baseline so mechanical knobs can restore from clean state
+        this._snapshotBaseline();
 
         // 5. Store source metadata
         this.sourceMetadata = {
@@ -190,6 +194,9 @@ class ProxyEngine {
             statistics: posterizeResult.statistics || {}
         };
 
+        // Snapshot baseline so mechanical knobs can restore from clean state
+        this._snapshotBaseline();
+
         // 5. Generate preview
         const previewBuffer = this._generatePreviewFromIndices(
             colorIndices,
@@ -211,6 +218,12 @@ class ProxyEngine {
 
     /**
      * Update proxy with new parameters (FAST PATH)
+     *
+     * Restores from baseline before applying knobs so that changes are
+     * always relative to the clean posterization output — not accumulated
+     * on top of previous knob mutations. This makes slider changes fully
+     * reversible.
+     *
      * @param {Object} paramChanges - Only changed parameters
      * @returns {Promise<Object>} Updated preview data
      */
@@ -221,7 +234,14 @@ class ProxyEngine {
 
         const startTime = performance.now();
 
-        // Fast path: only re-run affected steps
+        // Restore clean baseline before applying any knobs.
+        // Without this, knob effects accumulate destructively
+        // (e.g. pruned colors can never come back).
+        if (this._baselineState) {
+            this._restoreFromBaseline();
+        }
+
+        // Apply knobs on top of clean baseline
         if ('minVolume' in paramChanges) {
             await this._applyMinVolume(paramChanges.minVolume);
         }
@@ -267,6 +287,45 @@ class ProxyEngine {
             ...this.sourceMetadata,
             palette: this.separationState.palette,
             targetColors: this.separationState.palette.length
+        };
+    }
+
+    /**
+     * Deep-copy current separationState as the clean baseline.
+     * Called after initializeProxy and rePosterize — never after knob application.
+     * @private
+     */
+    _snapshotBaseline() {
+        const s = this.separationState;
+        this._baselineState = {
+            palette: s.palette.map(c => ({ ...c })),
+            rgbPalette: s.rgbPalette ? s.rgbPalette.map(c =>
+                typeof c === 'string' ? c : { ...c }
+            ) : null,
+            colorIndices: new Uint8Array(s.colorIndices),
+            masks: s.masks.map(m => new Uint8Array(m)),
+            width: s.width,
+            height: s.height,
+            statistics: { ...s.statistics }
+        };
+    }
+
+    /**
+     * Restore separationState from the clean baseline snapshot.
+     * @private
+     */
+    _restoreFromBaseline() {
+        const b = this._baselineState;
+        this.separationState = {
+            palette: b.palette.map(c => ({ ...c })),
+            rgbPalette: b.rgbPalette ? b.rgbPalette.map(c =>
+                typeof c === 'string' ? c : { ...c }
+            ) : null,
+            colorIndices: new Uint8Array(b.colorIndices),
+            masks: b.masks.map(m => new Uint8Array(m)),
+            width: b.width,
+            height: b.height,
+            statistics: { ...b.statistics }
         };
     }
 

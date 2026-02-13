@@ -18,10 +18,10 @@
       "label": {
         "default": "Navigator"
       },
-      "minimumSize": { "width": 220, "height": 300 },
-      "maximumSize": { "width": 800, "height": 2000 },
-      "preferredDockedSize": { "width": 280, "height": 500 },
-      "preferredFloatingSize": { "width": 400, "height": 700 }
+      "minimumSize": { "width": 500, "height": 400 },
+      "maximumSize": { "width": 3000, "height": 3000 },
+      "preferredDockedSize": { "width": 900, "height": 700 },
+      "preferredFloatingSize": { "width": 1100, "height": 850 }
     }
   ],
   "requiredPermissions": {

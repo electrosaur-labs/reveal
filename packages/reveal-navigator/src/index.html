@@ -388,16 +388,22 @@
             border: 1px solid transparent;
             border-radius: 3px;
             cursor: pointer;
+            position: relative;
         }
 
-        .surgeon-swatch:hover {
-            border-color: #666;
-            background: #333;
+        .surgeon-swatch.surgeon-hover {
+            border-color: #888;
+            background: #383838;
         }
 
         .surgeon-swatch.surgeon-selected {
             border-color: #4da6ff;
             background: #2d3545;
+        }
+
+        .surgeon-swatch.surgeon-merge-target {
+            border-color: #f0a030;
+            background: #3a3520;
         }
 
         .surgeon-color {
@@ -406,6 +412,46 @@
             height: 24px;
             border-radius: 2px;
             border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .surgeon-color.surgeon-overridden {
+            border-color: #f0a030;
+            box-shadow: 0 0 3px rgba(240, 160, 48, 0.4);
+        }
+
+        .surgeon-override-dot {
+            display: none;
+            position: absolute;
+            top: 1px;
+            right: 1px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #f0a030;
+        }
+
+        .surgeon-override-dot.visible {
+            display: block;
+        }
+
+        .surgeon-revert {
+            display: none;
+            background: none;
+            border: none;
+            color: #f0a030;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 0 2px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .surgeon-revert:hover {
+            color: #ffc060;
+        }
+
+        .surgeon-revert.visible {
+            display: inline;
         }
 
         .surgeon-pct {
@@ -422,6 +468,31 @@
 
         #finalize-row sp-action-button {
             width: 100%;
+        }
+
+        #finalize-summary {
+            display: none;
+            margin-top: 4px;
+            padding: 6px 8px;
+            background: #1e3a1e;
+            border: 1px solid #3a6a3a;
+            border-radius: 3px;
+            font-size: 10px;
+            color: #a0d8a0;
+            white-space: pre-line;
+            text-align: left;
+        }
+
+        #finalize-progress {
+            display: none;
+            margin-top: 4px;
+            padding: 4px 8px;
+            background: #2d3545;
+            border: 1px solid #4da6ff;
+            border-radius: 3px;
+            font-size: 10px;
+            color: #8bb8e8;
+            text-align: center;
         }
 
         /* ─── Right Panel: Knobs + HUD ─── */
@@ -523,6 +594,7 @@
         }
 
         #error-box button:hover { background: #606060; }
+
     </style>
 </head>
 <body>
@@ -572,6 +644,8 @@
             <!-- Finalize Flight Plan -->
             <div id="finalize-row" style="display:none;">
                 <sp-action-button id="btn-finalize" variant="accent">Finalize Flight Plan</sp-action-button>
+                <div id="finalize-progress"></div>
+                <div id="finalize-summary"></div>
             </div>
         </div>
 
