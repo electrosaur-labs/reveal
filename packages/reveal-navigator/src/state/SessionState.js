@@ -131,19 +131,27 @@ class SessionState extends EventEmitter {
             labPixels, width, height, this.currentConfig
         );
 
-        this.previewBuffer = proxyResult.previewBuffer;
-        this.state.proxyBufferReady = true;
-        this.state.isProcessing = false;
-
         logger.log(`[SessionState] Initial posterize: ${proxyResult.palette.length} colors, ${proxyResult.dimensions.width}x${proxyResult.dimensions.height} in ${proxyResult.elapsedMs.toFixed(0)}ms`);
         this.emit('proxyReady', proxyResult);
 
-        // Also emit previewUpdated so carousel swatches refresh with correct palette
+        // Apply knobs (speckleRescue, shadowClamp, minVolume) with explicit state values.
+        // This ensures the initial preview is consistent with subsequent slider updates.
+        const knobResult = await this.proxyEngine.updateProxy({
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp
+        });
+
+        this.previewBuffer = knobResult.previewBuffer;
+        this.state.proxyBufferReady = true;
+        this.state.isProcessing = false;
+
+        // Emit previewUpdated so carousel swatches refresh with correct palette
         const initialAccuracy = this.calculateCurrentAccuracy();
         this.emit('previewUpdated', {
-            previewBuffer: proxyResult.previewBuffer,
-            palette: proxyResult.palette,
-            elapsedMs: proxyResult.elapsedMs,
+            previewBuffer: knobResult.previewBuffer,
+            palette: knobResult.palette,
+            elapsedMs: proxyResult.elapsedMs + knobResult.elapsedMs,
             dimensions: proxyResult.dimensions,
             accuracyDeltaE: initialAccuracy
         });
@@ -373,15 +381,22 @@ class SessionState extends EventEmitter {
 
         logger.log(`[SessionState] Swap result: ${result.palette.length} colors, ${result.elapsedMs.toFixed(0)}ms`);
 
-        this.previewBuffer = result.previewBuffer;
+        // Apply knobs with explicit state values (not config which may have undefined knobs)
+        const knobResult = await this.proxyEngine.updateProxy({
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp
+        });
+
+        this.previewBuffer = knobResult.previewBuffer;
         this.state.proxyBufferReady = true;
         this.state.isProcessing = false;
 
         const swapAccuracy = this.calculateCurrentAccuracy();
         this.emit('previewUpdated', {
-            previewBuffer: result.previewBuffer,
-            palette: result.palette,
-            elapsedMs: result.elapsedMs,
+            previewBuffer: knobResult.previewBuffer,
+            palette: knobResult.palette,
+            elapsedMs: result.elapsedMs + knobResult.elapsedMs,
             dimensions: result.dimensions,
             accuracyDeltaE: swapAccuracy
         });

@@ -13,15 +13,11 @@
   "manifestVersion": 5,
   "entrypoints": [
     {
-      "type": "panel",
-      "id": "navigator.panel",
+      "type": "command",
+      "id": "navigator.showDialog",
       "label": {
-        "default": "Navigator"
-      },
-      "minimumSize": { "width": 500, "height": 400 },
-      "maximumSize": { "width": 3000, "height": 3000 },
-      "preferredDockedSize": { "width": 900, "height": 700 },
-      "preferredFloatingSize": { "width": 1100, "height": 850 }
+        "default": "Navigator..."
+      }
     }
   ],
   "requiredPermissions": {

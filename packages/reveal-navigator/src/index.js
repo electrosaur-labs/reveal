@@ -1,9 +1,9 @@
 /**
  * Navigator - Screen Print Color Separation UI
  *
- * Auto-ingest: reads the active Photoshop document on panel open
- * and whenever the user switches to a different document.
- * The Sync button re-pulls pixels after canvas edits.
+ * Command plugin: invoked from Plugins → Navigator...
+ * Opens a non-modal dialog, auto-ingests the active document,
+ * and dismisses itself after production render completes.
  */
 
 const { entrypoints } = require("uxp");
@@ -29,7 +29,7 @@ let surgeon = null;
 let isIngesting = false;
 let isProductionRunning = false;
 let currentDocId = null;    // Track which document we've ingested
-let panelVisible = false;
+let dialogOpen = false;
 
 // ─── Bootstrap ───────────────────────────────────────────
 
@@ -224,7 +224,7 @@ function setupDocumentChangeListener() {
 }
 
 function onDocumentChanged() {
-    if (!panelVisible) return;
+    if (!dialogOpen) return;
 
     // Check if the active document actually changed
     try {
@@ -436,8 +436,8 @@ async function handleFinalize() {
 
         logger.log(`[Navigator] Production render complete: ${result.layerCount} layers, ${result.elapsedMs}ms`);
 
-        // Collapse panel — work is done
-        _collapsePanel(lines);
+        // Dismiss dialog — work is done
+        _closeDialog();
 
     } catch (err) {
         logger.log('[Navigator] Production render failed: ' + err.message);
@@ -451,30 +451,74 @@ async function handleFinalize() {
     }
 }
 
-/** Clear the panel completely after successful render. */
-function _collapsePanel() {
-    const root = document.getElementById('root');
-    if (root) root.style.display = 'none';
+/** Dismiss the dialog after successful render. */
+function _closeDialog() {
+    const dialog = document.getElementById('navigatorDialog');
+    if (dialog) {
+        try { dialog.close(); } catch (_) {}
+    }
+    dialogOpen = false;
+}
+
+// ─── Show Dialog (command entrypoint) ────────────────────
+
+async function showDialog() {
+    try {
+        const dialog = document.getElementById('navigatorDialog');
+        if (!dialog) {
+            logger.log('[Navigator] Dialog element not found');
+            return;
+        }
+
+        // Validate document BEFORE showing dialog
+        const validation = validateDocument();
+        if (!validation.ok) {
+            alert(`${validation.title}\n\n${validation.message}`);
+            return;
+        }
+
+        // Initialize plugin on first open
+        if (!sessionState) {
+            initPlugin();
+        }
+
+        // Reset UI for fresh session
+        const root = document.getElementById('root');
+        if (root) root.style.display = '';
+
+        dialogOpen = true;
+
+        // Auto-ingest the active document
+        ingestActiveDocument(false);
+
+        // Show non-modal dialog (allows Photoshop Color Panel access)
+        dialog.show({
+            resize: "both",
+            size: {
+                width: 1100,
+                height: 850,
+                minWidth: 500,
+                minHeight: 400,
+                maxWidth: 3000,
+                maxHeight: 3000
+            }
+        });
+
+        logger.log('[Navigator] Dialog shown');
+
+    } catch (err) {
+        logger.log('[Navigator] Error showing dialog: ' + err.message);
+        alert(`Navigator error: ${err.message}`);
+    }
 }
 
 // ─── UXP Entrypoints ────────────────────────────────────
 
 entrypoints.setup({
-    panels: {
-        "navigator.panel": {
-            show() {
-                logger.log('Navigator panel shown');
-                panelVisible = true;
-                if (!sessionState) {
-                    initPlugin();
-                }
-                // Auto-ingest on show — errors go to status bar, no dialog
-                ingestActiveDocument(false);
-            },
-            hide() {
-                logger.log('Navigator panel hidden');
-                panelVisible = false;
-            }
-        }
+    commands: {
+        "navigator.showDialog": showDialog
     }
 });
+
+// Initialize on load
+initPlugin();

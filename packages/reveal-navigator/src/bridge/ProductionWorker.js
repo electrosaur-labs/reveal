@@ -97,23 +97,47 @@ class ProductionWorker {
         const doc = app.activeDocument;
         const is16bit = String(doc.bitsPerChannel).toLowerCase().includes('16') || doc.bitsPerChannel === 16;
 
-        await core.executeAsModal(async () => {
-            for (let i = 0; i < layers.length; i++) {
-                this._onProgress(4, 4, `Creating layer ${i + 1}/${layers.length}...`);
-                logger.log(`[ProductionWorker] Creating layer ${i + 1}/${layers.length}: ${layers[i].name}`);
+        await core.executeAsModal(async (executionContext) => {
+            // Suspend history so all layer operations collapse into one undo step
+            let suspensionID = null;
+            try {
+                suspensionID = await executionContext.hostControl.suspendHistory({
+                    documentID: doc.id,
+                    name: "Reveal"
+                });
+            } catch (err) {
+                logger.log('[ProductionWorker] Could not suspend history: ' + err.message);
+            }
 
-                if (is16bit) {
-                    await this._createLayer16bit(layers[i]);
-                } else {
-                    await this._createLayer8bit(layers[i]);
+            try {
+                for (let i = 0; i < layers.length; i++) {
+                    this._onProgress(4, 4, `Creating layer ${i + 1}/${layers.length}...`);
+                    logger.log(`[ProductionWorker] Creating layer ${i + 1}/${layers.length}: ${layers[i].name}`);
+
+                    if (is16bit) {
+                        await this._createLayer16bit(layers[i]);
+                    } else {
+                        await this._createLayer8bit(layers[i]);
+                    }
                 }
+
+                // Hide the original image (bottom layer)
+                const allLayers = doc.layers;
+                if (allLayers.length > 0) {
+                    allLayers[allLayers.length - 1].visible = false;
+                }
+
+                if (suspensionID !== null) {
+                    await executionContext.hostControl.resumeHistory(suspensionID);
+                }
+            } catch (err) {
+                if (suspensionID !== null) {
+                    await executionContext.hostControl.resumeHistory(suspensionID, false);
+                }
+                throw err;
             }
         }, {
-            commandName: "Navigator: Create Production Layers",
-            historyStateInfo: {
-                name: "Reveal",
-                target: doc
-            }
+            commandName: "Reveal"
         });
 
         const elapsedMs = Date.now() - t0;
