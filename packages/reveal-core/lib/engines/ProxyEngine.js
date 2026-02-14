@@ -107,7 +107,8 @@ class ProxyEngine {
             bitDepth: initialConfig.bitDepth || 16
         };
 
-        // 6. Generate initial preview from color indices
+        // 6. Generate clean preview (no knobs yet).
+        // Caller (SessionState) follows up with updateProxy() to apply knobs.
         const previewBuffer = this._generatePreviewFromIndices(
             this.separationState.colorIndices,
             this.separationState.rgbPalette,
@@ -197,7 +198,8 @@ class ProxyEngine {
         // Snapshot baseline so mechanical knobs can restore from clean state
         this._snapshotBaseline();
 
-        // 5. Generate preview
+        // 5. Generate clean preview (no knobs yet).
+        // Caller (SessionState) follows up with updateProxy() to apply knobs.
         const previewBuffer = this._generatePreviewFromIndices(
             colorIndices,
             posterizeResult.palette,
@@ -242,17 +244,7 @@ class ProxyEngine {
         }
 
         // Apply knobs on top of clean baseline
-        if ('minVolume' in paramChanges) {
-            await this._applyMinVolume(paramChanges.minVolume);
-        }
-
-        if ('speckleRescue' in paramChanges) {
-            await this._applySpeckleRescue(paramChanges.speckleRescue);
-        }
-
-        if ('shadowClamp' in paramChanges) {
-            await this._applyShadowClamp(paramChanges.shadowClamp);
-        }
+        await this._applyKnobs(paramChanges);
 
         if ('paletteOverride' in paramChanges) {
             this.separationState.palette = paramChanges.paletteOverride;
@@ -260,8 +252,10 @@ class ProxyEngine {
             await this._recomputeSeparation();
         }
 
-        // Generate updated preview from color indices
-        const previewBuffer = this._generatePreviewFromIndices(
+        // Generate preview from masks (reflects despeckle + shadowClamp).
+        // Pixels where all masks are 0 (isolated speckles removed) show as white.
+        const previewBuffer = this._generatePreviewFromMasks(
+            this.separationState.masks,
             this.separationState.colorIndices,
             this.separationState.rgbPalette,
             this.separationState.width,
@@ -381,6 +375,22 @@ class ProxyEngine {
     }
 
     /**
+     * Apply all mechanical knobs from a config/paramChanges object.
+     * @private
+     */
+    async _applyKnobs(params) {
+        if (params.minVolume !== undefined) {
+            await this._applyMinVolume(params.minVolume);
+        }
+        if (params.speckleRescue !== undefined) {
+            await this._applySpeckleRescue(params.speckleRescue);
+        }
+        if (params.shadowClamp !== undefined) {
+            await this._applyShadowClamp(params.shadowClamp);
+        }
+    }
+
+    /**
      * Apply minVolume pruning (palette reduction)
      * @private
      */
@@ -479,28 +489,128 @@ class ProxyEngine {
     }
 
     /**
-     * Apply speckle rescue (morphological erosion)
+     * Apply speckle rescue (connected component despeckle).
+     * Removes isolated clusters smaller than threshold pixels.
+     * Uses the same SeparationEngine._despeckleMask as production.
      * @private
      */
-    async _applySpeckleRescue(radiusPixels) {
-        if (radiusPixels === 0) {
+    async _applySpeckleRescue(thresholdPixels) {
+        if (thresholdPixels === 0) {
             return;
         }
 
-
         const { width, height } = this.separationState;
+        let threshold = Math.round(thresholdPixels);
 
-        // Apply erosion to each mask
-        for (let colorIdx = 0; colorIdx < this.separationState.masks.length; colorIdx++) {
-            const mask = this.separationState.masks[colorIdx];
-            const eroded = this._erodeMask(mask, width, height, radiusPixels);
-            this.separationState.masks[colorIdx] = eroded;
+        // Scale threshold for proxy resolution.
+        // At 512px proxy, small clusters from full-res don't exist after
+        // bilinear downsampling. Scale by the linear downsample ratio so
+        // the visual effect is proportional to what the user expects.
+        if (this.sourceMetadata && this.sourceMetadata.originalWidth > width) {
+            const linearScale = this.sourceMetadata.originalWidth / width;
+            threshold = Math.round(threshold * linearScale);
         }
 
+        for (let colorIdx = 0; colorIdx < this.separationState.masks.length; colorIdx++) {
+            SeparationEngine._despeckleMask(
+                this.separationState.masks[colorIdx],
+                width, height, threshold
+            );
+        }
+
+        // Heal orphaned pixels: despeckle zeroed out mask entries but
+        // colorIndices still points to the old color, so the preview
+        // falls back to the original — making despeckle invisible.
+        // BFS-fill orphans from the nearest non-orphan neighbor so
+        // despeckled pixels absorb into the surrounding color.
+        this._healDespeckledPixels();
     }
 
     /**
-     * Apply shadow clamp (minimum ink density)
+     * BFS fill orphaned pixels (mask zeroed by despeckle) from surrounding colors.
+     * O(pixelCount) — each pixel visited at most twice.
+     * @private
+     */
+    _healDespeckledPixels() {
+        const { masks, colorIndices, width, height } = this.separationState;
+        const pixelCount = width * height;
+        const numColors = masks.length;
+
+        // Mark orphaned pixels (their assigned mask was zeroed)
+        const isOrphan = new Uint8Array(pixelCount);
+        let orphanCount = 0;
+
+        for (let i = 0; i < pixelCount; i++) {
+            const ci = colorIndices[i];
+            if (ci >= numColors || masks[ci][i] === 0) {
+                isOrphan[i] = 1;
+                orphanCount++;
+            }
+        }
+
+        if (orphanCount === 0) return;
+
+        // Seed BFS queue with non-orphan pixels adjacent to at least one orphan
+        const queue = new Uint32Array(pixelCount);
+        let head = 0;
+        let tail = 0;
+
+        for (let i = 0; i < pixelCount; i++) {
+            if (isOrphan[i]) continue;
+            const x = i % width;
+            const y = (i - x) / width;
+            let adjacent = false;
+            for (let dy = -1; dy <= 1 && !adjacent; dy++) {
+                for (let dx = -1; dx <= 1 && !adjacent; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = x + dx, ny = y + dy;
+                    if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                        if (isOrphan[ny * width + nx]) adjacent = true;
+                    }
+                }
+            }
+            if (adjacent) queue[tail++] = i;
+        }
+
+        // BFS: spread non-orphan colors into orphan gaps
+        while (head < tail) {
+            const i = queue[head++];
+            const ci = colorIndices[i];
+            const x = i % width;
+            const y = (i - x) / width;
+
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = x + dx, ny = y + dy;
+                    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                    const ni = ny * width + nx;
+                    if (isOrphan[ni]) {
+                        colorIndices[ni] = ci;
+                        masks[ci][ni] = 255;
+                        isOrphan[ni] = 0;
+                        queue[tail++] = ni;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Apply shadow clamp as local-density edge erosion.
+     *
+     * Binary masks (0/255) make traditional value-clamping a no-op.
+     * Instead, reinterpret shadowClamp as: "pixels at thin edges below a
+     * minimum local ink density can't hold on the screen mesh."
+     *
+     * For each mask pixel, compute the fraction of 8-connected neighbors
+     * sharing the same mask. If below threshold, zero the pixel.
+     * Then heal orphaned pixels via _healDespeckledPixels().
+     *
+     * shadowClamp=0%  → threshold=0    → nothing removed
+     * shadowClamp=8%  → threshold≈0.24 → removes pixels with ≤1/8 same neighbors
+     * shadowClamp=20% → threshold≈0.6  → erodes ~1px from all edges
+     *
      * @private
      */
     async _applyShadowClamp(clampPercent) {
@@ -508,19 +618,44 @@ class ProxyEngine {
             return;
         }
 
-        const clampValue = Math.round(clampPercent * 255 / 100);
+        // Map 0-20% slider range onto 0-0.6 neighbor fraction (3× scale)
+        const threshold = (clampPercent / 100) * 3;
+        const { masks, width, height } = this.separationState;
 
+        for (let c = 0; c < masks.length; c++) {
+            const mask = masks[c];
+            const toRemove = [];
 
-        // Clamp mask values below threshold to threshold
-        this.separationState.masks.forEach(mask => {
-            for (let i = 0; i < mask.length; i++) {
-                const val = mask[i];
-                if (val > 0 && val < clampValue) {
-                    mask[i] = clampValue;
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = y * width + x;
+                    if (mask[i] === 0) continue;
+
+                    let same = 0, total = 0;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            if (dx === 0 && dy === 0) continue;
+                            const nx = x + dx, ny = y + dy;
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                total++;
+                                if (mask[ny * width + nx] > 0) same++;
+                            }
+                        }
+                    }
+
+                    if (same / total < threshold) {
+                        toRemove.push(i);
+                    }
                 }
             }
-        });
 
+            for (const idx of toRemove) {
+                mask[idx] = 0;
+            }
+        }
+
+        // Heal orphaned pixels (absorb eroded edges into surrounding color)
+        this._healDespeckledPixels();
     }
 
     /**
@@ -581,51 +716,6 @@ class ProxyEngine {
     }
 
     /**
-     * Erode mask using simple box kernel
-     * @private
-     */
-    _erodeMask(mask, width, height, radius) {
-        const eroded = new Uint8Array(mask.length);
-
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const idx = y * width + x;
-
-                if (mask[idx] === 0) {
-                    eroded[idx] = 0;
-                    continue;
-                }
-
-                // Check if all neighbors within radius are non-zero
-                let allNeighborsSet = true;
-
-                for (let dy = -radius; dy <= radius; dy++) {
-                    for (let dx = -radius; dx <= radius; dx++) {
-                        const nx = x + dx;
-                        const ny = y + dy;
-
-                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
-                            allNeighborsSet = false;
-                            break;
-                        }
-
-                        const nIdx = ny * width + nx;
-                        if (mask[nIdx] === 0) {
-                            allNeighborsSet = false;
-                            break;
-                        }
-                    }
-                    if (!allNeighborsSet) break;
-                }
-
-                eroded[idx] = allNeighborsSet ? 255 : 0;
-            }
-        }
-
-        return eroded;
-    }
-
-    /**
      * Generate RGBA preview buffer from color indices
      * @private
      */
@@ -667,6 +757,57 @@ class ProxyEngine {
             previewBuffer[idx + 1] = color.g;
             previewBuffer[idx + 2] = color.b;
             previewBuffer[idx + 3] = 255; // Alpha
+        }
+
+        return previewBuffer;
+    }
+
+    /**
+     * Generate preview RGBA buffer from masks (post-knob).
+     * Pixels where the assigned mask was removed (despeckled) are shown in
+     * the color of whatever mask still covers them. If NO mask covers a pixel
+     * (minVolume pruned the color entirely), fall back to colorIndices.
+     * Speckle-removed pixels visually merge into their surroundings — they
+     * don't show as white because in print they'd absorb into the adjacent ink.
+     * @private
+     */
+    _generatePreviewFromMasks(masks, colorIndices, rgbPalette, width, height) {
+        const pixelCount = width * height;
+        const previewBuffer = new Uint8ClampedArray(pixelCount * 4);
+        const numColors = masks.length;
+
+        for (let i = 0; i < pixelCount; i++) {
+            const idx = i * 4;
+            const ci = colorIndices[i];
+            let colorIdx = ci;
+
+            // If assigned color's mask was eroded, find another active mask
+            if (ci >= numColors || masks[ci][i] === 0) {
+                let found = -1;
+                for (let c = 0; c < numColors; c++) {
+                    if (masks[c][i] > 0) {
+                        found = c;
+                        break;
+                    }
+                }
+                // Fall back to original colorIndices if no mask active
+                // (e.g. minVolume pruned the color — it remaps via colorIndices)
+                colorIdx = found >= 0 ? found : ci;
+            }
+
+            if (colorIdx < rgbPalette.length) {
+                const color = typeof rgbPalette[colorIdx] === 'string'
+                    ? this._hexToRgb(rgbPalette[colorIdx])
+                    : rgbPalette[colorIdx];
+                previewBuffer[idx]     = color.r;
+                previewBuffer[idx + 1] = color.g;
+                previewBuffer[idx + 2] = color.b;
+            } else {
+                previewBuffer[idx]     = 255;
+                previewBuffer[idx + 1] = 255;
+                previewBuffer[idx + 2] = 255;
+            }
+            previewBuffer[idx + 3] = 255;
         }
 
         return previewBuffer;
