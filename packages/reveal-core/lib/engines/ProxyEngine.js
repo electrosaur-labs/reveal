@@ -1,11 +1,12 @@
 /**
  * ProxyEngine - Low-resolution proxy for real-time parameter updates
  *
- * Maintains a 512px "digital twin" for <30ms response time during UI scrubbing.
+ * Maintains an 800px "digital twin" for fast response during UI scrubbing.
  * Architecture:
- * - Fixed 512px resolution (long edge)
+ * - Fixed 800px resolution (long edge)
  * - 16-bit LAB buffer (maintains full tonal range)
  * - Bilinear downsampling from source
+ * - Bilateral filter preprocessing (matches reveal-adobe pipeline)
  * - State persistence: holds current separation state in memory
  * - Incremental updates: re-runs only affected steps
  *
@@ -15,9 +16,10 @@
 const PosterizationEngine = require('./PosterizationEngine');
 const SeparationEngine = require('./SeparationEngine');
 const PreviewEngine = require('./PreviewEngine');
+const BilateralFilter = require('../preprocessing/BilateralFilter');
 
 class ProxyEngine {
-    static PROXY_SIZE = 512; // Fixed resolution for long edge
+    static PROXY_SIZE = 800; // Fixed resolution for long edge
 
     constructor() {
         this.proxyBuffer = null;        // 512px 16-bit LAB buffer
@@ -37,15 +39,25 @@ class ProxyEngine {
     async initializeProxy(labPixels, width, height, initialConfig) {
         const startTime = performance.now();
 
-        // 1. Bilinear downsample to 512px
+        // 1. Bilinear downsample to 800px
         const { buffer: proxyBuffer, width: proxyW, height: proxyH } =
             this._downsampleBilinear(labPixels, width, height);
+
+        // 2. Bilateral filter preprocessing (matches reveal-adobe pipeline)
+        const preprocessingIntensity = initialConfig.preprocessingIntensity || 'auto';
+        if (preprocessingIntensity !== 'off') {
+            const is16Bit = true; // ProxyEngine always uses 16-bit Lab
+            const isHeavy = preprocessingIntensity === 'heavy';
+            const radius = isHeavy ? 5 : 3;
+            const sigmaR = is16Bit ? 5000 : 3000;
+            BilateralFilter.applyBilateralFilterLab(proxyBuffer, proxyW, proxyH, radius, sigmaR);
+        }
 
         this.proxyBuffer = proxyBuffer;
 
         // Proxy-safe config:
         // - format: 'lab' — CRITICAL: input is 16-bit Lab, not RGB
-        // - Disable aggressive merging that collapses palette at 512px
+        // - Disable aggressive merging that collapses palette at 800px
         const proxyConfig = {
             ...initialConfig,
             format: 'lab',
@@ -54,8 +66,6 @@ class ProxyEngine {
             densityFloor: 0,
             preservedUnifyThreshold: 0.5
         };
-
-        // 2. Run initial posterization (full pipeline)
         const posterizeResult = await PosterizationEngine.posterize(
             proxyBuffer,
             proxyW,
@@ -93,6 +103,7 @@ class ProxyEngine {
             masks: masks,
             width: proxyW,
             height: proxyH,
+            distanceMetric: initialConfig.distanceMetric || 'cie76',
             statistics: posterizeResult.statistics || {}
         };
 
@@ -144,9 +155,7 @@ class ProxyEngine {
         const proxyW = this.separationState.width;
         const proxyH = this.separationState.height;
 
-        // Proxy-safe config:
-        // - format: 'lab' — CRITICAL: input is 16-bit Lab, not RGB
-        // - Disable aggressive merging that collapses palette at 512px
+        // Proxy-safe config (same rationale as initializeProxy)
         const proxyConfig = {
             ...config,
             format: 'lab',
@@ -155,8 +164,6 @@ class ProxyEngine {
             densityFloor: 0,
             preservedUnifyThreshold: 0.5
         };
-
-        // 1. Posterize existing proxyBuffer with proxy-safe config
         const posterizeResult = await PosterizationEngine.posterize(
             this.proxyBuffer,
             proxyW,
@@ -192,6 +199,7 @@ class ProxyEngine {
             masks,
             width: proxyW,
             height: proxyH,
+            distanceMetric: config.distanceMetric || 'cie76',
             statistics: posterizeResult.statistics || {}
         };
 
@@ -309,6 +317,7 @@ class ProxyEngine {
             masks: s.masks.map(m => new Uint8Array(m)),
             width: s.width,
             height: s.height,
+            distanceMetric: s.distanceMetric || 'cie76',
             statistics: { ...s.statistics }
         };
     }
@@ -328,16 +337,17 @@ class ProxyEngine {
             masks: b.masks.map(m => new Uint8Array(m)),
             width: b.width,
             height: b.height,
+            distanceMetric: b.distanceMetric || 'cie76',
             statistics: { ...b.statistics }
         };
     }
 
     /**
-     * Bilinear downsample to 512px (long edge)
+     * Bilinear downsample to 800px (long edge)
      * @private
      */
     _downsampleBilinear(labPixels, srcWidth, srcHeight) {
-        // Calculate target dimensions (512px on long edge)
+        // Calculate target dimensions (800px on long edge)
         const longEdge = Math.max(srcWidth, srcHeight);
         const scale = ProxyEngine.PROXY_SIZE / longEdge;
 
@@ -663,14 +673,14 @@ class ProxyEngine {
      */
     async _recomputeSeparation() {
 
-        // Get new color indices
+        // Get new color indices — use the archetype's metric (not hardcoded CIE76)
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
             this.proxyBuffer,
             this.separationState.palette,
             null,
             this.separationState.width,
             this.separationState.height,
-            { ditherType: 'none', distanceMetric: 'cie76' }
+            { ditherType: 'none', distanceMetric: this.separationState.distanceMetric || 'cie76' }
         );
 
         // Generate new masks

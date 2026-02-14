@@ -145,12 +145,20 @@ class ArchetypeCarousel {
     }
 
     /**
-     * Get RGB palette from the proxy's current separation state.
+     * Get RGB palette colors that have at least one pixel assigned.
+     * Filters out zero-coverage slots left by minVolume/merge so the
+     * active card swatches match what PaletteSurgeon displays.
      */
     _getActiveRgbPalette() {
         const proxy = this._session.proxyEngine;
-        if (!proxy || !proxy.separationState || !proxy.separationState.rgbPalette) return null;
-        return proxy.separationState.rgbPalette;
+        if (!proxy || !proxy.separationState) return null;
+        const { rgbPalette, colorIndices } = proxy.separationState;
+        if (!rgbPalette || !colorIndices) return null;
+
+        const counts = new Uint32Array(rgbPalette.length);
+        for (let i = 0, len = colorIndices.length; i < len; i++) counts[colorIndices[i]]++;
+
+        return rgbPalette.filter((_, i) => counts[i] > 0);
     }
 
     /**

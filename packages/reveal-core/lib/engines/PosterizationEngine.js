@@ -125,7 +125,7 @@ class PosterizationEngine {
             : false;
 
         // STRATEGY SELECTION: Use user-provided strategy or default to SALIENCY for reveal, VOLUMETRIC for others
-        const strategyName = options.centroidStrategy || (engineType === 'reveal' ? 'SALIENCY' : 'VOLUMETRIC');
+        const strategyName = options.centroidStrategy || ((engineType === 'reveal' || engineType === 'reveal-mk1.5') ? 'SALIENCY' : 'VOLUMETRIC');
         const strategy = CentroidStrategies[strategyName] || CentroidStrategies.SALIENCY;
 
         // Validate strategy is a function
@@ -3806,6 +3806,7 @@ class PosterizationEngine {
                 b: peak.b
             }));
 
+            logger.log(`[Mk1.5] PeakFinder: ${detectedPeaks.length} peaks at ${width}x${height} (bitDepth=${sourceBitDepth}): ${detectedPeaks.map(p => `L=${p.L.toFixed(1)} a=${p.a.toFixed(1)} b=${p.b.toFixed(1)} C=${(Math.sqrt(p.a*p.a+p.b*p.b)).toFixed(1)}`).join(', ') || 'none'}`);
         }
         // =============================================================
 
@@ -3861,6 +3862,7 @@ class PosterizationEngine {
         const numForced = forcedCentroids.length;
         const medianCutTarget = Math.max(1, targetColors - numForced - numPreserved);
 
+        logger.log(`[Mk1.5] Slot budget: targetColors=${targetColors}, numForced=${numForced}, numPreserved=${numPreserved} → medianCutTarget=${medianCutTarget}`);
         // ==================================================
 
 
@@ -3895,6 +3897,8 @@ class PosterizationEngine {
             options.tuning || null
         );
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_median_cut_done');
+
+        logger.log(`[Mk1.5] Median cut produced ${initialPaletteLab.length} colors: ${initialPaletteLab.map(c => `L=${c.L.toFixed(1)} a=${c.a.toFixed(1)} b=${c.b.toFixed(1)}`).join(' | ')}`);
 
         // Step 3: Apply perceptual snap
         const colorSpaceAnalysis = this._analyzeColorSpace(labPixels);

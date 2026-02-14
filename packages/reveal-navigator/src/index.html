@@ -423,6 +423,7 @@
             height: 24px;
             border-radius: 2px;
             border: 1px solid rgba(255,255,255,0.15);
+            position: relative;
         }
 
         .surgeon-color.surgeon-overridden {
@@ -463,6 +464,19 @@
 
         .surgeon-revert.visible {
             display: inline;
+        }
+
+        .surgeon-merge-badge {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            font-size: 8px;
+            font-weight: bold;
+            color: #fff;
+            background: #4da6ff;
+            border-radius: 6px;
+            padding: 0 3px;
+            line-height: 13px;
         }
 
         .surgeon-pct {
@@ -655,7 +669,7 @@
 
             <!-- Finalize Flight Plan -->
             <div id="finalize-row" style="display:none;">
-                <sp-action-button id="btn-finalize" variant="accent">Finalize Flight Plan</sp-action-button>
+                <sp-action-button id="btn-finalize" variant="accent">Separate</sp-action-button>
                 <div id="finalize-progress"></div>
                 <div id="finalize-summary"></div>
             </div>
@@ -665,6 +679,15 @@
         <div id="hud-panel">
             <!-- Mechanical Knobs -->
             <div id="knobs-panel" style="display:none;">
+                <div class="knob-row">
+                    <span class="knob-label"># Colors</span>
+                    <button class="knob-revert" id="revert-targetColors" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="targetColors-val">8</span>
+                </div>
+                <sp-slider id="knob-targetColors" min="3" max="12" step="1" value="8" variant="filled"></sp-slider>
+
+                <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
+
                 <div class="knob-row">
                     <span class="knob-label">Min Volume</span>
                     <button class="knob-revert" id="revert-minVolume" title="Revert to archetype default">&#x21BA;</button>

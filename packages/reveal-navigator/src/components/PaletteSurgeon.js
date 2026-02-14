@@ -73,6 +73,8 @@ class PaletteSurgeon {
         const { rgbPalette, colorIndices, width, height } = proxy.separationState;
         if (!rgbPalette || !colorIndices) return;
 
+        logger.log(`[Surgeon] _rebuild: ${rgbPalette.length} palette entries, ${colorIndices.length} pixels`);
+
         const pixelCount = width * height;
         const counts = new Uint32Array(rgbPalette.length);
         for (let i = 0; i < pixelCount; i++) {
@@ -117,6 +119,17 @@ class PaletteSurgeon {
             const dot = document.createElement('span');
             dot.className = 'surgeon-override-dot';
             if (isOverridden) dot.classList.add('visible');
+
+            // ── Merge badge ("+N" on target swatches that absorbed others) ──
+            const mergedSources = this._session.mergeHistory.get(i);
+            const mergeCount = mergedSources ? mergedSources.size : 0;
+            if (mergeCount > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'surgeon-merge-badge';
+                badge.textContent = `+${mergeCount}`;
+                badge.title = `Absorbed ${mergeCount} merged color${mergeCount > 1 ? 's' : ''}`;
+                colorBlock.appendChild(badge);
+            }
 
             // ── Percentage label ──
             const label = document.createElement('span');

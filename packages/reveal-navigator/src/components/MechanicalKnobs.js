@@ -17,6 +17,7 @@
  */
 
 const KNOB_DEFS = [
+    { key: 'targetColors',   sliderId: 'knob-targetColors',   valId: 'targetColors-val',   revertId: 'revert-targetColors',   decimals: 0, unit: ''   },
     { key: 'minVolume',      sliderId: 'knob-minVolume',      valId: 'minVolume-val',      revertId: 'revert-minVolume',      decimals: 1, unit: '%'  },
     { key: 'speckleRescue',  sliderId: 'knob-speckleRescue',  valId: 'speckleRescue-val',  revertId: 'revert-speckleRescue',  decimals: 0, unit: 'px' },
     { key: 'shadowClamp',    sliderId: 'knob-shadowClamp',    valId: 'shadowClamp-val',    revertId: 'revert-shadowClamp',    decimals: 1, unit: '%'  }
@@ -56,6 +57,9 @@ class MechanicalKnobs {
         for (const [key, entry] of Object.entries(this._sliders)) {
             entry.slider.addEventListener('input', () => {
                 const value = parseFloat(entry.slider.value);
+                if (key === 'targetColors') {
+                    console.log(`[Knobs] targetColors input: slider.value=${entry.slider.value} parsed=${value}`);
+                }
                 this._updateDisplay(entry, value);
                 this._session.updateParameter(key, value);
                 this._updateRevertIcon(key, entry);

@@ -231,7 +231,8 @@ function parseLayers(buffer, startOffset, depth, docWidth, docHeight) {
                 channelBytes = decompressRLE(buffer, offset, targetLayer.height, expectedSize);
                 offset += dataAfterCompression;
             } else {
-                throw new Error(`Unsupported compression: ${compression}`);
+                // ZIP or other unsupported compression — fall through to composite
+                return null;
             }
 
             layerPixelData[channelID] = channelBytes;

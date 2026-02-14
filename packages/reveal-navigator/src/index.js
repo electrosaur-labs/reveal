@@ -457,6 +457,9 @@ function _closeDialog() {
     _resetFinalizeUI();
     currentDocId = null;
 
+    // Clear all session state so nothing persists into the next dialog open
+    if (sessionState) sessionState.reset();
+
     const dialog = document.getElementById('navigatorDialog');
     if (dialog) {
         try { dialog.close(); } catch (_) {}

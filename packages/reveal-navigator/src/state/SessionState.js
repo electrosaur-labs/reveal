@@ -67,6 +67,7 @@ class SessionState extends EventEmitter {
 
         // Separate from reactive state
         this.paletteOverrides = new Map();  // colorIndex → {L, a, b}
+        this.mergeHistory = new Map();      // targetIndex → Set<sourceIndex>
         this.proxyEngine = null;
         this.currentConfig = null;          // Full config from ParameterGenerator
         this.previewBuffer = null;          // Current RGBA preview
@@ -84,6 +85,34 @@ class SessionState extends EventEmitter {
 
         // Debounce timer
         this._debounceTimer = null;
+    }
+
+    /**
+     * Reset all session-specific state. Called when the dialog closes
+     * so no stale overrides/merges persist into the next invocation.
+     */
+    reset() {
+        if (this._debounceTimer) {
+            clearTimeout(this._debounceTimer);
+            this._debounceTimer = null;
+        }
+        this.paletteOverrides.clear();
+        this.mergeHistory.clear();
+        this._tweakCache.clear();
+        this.proxyEngine = null;
+        this.currentConfig = null;
+        this.previewBuffer = null;
+        this.imageDNA = null;
+        this.imageWidth = 0;
+        this.imageHeight = 0;
+        this._archetypeDefaults = null;
+        this.state.activeArchetypeId = null;
+        this.state.isArchetypeDirty = false;
+        this.state.isProcessing = false;
+        this.state.productionRenderPending = false;
+        this.state.proxyBufferReady = false;
+        this.state.isKnobsCustomized = false;
+        this.state.highlightColorIndex = -1;
     }
 
     // ─── Lifecycle ───────────────────────────────────────────
@@ -107,6 +136,7 @@ class SessionState extends EventEmitter {
         this.imageWidth = width;
         this.imageHeight = height;
         this.paletteOverrides.clear();
+        this.mergeHistory.clear();
         this._tweakCache.clear();
 
         // 1. DNA analysis — runs on the original live buffer
@@ -118,6 +148,10 @@ class SessionState extends EventEmitter {
         //    RadarHUD can read activeArchetypeId for the gold centroid polygon
         this.currentConfig = Reveal.generateConfiguration(this.imageDNA);
         this._applyConfigToState(this.currentConfig);
+        // Backfill engineType: archetype doesn't define it, state has the correct default
+        if (!this.currentConfig.engineType) {
+            this.currentConfig.engineType = this.state.engineType;
+        }
         logger.log(`[SessionState] Config generated: archetype=${this.currentConfig.id || 'unknown'}`);
 
         this.emit('imageLoaded', { width, height, dna: this.imageDNA });
@@ -240,6 +274,7 @@ class SessionState extends EventEmitter {
         // Mark archetype dirty when structural param changes
         if (STRUCTURAL_PARAMS.has(key)) {
             this.state.isArchetypeDirty = true;
+            logger.log(`[SessionState] Structural param: ${key}=${value} → isArchetypeDirty=true`);
         }
 
         // Detect knob customization vs archetype defaults
@@ -294,9 +329,11 @@ class SessionState extends EventEmitter {
                 // against the new baseline from re-posterization.
                 this._rebuildConfigFromState();
                 this.paletteOverrides.clear();
+                this.mergeHistory.clear();
                 this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
                 result = await this.proxyEngine.rePosterize(this.currentConfig);
                 this.state.isArchetypeDirty = false;
+                logger.log(`[SessionState] Structural re-posterize: targetColors=${this.currentConfig.targetColors}, palette=${result.palette.length} colors`);
             }
 
             // Build update params — always include palette overrides so they
@@ -310,18 +347,21 @@ class SessionState extends EventEmitter {
                 updateParams.paletteOverride = this._buildOverriddenPalette();
             }
 
+            logger.log(`[SessionState] triggerProxyUpdate: calling updateProxy...`);
             result = await this.proxyEngine.updateProxy(updateParams);
+            logger.log(`[SessionState] triggerProxyUpdate: updateProxy done, palette=${result.palette ? result.palette.length : '?'}`);
 
             this.previewBuffer = result.previewBuffer;
             this.state.isProcessing = false;
             this.state.proxyBufferReady = true;
 
             this._emitPreviewUpdated(result);
+            logger.log(`[SessionState] triggerProxyUpdate: previewUpdated emitted`);
 
             return result;
         } catch (err) {
             this.state.isProcessing = false;
-            logger.log(`[SessionState] Proxy update failed: ${err.message}`);
+            logger.log(`[SessionState] Proxy update FAILED: ${err.message}\n${err.stack}`);
             this.emit('error', err);
             return null;
         }
@@ -358,10 +398,15 @@ class SessionState extends EventEmitter {
             manualArchetypeId: archetypeId
         });
         this._applyConfigToState(this.currentConfig);
+        // Backfill engineType: archetype doesn't define it, state has the correct default
+        if (!this.currentConfig.engineType) {
+            this.currentConfig.engineType = this.state.engineType;
+        }
 
         this.state.activeArchetypeId = archetypeId;
         this.state.isArchetypeDirty = false;
         this.paletteOverrides.clear();
+        this.mergeHistory.clear();
 
         // Reset decision support state on archetype swap
         this.state.highlightColorIndex = -1;
@@ -526,6 +571,12 @@ class SessionState extends EventEmitter {
 
         this.paletteOverrides.delete(colorIndex);
 
+        // Clean up merge history: remove this source from whichever target absorbed it
+        for (const [target, sources] of this.mergeHistory) {
+            sources.delete(colorIndex);
+            if (sources.size === 0) this.mergeHistory.delete(target);
+        }
+
         const overriddenPalette = this._buildOverriddenPalette();
 
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
@@ -570,6 +621,12 @@ class SessionState extends EventEmitter {
         }
 
         this.paletteOverrides.set(sourceIndex, { ...palette[targetIndex] });
+
+        // Track merge relationship so UI can show "+N" badge on target
+        if (!this.mergeHistory.has(targetIndex)) {
+            this.mergeHistory.set(targetIndex, new Set());
+        }
+        this.mergeHistory.get(targetIndex).add(sourceIndex);
 
         const overriddenPalette = this._buildOverriddenPalette();
 
@@ -763,6 +820,7 @@ class SessionState extends EventEmitter {
 
         // Snapshot archetype defaults for dirty detection
         this._archetypeDefaults = {
+            targetColors: this.state.targetColors,
             minVolume: this.state.minVolume,
             speckleRescue: this.state.speckleRescue,
             shadowClamp: this.state.shadowClamp

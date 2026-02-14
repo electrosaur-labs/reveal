@@ -63,6 +63,18 @@ class ProductionWorker {
             throw new Error('No palette available — run navigation first');
         }
 
+        // ── DIAGNOSTIC: dump archetype + metric + palette ──
+        logger.log(`[ProductionWorker] ── FINALIZE CONFIG ──`);
+        logger.log(`[ProductionWorker]   archetype: ${prodConfig.activeArchetypeId}`);
+        logger.log(`[ProductionWorker]   distanceMetric: ${prodConfig.distanceMetric}`);
+        logger.log(`[ProductionWorker]   targetColors: ${prodConfig.targetColors}`);
+        logger.log(`[ProductionWorker]   knobs: minVol=${prodConfig.minVolume} spkl=${prodConfig.speckleRescue} shd=${prodConfig.shadowClamp}`);
+        logger.log(`[ProductionWorker]   paletteOverrides: ${JSON.stringify(prodConfig.paletteOverrides)}`);
+        for (let i = 0; i < labPalette.length; i++) {
+            const c = labPalette[i];
+            logger.log(`[ProductionWorker]   palette[${i}]: L=${c.L.toFixed(1)} a=${c.a.toFixed(1)} b=${c.b.toFixed(1)}`);
+        }
+
         // Convert Lab→RGB for hex naming
         const PosterizationEngine = Reveal.engines.PosterizationEngine;
         const hexColors = labPalette.map(c => {
@@ -71,18 +83,37 @@ class ProductionWorker {
             return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`.toUpperCase();
         });
 
-        logger.log(`[ProductionWorker] Palette: ${labPalette.length} colors`);
+        logger.log(`[ProductionWorker] Palette: ${labPalette.length} colors (${hexColors.join(', ')})`);
 
-        // ── Step 3: Fast inline separation ──
+        // ── Step 3: Separate image using archetype's distance metric ──
         this._onProgress(3, 4, 'Separating image...');
 
         const state = prodConfig;
         const tSep = Date.now();
+        const metric = prodConfig.distanceMetric || 'cie76';
 
-        // Fast synchronous nearest-neighbor in native 16-bit space
-        const colorIndices = this._mapPixelsFast(labPixels, labPalette, pixelCount);
+        let colorIndices;
+        if (metric === 'cie76') {
+            // Fast synchronous nearest-neighbor in native 16-bit space
+            colorIndices = this._mapPixelsFast(labPixels, labPalette, pixelCount);
+        } else {
+            // Use SeparationEngine for CIE94/CIE2000 — matches proxy preview
+            logger.log(`[ProductionWorker] Using ${metric} (via SeparationEngine)`);
+            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+                labPixels, labPalette, null, width, height,
+                { ditherType: 'none', distanceMetric: metric }
+            );
+        }
 
-        logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms`);
+        logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms (metric=${metric})`);
+
+        // Diagnostic: per-color pixel counts
+        const pixCounts = new Uint32Array(labPalette.length);
+        for (let i = 0; i < pixelCount; i++) pixCounts[colorIndices[i]]++;
+        for (let i = 0; i < labPalette.length; i++) {
+            const pct = ((pixCounts[i] / pixelCount) * 100).toFixed(2);
+            logger.log(`[ProductionWorker]   color[${i}] ${hexColors[i]}: ${pixCounts[i]} px (${pct}%)`);
+        }
 
         // Generate layers: mask per color + minVolume + shadowClamp + speckleRescue + skip empty
         const layers = this._buildLayers(
