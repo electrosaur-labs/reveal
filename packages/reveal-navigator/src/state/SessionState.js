@@ -151,6 +151,7 @@ class SessionState extends EventEmitter {
         this.emit('previewUpdated', {
             previewBuffer: knobResult.previewBuffer,
             palette: knobResult.palette,
+            activeColorCount: this._countActiveColors(),
             elapsedMs: proxyResult.elapsedMs + knobResult.elapsedMs,
             dimensions: proxyResult.dimensions,
             accuracyDeltaE: initialAccuracy
@@ -400,6 +401,7 @@ class SessionState extends EventEmitter {
         this.emit('previewUpdated', {
             previewBuffer: knobResult.previewBuffer,
             palette: knobResult.palette,
+            activeColorCount: this._countActiveColors(),
             elapsedMs: result.elapsedMs + knobResult.elapsedMs,
             dimensions: result.dimensions,
             accuracyDeltaE: swapAccuracy
@@ -705,6 +707,23 @@ class SessionState extends EventEmitter {
     // ─── Private Helpers ─────────────────────────────────────
 
     /**
+     * Count palette colors that have at least one pixel assigned.
+     * minVolume remaps weak colors to zero coverage without compacting
+     * the palette, so palette.length overstates the visible count.
+     * @private
+     */
+    _countActiveColors() {
+        const sep = this.proxyEngine && this.proxyEngine.separationState;
+        if (!sep || !sep.colorIndices || !sep.palette) return sep ? sep.palette.length : 0;
+        const counts = new Uint32Array(sep.palette.length);
+        const ci = sep.colorIndices;
+        for (let i = 0, len = ci.length; i < len; i++) counts[ci[i]]++;
+        let active = 0;
+        for (let i = 0; i < counts.length; i++) if (counts[i] > 0) active++;
+        return active;
+    }
+
+    /**
      * Emit a previewUpdated event with accuracy Delta-E included.
      * @private
      */
@@ -713,6 +732,7 @@ class SessionState extends EventEmitter {
         this.emit('previewUpdated', {
             previewBuffer: result.previewBuffer,
             palette: result.palette,
+            activeColorCount: this._countActiveColors(),
             elapsedMs: result.elapsedMs,
             accuracyDeltaE
         });

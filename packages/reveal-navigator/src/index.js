@@ -155,7 +155,8 @@ function initPlugin() {
             const deltaEl = document.getElementById('stat-delta');
             const timeEl = document.getElementById('stat-time');
             if (colorsEl && data.palette) {
-                colorsEl.textContent = `${data.palette.length} colors`;
+                const count = data.activeColorCount != null ? data.activeColorCount : data.palette.length;
+                colorsEl.textContent = `${count} colors`;
             }
             if (deltaEl) {
                 deltaEl.textContent = data.accuracyDeltaE != null
