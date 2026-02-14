@@ -3,8 +3,8 @@
  *
  * Three scrubbable knobs that drive the ProxyEngine fast path (~50-100ms):
  *   - minVolume:      Ghost plate removal (0-5%)
- *   - speckleRescue:  Halftone solidity (0-10px)
- *   - shadowClamp:    Ink body control (0-20%)
+ *   - speckleRescue:  Halftone solidity (0-30px)
+ *   - shadowClamp:    Ink body control (0-40%, tonal L-value modulated)
  *
  * Each slider has a revert arrow (↺) that appears only when its value
  * differs from the archetype default. Clicking it snaps that single

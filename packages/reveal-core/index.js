@@ -333,7 +333,9 @@ function getPresetParameters(presetId) {
  * @returns {number} returns.b - Blue-yellow axis (-128 to +127)
  */
 function rgbToLab(r, g, b) {
-    return PosterizationEngine.rgbToLab(r, g, b);
+    // Accept both rgbToLab(r, g, b) and rgbToLab({r, g, b})
+    if (typeof r === 'object') return PosterizationEngine.rgbToLab(r);
+    return PosterizationEngine.rgbToLab({ r, g, b });
 }
 
 /**
@@ -351,7 +353,9 @@ function rgbToLab(r, g, b) {
  * @returns {number} returns.b - Blue (0-255)
  */
 function labToRgb(L, a, b) {
-    return PosterizationEngine.labToRgb(L, a, b);
+    // Accept both labToRgb(L, a, b) and labToRgb({L, a, b})
+    if (typeof L === 'object') return PosterizationEngine.labToRgb(L);
+    return PosterizationEngine.labToRgb({ L, a, b });
 }
 
 // Export agent-optimized API

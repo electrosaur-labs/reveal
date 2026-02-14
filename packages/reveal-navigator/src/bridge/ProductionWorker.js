@@ -54,7 +54,11 @@ class ProductionWorker {
         // ── Step 2: Build production palette ──
         this._onProgress(2, 4, 'Building palette...');
 
-        const labPalette = this._sessionState.getPalette();
+        // Use exportProductionConfig — canonical source for palette (with
+        // overrides baked in) and all knob values. Ensures production
+        // render matches what the user approved in the proxy preview.
+        const prodConfig = this._sessionState.exportProductionConfig();
+        const labPalette = prodConfig.palette;
         if (!labPalette || labPalette.length === 0) {
             throw new Error('No palette available — run navigation first');
         }
@@ -72,7 +76,7 @@ class ProductionWorker {
         // ── Step 3: Fast inline separation ──
         this._onProgress(3, 4, 'Separating image...');
 
-        const state = this._sessionState.getState();
+        const state = prodConfig;
         const tSep = Date.now();
 
         // Fast synchronous nearest-neighbor in native 16-bit space
@@ -80,11 +84,11 @@ class ProductionWorker {
 
         logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms`);
 
-        // Generate layers: mask per color + shadowClamp + speckleRescue + skip empty
+        // Generate layers: mask per color + minVolume + shadowClamp + speckleRescue + skip empty
         const layers = this._buildLayers(
             colorIndices, labPalette, hexColors,
             width, height,
-            state.shadowClamp, state.speckleRescue
+            state.minVolume, state.shadowClamp, state.speckleRescue
         );
 
         logger.log(`[ProductionWorker] Separation complete: ${layers.length} layers`);
@@ -204,10 +208,60 @@ class ProductionWorker {
     // ─── Build Layer Objects ─────────────────────────────────────
     // Generates masks, applies knobs, skips empty layers.
 
-    _buildLayers(colorIndices, labPalette, hexColors, width, height, shadowClamp, speckleRescue) {
+    _buildLayers(colorIndices, labPalette, hexColors, width, height, minVolume, shadowClamp, speckleRescue) {
         const layers = [];
         const pixelCount = width * height;
         const MIN_COVERAGE = 0.001; // 0.1%
+
+        // Apply minVolume: remap weak-color pixels to nearest strong neighbor.
+        // Matches ProxyEngine._applyMinVolume behavior so production output
+        // matches the proxy preview (same plates pruned).
+        if (minVolume > 0) {
+            const minPixels = Math.round(pixelCount * minVolume / 100);
+            const colorCounts = new Uint32Array(labPalette.length);
+            for (let i = 0; i < pixelCount; i++) {
+                colorCounts[colorIndices[i]]++;
+            }
+
+            const weakIndices = [];
+            const strongIndices = [];
+            for (let i = 0; i < labPalette.length; i++) {
+                if (colorCounts[i] > 0 && colorCounts[i] < minPixels) {
+                    weakIndices.push(i);
+                } else if (colorCounts[i] > 0) {
+                    strongIndices.push(i);
+                }
+            }
+
+            if (weakIndices.length > 0 && strongIndices.length > 0) {
+                const remapTable = new Uint8Array(labPalette.length);
+                for (let i = 0; i < remapTable.length; i++) remapTable[i] = i;
+
+                for (const weakIdx of weakIndices) {
+                    const wc = labPalette[weakIdx];
+                    let nearestIdx = strongIndices[0];
+                    let minDist = Infinity;
+                    for (const strongIdx of strongIndices) {
+                        const sc = labPalette[strongIdx];
+                        const dL = wc.L - sc.L;
+                        const da = wc.a - sc.a;
+                        const db = wc.b - sc.b;
+                        const dist = dL * dL + da * da + db * db;
+                        if (dist < minDist) {
+                            minDist = dist;
+                            nearestIdx = strongIdx;
+                        }
+                    }
+                    remapTable[weakIdx] = nearestIdx;
+                }
+
+                for (let i = 0; i < pixelCount; i++) {
+                    colorIndices[i] = remapTable[colorIndices[i]];
+                }
+
+                logger.log(`[ProductionWorker] minVolume: remapped ${weakIndices.length} weak colors`);
+            }
+        }
 
         for (let idx = 0; idx < labPalette.length; idx++) {
             // Generate binary mask

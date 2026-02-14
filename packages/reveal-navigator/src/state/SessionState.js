@@ -288,24 +288,28 @@ class SessionState extends EventEmitter {
 
             if (this.state.isArchetypeDirty) {
                 // Slow path: structural param changed — full re-posterize
-                // Uses rePosterize to avoid redundant downsample
+                // Uses rePosterize to avoid redundant downsample.
+                // Clear palette overrides — old indices are meaningless
+                // against the new baseline from re-posterization.
                 this._rebuildConfigFromState();
+                this.paletteOverrides.clear();
+                this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
                 result = await this.proxyEngine.rePosterize(this.currentConfig);
                 this.state.isArchetypeDirty = false;
-                // Apply current knob values on top of the clean posterization
-                result = await this.proxyEngine.updateProxy({
-                    minVolume: this.state.minVolume,
-                    speckleRescue: this.state.speckleRescue,
-                    shadowClamp: this.state.shadowClamp
-                });
-            } else {
-                // Fast path: mechanical knob only
-                result = await this.proxyEngine.updateProxy({
-                    minVolume: this.state.minVolume,
-                    speckleRescue: this.state.speckleRescue,
-                    shadowClamp: this.state.shadowClamp
-                });
             }
+
+            // Build update params — always include palette overrides so they
+            // survive the baseline restore inside updateProxy
+            const updateParams = {
+                minVolume: this.state.minVolume,
+                speckleRescue: this.state.speckleRescue,
+                shadowClamp: this.state.shadowClamp
+            };
+            if (this.paletteOverrides.size > 0) {
+                updateParams.paletteOverride = this._buildOverriddenPalette();
+            }
+
+            result = await this.proxyEngine.updateProxy(updateParams);
 
             this.previewBuffer = result.previewBuffer;
             this.state.isProcessing = false;
@@ -484,6 +488,7 @@ class SessionState extends EventEmitter {
      * @returns {Promise<Object>} Updated preview data
      */
     async overridePaletteColor(colorIndex, newLabColor) {
+        logger.log(`[SessionState.override] idx=${colorIndex} Lab=(${newLabColor.L.toFixed(1)},${newLabColor.a.toFixed(1)},${newLabColor.b.toFixed(1)}) mapSize_before=${this.paletteOverrides.size}`);
         this.paletteOverrides.set(colorIndex, { ...newLabColor });
 
         const overriddenPalette = this._buildOverriddenPalette();
@@ -493,17 +498,16 @@ class SessionState extends EventEmitter {
         if (!this.proxyEngine) return null;
 
         const result = await this.proxyEngine.updateProxy({
-            paletteOverride: overriddenPalette
+            paletteOverride: overriddenPalette,
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp
         });
 
         this.previewBuffer = result.previewBuffer;
         this.state.proxyBufferReady = true;
 
-        this.emit('previewUpdated', {
-            previewBuffer: result.previewBuffer,
-            palette: result.palette,
-            elapsedMs: result.elapsedMs
-        });
+        this._emitPreviewUpdated(result);
 
         return result;
     }
@@ -527,17 +531,16 @@ class SessionState extends EventEmitter {
         if (!this.proxyEngine) return null;
 
         const result = await this.proxyEngine.updateProxy({
-            paletteOverride: overriddenPalette
+            paletteOverride: overriddenPalette,
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp
         });
 
         this.previewBuffer = result.previewBuffer;
         this.state.proxyBufferReady = true;
 
-        this.emit('previewUpdated', {
-            previewBuffer: result.previewBuffer,
-            palette: result.palette,
-            elapsedMs: result.elapsedMs
-        });
+        this._emitPreviewUpdated(result);
 
         return result;
     }
@@ -555,10 +558,13 @@ class SessionState extends EventEmitter {
             throw new Error('Proxy not initialized');
         }
 
-        // Copy target color into source slot (effectively merges)
-        const palette = this.proxyEngine.separationState.palette;
-        if (sourceIndex >= palette.length || targetIndex >= palette.length) {
-            throw new Error(`Invalid palette index: source=${sourceIndex}, target=${targetIndex}, size=${palette.length}`);
+        logger.log(`[SessionState.merge] source=${sourceIndex} target=${targetIndex} mapSize_before=${this.paletteOverrides.size} keys=[${[...this.paletteOverrides.keys()]}]`);
+
+        // Read from baseline+overrides (the consistent visible state),
+        // not separationState.palette which is mutable post-knob state.
+        const palette = this._buildOverriddenPalette();
+        if (!palette || sourceIndex >= palette.length || targetIndex >= palette.length) {
+            throw new Error(`Invalid palette index: source=${sourceIndex}, target=${targetIndex}, size=${palette ? palette.length : 0}`);
         }
 
         this.paletteOverrides.set(sourceIndex, { ...palette[targetIndex] });
@@ -568,17 +574,16 @@ class SessionState extends EventEmitter {
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
 
         const result = await this.proxyEngine.updateProxy({
-            paletteOverride: overriddenPalette
+            paletteOverride: overriddenPalette,
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp
         });
 
         this.previewBuffer = result.previewBuffer;
         this.state.proxyBufferReady = true;
 
-        this.emit('previewUpdated', {
-            previewBuffer: result.previewBuffer,
-            palette: result.palette,
-            elapsedMs: result.elapsedMs
-        });
+        this._emitPreviewUpdated(result);
 
         return result;
     }
@@ -770,19 +775,34 @@ class SessionState extends EventEmitter {
     }
 
     /**
-     * Build a palette array with overrides applied on top of the proxy's current palette.
+     * Build a palette array with overrides applied on top of the BASELINE palette.
+     * Uses the clean posterization output (never mutated by knobs) so that
+     * override indices remain stable regardless of minVolume compaction.
      * @private
      * @returns {Array<{L, a, b}>|null}
      */
     _buildOverriddenPalette() {
-        if (!this.proxyEngine || !this.proxyEngine.separationState) return null;
+        if (!this.proxyEngine || !this.proxyEngine._baselineState) return null;
 
-        const basePalette = this.proxyEngine.separationState.palette;
+        // ALWAYS use the clean, un-mutated baseline palette as the source.
+        // Never fall back to separationState.palette — it's a mutable result
+        // of knob application and creates index drift when minVolume remaps.
+        const basePalette = this.proxyEngine._baselineState.palette;
         const result = basePalette.map(c => ({ ...c }));
 
         for (const [idx, color] of this.paletteOverrides) {
             if (idx < result.length) {
                 result[idx] = { ...color };
+            }
+        }
+
+        // DIAGNOSTIC: detect all-same palette
+        if (result.length > 1) {
+            const first = result[0];
+            const allSame = result.every(c => c.L === first.L && c.a === first.a && c.b === first.b);
+            if (allSame) {
+                logger.log(`[SessionState._buildOverriddenPalette] WARNING: ALL ${result.length} colors identical! L=${first.L.toFixed(1)} a=${first.a.toFixed(1)} b=${first.b.toFixed(1)}`);
+                logger.log(`[SessionState._buildOverriddenPalette] baseline[0]=(${basePalette[0].L.toFixed(1)},${basePalette[0].a.toFixed(1)},${basePalette[0].b.toFixed(1)}) baseline[1]=(${basePalette[1].L.toFixed(1)},${basePalette[1].a.toFixed(1)},${basePalette[1].b.toFixed(1)})`);
             }
         }
 

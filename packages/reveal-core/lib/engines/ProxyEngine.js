@@ -236,21 +236,30 @@ class ProxyEngine {
 
         const startTime = performance.now();
 
-        // Restore clean baseline before applying any knobs.
+        // Restore clean baseline before applying any changes.
         // Without this, knob effects accumulate destructively
         // (e.g. pruned colors can never come back).
         if (this._baselineState) {
             this._restoreFromBaseline();
         }
 
-        // Apply knobs on top of clean baseline
-        await this._applyKnobs(paramChanges);
-
+        // Apply palette override — swap ink colors without re-separating.
+        // In screen printing, "override" means "same plate, different ink."
+        // Plate assignments (colorIndices + masks) stay fixed from baseline;
+        // only the palette and rgbPalette update so the preview shows
+        // the new ink color on the existing plate coverage.
+        // DO NOT call _recomputeSeparation() — that would redistribute
+        // every pixel to nearest color, causing cascade: swatches rearrange,
+        // paper reassigns, coverage shifts, revert lands on wrong swatch.
         if ('paletteOverride' in paramChanges) {
             this.separationState.palette = paramChanges.paletteOverride;
-            // Re-run separation with new palette
-            await this._recomputeSeparation();
+            this.separationState.rgbPalette = paramChanges.paletteOverride.map(
+                lab => PosterizationEngine.labToRgb(lab)
+            );
         }
+
+        // Apply knobs on top (may prune, despeckle, clamp)
+        await this._applyKnobs(paramChanges);
 
         // Generate preview from masks (reflects despeckle + shadowClamp).
         // Pixels where all masks are 0 (isolated speckles removed) show as white.
@@ -412,10 +421,7 @@ class ProxyEngine {
             }
         });
 
-        if (weakIndices.length === 0) {
-            return;
-        }
-
+        if (weakIndices.length === 0) return;
 
         // Remap weak colors to nearest strong colors
         const strongIndices = [];
@@ -424,6 +430,8 @@ class ProxyEngine {
                 strongIndices.push(i);
             }
         }
+
+        if (strongIndices.length === 0) return;
 
         // Build remapping table
         const remapTable = new Array(this.separationState.palette.length);
@@ -442,7 +450,7 @@ class ProxyEngine {
                 const dL = weakColor.L - strongColor.L;
                 const da = weakColor.a - strongColor.a;
                 const db = weakColor.b - strongColor.b;
-                const dist = Math.sqrt(dL * dL + da * da + db * db);
+                const dist = dL * dL + da * da + db * db;
 
                 if (dist < minDist) {
                     minDist = dist;
@@ -453,39 +461,17 @@ class ProxyEngine {
             remapTable[weakIdx] = nearestStrongIdx;
         }
 
-        // Apply remapping to color indices
+        // Remap color indices — DON'T compact palette.
+        // Palette array stays the same length with the same indices so that
+        // palette overrides (keyed by baseline index) remain valid.
+        // PaletteSurgeon already hides zero-coverage swatches.
         for (let i = 0; i < this.separationState.colorIndices.length; i++) {
             const oldIdx = this.separationState.colorIndices[i];
             this.separationState.colorIndices[i] = remapTable[oldIdx];
         }
 
-        // Rebuild palette (remove weak colors)
-        const newPalette = [];
-        const newRgbPalette = [];
-        const indexMapping = new Map();
-
-        for (let i = 0; i < this.separationState.palette.length; i++) {
-            if (!weakIndices.includes(i)) {
-                indexMapping.set(i, newPalette.length);
-                newPalette.push(this.separationState.palette[i]);
-                if (this.separationState.rgbPalette) {
-                    newRgbPalette.push(this.separationState.rgbPalette[i]);
-                }
-            }
-        }
-
-        // Remap color indices to new palette
-        for (let i = 0; i < this.separationState.colorIndices.length; i++) {
-            const oldIdx = this.separationState.colorIndices[i];
-            this.separationState.colorIndices[i] = indexMapping.get(oldIdx);
-        }
-
-        this.separationState.palette = newPalette;
-        this.separationState.rgbPalette = newRgbPalette;
-
-        // Rebuild masks
+        // Rebuild masks (pruned colors get all-zero masks)
         await this._rebuildMasks();
-
     }
 
     /**
@@ -503,12 +489,14 @@ class ProxyEngine {
         let threshold = Math.round(thresholdPixels);
 
         // Scale threshold for proxy resolution.
-        // At 512px proxy, small clusters from full-res don't exist after
-        // bilinear downsampling. Scale by the linear downsample ratio so
-        // the visual effect is proportional to what the user expects.
+        // Despeckle removes connected components below a pixel-area threshold.
+        // Area scales as linearScale², so linear scaling overshoots badly
+        // (4px × 8 = 32px at proxy = 2048px equivalent at full-res).
+        // Use sqrt(linearScale) instead — scales by perimeter dimension,
+        // giving visible but non-destructive effect at proxy.
         if (this.sourceMetadata && this.sourceMetadata.originalWidth > width) {
             const linearScale = this.sourceMetadata.originalWidth / width;
-            threshold = Math.round(threshold * linearScale);
+            threshold = Math.round(threshold * Math.sqrt(linearScale));
         }
 
         for (let colorIdx = 0; colorIdx < this.separationState.masks.length; colorIdx++) {
@@ -597,19 +585,24 @@ class ProxyEngine {
     }
 
     /**
-     * Apply shadow clamp as local-density edge erosion.
+     * Apply shadow clamp as tonal-aware edge erosion.
      *
      * Binary masks (0/255) make traditional value-clamping a no-op.
      * Instead, reinterpret shadowClamp as: "pixels at thin edges below a
      * minimum local ink density can't hold on the screen mesh."
      *
      * For each mask pixel, compute the fraction of 8-connected neighbors
-     * sharing the same mask. If below threshold, zero the pixel.
-     * Then heal orphaned pixels via _healDespeckledPixels().
+     * sharing the same mask. If below a per-ink threshold, zero the pixel.
      *
-     * shadowClamp=0%  → threshold=0    → nothing removed
-     * shadowClamp=8%  → threshold≈0.24 → removes pixels with ≤1/8 same neighbors
-     * shadowClamp=20% → threshold≈0.6  → erodes ~1px from all edges
+     * Tonal modulation: light inks (high L) are harder to hold on the
+     * mesh and need more neighbor support. Dark inks (low L) grip better.
+     *   - Black ink (L=0):   threshold = base × 0.5 (tolerant)
+     *   - Mid ink (L=50):    threshold = base × 1.0 (normal)
+     *   - Light ink (L=100): threshold = base × 1.5 (aggressive)
+     *
+     * shadowClamp=0%  → nothing removed
+     * shadowClamp=10% → removes thin edges (light inks more aggressively)
+     * shadowClamp=40% → erodes ~1-2px from all edges
      *
      * @private
      */
@@ -618,12 +611,18 @@ class ProxyEngine {
             return;
         }
 
-        // Map 0-20% slider range onto 0-0.6 neighbor fraction (3× scale)
-        const threshold = (clampPercent / 100) * 3;
-        const { masks, width, height } = this.separationState;
+        // Map 0-40% slider range onto 0-1.2 base neighbor fraction (3× scale)
+        const baseThreshold = (clampPercent / 100) * 3;
+        const { masks, palette, width, height } = this.separationState;
 
         for (let c = 0; c < masks.length; c++) {
             const mask = masks[c];
+
+            // Tonal modulation: light inks erode more, dark inks less
+            const inkL = (palette[c] && palette[c].L !== undefined) ? palette[c].L : 50;
+            const lightnessBoost = inkL / 100;  // 0.0 (black) → 1.0 (white)
+            const threshold = baseThreshold * (0.5 + lightnessBoost);
+
             const toRemove = [];
 
             for (let y = 0; y < height; y++) {

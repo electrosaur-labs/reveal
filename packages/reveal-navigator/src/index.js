@@ -451,13 +451,29 @@ async function handleFinalize() {
     }
 }
 
-/** Dismiss the dialog after successful render. */
+/** Dismiss the dialog after successful render and reset UI for next invocation. */
 function _closeDialog() {
+    _resetFinalizeUI();
+    currentDocId = null;
+
     const dialog = document.getElementById('navigatorDialog');
     if (dialog) {
         try { dialog.close(); } catch (_) {}
     }
     dialogOpen = false;
+}
+
+/** Reset finalize-related UI elements to their initial state. */
+function _resetFinalizeUI() {
+    const btn = document.getElementById('btn-finalize');
+    const carouselEl = document.getElementById('carousel');
+    const progressEl = document.getElementById('finalize-progress');
+    if (btn) btn.disabled = false;
+    if (carouselEl) carouselEl.style.pointerEvents = '';
+    if (progressEl) {
+        progressEl.style.display = 'none';
+        progressEl.textContent = '';
+    }
 }
 
 // ─── Show Dialog (command entrypoint) ────────────────────
