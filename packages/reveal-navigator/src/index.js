@@ -456,15 +456,25 @@ async function handleFinalize() {
 function _closeDialog() {
     _resetFinalizeUI();
     currentDocId = null;
+    dialogOpen = false;
 
-    // Clear all session state so nothing persists into the next dialog open
-    if (sessionState) sessionState.reset();
-
+    // Close dialog FIRST — before reset, so the UI dismisses immediately
     const dialog = document.getElementById('navigatorDialog');
     if (dialog) {
-        try { dialog.close(); } catch (_) {}
+        try {
+            dialog.close('done');
+            logger.log('[Navigator] Dialog closed');
+        } catch (err) {
+            logger.log('[Navigator] dialog.close() failed: ' + err.message);
+        }
     }
-    dialogOpen = false;
+
+    // Clear session state after dialog is dismissed
+    try {
+        if (sessionState) sessionState.reset();
+    } catch (err) {
+        logger.log('[Navigator] reset() failed: ' + err.message);
+    }
 }
 
 /** Reset finalize-related UI elements to their initial state. */

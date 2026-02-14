@@ -42,21 +42,7 @@ class ProductionWorker {
     async execute() {
         const t0 = Date.now();
 
-        // ── Step 1: Read full-res pixels ──
-        this._onProgress(1, 4, 'Reading full-res pixels...');
-        logger.log('[ProductionWorker] Reading full-res document...');
-
-        const { labPixels, width, height } = await PhotoshopBridge.getDocumentLab();
-        const pixelCount = width * height;
-
-        logger.log(`[ProductionWorker] Got ${width}x${height} (${pixelCount} pixels)`);
-
-        // ── Step 2: Build production palette ──
-        this._onProgress(2, 4, 'Building palette...');
-
-        // Use exportProductionConfig — canonical source for palette (with
-        // overrides baked in) and all knob values. Ensures production
-        // render matches what the user approved in the proxy preview.
+        // Build production config BEFORE entering modal (no PS API needed)
         const prodConfig = this._sessionState.exportProductionConfig();
         const labPalette = prodConfig.palette;
         if (!labPalette || labPalette.length === 0) {
@@ -85,55 +71,91 @@ class ProductionWorker {
 
         logger.log(`[ProductionWorker] Palette: ${labPalette.length} colors (${hexColors.join(', ')})`);
 
-        // ── Step 3: Separate image using archetype's distance metric ──
-        this._onProgress(3, 4, 'Separating image...');
-
-        const state = prodConfig;
-        const tSep = Date.now();
         const metric = prodConfig.distanceMetric || 'cie76';
+        const self = this;
 
-        let colorIndices;
-        if (metric === 'cie76') {
-            // Fast synchronous nearest-neighbor in native 16-bit space
-            colorIndices = this._mapPixelsFast(labPixels, labPalette, pixelCount);
-        } else {
-            // Use SeparationEngine for CIE94/CIE2000 — matches proxy preview
-            logger.log(`[ProductionWorker] Using ${metric} (via SeparationEngine)`);
-            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-                labPixels, labPalette, null, width, height,
-                { ditherType: 'none', distanceMetric: metric }
+        // ── Single executeAsModal wraps the entire pipeline ──
+        // Cursor goes busy immediately on "Separate" click.
+        // Pixel read + separation + mask gen + layer creation all run inside.
+        const result = await core.executeAsModal(async (executionContext) => {
+            // ── Step 1: Read full-res pixels ──
+            self._onProgress(1, 4, 'Reading full-res pixels...');
+            logger.log('[ProductionWorker] Reading full-res document...');
+
+            const doc = app.activeDocument;
+            const docWidth = doc.width;
+            const docHeight = doc.height;
+
+            // Read pixels directly (no nested executeAsModal)
+            const pixelData = await imaging.getPixels({
+                documentID: doc.id,
+                componentSize: 8,
+                targetComponentCount: 3,
+                colorSpace: "Lab"
+            });
+
+            let rawPixels, actualWidth, actualHeight;
+            if (pixelData.imageData) {
+                actualWidth = pixelData.imageData.width;
+                actualHeight = pixelData.imageData.height;
+                rawPixels = await pixelData.imageData.getData({ chunky: true });
+            } else if (pixelData.pixels) {
+                actualWidth = docWidth;
+                actualHeight = docHeight;
+                rawPixels = pixelData.pixels;
+            } else {
+                throw new Error('Unexpected pixel data format');
+            }
+
+            // Upconvert 8-bit Lab → 16-bit
+            const labPixels = PhotoshopBridge.lab8to16(rawPixels);
+            const pixelCount = actualWidth * actualHeight;
+
+            logger.log(`[ProductionWorker] Got ${actualWidth}x${actualHeight} (${pixelCount} pixels)`);
+
+            // ── Step 2: Separate image ──
+            self._onProgress(2, 4, 'Separating image...');
+            const tSep = Date.now();
+
+            let colorIndices;
+            if (metric === 'cie76') {
+                colorIndices = self._mapPixelsFast(labPixels, labPalette, pixelCount);
+            } else {
+                logger.log(`[ProductionWorker] Using ${metric} (via SeparationEngine)`);
+                colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+                    labPixels, labPalette, null, actualWidth, actualHeight,
+                    { ditherType: 'none', distanceMetric: metric }
+                );
+            }
+
+            logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms (metric=${metric})`);
+
+            // Diagnostic: per-color pixel counts
+            const pixCounts = new Uint32Array(labPalette.length);
+            for (let i = 0; i < pixelCount; i++) pixCounts[colorIndices[i]]++;
+            for (let i = 0; i < labPalette.length; i++) {
+                const pct = ((pixCounts[i] / pixelCount) * 100).toFixed(2);
+                logger.log(`[ProductionWorker]   color[${i}] ${hexColors[i]}: ${pixCounts[i]} px (${pct}%)`);
+            }
+
+            // ── Step 3: Build masks ──
+            self._onProgress(3, 4, 'Building masks...');
+
+            const layers = self._buildLayers(
+                colorIndices, labPalette, hexColors,
+                actualWidth, actualHeight,
+                prodConfig.minVolume, prodConfig.shadowClamp, prodConfig.speckleRescue
             );
-        }
 
-        logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms (metric=${metric})`);
+            logger.log(`[ProductionWorker] Separation complete: ${layers.length} layers`);
 
-        // Diagnostic: per-color pixel counts
-        const pixCounts = new Uint32Array(labPalette.length);
-        for (let i = 0; i < pixelCount; i++) pixCounts[colorIndices[i]]++;
-        for (let i = 0; i < labPalette.length; i++) {
-            const pct = ((pixCounts[i] / pixelCount) * 100).toFixed(2);
-            logger.log(`[ProductionWorker]   color[${i}] ${hexColors[i]}: ${pixCounts[i]} px (${pct}%)`);
-        }
+            if (layers.length === 0) {
+                throw new Error('Separation produced no layers — check palette');
+            }
 
-        // Generate layers: mask per color + minVolume + shadowClamp + speckleRescue + skip empty
-        const layers = this._buildLayers(
-            colorIndices, labPalette, hexColors,
-            width, height,
-            state.minVolume, state.shadowClamp, state.speckleRescue
-        );
+            // ── Step 4: Create Photoshop layers ──
+            const is16bit = String(doc.bitsPerChannel).toLowerCase().includes('16') || doc.bitsPerChannel === 16;
 
-        logger.log(`[ProductionWorker] Separation complete: ${layers.length} layers`);
-
-        if (layers.length === 0) {
-            throw new Error('Separation produced no layers — check palette');
-        }
-
-        // ── Step 4: Create Photoshop layers ──
-        const doc = app.activeDocument;
-        const is16bit = String(doc.bitsPerChannel).toLowerCase().includes('16') || doc.bitsPerChannel === 16;
-
-        await core.executeAsModal(async (executionContext) => {
-            // Suspend history so all layer operations collapse into one undo step
             let suspensionID = null;
             try {
                 suspensionID = await executionContext.hostControl.suspendHistory({
@@ -146,13 +168,13 @@ class ProductionWorker {
 
             try {
                 for (let i = 0; i < layers.length; i++) {
-                    this._onProgress(4, 4, `Creating layer ${i + 1}/${layers.length}...`);
+                    self._onProgress(4, 4, `Creating layer ${i + 1}/${layers.length}...`);
                     logger.log(`[ProductionWorker] Creating layer ${i + 1}/${layers.length}: ${layers[i].name}`);
 
                     if (is16bit) {
-                        await this._createLayer16bit(layers[i]);
+                        await self._createLayer16bit(layers[i]);
                     } else {
-                        await this._createLayer8bit(layers[i]);
+                        await self._createLayer8bit(layers[i]);
                     }
                 }
 
@@ -171,14 +193,16 @@ class ProductionWorker {
                 }
                 throw err;
             }
+
+            return { layerCount: layers.length };
         }, {
             commandName: "Reveal"
         });
 
         const elapsedMs = Date.now() - t0;
-        logger.log(`[ProductionWorker] Done: ${layers.length} layers in ${elapsedMs}ms`);
+        logger.log(`[ProductionWorker] Done: ${result.layerCount} layers in ${elapsedMs}ms`);
 
-        return { layerCount: layers.length, elapsedMs };
+        return { layerCount: result.layerCount, elapsedMs };
     }
 
     // ─── Fast Pixel Mapping ──────────────────────────────────────
