@@ -72,8 +72,10 @@ class SessionState extends EventEmitter {
         this.currentConfig = null;          // Full config from ParameterGenerator
         this.previewBuffer = null;          // Current RGBA preview
         this.imageDNA = null;               // DNA v2.0 snapshot
-        this.imageWidth = 0;
+        this.imageWidth = 0;                // Proxy dimensions
         this.imageHeight = 0;
+        this.originalWidth = 0;             // Full document dimensions (for loupe coord mapping)
+        this.originalHeight = 0;
 
         // Snapshot of knob values from archetype config (for dirty detection)
         this._archetypeDefaults = null;
@@ -85,6 +87,10 @@ class SessionState extends EventEmitter {
 
         // Debounce timer
         this._debounceTimer = null;
+
+        // Concurrency guard: prevents overlapping triggerProxyUpdate calls
+        this._updateInFlight = false;
+        this._updateQueued = false;
     }
 
     /**
@@ -105,7 +111,11 @@ class SessionState extends EventEmitter {
         this.imageDNA = null;
         this.imageWidth = 0;
         this.imageHeight = 0;
+        this.originalWidth = 0;
+        this.originalHeight = 0;
         this._archetypeDefaults = null;
+        this._updateInFlight = false;
+        this._updateQueued = false;
         this.state.activeArchetypeId = null;
         this.state.isArchetypeDirty = false;
         this.state.isProcessing = false;
@@ -118,8 +128,11 @@ class SessionState extends EventEmitter {
     // ─── Lifecycle ───────────────────────────────────────────
 
     /**
-     * Load a new image into the session.
-     * Runs DNA analysis → config generation → proxy initialization.
+     * Load a new image into the session using progressive pulse architecture.
+     *
+     * Pulse 1 — Structural Lock (~50ms): DNA analysis → dnaReady event
+     * Pulse 2 — Best-Fit Preview (~400ms): Top-1 archetype → proxy → previewUpdated
+     * Pulse 3 — Lazy Ribbon (background): Score remaining 16 archetypes → carouselReady
      *
      * IMPORTANT: We do NOT copy labPixels — UXP's Uint16Array copy produces
      * stale all-white buffers. Instead, we use the original reference for the
@@ -130,46 +143,57 @@ class SessionState extends EventEmitter {
      * @param {Uint16Array} labPixels - 16-bit Lab pixel data (L,a,b triples)
      * @param {number} width
      * @param {number} height
+     * @param {number} [originalWidth] - Full document width (if PS GPU downsampled)
+     * @param {number} [originalHeight] - Full document height (if PS GPU downsampled)
      * @returns {Promise<Object>} Initial proxy result
      */
-    async loadImage(labPixels, width, height) {
+    async loadImage(labPixels, width, height, originalWidth, originalHeight) {
         this.imageWidth = width;
         this.imageHeight = height;
+        this.originalWidth = originalWidth || width;
+        this.originalHeight = originalHeight || height;
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
         this._tweakCache.clear();
 
-        // 1. DNA analysis — runs on the original live buffer
+        // ── Pulse 1: Structural Lock (~50ms) ──
+        // DNA analysis on the proxy-size buffer — instant radar + stats
         const dnaGen = new Reveal.DNAGenerator();
         this.imageDNA = dnaGen.generate(labPixels, width, height, { bitDepth: 16 });
-        logger.log(`[SessionState] DNA generated: dominant_sector=${this.imageDNA.dominant_sector}`);
+        logger.log(`[SessionState] Pulse 1: DNA generated (dominant_sector=${this.imageDNA.dominant_sector})`);
 
-        // 2. Generate config from DNA — BEFORE emitting imageLoaded so that
-        //    RadarHUD can read activeArchetypeId for the gold centroid polygon
-        this.currentConfig = Reveal.generateConfiguration(this.imageDNA);
+        this.emit('dnaReady', this.imageDNA);
+
+        // ── Pulse 2: Best-Fit Preview (~400ms) ──
+        // Score ONLY top-1 archetype, generate config, initialize proxy
+        const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
+        const mapper = new Reveal.ArchetypeMapper(archetypes);
+        const topMatch = mapper.getTopMatches(this.imageDNA, 1)[0];
+        logger.log(`[SessionState] Pulse 2: Top match = ${topMatch.id} (score=${topMatch.score.toFixed(0)})`);
+
+        this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
+            manualArchetypeId: topMatch.id
+        });
         this._applyConfigToState(this.currentConfig);
-        // Backfill engineType: archetype doesn't define it, state has the correct default
         if (!this.currentConfig.engineType) {
             this.currentConfig.engineType = this.state.engineType;
         }
-        logger.log(`[SessionState] Config generated: archetype=${this.currentConfig.id || 'unknown'}`);
 
         this.emit('imageLoaded', { width, height, dna: this.imageDNA });
         this.emit('configChanged', this.currentConfig);
 
-        // 3. Initialize ProxyEngine — pass the live buffer directly
-        //    ProxyEngine.initializeProxy() downsamples to 512px internally
-        //    and stores the result in this.proxyEngine.proxyBuffer
+        // Initialize ProxyEngine — pass the live buffer directly.
+        // If Photoshop GPU already downsampled to proxy size,
+        // ProxyEngine will skip redundant _downsampleBilinear().
         this.proxyEngine = new Reveal.ProxyEngine();
         const proxyResult = await this.proxyEngine.initializeProxy(
             labPixels, width, height, this.currentConfig
         );
 
-        logger.log(`[SessionState] Initial posterize: ${proxyResult.palette.length} colors, ${proxyResult.dimensions.width}x${proxyResult.dimensions.height} in ${proxyResult.elapsedMs.toFixed(0)}ms`);
+        logger.log(`[SessionState] Pulse 2: Posterized ${proxyResult.palette.length} colors, ${proxyResult.dimensions.width}x${proxyResult.dimensions.height} in ${proxyResult.elapsedMs.toFixed(0)}ms`);
         this.emit('proxyReady', proxyResult);
 
-        // Apply knobs (speckleRescue, shadowClamp, minVolume) with explicit state values.
-        // This ensures the initial preview is consistent with subsequent slider updates.
+        // Apply knobs (speckleRescue, shadowClamp, minVolume) with explicit state values
         const knobResult = await this.proxyEngine.updateProxy({
             minVolume: this.state.minVolume,
             speckleRescue: this.state.speckleRescue,
@@ -180,7 +204,6 @@ class SessionState extends EventEmitter {
         this.state.proxyBufferReady = true;
         this.state.isProcessing = false;
 
-        // Emit previewUpdated so carousel swatches refresh with correct palette
         const initialAccuracy = this.calculateCurrentAccuracy();
         this.emit('previewUpdated', {
             previewBuffer: knobResult.previewBuffer,
@@ -191,7 +214,26 @@ class SessionState extends EventEmitter {
             accuracyDeltaE: initialAccuracy
         });
 
+        // ── Pulse 3: Lazy Ribbon (background) ──
+        // Score remaining 16 archetypes and emit carouselReady
+        setTimeout(() => this._populateRemainingArchetypes(topMatch), 10);
+
         return proxyResult;
+    }
+
+    /**
+     * Background task: score all remaining archetypes and emit carouselReady.
+     * Called via setTimeout from loadImage so UI is already interactive.
+     * @private
+     */
+    _populateRemainingArchetypes(topMatch) {
+        try {
+            const scores = this.getAllArchetypeScores();
+            logger.log(`[SessionState] Pulse 3: Scored all ${scores.length} archetypes`);
+            this.emit('carouselReady', { scores, topMatchId: topMatch.id });
+        } catch (err) {
+            logger.log(`[SessionState] Pulse 3 failed: ${err.message}`);
+        }
     }
 
     // ─── Knob Reset ─────────────────────────────────────────
@@ -311,11 +353,23 @@ class SessionState extends EventEmitter {
      * Execute a proxy update. Chooses fast path (mechanical knob)
      * or slow path (structural re-posterize) based on what changed.
      *
+     * Concurrency guard: if an update is already in flight, queue one
+     * re-run instead of overlapping. This prevents race conditions
+     * where a stale posterization overwrites a fresh one.
+     *
      * @returns {Promise<Object>} Updated preview data
      */
     async triggerProxyUpdate() {
         if (!this.proxyEngine) return null;
 
+        // Concurrency guard: if already running, queue a re-run
+        if (this._updateInFlight) {
+            this._updateQueued = true;
+            logger.log(`[SessionState] triggerProxyUpdate: queued (in-flight)`);
+            return null;
+        }
+
+        this._updateInFlight = true;
         this.state.isProcessing = true;
         this.emit('processingStart');
 
@@ -364,6 +418,15 @@ class SessionState extends EventEmitter {
             logger.log(`[SessionState] Proxy update FAILED: ${err.message}\n${err.stack}`);
             this.emit('error', err);
             return null;
+        } finally {
+            this._updateInFlight = false;
+
+            // If another update was queued while we were running, run it now
+            if (this._updateQueued) {
+                this._updateQueued = false;
+                logger.log(`[SessionState] triggerProxyUpdate: draining queued update`);
+                this.triggerProxyUpdate();
+            }
         }
     }
 
@@ -674,6 +737,10 @@ class SessionState extends EventEmitter {
             vibrancyBoost: this.state.vibrancyBoost,
             paletteReduction: this.state.paletteReduction,
 
+            // Preprocessing & dithering (must match proxy for preview=production)
+            preprocessingIntensity: this.currentConfig ? this.currentConfig.preprocessingIntensity : 'off',
+            ditherType: this.currentConfig ? this.currentConfig.ditherType : 'none',
+
             // Mechanical knobs
             minVolume: this.state.minVolume,
             speckleRescue: this.state.speckleRescue,
@@ -751,6 +818,25 @@ class SessionState extends EventEmitter {
     /** Returns the current RGBA preview buffer. */
     getPreview() {
         return this.previewBuffer;
+    }
+
+    /**
+     * Map proxy pixel coordinates to full-resolution document coordinates.
+     * Used by Loupe to convert preview mouse position → PS sourceBounds.
+     *
+     * @param {number} proxyX - X coordinate in proxy image space
+     * @param {number} proxyY - Y coordinate in proxy image space
+     * @returns {{x: number, y: number}} Document pixel coordinates
+     */
+    getDocumentCoords(proxyX, proxyY) {
+        const proxyW = this.proxyEngine ? this.proxyEngine.separationState.width : this.imageWidth;
+        const proxyH = this.proxyEngine ? this.proxyEngine.separationState.height : this.imageHeight;
+        const scaleX = this.originalWidth / proxyW;
+        const scaleY = this.originalHeight / proxyH;
+        return {
+            x: Math.round(proxyX * scaleX),
+            y: Math.round(proxyY * scaleY)
+        };
     }
 
     /**

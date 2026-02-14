@@ -124,6 +124,66 @@ class PhotoshopBridge {
     }
 
     /**
+     * Read a native-resolution tile from the active document.
+     * Used by Loupe for 1:1 pixel inspection of a small region.
+     *
+     * @param {{left: number, top: number, right: number, bottom: number}} rect - Document pixel bounds
+     * @returns {Promise<{labPixels: Uint16Array, width: number, height: number}>}
+     */
+    static async getTileLab(rect) {
+        const doc = app.activeDocument;
+        if (!doc) {
+            throw new Error('No active document');
+        }
+
+        // Clamp to document bounds
+        const left = Math.max(0, rect.left);
+        const top = Math.max(0, rect.top);
+        const right = Math.min(doc.width, rect.right);
+        const bottom = Math.min(doc.height, rect.bottom);
+
+        if (right <= left || bottom <= top) {
+            throw new Error('Tile rect is outside document bounds');
+        }
+
+        const getPixelsArgs = {
+            documentID: doc.id,
+            componentSize: 8,
+            targetComponentCount: 3,
+            colorSpace: "Lab",
+            sourceBounds: { left, top, right, bottom }
+        };
+
+        const pixelData = await core.executeAsModal(async () => {
+            return await imaging.getPixels(getPixelsArgs);
+        }, { commandName: "Navigator: Read Tile Pixels" });
+
+        let rawPixels, actualWidth, actualHeight;
+
+        if (pixelData.imageData) {
+            actualWidth = pixelData.imageData.width;
+            actualHeight = pixelData.imageData.height;
+            rawPixels = await core.executeAsModal(async () => {
+                return await pixelData.imageData.getData({ chunky: true });
+            }, { commandName: "Navigator: Extract Tile Data" });
+        } else if (pixelData.pixels) {
+            actualWidth = right - left;
+            actualHeight = bottom - top;
+            rawPixels = pixelData.pixels;
+        } else {
+            throw new Error('Unexpected pixel data format from imaging.getPixels');
+        }
+
+        const lab16 = PhotoshopBridge.lab8to16(rawPixels);
+
+        return {
+            labPixels: lab16,
+            width: actualWidth,
+            height: actualHeight
+        };
+    }
+
+    /**
      * Convert 8-bit Lab encoding to 16-bit Lab encoding.
      *
      * 8-bit:  L 0-255 (→0-100), a/b 0-255 (128=neutral, →-128..+127)

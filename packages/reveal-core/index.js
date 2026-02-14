@@ -24,6 +24,7 @@ const DNAGenerator = require('./lib/analysis/DNAGenerator');
 const ArchetypeMapper = require('./lib/analysis/ArchetypeMapper');
 const ArchetypeLoader = require('./lib/analysis/ArchetypeLoader');
 const PeakFinder = require('./lib/analysis/PeakFinder');
+const MechanicalKnobs = require('./lib/engines/MechanicalKnobs');
 const logger = require('./lib/utils/logger');
 
 /**
@@ -416,7 +417,10 @@ module.exports.engines = {
     ArchetypeLoader: ArchetypeLoader,
 
     // Reveal Mk 1.5 - Identity Peak Detection
-    PeakFinder: PeakFinder
+    PeakFinder: PeakFinder,
+
+    // Mechanical Knobs - Shared post-separation mask processing (v2.3)
+    MechanicalKnobs: MechanicalKnobs
 };
 
 // Export LabDistance at top level for convenient access
@@ -439,3 +443,6 @@ module.exports.ProxyEngine = ProxyEngine;
 
 // Export PeakFinder at top level for convenient access (Reveal Mk 1.5)
 module.exports.PeakFinder = PeakFinder;
+
+// Export MechanicalKnobs at top level for shared knob processing
+module.exports.MechanicalKnobs = MechanicalKnobs;

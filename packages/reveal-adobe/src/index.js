@@ -305,6 +305,32 @@ async function showDialog() {
                         tuning: tuning  // Now defined!
                     };
 
+                    // ═══ DIAGNOSTIC: Full posterize config dump ═══
+                    console.log(`\n═══ [reveal-adobe] POSTERIZE PARAMS ═══`);
+                    console.log(`  Image: ${pixelData.width}×${pixelData.height}, format=${pixelData.format}, bitDepth=${pixelData.bitDepth}`);
+                    console.log(`  targetColors: ${colorCount}`);
+                    console.log(`  engineType: ${params.engineType}`);
+                    console.log(`  centroidStrategy: ${params.centroidStrategy}`);
+                    console.log(`  distanceMetric: ${params.distanceMetric}`);
+                    console.log(`  enableHueGapAnalysis: ${params.enableHueGapAnalysis}`);
+                    console.log(`  enablePaletteReduction: ${params.enablePaletteReduction}`);
+                    console.log(`  paletteReduction: ${params.paletteReduction}`);
+                    console.log(`  densityFloor: ${params.densityFloor}`);
+                    console.log(`  snapThreshold: ${params.snapThreshold}`);
+                    console.log(`  preservedUnifyThreshold: ${params.preservedUnifyThreshold}`);
+                    console.log(`  preserveWhite: ${params.preserveWhite}, preserveBlack: ${params.preserveBlack}`);
+                    console.log(`  substrateMode: ${params.substrateMode}, substrateTolerance: ${params.substrateTolerance}`);
+                    console.log(`  vibrancyMode: ${params.vibrancyMode}, vibrancyBoost: ${params.vibrancyBoost}`);
+                    console.log(`  highlightThreshold: ${params.highlightThreshold}, highlightBoost: ${params.highlightBoost}`);
+                    console.log(`  lWeight: ${params.lWeight}, cWeight: ${params.cWeight}, blackBias: ${params.blackBias}`);
+                    console.log(`  isolationThreshold: ${params.isolationThreshold}`);
+                    console.log(`  hueLockAngle: ${params.hueLockAngle}, shadowPoint: ${params.shadowPoint}`);
+                    console.log(`  tuning.split: ${JSON.stringify(tuning.split)}`);
+                    console.log(`  tuning.prune: ${JSON.stringify(tuning.prune)}`);
+                    console.log(`  tuning.centroid: ${JSON.stringify(tuning.centroid)}`);
+                    console.log(`  archetype: ${params.meta?.archetype || 'unknown'} (id=${params.meta?.archetypeId || params.id || 'unknown'})`);
+                    console.log(`═══ END reveal-adobe PARAMS ═══\n`);
+
                     const result = PosterizationEngine.posterize(
                         pixelData.pixels,
                         pixelData.width,
@@ -338,6 +364,17 @@ async function showDialog() {
                             previewStride: parseInt(document.getElementById('previewStride')?.value || '4', 10)  // User-selected stride (4=Standard, 2=Fine, 1=Finest)
                         }
                     );
+
+                    // ═══ DIAGNOSTIC: Posterize result ═══
+                    if (result.paletteLab) {
+                        console.log(`\n═══ [reveal-adobe] POSTERIZE RESULT: ${result.paletteLab.length} colors ═══`);
+                        result.paletteLab.forEach((lab, i) => {
+                            const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
+                            const H = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
+                            console.log(`  [${i}] L=${lab.L.toFixed(1)} a=${lab.a.toFixed(1)} b=${lab.b.toFixed(1)} C=${C.toFixed(1)} H=${H.toFixed(0)}°`);
+                        });
+                        console.log(`═══ END reveal-adobe RESULT ═══\n`);
+                    }
 
                     const hexColors = PosterizationEngine.paletteToHex(result.palette);
 

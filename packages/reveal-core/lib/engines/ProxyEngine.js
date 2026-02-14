@@ -17,6 +17,7 @@ const PosterizationEngine = require('./PosterizationEngine');
 const SeparationEngine = require('./SeparationEngine');
 const PreviewEngine = require('./PreviewEngine');
 const BilateralFilter = require('../preprocessing/BilateralFilter');
+const MechanicalKnobs = require('./MechanicalKnobs');
 
 class ProxyEngine {
     static PROXY_SIZE = 800; // Fixed resolution for long edge
@@ -39,9 +40,22 @@ class ProxyEngine {
     async initializeProxy(labPixels, width, height, initialConfig) {
         const startTime = performance.now();
 
-        // 1. Bilinear downsample to 800px
-        const { buffer: proxyBuffer, width: proxyW, height: proxyH } =
-            this._downsampleBilinear(labPixels, width, height);
+        // 1. Downsample to 800px (long edge) — skip if input already at proxy size
+        //    When Photoshop GPU handles downsampling via targetSize, the input
+        //    arrives pre-sized and redundant bilinear is wasteful.
+        let proxyBuffer, proxyW, proxyH;
+        const longEdge = Math.max(width, height);
+        if (longEdge <= ProxyEngine.PROXY_SIZE) {
+            // Already at or below proxy size — use input directly
+            proxyBuffer = labPixels;
+            proxyW = width;
+            proxyH = height;
+        } else {
+            const result = this._downsampleBilinear(labPixels, width, height);
+            proxyBuffer = result.buffer;
+            proxyW = result.width;
+            proxyH = result.height;
+        }
 
         // 2. Bilateral filter preprocessing (matches reveal-adobe pipeline)
         const preprocessingIntensity = initialConfig.preprocessingIntensity || 'auto';
@@ -55,9 +69,13 @@ class ProxyEngine {
 
         this.proxyBuffer = proxyBuffer;
 
-        // Proxy-safe config:
-        // - format: 'lab' — CRITICAL: input is 16-bit Lab, not RGB
-        // - Disable aggressive merging that collapses palette at 800px
+        // Proxy-safe config: disable snap/prune/densityFloor to prevent palette
+        // collapse at proxy resolution. Even at 800px, CIE94/CIE2000 archetypes
+        // with enablePaletteReduction=true can merge minority colors (e.g. green
+        // on the Jethro image). Production uses the locked proxy palette (no
+        // re-posterization), so these overrides don't cause preview-vs-production
+        // divergence.
+        // format: 'lab' is CRITICAL — input is 16-bit Lab, not RGB.
         const proxyConfig = {
             ...initialConfig,
             format: 'lab',
@@ -66,6 +84,32 @@ class ProxyEngine {
             densityFloor: 0,
             preservedUnifyThreshold: 0.5
         };
+
+        // ═══ DIAGNOSTIC: Full posterize config dump ═══
+        console.log(`\n═══ [ProxyEngine.initializeProxy] POSTERIZE PARAMS ═══`);
+        console.log(`  Image: ${proxyW}×${proxyH} (from ${width}×${height}), format=${proxyConfig.format}, bitDepth=${proxyConfig.bitDepth}`);
+        console.log(`  targetColors: ${proxyConfig.targetColors}`);
+        console.log(`  engineType: ${proxyConfig.engineType}`);
+        console.log(`  centroidStrategy: ${proxyConfig.centroidStrategy}`);
+        console.log(`  distanceMetric: ${proxyConfig.distanceMetric}`);
+        console.log(`  enableHueGapAnalysis: ${proxyConfig.enableHueGapAnalysis}`);
+        console.log(`  enablePaletteReduction: ${proxyConfig.enablePaletteReduction}`);
+        console.log(`  paletteReduction: ${proxyConfig.paletteReduction}`);
+        console.log(`  densityFloor: ${proxyConfig.densityFloor}`);
+        console.log(`  snapThreshold: ${proxyConfig.snapThreshold}`);
+        console.log(`  preservedUnifyThreshold: ${proxyConfig.preservedUnifyThreshold}`);
+        console.log(`  preserveWhite: ${proxyConfig.preserveWhite}, preserveBlack: ${proxyConfig.preserveBlack}`);
+        console.log(`  substrateMode: ${proxyConfig.substrateMode}, substrateTolerance: ${proxyConfig.substrateTolerance}`);
+        console.log(`  vibrancyMode: ${proxyConfig.vibrancyMode}, vibrancyBoost: ${proxyConfig.vibrancyBoost}`);
+        console.log(`  highlightThreshold: ${proxyConfig.highlightThreshold}, highlightBoost: ${proxyConfig.highlightBoost}`);
+        console.log(`  lWeight: ${proxyConfig.lWeight}, cWeight: ${proxyConfig.cWeight}, blackBias: ${proxyConfig.blackBias}`);
+        console.log(`  isolationThreshold: ${proxyConfig.isolationThreshold}`);
+        console.log(`  hueLockAngle: ${proxyConfig.hueLockAngle}, shadowPoint: ${proxyConfig.shadowPoint}`);
+        console.log(`  tuning: ${proxyConfig.tuning ? JSON.stringify(proxyConfig.tuning) : 'NONE (using flat params)'}`);
+        console.log(`  archetype: ${proxyConfig.name || 'unknown'} (id=${proxyConfig.id || 'unknown'})`);
+        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, enablePaletteReduction=false, densityFloor=0, preservedUnifyThreshold=0.5`);
+        console.log(`═══ END ProxyEngine.initializeProxy PARAMS ═══\n`);
+
         const posterizeResult = await PosterizationEngine.posterize(
             proxyBuffer,
             proxyW,
@@ -74,6 +118,16 @@ class ProxyEngine {
             proxyConfig
         );
 
+        // ═══ DIAGNOSTIC: Posterize result ═══
+        if (posterizeResult.paletteLab) {
+            console.log(`\n═══ [ProxyEngine.initializeProxy] POSTERIZE RESULT: ${posterizeResult.paletteLab.length} colors ═══`);
+            posterizeResult.paletteLab.forEach((lab, i) => {
+                const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
+                const H = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
+                console.log(`  [${i}] L=${lab.L.toFixed(1)} a=${lab.a.toFixed(1)} b=${lab.b.toFixed(1)} C=${C.toFixed(1)} H=${H.toFixed(0)}°`);
+            });
+            console.log(`═══ END ProxyEngine.initializeProxy RESULT ═══\n`);
+        }
 
         // 3. Run separation - get color indices
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -155,7 +209,7 @@ class ProxyEngine {
         const proxyW = this.separationState.width;
         const proxyH = this.separationState.height;
 
-        // Proxy-safe config (same rationale as initializeProxy)
+        // Proxy-safe overrides (same as initializeProxy — prevent palette collapse)
         const proxyConfig = {
             ...config,
             format: 'lab',
@@ -164,6 +218,32 @@ class ProxyEngine {
             densityFloor: 0,
             preservedUnifyThreshold: 0.5
         };
+
+        // ═══ DIAGNOSTIC: Full posterize config dump ═══
+        console.log(`\n═══ [ProxyEngine.rePosterize] POSTERIZE PARAMS ═══`);
+        console.log(`  Image: ${proxyW}×${proxyH}, format=${proxyConfig.format}, bitDepth=${proxyConfig.bitDepth}`);
+        console.log(`  targetColors: ${proxyConfig.targetColors}`);
+        console.log(`  engineType: ${proxyConfig.engineType}`);
+        console.log(`  centroidStrategy: ${proxyConfig.centroidStrategy}`);
+        console.log(`  distanceMetric: ${proxyConfig.distanceMetric}`);
+        console.log(`  enableHueGapAnalysis: ${proxyConfig.enableHueGapAnalysis}`);
+        console.log(`  enablePaletteReduction: ${proxyConfig.enablePaletteReduction}`);
+        console.log(`  paletteReduction: ${proxyConfig.paletteReduction}`);
+        console.log(`  densityFloor: ${proxyConfig.densityFloor}`);
+        console.log(`  snapThreshold: ${proxyConfig.snapThreshold}`);
+        console.log(`  preservedUnifyThreshold: ${proxyConfig.preservedUnifyThreshold}`);
+        console.log(`  preserveWhite: ${proxyConfig.preserveWhite}, preserveBlack: ${proxyConfig.preserveBlack}`);
+        console.log(`  substrateMode: ${proxyConfig.substrateMode}, substrateTolerance: ${proxyConfig.substrateTolerance}`);
+        console.log(`  vibrancyMode: ${proxyConfig.vibrancyMode}, vibrancyBoost: ${proxyConfig.vibrancyBoost}`);
+        console.log(`  highlightThreshold: ${proxyConfig.highlightThreshold}, highlightBoost: ${proxyConfig.highlightBoost}`);
+        console.log(`  lWeight: ${proxyConfig.lWeight}, cWeight: ${proxyConfig.cWeight}, blackBias: ${proxyConfig.blackBias}`);
+        console.log(`  isolationThreshold: ${proxyConfig.isolationThreshold}`);
+        console.log(`  hueLockAngle: ${proxyConfig.hueLockAngle}, shadowPoint: ${proxyConfig.shadowPoint}`);
+        console.log(`  tuning: ${proxyConfig.tuning ? JSON.stringify(proxyConfig.tuning) : 'NONE (using flat params)'}`);
+        console.log(`  archetype: ${proxyConfig.name || 'unknown'} (id=${proxyConfig.id || 'unknown'})`);
+        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, enablePaletteReduction=false, densityFloor=0, preservedUnifyThreshold=0.5`);
+        console.log(`═══ END ProxyEngine.rePosterize PARAMS ═══\n`);
+
         const posterizeResult = await PosterizationEngine.posterize(
             this.proxyBuffer,
             proxyW,
@@ -171,6 +251,17 @@ class ProxyEngine {
             proxyConfig.targetColors,
             proxyConfig
         );
+
+        // ═══ DIAGNOSTIC: Posterize result ═══
+        if (posterizeResult.paletteLab) {
+            console.log(`\n═══ [ProxyEngine.rePosterize] POSTERIZE RESULT: ${posterizeResult.paletteLab.length} colors ═══`);
+            posterizeResult.paletteLab.forEach((lab, i) => {
+                const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
+                const H = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
+                console.log(`  [${i}] L=${lab.L.toFixed(1)} a=${lab.a.toFixed(1)} b=${lab.b.toFixed(1)} C=${C.toFixed(1)} H=${H.toFixed(0)}°`);
+            });
+            console.log(`═══ END ProxyEngine.rePosterize RESULT ═══\n`);
+        }
 
         // 2. Separation
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -410,261 +501,43 @@ class ProxyEngine {
     }
 
     /**
-     * Apply minVolume pruning (palette reduction)
+     * Apply minVolume pruning — delegates to MechanicalKnobs.
      * @private
      */
     async _applyMinVolume(minVolumePercent) {
-        const totalPixels = this.separationState.width * this.separationState.height;
-        const minPixels = Math.round(totalPixels * minVolumePercent / 100);
+        const { palette, colorIndices, width, height } = this.separationState;
+        const pixelCount = width * height;
 
-        // Count pixels per color
-        const colorCounts = new Array(this.separationState.palette.length).fill(0);
-        for (let i = 0; i < this.separationState.colorIndices.length; i++) {
-            colorCounts[this.separationState.colorIndices[i]]++;
-        }
-
-        // Identify colors below threshold
-        const weakIndices = [];
-        colorCounts.forEach((count, idx) => {
-            if (count < minPixels && count > 0) {
-                weakIndices.push(idx);
-            }
-        });
-
-        if (weakIndices.length === 0) return;
-
-        // Remap weak colors to nearest strong colors
-        const strongIndices = [];
-        for (let i = 0; i < this.separationState.palette.length; i++) {
-            if (!weakIndices.includes(i) && colorCounts[i] > 0) {
-                strongIndices.push(i);
-            }
-        }
-
-        if (strongIndices.length === 0) return;
-
-        // Build remapping table
-        const remapTable = new Array(this.separationState.palette.length);
-        for (let i = 0; i < remapTable.length; i++) {
-            remapTable[i] = i; // Identity by default
-        }
-
-        // Remap weak to nearest strong
-        for (const weakIdx of weakIndices) {
-            const weakColor = this.separationState.palette[weakIdx];
-            let nearestStrongIdx = strongIndices[0];
-            let minDist = Infinity;
-
-            for (const strongIdx of strongIndices) {
-                const strongColor = this.separationState.palette[strongIdx];
-                const dL = weakColor.L - strongColor.L;
-                const da = weakColor.a - strongColor.a;
-                const db = weakColor.b - strongColor.b;
-                const dist = dL * dL + da * da + db * db;
-
-                if (dist < minDist) {
-                    minDist = dist;
-                    nearestStrongIdx = strongIdx;
-                }
-            }
-
-            remapTable[weakIdx] = nearestStrongIdx;
-        }
-
-        // Remap color indices — DON'T compact palette.
-        // Palette array stays the same length with the same indices so that
-        // palette overrides (keyed by baseline index) remain valid.
-        // PaletteSurgeon already hides zero-coverage swatches.
-        for (let i = 0; i < this.separationState.colorIndices.length; i++) {
-            const oldIdx = this.separationState.colorIndices[i];
-            this.separationState.colorIndices[i] = remapTable[oldIdx];
-        }
+        MechanicalKnobs.applyMinVolume(colorIndices, palette, pixelCount, minVolumePercent);
 
         // Rebuild masks (pruned colors get all-zero masks)
         await this._rebuildMasks();
     }
 
     /**
-     * Apply speckle rescue (connected component despeckle).
-     * Removes isolated clusters smaller than threshold pixels.
-     * Uses the same SeparationEngine._despeckleMask as production.
+     * Apply speckle rescue — delegates to MechanicalKnobs.
+     * Passes originalWidth for proxy-aware threshold scaling.
      * @private
      */
     async _applySpeckleRescue(thresholdPixels) {
-        if (thresholdPixels === 0) {
-            return;
-        }
-
-        const { width, height } = this.separationState;
-        let threshold = Math.round(thresholdPixels);
-
-        // Scale threshold for proxy resolution.
-        // Despeckle removes connected components below a pixel-area threshold.
-        // Area scales as linearScale², so linear scaling overshoots badly
-        // (4px × 8 = 32px at proxy = 2048px equivalent at full-res).
-        // Use sqrt(linearScale) instead — scales by perimeter dimension,
-        // giving visible but non-destructive effect at proxy.
-        if (this.sourceMetadata && this.sourceMetadata.originalWidth > width) {
-            const linearScale = this.sourceMetadata.originalWidth / width;
-            threshold = Math.round(threshold * Math.sqrt(linearScale));
-        }
-
-        for (let colorIdx = 0; colorIdx < this.separationState.masks.length; colorIdx++) {
-            SeparationEngine._despeckleMask(
-                this.separationState.masks[colorIdx],
-                width, height, threshold
-            );
-        }
-
-        // Heal orphaned pixels: despeckle zeroed out mask entries but
-        // colorIndices still points to the old color, so the preview
-        // falls back to the original — making despeckle invisible.
-        // BFS-fill orphans from the nearest non-orphan neighbor so
-        // despeckled pixels absorb into the surrounding color.
-        this._healDespeckledPixels();
-    }
-
-    /**
-     * BFS fill orphaned pixels (mask zeroed by despeckle) from surrounding colors.
-     * O(pixelCount) — each pixel visited at most twice.
-     * @private
-     */
-    _healDespeckledPixels() {
         const { masks, colorIndices, width, height } = this.separationState;
-        const pixelCount = width * height;
-        const numColors = masks.length;
+        const originalWidth = this.sourceMetadata && this.sourceMetadata.originalWidth;
 
-        // Mark orphaned pixels (their assigned mask was zeroed)
-        const isOrphan = new Uint8Array(pixelCount);
-        let orphanCount = 0;
-
-        for (let i = 0; i < pixelCount; i++) {
-            const ci = colorIndices[i];
-            if (ci >= numColors || masks[ci][i] === 0) {
-                isOrphan[i] = 1;
-                orphanCount++;
-            }
-        }
-
-        if (orphanCount === 0) return;
-
-        // Seed BFS queue with non-orphan pixels adjacent to at least one orphan
-        const queue = new Uint32Array(pixelCount);
-        let head = 0;
-        let tail = 0;
-
-        for (let i = 0; i < pixelCount; i++) {
-            if (isOrphan[i]) continue;
-            const x = i % width;
-            const y = (i - x) / width;
-            let adjacent = false;
-            for (let dy = -1; dy <= 1 && !adjacent; dy++) {
-                for (let dx = -1; dx <= 1 && !adjacent; dx++) {
-                    if (dx === 0 && dy === 0) continue;
-                    const nx = x + dx, ny = y + dy;
-                    if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                        if (isOrphan[ny * width + nx]) adjacent = true;
-                    }
-                }
-            }
-            if (adjacent) queue[tail++] = i;
-        }
-
-        // BFS: spread non-orphan colors into orphan gaps
-        while (head < tail) {
-            const i = queue[head++];
-            const ci = colorIndices[i];
-            const x = i % width;
-            const y = (i - x) / width;
-
-            for (let dy = -1; dy <= 1; dy++) {
-                for (let dx = -1; dx <= 1; dx++) {
-                    if (dx === 0 && dy === 0) continue;
-                    const nx = x + dx, ny = y + dy;
-                    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-                    const ni = ny * width + nx;
-                    if (isOrphan[ni]) {
-                        colorIndices[ni] = ci;
-                        masks[ci][ni] = 255;
-                        isOrphan[ni] = 0;
-                        queue[tail++] = ni;
-                    }
-                }
-            }
-        }
+        MechanicalKnobs.applySpeckleRescue(
+            masks, colorIndices, width, height, thresholdPixels, originalWidth
+        );
     }
 
     /**
-     * Apply shadow clamp as tonal-aware edge erosion.
-     *
-     * Binary masks (0/255) make traditional value-clamping a no-op.
-     * Instead, reinterpret shadowClamp as: "pixels at thin edges below a
-     * minimum local ink density can't hold on the screen mesh."
-     *
-     * For each mask pixel, compute the fraction of 8-connected neighbors
-     * sharing the same mask. If below a per-ink threshold, zero the pixel.
-     *
-     * Tonal modulation: light inks (high L) are harder to hold on the
-     * mesh and need more neighbor support. Dark inks (low L) grip better.
-     *   - Black ink (L=0):   threshold = base × 0.5 (tolerant)
-     *   - Mid ink (L=50):    threshold = base × 1.0 (normal)
-     *   - Light ink (L=100): threshold = base × 1.5 (aggressive)
-     *
-     * shadowClamp=0%  → nothing removed
-     * shadowClamp=10% → removes thin edges (light inks more aggressively)
-     * shadowClamp=40% → erodes ~1-2px from all edges
-     *
+     * Apply shadow clamp — delegates to MechanicalKnobs.
      * @private
      */
     async _applyShadowClamp(clampPercent) {
-        if (clampPercent === 0) {
-            return;
-        }
+        const { masks, colorIndices, palette, width, height } = this.separationState;
 
-        // Map 0-40% slider range onto 0-1.2 base neighbor fraction (3× scale)
-        const baseThreshold = (clampPercent / 100) * 3;
-        const { masks, palette, width, height } = this.separationState;
-
-        for (let c = 0; c < masks.length; c++) {
-            const mask = masks[c];
-
-            // Tonal modulation: light inks erode more, dark inks less
-            const inkL = (palette[c] && palette[c].L !== undefined) ? palette[c].L : 50;
-            const lightnessBoost = inkL / 100;  // 0.0 (black) → 1.0 (white)
-            const threshold = baseThreshold * (0.5 + lightnessBoost);
-
-            const toRemove = [];
-
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const i = y * width + x;
-                    if (mask[i] === 0) continue;
-
-                    let same = 0, total = 0;
-                    for (let dy = -1; dy <= 1; dy++) {
-                        for (let dx = -1; dx <= 1; dx++) {
-                            if (dx === 0 && dy === 0) continue;
-                            const nx = x + dx, ny = y + dy;
-                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                total++;
-                                if (mask[ny * width + nx] > 0) same++;
-                            }
-                        }
-                    }
-
-                    if (same / total < threshold) {
-                        toRemove.push(i);
-                    }
-                }
-            }
-
-            for (const idx of toRemove) {
-                mask[idx] = 0;
-            }
-        }
-
-        // Heal orphaned pixels (absorb eroded edges into surrounding color)
-        this._healDespeckledPixels();
+        MechanicalKnobs.applyShadowClamp(
+            masks, colorIndices, palette, width, height, clampPercent
+        );
     }
 
     /**

@@ -23,6 +23,7 @@ const PhotoshopBridge = require("./PhotoshopBridge");
 
 const logger = Reveal.logger;
 const SeparationEngine = Reveal.engines.SeparationEngine;
+const MechanicalKnobs = Reveal.MechanicalKnobs;
 
 class ProductionWorker {
 
@@ -54,6 +55,7 @@ class ProductionWorker {
         logger.log(`[ProductionWorker]   archetype: ${prodConfig.activeArchetypeId}`);
         logger.log(`[ProductionWorker]   distanceMetric: ${prodConfig.distanceMetric}`);
         logger.log(`[ProductionWorker]   targetColors: ${prodConfig.targetColors}`);
+        logger.log(`[ProductionWorker]   preprocessing: ${prodConfig.preprocessingIntensity}, dither: ${prodConfig.ditherType}`);
         logger.log(`[ProductionWorker]   knobs: minVol=${prodConfig.minVolume} spkl=${prodConfig.speckleRescue} shd=${prodConfig.shadowClamp}`);
         logger.log(`[ProductionWorker]   paletteOverrides: ${JSON.stringify(prodConfig.paletteOverrides)}`);
         for (let i = 0; i < labPalette.length; i++) {
@@ -113,18 +115,31 @@ class ProductionWorker {
 
             logger.log(`[ProductionWorker] Got ${actualWidth}x${actualHeight} (${pixelCount} pixels)`);
 
+            // ── Step 1b: Bilateral filter (matches proxy preprocessing) ──
+            const preprocessing = prodConfig.preprocessingIntensity || 'off';
+            if (preprocessing !== 'off') {
+                const BilateralFilter = Reveal.BilateralFilter;
+                const isHeavy = preprocessing === 'heavy';
+                const radius = isHeavy ? 5 : 3;
+                const sigmaR = 5000; // 16-bit Lab space
+                const tBilateral = Date.now();
+                BilateralFilter.applyBilateralFilterLab(labPixels, actualWidth, actualHeight, radius, sigmaR);
+                logger.log(`[ProductionWorker] Bilateral filter (${preprocessing}, r=${radius}) in ${Date.now() - tBilateral}ms`);
+            }
+
             // ── Step 2: Separate image ──
             self._onProgress(2, 4, 'Separating image...');
             const tSep = Date.now();
+            const ditherType = prodConfig.ditherType || 'none';
 
             let colorIndices;
-            if (metric === 'cie76') {
+            if (metric === 'cie76' && ditherType === 'none') {
                 colorIndices = self._mapPixelsFast(labPixels, labPalette, pixelCount);
             } else {
-                logger.log(`[ProductionWorker] Using ${metric} (via SeparationEngine)`);
+                logger.log(`[ProductionWorker] Using ${metric}, dither=${ditherType} (via SeparationEngine)`);
                 colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
                     labPixels, labPalette, null, actualWidth, actualHeight,
-                    { ditherType: 'none', distanceMetric: metric }
+                    { ditherType, distanceMetric: metric }
                 );
             }
 
@@ -205,6 +220,86 @@ class ProductionWorker {
         return { layerCount: result.layerCount, elapsedMs };
     }
 
+    // ─── Loupe Tile Rendering ─────────────────────────────────────
+    // Renders a small native-resolution tile for 1:1 loupe inspection.
+    // Uses the locked palette and current knobs — no re-posterization.
+
+    /**
+     * Render a high-res separation for a specific tile (loupe ROI).
+     * Reads native-res pixels from PS, maps to locked palette, applies knobs,
+     * returns RGBA preview buffer.
+     *
+     * @param {{left: number, top: number, right: number, bottom: number}} rect - Document bounds
+     * @returns {Promise<{buffer: Uint8ClampedArray, width: number, height: number}>}
+     */
+    async renderLoupeTile(rect) {
+        const labPalette = this._sessionState.getPalette();
+        if (!labPalette || labPalette.length === 0) {
+            throw new Error('No palette available for loupe');
+        }
+
+        const { labPixels, width, height } = await PhotoshopBridge.getTileLab(rect);
+        const pixelCount = width * height;
+
+        // Bilateral filter preprocessing — matches the proxy pipeline so loupe
+        // colors look consistent with the main preview (no raw noise artifacts).
+        // Uses the same radius=3, sigmaR=5000 as ProxyEngine.initializeProxy.
+        const BilateralFilter = Reveal.BilateralFilter;
+        if (BilateralFilter) {
+            BilateralFilter.applyBilateralFilterLab(labPixels, width, height, 3, 5000);
+        }
+
+        // Map pixels using locked palette — fast CIE76 inline
+        const metric = this._sessionState.getState().distanceMetric || 'cie76';
+        let colorIndices;
+        if (metric === 'cie76') {
+            colorIndices = this._mapPixelsFast(labPixels, labPalette, pixelCount);
+        } else {
+            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+                labPixels, labPalette, null, width, height,
+                { ditherType: 'none', distanceMetric: metric }
+            );
+        }
+
+        // Apply knobs using shared MechanicalKnobs (same as _buildLayers and ProxyEngine)
+        const state = this._sessionState.getState();
+
+        if (state.minVolume > 0) {
+            MechanicalKnobs.applyMinVolume(colorIndices, labPalette, pixelCount, state.minVolume);
+        }
+
+        // Build masks from (possibly remapped) color indices
+        const masks = MechanicalKnobs.rebuildMasks(colorIndices, labPalette.length, pixelCount);
+
+        // Loupe tiles are native resolution — no originalWidth scaling needed
+        if (state.speckleRescue > 0) {
+            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, state.speckleRescue);
+        }
+
+        if (state.shadowClamp > 0) {
+            MechanicalKnobs.applyShadowClamp(masks, colorIndices, labPalette, width, height, state.shadowClamp);
+        }
+
+        // Generate RGBA preview from masks + colorIndices
+        const PosterizationEngine = Reveal.engines.PosterizationEngine;
+        const rgbPalette = labPalette.map(c => PosterizationEngine.labToRgb(c));
+        const buffer = new Uint8ClampedArray(pixelCount * 4);
+        for (let i = 0; i < pixelCount; i++) {
+            const idx = i * 4;
+            const ci = colorIndices[i];
+            if (ci < rgbPalette.length) {
+                buffer[idx]     = rgbPalette[ci].r;
+                buffer[idx + 1] = rgbPalette[ci].g;
+                buffer[idx + 2] = rgbPalette[ci].b;
+            } else {
+                buffer[idx] = buffer[idx+1] = buffer[idx+2] = 255;
+            }
+            buffer[idx + 3] = 255;
+        }
+
+        return { buffer, width, height };
+    }
+
     // ─── Fast Pixel Mapping ──────────────────────────────────────
     // Inline CIE76 in native 16-bit space. No async, no string hash,
     // no per-pixel conversion. Spatial locality + early exit.
@@ -268,76 +363,33 @@ class ProductionWorker {
         const pixelCount = width * height;
         const MIN_COVERAGE = 0.001; // 0.1%
 
-        // Apply minVolume: remap weak-color pixels to nearest strong neighbor.
-        // Matches ProxyEngine._applyMinVolume behavior so production output
-        // matches the proxy preview (same plates pruned).
+        // ── Apply minVolume (shared with ProxyEngine) ──
         if (minVolume > 0) {
-            const minPixels = Math.round(pixelCount * minVolume / 100);
-            const colorCounts = new Uint32Array(labPalette.length);
-            for (let i = 0; i < pixelCount; i++) {
-                colorCounts[colorIndices[i]]++;
-            }
-
-            const weakIndices = [];
-            const strongIndices = [];
-            for (let i = 0; i < labPalette.length; i++) {
-                if (colorCounts[i] > 0 && colorCounts[i] < minPixels) {
-                    weakIndices.push(i);
-                } else if (colorCounts[i] > 0) {
-                    strongIndices.push(i);
-                }
-            }
-
-            if (weakIndices.length > 0 && strongIndices.length > 0) {
-                const remapTable = new Uint8Array(labPalette.length);
-                for (let i = 0; i < remapTable.length; i++) remapTable[i] = i;
-
-                for (const weakIdx of weakIndices) {
-                    const wc = labPalette[weakIdx];
-                    let nearestIdx = strongIndices[0];
-                    let minDist = Infinity;
-                    for (const strongIdx of strongIndices) {
-                        const sc = labPalette[strongIdx];
-                        const dL = wc.L - sc.L;
-                        const da = wc.a - sc.a;
-                        const db = wc.b - sc.b;
-                        const dist = dL * dL + da * da + db * db;
-                        if (dist < minDist) {
-                            minDist = dist;
-                            nearestIdx = strongIdx;
-                        }
-                    }
-                    remapTable[weakIdx] = nearestIdx;
-                }
-
-                for (let i = 0; i < pixelCount; i++) {
-                    colorIndices[i] = remapTable[colorIndices[i]];
-                }
-
-                logger.log(`[ProductionWorker] minVolume: remapped ${weakIndices.length} weak colors`);
+            const result = MechanicalKnobs.applyMinVolume(colorIndices, labPalette, pixelCount, minVolume);
+            if (result.remappedCount > 0) {
+                logger.log(`[ProductionWorker] minVolume: remapped ${result.remappedCount} weak colors`);
             }
         }
 
+        // Build masks from (possibly remapped) color indices
+        const masks = MechanicalKnobs.rebuildMasks(colorIndices, labPalette.length, pixelCount);
+
+        // ── Apply speckleRescue (shared with ProxyEngine) ──
+        // No originalWidth scaling — production runs at full document resolution
+        if (speckleRescue > 0) {
+            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, speckleRescue);
+        }
+
+        // ── Apply shadowClamp (shared with ProxyEngine) ──
+        // Uses tonal-aware edge erosion (same algorithm as proxy preview)
+        if (shadowClamp > 0) {
+            MechanicalKnobs.applyShadowClamp(masks, colorIndices, labPalette, width, height, shadowClamp);
+        }
+
+        // Build layer objects, skipping empty layers
         for (let idx = 0; idx < labPalette.length; idx++) {
-            // Generate binary mask
-            const mask = SeparationEngine.generateLayerMask(colorIndices, idx, width, height);
+            const mask = masks[idx];
 
-            // Apply shadowClamp
-            if (shadowClamp > 0) {
-                const clampThreshold = Math.round(shadowClamp * 255 / 100);
-                for (let i = 0; i < mask.length; i++) {
-                    if (mask[i] > 0 && mask[i] < clampThreshold) {
-                        mask[i] = clampThreshold;
-                    }
-                }
-            }
-
-            // Apply speckleRescue (morphological despeckle)
-            if (speckleRescue > 0) {
-                SeparationEngine._despeckleMask(mask, width, height, Math.round(speckleRescue));
-            }
-
-            // Count coverage
             let opaqueCount = 0;
             for (let i = 0; i < mask.length; i++) {
                 if (mask[i] === 255) opaqueCount++;

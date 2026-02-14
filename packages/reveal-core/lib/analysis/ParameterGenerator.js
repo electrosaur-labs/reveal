@@ -55,7 +55,8 @@ class DynamicConfigurator {
         this._applyChromaGate(params, dna);
 
         // 3. Set bit depth metadata for distance metric selection
-        const bitDepth = dna.bitDepth || 8;
+        // DNAGenerator stores bitDepth in metadata.bitDepth, not at top level
+        const bitDepth = dna.bitDepth || (dna.metadata && dna.metadata.bitDepth) || 8;
 
         // 4. Configure preprocessing (conditional based on image entropy)
         const preprocessingIntensity = options.preprocessingIntensity || params.preprocessingIntensity || 'auto';
@@ -83,6 +84,15 @@ class DynamicConfigurator {
             // Identity
             id: archetype.id,
             name: archetype.name,
+
+            // NOTE: bitDepth is intentionally NOT included here.
+            // PosterizationEngine defaults to 8-bit thresholds (brown-dampener active,
+            // neutrality gate at 5.0). The Navigator reads PS pixels at componentSize:8
+            // (UXP limitation) and upconverts to 16-bit encoding, but the data has 8-bit
+            // precision. Passing bitDepth:16 disables the brown-dampener and causes
+            // 8-bit quantization noise to contaminate centroids (green→yellow regression).
+            // Callers with true 16-bit source data (e.g. reveal-batch reading PSD files)
+            // should pass bitDepth explicitly in options.
 
             // Core parameters from archetype (FIXED - no overrides)
             targetColors: params.targetColorsSlider || params.targetColors || 10,
@@ -131,8 +141,8 @@ class DynamicConfigurator {
             maskProfile: params.maskProfile || 'Gray Gamma 2.2',
 
             // Engine selection
-            engineType: params.engineType,
-            centroidStrategy: params.centroidStrategy,
+            engineType: params.engineType || 'reveal-mk1.5',
+            centroidStrategy: params.centroidStrategy || 'SALIENCY',
 
             // Neutral clamping (DNA v2.0 feature)
             neutralCentroidClampThreshold: params.neutralCentroidClampThreshold || 0.5,

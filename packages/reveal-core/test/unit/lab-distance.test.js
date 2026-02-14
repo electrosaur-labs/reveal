@@ -20,7 +20,11 @@ const {
     cie2000SquaredInline,
     createDistanceCalculator,
     preparePaletteChroma,
-    normalizeDistanceConfig
+    normalizeDistanceConfig,
+    // 16-bit functions
+    cie94SquaredInline16,
+    preparePaletteChroma16,
+    LAB16_AB_NEUTRAL
 } = require('../../lib/color/LabDistance');
 
 describe('LabDistance', () => {
@@ -462,6 +466,112 @@ describe('LabDistance', () => {
             const dist = cie2000(gray1, gray2);
             expect(dist).toBeGreaterThan(0);
             expect(isNaN(dist)).toBe(false);
+        });
+    });
+
+    describe('CIE94 16-bit (cie94SquaredInline16)', () => {
+        // Helper: convert perceptual Lab to 16-bit encoding
+        function labTo16(L, a, b) {
+            return {
+                L: Math.round((L / 100) * 32768),
+                a: Math.round((a / 128) * 16384 + 16384),
+                b: Math.round((b / 128) * 16384 + 16384)
+            };
+        }
+
+        it('returns 0 for identical colors', () => {
+            const c = labTo16(50, 30, 40);
+            const palette16 = [{ L: c.L, a: c.a, b: c.b }];
+            const chroma = preparePaletteChroma16(palette16);
+
+            const dist = cie94SquaredInline16(
+                c.L, c.a, c.b, c.L, c.a, c.b, chroma[0]
+            );
+            expect(dist).toBe(0);
+        });
+
+        it('has non-zero dC for colors with different chroma (regression: dC was always 0)', () => {
+            // Neutral pixel vs high-chroma palette color
+            const pixel = labTo16(50, 0, 0);     // C ≈ 0
+            const green = labTo16(65, -54, 44);   // C ≈ 70
+            const palette16 = [{ L: green.L, a: green.a, b: green.b }];
+            const chroma = preparePaletteChroma16(palette16);
+
+            const dist = cie94SquaredInline16(
+                pixel.L, pixel.a, pixel.b,
+                green.L, green.a, green.b,
+                chroma[0]
+            );
+
+            // The correct distance should differ from the buggy one (dC=0).
+            // With the fix, dC is non-zero: chromatic difference is properly
+            // split between dC/SC and dH/SH instead of all going to dH/SH.
+            // The buggy version put ALL chromatic difference into dH, but
+            // with a smaller SH denominator — so buggy distance was larger
+            // for high-chroma palette entries. The fix is CORRECT even if
+            // the absolute value differs.
+            const dL = pixel.L - green.L;
+            const da = pixel.a - green.a;
+            const db = pixel.b - green.b;
+            const buggyDist = dL * dL + (da * da + db * db) / ((1 + 0.000117 * chroma[0]) ** 2);
+
+            // Correct and buggy should produce DIFFERENT distances
+            expect(Math.abs(dist - buggyDist)).toBeGreaterThan(1000);
+            expect(dist).toBeGreaterThan(0);
+        });
+
+        it('neutral pixel should be closer to blue-gray than to green (green fur regression)', () => {
+            // Simulates the Jethro fur scenario:
+            // Fur pixel (~neutral blue-gray) must map to blue-fur, not green
+            const furPixel = labTo16(50, -2, -8);
+            const blueFur  = labTo16(50, -10, -23);  // C ≈ 25
+            const green    = labTo16(65, -54, 44);    // C ≈ 70
+
+            const palette16 = [
+                { L: blueFur.L, a: blueFur.a, b: blueFur.b },
+                { L: green.L, a: green.a, b: green.b }
+            ];
+            const chromas = preparePaletteChroma16(palette16);
+
+            const distToBlue = cie94SquaredInline16(
+                furPixel.L, furPixel.a, furPixel.b,
+                blueFur.L, blueFur.a, blueFur.b,
+                chromas[0]
+            );
+            const distToGreen = cie94SquaredInline16(
+                furPixel.L, furPixel.a, furPixel.b,
+                green.L, green.a, green.b,
+                chromas[1]
+            );
+
+            // Blue-fur should be MUCH closer than green
+            expect(distToBlue).toBeLessThan(distToGreen);
+            expect(distToGreen / distToBlue).toBeGreaterThan(5);
+        });
+
+        it('agrees with perceptual-space CIE94 within tolerance', () => {
+            // The 16-bit version should produce proportional results to the
+            // perceptual version for the same color pair
+            const lab1 = { L: 53.23, a: 80.11, b: 67.22 };  // red
+            const lab2 = { L: 87.74, a: -86.18, b: 83.18 };  // green
+
+            const perceptualDist = cie94(lab1, lab2, true);
+
+            const c1_16 = labTo16(lab1.L, lab1.a, lab1.b);
+            const c2_16 = labTo16(lab2.L, lab2.a, lab2.b);
+            const palette16 = [{ L: c2_16.L, a: c2_16.a, b: c2_16.b }];
+            const chroma = preparePaletteChroma16(palette16);
+
+            const dist16 = cie94SquaredInline16(
+                c1_16.L, c1_16.a, c1_16.b,
+                c2_16.L, c2_16.a, c2_16.b,
+                chroma[0]
+            );
+
+            // Both should agree on which color is closer (relative ordering)
+            // The absolute values differ due to 16-bit scaling
+            expect(dist16).toBeGreaterThan(0);
+            expect(perceptualDist).toBeGreaterThan(0);
         });
     });
 

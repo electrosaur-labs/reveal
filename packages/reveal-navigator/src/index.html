@@ -568,6 +568,58 @@
             color: #888;
         }
 
+        /* ─── Loupe Overlay ─── */
+        #loupe-container {
+            display: none;
+            position: absolute;
+            width: 256px;
+            height: 256px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 2px solid rgba(77, 166, 255, 0.7);
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        #loupe-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            image-rendering: pixelated;
+        }
+
+        #loupe-coords {
+            position: absolute;
+            bottom: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            color: #ccc;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 1px 6px;
+            border-radius: 8px;
+            white-space: nowrap;
+        }
+
+        #btn-loupe {
+            background: none;
+            border: 1px solid #555;
+            color: #aaa;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            margin-left: 4px;
+        }
+
+        #btn-loupe:hover { background: #505050; color: #ddd; }
+        #btn-loupe.active {
+            background: #2d3545;
+            border-color: #4da6ff;
+            color: #8bb8e8;
+        }
+
         /* ─── Error Overlay ─── */
         #error-overlay {
             display: none;
@@ -631,6 +683,7 @@
             <div id="doc-header">
                 <span id="doc-name">No document</span>
                 <span id="doc-layer"></span>
+                <button id="btn-loupe" title="Toggle 1:1 Loupe">1:1</button>
                 <button id="btn-sync" title="Re-sync from canvas">&#x21bb;</button>
             </div>
 
@@ -639,6 +692,11 @@
                 <img id="preview-img" style="display:none;" />
                 <div id="preview-placeholder">Open a Lab document to begin navigation.</div>
                 <div id="archetype-badge"></div>
+                <!-- 1:1 Loupe overlay (hidden until activated) -->
+                <div id="loupe-container">
+                    <img id="loupe-img" />
+                    <span id="loupe-coords"></span>
+                </div>
             </div>
 
             <!-- Stats panel -->
@@ -669,7 +727,7 @@
 
             <!-- Finalize Flight Plan -->
             <div id="finalize-row" style="display:none;">
-                <sp-action-button id="btn-finalize" variant="accent">Separate</sp-action-button>
+                <sp-action-button id="btn-finalize" variant="accent">Commit to Press</sp-action-button>
                 <div id="finalize-progress"></div>
                 <div id="finalize-summary"></div>
             </div>

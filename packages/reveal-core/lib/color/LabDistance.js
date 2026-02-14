@@ -556,30 +556,30 @@ function cie76WeightedSquaredInline16(L1, a1, b1, L2, a2, b2, shadowThreshold16 
  * @param {number} L2 - Second color L (0-32768)
  * @param {number} a2 - Second color a (0-32768, 16384=neutral)
  * @param {number} b2 - Second color b (0-32768, 16384=neutral)
- * @param {number} C1 - Pre-computed chroma of first color (in 16-bit units)
+ * @param {number} C_ref - Pre-computed chroma of reference/palette color (L2,a2,b2) in 16-bit units
  * @param {number} k1_16 - Scaled k1 coefficient (default: 0.000352)
  * @param {number} k2_16 - Scaled k2 coefficient (default: 0.000117)
  * @returns {number} - Squared CIE94 distance in 16-bit² units
  */
-function cie94SquaredInline16(L1, a1, b1, L2, a2, b2, C1, k1_16 = 0.000352, k2_16 = 0.000117) {
+function cie94SquaredInline16(L1, a1, b1, L2, a2, b2, C_ref, k1_16 = 0.000352, k2_16 = 0.000117) {
     const dL = L1 - L2;
     const da = a1 - a2;
     const db = b1 - b2;
 
-    // Chroma of second color (offset from neutral)
-    const a2off = a2 - LAB16_AB_NEUTRAL;
-    const b2off = b2 - LAB16_AB_NEUTRAL;
-    const C2 = Math.sqrt(a2off * a2off + b2off * b2off);
+    // Chroma of test/pixel color (L1, a1, b1) — offset from neutral
+    const a1off = a1 - LAB16_AB_NEUTRAL;
+    const b1off = b1 - LAB16_AB_NEUTRAL;
+    const C_test = Math.sqrt(a1off * a1off + b1off * b1off);
 
-    // Chroma difference
-    const dC = C1 - C2;
+    // Chroma difference (reference − test)
+    const dC = C_ref - C_test;
 
     // Hue difference squared (derived from dH² = da² + db² - dC²)
     const dHSquared = Math.max(0, da * da + db * db - dC * dC);
 
-    // Weighting factors (using C1 as reference)
-    const SC = 1 + k1_16 * C1;
-    const SH = 1 + k2_16 * C1;
+    // Weighting factors (using reference/palette chroma per CIE94 spec)
+    const SC = 1 + k1_16 * C_ref;
+    const SH = 1 + k2_16 * C_ref;
 
     // Weighted components
     const dLterm = dL;           // SL = 1
@@ -590,9 +590,10 @@ function cie94SquaredInline16(L1, a1, b1, L2, a2, b2, C1, k1_16 = 0.000352, k2_1
 }
 
 /**
- * Pre-computes 16-bit chroma values for a Lab palette
+ * Pre-computes 16-bit chroma values for a Lab palette (reference chromas).
  *
- * Chroma is computed as distance from neutral (16384) in a/b space.
+ * Used by cie94SquaredInline16 as C_ref — the reference chroma for SC/SH
+ * denominators per CIE94 spec. The pixel (test) chroma is computed inline.
  *
  * @param {Array<{L, a, b}>} labPalette16 - Lab palette in 16-bit values
  * @returns {Float32Array} - Pre-computed chroma values in 16-bit units

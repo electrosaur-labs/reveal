@@ -30,5 +30,7 @@
     "type": "git",
     "url": "https://github.com/electrosaur-labs/reveal-project.git"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "utif2": "^4.1.0"
+  }
 }

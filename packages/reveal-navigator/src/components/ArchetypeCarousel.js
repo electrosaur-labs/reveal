@@ -36,7 +36,10 @@ class ArchetypeCarousel {
     }
 
     _bindEvents() {
-        this._session.on('proxyReady', () => this._rebuild());
+        // Pulse 2: proxyReady fires with top-1 match visible — show only active card
+        this._session.on('proxyReady', () => this._rebuildTopOnly());
+        // Pulse 3: carouselReady fires from background — populate remaining cards
+        this._session.on('carouselReady', () => this._rebuild());
         this._session.on('archetypeChanged', (data) => {
             this._activeId = data.archetypeId;
             this._updateActiveCard();
@@ -54,6 +57,26 @@ class ArchetypeCarousel {
         this._session.on('knobsCustomizedChanged', (data) => {
             this._updateCustomizedBadge(data.customized);
         });
+    }
+
+    /**
+     * Show only the active (top-1) card during Pulse 2 — before full scores are available.
+     * Remaining cards are populated later by _rebuild() when carouselReady fires.
+     */
+    _rebuildTopOnly() {
+        const state = this._session.getState();
+        this._activeId = state.activeArchetypeId;
+        if (!this._activeId) return;
+
+        const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
+        const archetype = archetypes.find(a => a.id === this._activeId);
+        if (!archetype) return;
+
+        // Show single active card with score=0 placeholder (real score comes in Pulse 3)
+        this._container.innerHTML = '';
+        const card = this._createCard({ id: this._activeId, score: 0, breakdown: null }, archetype);
+        card.classList.add('active');
+        this._container.appendChild(card);
     }
 
     /**

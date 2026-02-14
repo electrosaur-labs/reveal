@@ -17,6 +17,7 @@ const ArchetypeCarousel = require("./components/ArchetypeCarousel");
 const RadarHUD = require("./components/RadarHUD");
 const MechanicalKnobs = require("./components/MechanicalKnobs");
 const PaletteSurgeon = require("./components/PaletteSurgeon");
+const Loupe = require("./components/Loupe");
 
 const logger = Reveal.logger;
 
@@ -26,6 +27,7 @@ let carousel = null;
 let radar = null;
 let knobs = null;
 let surgeon = null;
+let loupe = null;
 let isIngesting = false;
 let isProductionRunning = false;
 let currentDocId = null;    // Track which document we've ingested
@@ -98,6 +100,30 @@ function initPlugin() {
             logger.log('[Navigator] PaletteSurgeon init failed: ' + err.message);
         }
 
+        // Wire Loupe component (non-fatal)
+        try {
+            loupe = new Loupe(
+                document.getElementById('loupe-container'),
+                document.getElementById('loupe-img'),
+                document.getElementById('loupe-coords'),
+                document.getElementById('preview-img'),
+                sessionState
+            );
+        } catch (err) {
+            logger.log('[Navigator] Loupe init failed: ' + err.message);
+        }
+
+        // Wire Loupe toggle button
+        const btnLoupe = document.getElementById('btn-loupe');
+        if (btnLoupe) {
+            btnLoupe.addEventListener('click', () => {
+                if (loupe) {
+                    loupe.toggle();
+                    btnLoupe.classList.toggle('active', loupe.isActive);
+                }
+            });
+        }
+
         // Wire Reset Archetype button (master knob reset)
         const btnReset = document.getElementById('btn-reset-archetype');
         if (btnReset) {
@@ -125,7 +151,30 @@ function initPlugin() {
             });
         }
 
-        // Show dominant sector in HUD info
+        // Pulse 1: dnaReady fires ~50ms after ingest — update radar + DNA stats immediately
+        sessionState.on('dnaReady', (dna) => {
+            const sectorEl = document.getElementById('dominant-sector');
+            if (sectorEl && dna && dna.dominant_sector) {
+                sectorEl.textContent = `Dominant: ${dna.dominant_sector}`;
+            }
+            // Refresh radar HUD immediately with DNA data
+            if (radar) {
+                try { radar.render(); } catch (_) {}
+            }
+            // Show DNA stats immediately
+            updateDNADisplay();
+        });
+
+        // Pulse 3: carouselReady fires in background after top-1 preview is visible
+        sessionState.on('carouselReady', (data) => {
+            if (carousel) {
+                try { carousel._rebuild(); } catch (err) {
+                    logger.log('[Navigator] Carousel lazy rebuild failed: ' + err.message);
+                }
+            }
+        });
+
+        // Show dominant sector in HUD info (kept for backward compat with imageLoaded)
         sessionState.on('imageLoaded', (data) => {
             const sectorEl = document.getElementById('dominant-sector');
             if (sectorEl && data.dna && data.dna.dominant_sector) {
@@ -195,10 +244,16 @@ function initPlugin() {
             btnFinalize.addEventListener('click', () => handleFinalize());
         }
 
-        // Escape key → deselect Palette Surgeon
+        // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && surgeon) {
                 surgeon.deselect();
+            }
+            // Z key → toggle 1:1 Loupe
+            if ((e.key === 'z' || e.key === 'Z') && loupe && !e.ctrlKey && !e.metaKey) {
+                loupe.toggle();
+                const btnLoupeEl = document.getElementById('btn-loupe');
+                if (btnLoupeEl) btnLoupeEl.classList.toggle('active', loupe.isActive);
             }
         });
 
@@ -308,7 +363,12 @@ async function ingestActiveDocument(showDialog) {
         updateDocumentHeader(validation.info);
         setStatus('Reading pixels...');
 
-        const { labPixels, width, height } = await PhotoshopBridge.getDocumentLab();
+        // Read full-res pixels — ProxyEngine handles downsampling internally.
+        // (PS GPU downsampling via targetSize was tested but loses minority color
+        // signals like green on the Jethro image. The bilinear in ProxyEngine
+        // preserves these better. TODO: investigate PS GPU downsample quality.)
+        const { labPixels, width, height, originalWidth, originalHeight } =
+            await PhotoshopBridge.getDocumentLab();
         logger.log(`[Navigator] Ingested ${width}x${height} from ${validation.info.name}`);
 
         setStatus('Analyzing DNA...');
@@ -455,6 +515,7 @@ async function handleFinalize() {
 /** Dismiss the dialog after successful render and reset UI for next invocation. */
 function _closeDialog() {
     _resetFinalizeUI();
+    if (loupe) loupe.destroy();
     currentDocId = null;
     dialogOpen = false;
 
