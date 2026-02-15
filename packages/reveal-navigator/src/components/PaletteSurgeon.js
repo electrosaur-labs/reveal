@@ -120,6 +120,16 @@ class PaletteSurgeon {
             dot.className = 'surgeon-override-dot';
             if (isOverridden) dot.classList.add('visible');
 
+            // ── Deleted swatch styling (Alt+click delete) ──
+            const isDeleted = this._session.deletedColors.has(i);
+            if (isDeleted) {
+                swatch.classList.add('surgeon-deleted');
+                const xBadge = document.createElement('span');
+                xBadge.className = 'surgeon-delete-badge';
+                xBadge.textContent = '\u2715';
+                colorBlock.appendChild(xBadge);
+            }
+
             // ── Merge badge ("+N" on target swatches that absorbed others) ──
             const mergedSources = this._session.mergeHistory.get(i);
             const mergeCount = mergedSources ? mergedSources.size : 0;
@@ -158,7 +168,7 @@ class PaletteSurgeon {
             // ── Click handler — reads index from DOM ──
             swatch.onclick = (e) => {
                 const idx = parseInt(e.currentTarget.dataset.index);
-                this._onSwatchClick(idx, e.shiftKey);
+                this._onSwatchClick(idx, e.shiftKey, e.altKey);
             };
 
             // ── Hover — lightweight highlight when IDLE ──
@@ -182,8 +192,14 @@ class PaletteSurgeon {
 
     // ─── Click ───────────────────────────────────────────────
 
-    _onSwatchClick(i, shiftKey) {
+    _onSwatchClick(i, shiftKey, altKey) {
         if (this._pickerOpen) return;
+
+        // Alt+click → delete swatch (merge into nearest neighbor)
+        if (altKey) {
+            this._onDeleteSwatch(i);
+            return;
+        }
 
         const now = Date.now();
 
@@ -225,10 +241,26 @@ class PaletteSurgeon {
             this._selectedIndex = i;
             this._state = 'SELECTED';
             this._session.setHighlight(i);
-            this._header.textContent = 'Shift+click another to merge \u2022 Double-click to edit color';
+            this._header.textContent = 'Shift+click merge \u2022 Alt+click delete \u2022 Double-click edit';
         }
 
         this._updateSelectionCSS();
+    }
+
+    // ─── Delete Swatch ─────────────────────────────────────────
+
+    _onDeleteSwatch(i) {
+        // Reset selection state
+        this._state = 'IDLE';
+        this._selectedIndex = -1;
+        this._session.clearHighlight();
+        this._header.textContent = 'Click a color to isolate';
+        this._updateSelectionCSS();
+
+        logger.log(`[Surgeon] DELETE swatch ${i} (alt+click)`);
+        this._session.deletePaletteColor(i).catch(err => {
+            logger.log(`[PaletteSurgeon] Delete failed: ${err.message}`);
+        });
     }
 
     // ─── Color Picker ────────────────────────────────────────

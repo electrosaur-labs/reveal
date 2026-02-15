@@ -68,6 +68,7 @@ class SessionState extends EventEmitter {
         // Separate from reactive state
         this.paletteOverrides = new Map();  // colorIndex → {L, a, b}
         this.mergeHistory = new Map();      // targetIndex → Set<sourceIndex>
+        this.deletedColors = new Set();     // colorIndex values deleted via Alt+click
         this.proxyEngine = null;
         this.currentConfig = null;          // Full config from ParameterGenerator
         this.previewBuffer = null;          // Current RGBA preview
@@ -107,6 +108,7 @@ class SessionState extends EventEmitter {
         }
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
+        this.deletedColors.clear();
         this._tweakCache.clear();
         this._paletteGeneration = 0;
         this.proxyEngine = null;
@@ -162,6 +164,7 @@ class SessionState extends EventEmitter {
         this.originalHeight = originalHeight || height;
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
+        this.deletedColors.clear();
         this._tweakCache.clear();
 
         // ── Pulse 1: DNA + score all archetypes (~51ms) ──
@@ -420,6 +423,7 @@ class SessionState extends EventEmitter {
                 this._rebuildConfigFromState();
                 this.paletteOverrides.clear();
                 this.mergeHistory.clear();
+                this.deletedColors.clear();
                 this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
                 result = await this.proxyEngine.rePosterize(this.currentConfig);
                 this.state.isArchetypeDirty = false;
@@ -509,6 +513,7 @@ class SessionState extends EventEmitter {
         this.state.isArchetypeDirty = false;
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
+        this.deletedColors.clear();
 
         // Reset decision support state on archetype swap
         this.state.highlightColorIndex = -1;
@@ -669,9 +674,10 @@ class SessionState extends EventEmitter {
      * @returns {Promise<Object|null>} Updated preview data, or null if not overridden
      */
     async revertPaletteColor(colorIndex) {
-        if (!this.paletteOverrides.has(colorIndex)) return null;
+        if (!this.paletteOverrides.has(colorIndex) && !this.deletedColors.has(colorIndex)) return null;
 
         this.paletteOverrides.delete(colorIndex);
+        this.deletedColors.delete(colorIndex);
 
         // Clean up merge history: remove this source from whichever target absorbed it
         for (const [target, sources] of this.mergeHistory) {
@@ -698,6 +704,52 @@ class SessionState extends EventEmitter {
         this._emitPreviewUpdated(result);
 
         return result;
+    }
+
+    /**
+     * Delete a palette color by merging it into the nearest remaining color.
+     * Uses CIE76 squared distance to find the closest live neighbor.
+     *
+     * @param {number} colorIndex - Palette index to delete
+     * @returns {Promise<Object>} Updated preview data
+     */
+    async deletePaletteColor(colorIndex) {
+        const palette = this._buildOverriddenPalette();
+        if (!palette || colorIndex >= palette.length) {
+            throw new Error(`Invalid palette index: ${colorIndex}`);
+        }
+
+        // Collect dead indices (merge sources + already deleted) to skip
+        const dead = new Set(this.deletedColors);
+        for (const sources of this.mergeHistory.values()) {
+            for (const s of sources) dead.add(s);
+        }
+        dead.add(colorIndex);  // the one we're about to delete
+
+        // Find nearest live color using CIE76 squared distance
+        const src = palette[colorIndex];
+        let bestDist = Infinity;
+        let bestIdx = -1;
+        for (let i = 0; i < palette.length; i++) {
+            if (dead.has(i)) continue;
+            const d = Reveal.LabDistance.cie76SquaredInline(
+                src.L, src.a, src.b,
+                palette[i].L, palette[i].a, palette[i].b
+            );
+            if (d < bestDist) {
+                bestDist = d;
+                bestIdx = i;
+            }
+        }
+
+        if (bestIdx === -1) {
+            throw new Error('Cannot delete the last remaining color');
+        }
+
+        logger.log(`[SessionState.delete] idx=${colorIndex} → nearest=${bestIdx} (dE²=${bestDist.toFixed(1)})`);
+
+        this.deletedColors.add(colorIndex);
+        return this.mergePaletteColors(colorIndex, bestIdx);
     }
 
     /**
