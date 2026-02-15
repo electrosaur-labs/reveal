@@ -36,10 +36,8 @@ class ArchetypeCarousel {
     }
 
     _bindEvents() {
-        // Pulse 2: proxyReady fires with top-1 match visible — show only active card
-        this._session.on('proxyReady', () => this._rebuildTopOnly());
-        // Pulse 3: carouselReady fires from background — populate remaining cards
-        this._session.on('carouselReady', () => this._rebuild());
+        // Pulse 1: carouselReady fires right after DNA scoring — all card frames appear
+        this._session.on('carouselReady', (data) => this._rebuild(data.scores));
         this._session.on('archetypeChanged', (data) => {
             this._activeId = data.archetypeId;
             this._updateActiveCard();
@@ -53,6 +51,9 @@ class ArchetypeCarousel {
         // Rebuild swatches AFTER posterization completes (not before)
         this._session.on('previewUpdated', (data) => this._refreshActiveSwatches(data));
 
+        // Progressive palette previews — fill in real swatches on non-active cards
+        this._session.on('archetypePaletteReady', (data) => this._addPaletteToCard(data));
+
         // Dirty indicator — orange dot when knobs are customized
         this._session.on('knobsCustomizedChanged', (data) => {
             this._updateCustomizedBadge(data.customized);
@@ -60,30 +61,12 @@ class ArchetypeCarousel {
     }
 
     /**
-     * Show only the active (top-1) card during Pulse 2 — before full scores are available.
-     * Remaining cards are populated later by _rebuild() when carouselReady fires.
+     * Rebuild the full card strip from scored archetypes.
+     * @param {Array} [scores] - Pre-computed scores from carouselReady event.
+     *                           Falls back to getAllArchetypeScores() if not provided.
      */
-    _rebuildTopOnly() {
-        const state = this._session.getState();
-        this._activeId = state.activeArchetypeId;
-        if (!this._activeId) return;
-
-        const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
-        const archetype = archetypes.find(a => a.id === this._activeId);
-        if (!archetype) return;
-
-        // Show single active card with score=0 placeholder (real score comes in Pulse 3)
-        this._container.innerHTML = '';
-        const card = this._createCard({ id: this._activeId, score: 0, breakdown: null }, archetype);
-        card.classList.add('active');
-        this._container.appendChild(card);
-    }
-
-    /**
-     * Rebuild the full card strip from current DNA scores.
-     */
-    _rebuild() {
-        const scores = this._session.getAllArchetypeScores();
+    _rebuild(scores) {
+        if (!scores) scores = this._session.getAllArchetypeScores();
         if (!scores || scores.length === 0) return;
 
         const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
@@ -230,19 +213,47 @@ class ArchetypeCarousel {
                 ).join('');
 
             } else {
-                // Non-active card: revert to hue indicator
-                const swatchRow = card.querySelector('.card-swatches');
-                if (swatchRow) swatchRow.remove();
-
-                // Restore hue indicator if missing
-                if (!card.querySelector('.card-hue')) {
-                    const hueDiv = document.createElement('div');
-                    hueDiv.className = 'card-hue';
-                    hueDiv.innerHTML = card.dataset.hueHtml || '';
-                    card.appendChild(hueDiv);
+                // Non-active card: keep real swatches if already generated,
+                // otherwise restore hue indicator
+                if (!card.querySelector('.card-swatches')) {
+                    // No real swatches yet — ensure hue indicator is present
+                    if (!card.querySelector('.card-hue')) {
+                        const hueDiv = document.createElement('div');
+                        hueDiv.className = 'card-hue';
+                        hueDiv.innerHTML = card.dataset.hueHtml || '';
+                        card.appendChild(hueDiv);
+                    }
                 }
             }
         });
+    }
+
+    /**
+     * Add real palette swatches to a single non-active card.
+     * Called incrementally as archetypePaletteReady events arrive.
+     * Replaces hue indicator with actual posterization palette colors.
+     *
+     * @param {{archetypeId: string, rgbPalette: Array}} data
+     */
+    _addPaletteToCard(data) {
+        const card = this._container.querySelector(
+            `[data-archetype-id="${data.archetypeId}"]`
+        );
+        if (!card || card.classList.contains('active')) return;
+
+        // Replace hue indicator with real palette swatches
+        const hueRow = card.querySelector('.card-hue');
+        if (hueRow) hueRow.remove();
+
+        let swatchRow = card.querySelector('.card-swatches');
+        if (!swatchRow) {
+            swatchRow = document.createElement('div');
+            swatchRow.className = 'card-swatches';
+            card.appendChild(swatchRow);
+        }
+        swatchRow.innerHTML = data.rgbPalette.map(c =>
+            `<span class="card-swatch" style="background:rgb(${c.r},${c.g},${c.b})"></span>`
+        ).join('');
     }
 
     /**

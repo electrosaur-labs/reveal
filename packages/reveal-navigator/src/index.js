@@ -165,15 +165,6 @@ function initPlugin() {
             updateDNADisplay();
         });
 
-        // Pulse 3: carouselReady fires in background after top-1 preview is visible
-        sessionState.on('carouselReady', (data) => {
-            if (carousel) {
-                try { carousel._rebuild(); } catch (err) {
-                    logger.log('[Navigator] Carousel lazy rebuild failed: ' + err.message);
-                }
-            }
-        });
-
         // Show dominant sector in HUD info (kept for backward compat with imageLoaded)
         sessionState.on('imageLoaded', (data) => {
             const sectorEl = document.getElementById('dominant-sector');
@@ -260,6 +251,13 @@ function initPlugin() {
         // Listen for document changes (open, switch, close)
         setupDocumentChangeListener();
 
+        // Listen for manual dialog dismiss (X button / Escape)
+        const dialogEl = document.getElementById('navigatorDialog');
+        if (dialogEl) {
+            dialogEl.addEventListener('close', () => _onDialogDismissed());
+            dialogEl.addEventListener('cancel', () => _onDialogDismissed());
+        }
+
         logger.log('[Navigator] Init complete');
     } catch (err) {
         logger.log('[Navigator] FATAL init error: ' + err.message);
@@ -339,6 +337,10 @@ async function ingestActiveDocument(showDialog) {
     if (isIngesting) return;
     isIngesting = true;
 
+    // Immediately clear stale content so old preview never flashes
+    _clearUI();
+    if (sessionState) sessionState.reset();
+
     const btnSync = document.getElementById('btn-sync');
     if (btnSync) btnSync.disabled = true;
 
@@ -364,15 +366,16 @@ async function ingestActiveDocument(showDialog) {
         setStatus('Reading pixels...');
 
         // Read full-res pixels — ProxyEngine handles downsampling internally.
-        // (PS GPU downsampling via targetSize was tested but loses minority color
-        // signals like green on the Jethro image. The bilinear in ProxyEngine
-        // preserves these better. TODO: investigate PS GPU downsample quality.)
+        // PS GPU downsampling (targetSize) was tested but loses minority color
+        // signals like green on the Jethro image. Photoshop's bicubic resample
+        // averages out sparse green pixels that JS bilinear preserves.
+        // The preservedUnifyThreshold fix helps but doesn't fully compensate.
         const { labPixels, width, height, originalWidth, originalHeight } =
             await PhotoshopBridge.getDocumentLab();
         logger.log(`[Navigator] Ingested ${width}x${height} from ${validation.info.name}`);
 
         setStatus('Analyzing DNA...');
-        await sessionState.loadImage(labPixels, width, height);
+        await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
 
     } catch (err) {
         logger.log(`[Navigator] Ingest failed: ${err.message}`);
@@ -551,6 +554,60 @@ function _resetFinalizeUI() {
     }
 }
 
+// ─── UI Reset ────────────────────────────────────────────
+
+/**
+ * Immediately clear all visible UI to blank state.
+ * Called at the start of every new ingest so stale content from the
+ * previous session never flashes on screen.
+ */
+function _clearUI() {
+    // Hide preview image, show placeholder
+    const img = document.getElementById('preview-img');
+    const placeholder = document.getElementById('preview-placeholder');
+    if (img) img.style.display = 'none';
+    if (placeholder) {
+        placeholder.style.display = 'block';
+        placeholder.textContent = 'Loading\u2026';
+        placeholder.style.color = '';  // reset error styling
+    }
+
+    // Clear carousel cards
+    const carouselEl = document.getElementById('carousel');
+    if (carouselEl) carouselEl.innerHTML = '';
+
+    // Hide stats panel
+    const statsPanel = document.getElementById('preview-stats');
+    if (statsPanel) statsPanel.style.display = 'none';
+
+    // Hide archetype badge
+    const badge = document.getElementById('archetype-badge');
+    if (badge) badge.style.display = 'none';
+
+    // Hide finalize row
+    const finalizeRow = document.getElementById('finalize-row');
+    if (finalizeRow) finalizeRow.style.display = 'none';
+
+    // Clear status and accuracy
+    setStatus('');
+    const accuracyEl = document.getElementById('accuracy-text');
+    if (accuracyEl) accuracyEl.textContent = '';
+}
+
+/**
+ * Handle dialog dismissed by user (X button / Escape) without Commit.
+ * Resets state so the next invocation starts clean.
+ */
+function _onDialogDismissed() {
+    if (!dialogOpen) return;
+    logger.log('[Navigator] Dialog dismissed by user');
+    if (loupe) loupe.destroy();
+    currentDocId = null;
+    dialogOpen = false;
+    if (sessionState) sessionState.reset();
+    _clearUI();
+}
+
 // ─── Show Dialog (command entrypoint) ────────────────────
 
 async function showDialog() {
@@ -573,7 +630,10 @@ async function showDialog() {
             initPlugin();
         }
 
-        // Reset UI for fresh session
+        // Reset any stale state from previous session
+        if (sessionState) sessionState.reset();
+        _clearUI();
+
         const root = document.getElementById('root');
         if (root) root.style.display = '';
 

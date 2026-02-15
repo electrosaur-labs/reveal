@@ -85,6 +85,9 @@ class SessionState extends EventEmitter {
         // user must click "Restore My Tweaks" to apply (Option B: Snapshot).
         this._tweakCache = new Map();
 
+        // Progressive palette generation counter (incremented to cancel in-flight loops)
+        this._paletteGeneration = 0;
+
         // Debounce timer
         this._debounceTimer = null;
 
@@ -105,6 +108,7 @@ class SessionState extends EventEmitter {
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
         this._tweakCache.clear();
+        this._paletteGeneration = 0;
         this.proxyEngine = null;
         this.currentConfig = null;
         this.previewBuffer = null;
@@ -130,9 +134,13 @@ class SessionState extends EventEmitter {
     /**
      * Load a new image into the session using progressive pulse architecture.
      *
-     * Pulse 1 — Structural Lock (~50ms): DNA analysis → dnaReady event
-     * Pulse 2 — Best-Fit Preview (~400ms): Top-1 archetype → proxy → previewUpdated
-     * Pulse 3 — Lazy Ribbon (background): Score remaining 16 archetypes → carouselReady
+     * Pulse 1 — Structural Lock (~51ms): DNA + score all archetypes → carouselReady
+     * Pulse 2 — Best-Fit Preview (~400ms): Top-1 proxy → previewUpdated
+     * Pulse 3 — Progressive Palettes (background): Generate palette per card
+     *
+     * Pulse 1 emits carouselReady BEFORE the heavy proxy init so the browser
+     * can paint 17 card frames while the CPU is busy posterizing the active
+     * archetype. Cards appear ~550ms into ingest; preview ~400ms later.
      *
      * IMPORTANT: We do NOT copy labPixels — UXP's Uint16Array copy produces
      * stale all-white buffers. Instead, we use the original reference for the
@@ -156,21 +164,27 @@ class SessionState extends EventEmitter {
         this.mergeHistory.clear();
         this._tweakCache.clear();
 
-        // ── Pulse 1: Structural Lock (~50ms) ──
-        // DNA analysis on the proxy-size buffer — instant radar + stats
+        // ── Pulse 1: DNA + score all archetypes (~51ms) ──
         const dnaGen = new Reveal.DNAGenerator();
         this.imageDNA = dnaGen.generate(labPixels, width, height, { bitDepth: 16 });
         logger.log(`[SessionState] Pulse 1: DNA generated (dominant_sector=${this.imageDNA.dominant_sector})`);
 
         this.emit('dnaReady', this.imageDNA);
 
-        // ── Pulse 2: Best-Fit Preview (~400ms) ──
-        // Score ONLY top-1 archetype, generate config, initialize proxy
+        // Score ALL archetypes immediately (<1ms) — carousel cards appear
+        // before the heavy proxy init so user sees structure early.
         const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
         const mapper = new Reveal.ArchetypeMapper(archetypes);
-        const topMatch = mapper.getTopMatches(this.imageDNA, 1)[0];
-        logger.log(`[SessionState] Pulse 2: Top match = ${topMatch.id} (score=${topMatch.score.toFixed(0)})`);
+        const allScores = mapper.getTopMatches(this.imageDNA, archetypes.length);
+        const topMatch = allScores[0];
+        logger.log(`[SessionState] Pulse 1: Scored ${allScores.length} archetypes, top=${topMatch.id} (${topMatch.score.toFixed(0)})`);
 
+        this.emit('carouselReady', { scores: allScores, topMatchId: topMatch.id });
+
+        // Yield so the browser can paint carousel cards before heavy CPU work
+        await new Promise(r => setTimeout(r, 0));
+
+        // ── Pulse 2: Best-Fit Preview (~400ms) ──
         this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
             manualArchetypeId: topMatch.id
         });
@@ -214,25 +228,47 @@ class SessionState extends EventEmitter {
             accuracyDeltaE: initialAccuracy
         });
 
-        // ── Pulse 3: Lazy Ribbon (background) ──
-        // Score remaining 16 archetypes and emit carouselReady
-        setTimeout(() => this._populateRemainingArchetypes(topMatch), 10);
+        // ── Pulse 3: Progressive palette previews (background) ──
+        setTimeout(() => this._generateRemainingPalettes(topMatch, allScores), 10);
 
         return proxyResult;
     }
 
     /**
-     * Background task: score all remaining archetypes and emit carouselReady.
-     * Called via setTimeout from loadImage so UI is already interactive.
+     * Background task: progressively generate palette previews for each
+     * non-active archetype card. Scoring already happened in Pulse 1.
+     *
+     * Palette swatches fill in one by one via archetypePaletteReady events.
+     * If the user swaps archetype mid-loop, _paletteGeneration increments
+     * and this loop aborts.
+     *
      * @private
      */
-    _populateRemainingArchetypes(topMatch) {
-        try {
-            const scores = this.getAllArchetypeScores();
-            logger.log(`[SessionState] Pulse 3: Scored all ${scores.length} archetypes`);
-            this.emit('carouselReady', { scores, topMatchId: topMatch.id });
-        } catch (err) {
-            logger.log(`[SessionState] Pulse 3 failed: ${err.message}`);
+    async _generateRemainingPalettes(topMatch, scores) {
+        const generation = ++this._paletteGeneration;
+
+        for (const match of scores) {
+            if (match.id === topMatch.id) continue;  // Active already has real swatches
+            if (generation !== this._paletteGeneration) return;  // Stale — user swapped archetype
+
+            try {
+                const config = Reveal.generateConfiguration(this.imageDNA, {
+                    manualArchetypeId: match.id
+                });
+                const palette = await this.proxyEngine.getPaletteForConfig(config);
+
+                if (generation !== this._paletteGeneration) return;  // Check again after async
+
+                this.emit('archetypePaletteReady', {
+                    archetypeId: match.id,
+                    rgbPalette: palette.rgbPalette
+                });
+
+                // Yield after each DOM update so the browser can paint the new swatch
+                await new Promise(r => setTimeout(r, 0));
+            } catch (err) {
+                logger.log(`[SessionState] Palette gen failed for ${match.id}: ${err.message}`);
+            }
         }
     }
 
@@ -445,6 +481,9 @@ class SessionState extends EventEmitter {
         if (!this.proxyEngine || !this.proxyEngine.proxyBuffer) {
             throw new Error('Proxy not initialized — call loadImage() first');
         }
+
+        // Cancel any in-flight progressive palette generation
+        this._paletteGeneration++;
 
         // Snapshot outgoing knob tweaks (only if customized)
         if (this.state.isKnobsCustomized && this.state.activeArchetypeId) {

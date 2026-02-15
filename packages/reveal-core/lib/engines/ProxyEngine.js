@@ -381,6 +381,43 @@ class ProxyEngine {
     }
 
     /**
+     * Posterize the proxy buffer with a given config and return ONLY the palette.
+     * Does NOT modify separationState or _baselineState — purely read-only.
+     * Used for progressive palette preview on non-active archetype cards.
+     *
+     * @param {Object} config - Posterization config (from ParameterGenerator)
+     * @returns {Promise<{labPalette: Array, rgbPalette: Array}>}
+     */
+    async getPaletteForConfig(config) {
+        if (!this.proxyBuffer || !this.separationState) {
+            throw new Error('Proxy not initialized');
+        }
+
+        const proxyW = this.separationState.width;
+        const proxyH = this.separationState.height;
+
+        // Proxy-safe overrides (same as initializeProxy/rePosterize)
+        const proxyConfig = {
+            ...config,
+            format: 'lab',
+            snapThreshold: 0,
+            enablePaletteReduction: false,
+            densityFloor: 0,
+            preservedUnifyThreshold: 0.5
+        };
+
+        const result = await PosterizationEngine.posterize(
+            this.proxyBuffer,
+            proxyW,
+            proxyH,
+            proxyConfig.targetColors,
+            proxyConfig
+        );
+
+        return { labPalette: result.paletteLab, rgbPalette: result.palette };
+    }
+
+    /**
      * Get full-res parameters for production render
      * @returns {Object} Parameters for high-res posterization
      */
