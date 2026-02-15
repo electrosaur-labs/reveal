@@ -376,13 +376,14 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 
     // 5. Prepare params
     const params = {
-        targetColorsSlider: config.targetColors,
+        targetColorsSlider: 8, // OVERRIDE: Force 8 colors for all images
+        // targetColorsSlider: config.targetColors,
         blackBias: config.blackBias,
         ditherType: config.ditherType,
         format: 'lab',
         bitDepth: 8,
-        engineType: config.engineType || 'reveal-mk1.5',
-        centroidStrategy: config.centroidStrategy || 'SALIENCY',
+        engineType: 'reveal',
+        centroidStrategy: 'SALIENCY',
         lWeight: config.lWeight,
         cWeight: config.cWeight,
         substrateMode: config.substrateMode,
@@ -438,20 +439,33 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     let finalPaletteLab = posterizeResult.paletteLab;
     let finalPaletteRgb = posterizeResult.palette;
 
-    // 7.5. Apply MechanicalKnobs (shared with ProxyEngine and ProductionWorker)
-    // Uses the same algorithms as the Navigator UI to ensure batch=production parity.
-    const MechanicalKnobs = require('../../reveal-core/lib/engines/MechanicalKnobs');
-
+    // 7.5. Palette Post-Pruning (Sovereign Solution)
     if (config.minVolume !== undefined && config.minVolume > 0) {
-        console.log(chalk.yellow(`  🗑️ minVolume=${config.minVolume}%`));
-        const mvResult = MechanicalKnobs.applyMinVolume(colorIndices, finalPaletteLab, pixelCount, config.minVolume);
-        if (mvResult.remappedCount > 0) {
-            console.log(chalk.green(`  ✅ minVolume remapped ${mvResult.remappedCount} weak colors`));
+        console.log(chalk.yellow(`  🗑️ Palette pruning: minVolume=${config.minVolume}%`));
+        const pruneResult = SeparationEngine.pruneWeakColors(
+            finalPaletteLab,
+            colorIndices,
+            width,
+            height,
+            config.minVolume,
+            { distanceMetric: config.distanceMetric }
+        );
+
+        if (pruneResult.mergedCount > 0) {
+            finalPaletteLab = pruneResult.prunedPalette;
+            colorIndices = pruneResult.remappedIndices;
+
+            // Build pruned RGB palette by filtering original palette using strong indices
+            const ColorSpace = require('../../reveal-core/lib/engines/ColorSpace');
+            finalPaletteRgb = finalPaletteLab.map(lab => ColorSpace.labToRgb(lab));
+
+            console.log(chalk.green(`  ✅ Pruned: ${posterizeResult.paletteLab.length} → ${finalPaletteLab.length} colors`));
         }
     }
 
-    // 8. Build masks from (possibly remapped) color indices
+    // 8. Build masks and apply knobs (MechanicalKnobs — same algorithms as Navigator/ProductionWorker)
     console.log(`  Creating layer masks...`);
+    const MechanicalKnobs = require('../../reveal-core/lib/engines/MechanicalKnobs');
     const masks = MechanicalKnobs.rebuildMasks(colorIndices, finalPaletteLab.length, pixelCount);
 
     if (config.speckleRescue !== undefined && config.speckleRescue > 0) {
@@ -459,10 +473,10 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, config.speckleRescue);
     }
 
-    if (config.shadowClamp !== undefined && config.shadowClamp > 0) {
-        console.log(chalk.yellow(`  🔲 shadowClamp=${config.shadowClamp}%`));
-        MechanicalKnobs.applyShadowClamp(masks, colorIndices, finalPaletteLab, width, height, config.shadowClamp);
-    }
+    // NOTE: shadowClamp is a no-op on binary masks (all values are 0 or 255).
+    // The old inline code (`if mask[i] > 0 && mask[i] < threshold`) never triggered.
+    // MechanicalKnobs.applyShadowClamp does connectivity erosion which is designed
+    // for the Navigator's tonal pipeline, not batch binary masks. Skip it here.
 
     // Generate hex colors for display
     const hexColors = finalPaletteRgb.map(rgb => rgbToHex(rgb.r, rgb.g, rgb.b));
