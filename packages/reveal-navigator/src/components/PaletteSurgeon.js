@@ -257,17 +257,20 @@ class PaletteSurgeon {
                     }
                 }], {});
 
-                const response = await action.batchPlay([{
+                await action.batchPlay([{
                     _obj: "showColorPicker"
                 }], {});
 
-                if (response && response.length > 0 && response[0]._obj !== "cancel") {
-                    const c = app.foregroundColor;
-                    result = {
-                        r: Math.round(c.rgb.red),
-                        g: Math.round(c.rgb.green),
-                        b: Math.round(c.rgb.blue)
-                    };
+                const c = app.foregroundColor;
+                const newR = Math.round(c.rgb.red);
+                const newG = Math.round(c.rgb.green);
+                const newB = Math.round(c.rgb.blue);
+
+                // Only treat as confirmed if the color actually changed from the swatch.
+                // Photoshop reverts foreground color on cancel, so this catches all
+                // cancel scenarios regardless of the batchPlay response format.
+                if (newR !== rgb.r || newG !== rgb.g || newB !== rgb.b) {
+                    result = { r: newR, g: newG, b: newB };
                 }
             }, { commandName: "Pick Swatch Color" });
 
