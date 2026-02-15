@@ -804,6 +804,114 @@ class SessionState extends EventEmitter {
     // ─── Production Export ────────────────────────────────────
 
     /**
+     * Build a separation manifest capturing everything about how
+     * the production render was produced. Embedded as XMP in the PSD
+     * so anyone opening the file later can see exact settings.
+     *
+     * @param {{layerCount: number, elapsedMs: number}} productionResult
+     * @returns {Object} Full manifest object
+     */
+    buildManifest(productionResult) {
+        const PhotoshopBridge = require('../bridge/PhotoshopBridge');
+        const docInfo = PhotoshopBridge.getDocumentInfo();
+
+        // ── Archetype score + breakdown ──
+        let archetypeSection = { id: null, name: null, score: 0, breakdown: {} };
+        const activeId = this.state.activeArchetypeId;
+        if (activeId) {
+            const scores = this.getAllArchetypeScores();
+            const match = scores.find(s => s.id === activeId);
+            if (match) {
+                archetypeSection = {
+                    id: match.id,
+                    name: match.name || match.id,
+                    score: Math.round(match.score * 100) / 100,
+                    breakdown: match.breakdown || {}
+                };
+            }
+        }
+
+        // ── Surgery section ──
+        const overrides = {};
+        const deletions = [];
+        for (const [idx, color] of this.paletteOverrides) {
+            if (this.deletedColors.has(idx)) {
+                deletions.push(idx);
+            } else {
+                overrides[String(idx)] = {
+                    L: Math.round(color.L * 10) / 10,
+                    a: Math.round(color.a * 10) / 10,
+                    b: Math.round(color.b * 10) / 10
+                };
+            }
+        }
+        const merges = {};
+        for (const [target, sources] of this.mergeHistory) {
+            merges[String(target)] = [...sources];
+        }
+
+        // ── Palette with hex + coverage ──
+        const palette = this._buildOverriddenPalette();
+        const PosterizationEngine = Reveal.engines.PosterizationEngine;
+        const sep = this.proxyEngine && this.proxyEngine.separationState;
+        let pixelCounts = null;
+        if (sep && sep.colorIndices && palette) {
+            pixelCounts = new Uint32Array(palette.length);
+            const ci = sep.colorIndices;
+            for (let i = 0, len = ci.length; i < len; i++) pixelCounts[ci[i]]++;
+        }
+        const totalPixels = sep ? sep.width * sep.height : 1;
+        const paletteSection = (palette || []).map((c, i) => {
+            const rgb = PosterizationEngine.labToRgb({ L: c.L, a: c.a, b: c.b });
+            const toHex = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+            const hex = `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`.toUpperCase();
+            const coverage = pixelCounts
+                ? ((pixelCounts[i] / totalPixels) * 100).toFixed(2) + '%'
+                : 'n/a';
+            return {
+                L: Math.round(c.L * 10) / 10,
+                a: Math.round(c.a * 10) / 10,
+                b: Math.round(c.b * 10) / 10,
+                hex,
+                coverage
+            };
+        });
+
+        return {
+            meta: {
+                generator: 'Reveal Navigator v1.0.0',
+                timestamp: new Date().toISOString(),
+                filename: docInfo ? docInfo.name : 'unknown',
+                width: docInfo ? docInfo.width : this.originalWidth,
+                height: docInfo ? docInfo.height : this.originalHeight,
+                bitDepth: 16
+            },
+            archetype: archetypeSection,
+            knobs: {
+                targetColors: this.state.targetColors,
+                minVolume: this.state.minVolume,
+                speckleRescue: this.state.speckleRescue,
+                shadowClamp: this.state.shadowClamp,
+                distanceMetric: this.state.distanceMetric,
+                ditherType: this.currentConfig ? this.currentConfig.ditherType : 'none',
+                preprocessingIntensity: this.currentConfig ? this.currentConfig.preprocessingIntensity : 'off'
+            },
+            surgery: {
+                overrides,
+                merges,
+                deletions
+            },
+            palette: paletteSection,
+            dna: this.imageDNA || {},
+            metrics: {
+                avgDeltaE: this.calculateCurrentAccuracy(),
+                layerCount: productionResult ? productionResult.layerCount : 0,
+                elapsedMs: productionResult ? productionResult.elapsedMs : 0
+            }
+        };
+    }
+
+    /**
      * Collapse current state + palette overrides into a single
      * production-ready config object for reveal-batch or reveal-adobe worker.
      *

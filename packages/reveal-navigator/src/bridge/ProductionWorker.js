@@ -217,7 +217,20 @@ class ProductionWorker {
         const elapsedMs = Date.now() - t0;
         logger.log(`[ProductionWorker] Done: ${result.layerCount} layers in ${elapsedMs}ms`);
 
-        return { layerCount: result.layerCount, elapsedMs };
+        const productionResult = { layerCount: result.layerCount, elapsedMs };
+
+        // ── Embed separation manifest as XMP ──
+        try {
+            const manifest = this._sessionState.buildManifest(productionResult);
+            await core.executeAsModal(async () => {
+                await PhotoshopBridge.writeManifestXMP(manifest);
+            }, { commandName: "Reveal: Write Manifest" });
+            logger.log(`[ProductionWorker] Manifest embedded in XMP`);
+        } catch (err) {
+            logger.log(`[ProductionWorker] Manifest XMP failed (non-fatal): ${err && err.message || String(err)}`);
+        }
+
+        return productionResult;
     }
 
     // ─── Loupe Tile Rendering ─────────────────────────────────────

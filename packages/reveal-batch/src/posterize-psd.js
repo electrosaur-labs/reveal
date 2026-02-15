@@ -376,14 +376,13 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 
     // 5. Prepare params
     const params = {
-        targetColorsSlider: 8, // OVERRIDE: Force 8 colors for all images
-        // targetColorsSlider: config.targetColors,
+        targetColorsSlider: config.targetColors,
         blackBias: config.blackBias,
         ditherType: config.ditherType,
         format: 'lab',
         bitDepth: 8,
-        engineType: 'reveal',
-        centroidStrategy: 'SALIENCY',
+        engineType: config.engineType || 'reveal-mk1.5',
+        centroidStrategy: config.centroidStrategy || 'SALIENCY',
         lWeight: config.lWeight,
         cWeight: config.cWeight,
         substrateMode: config.substrateMode,
@@ -439,57 +438,30 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     let finalPaletteLab = posterizeResult.paletteLab;
     let finalPaletteRgb = posterizeResult.palette;
 
-    // 7.5. Palette Post-Pruning (Sovereign Solution)
+    // 7.5. Apply MechanicalKnobs (shared with ProxyEngine and ProductionWorker)
+    // Uses the same algorithms as the Navigator UI to ensure batch=production parity.
+    const MechanicalKnobs = require('../../reveal-core/lib/engines/MechanicalKnobs');
+
     if (config.minVolume !== undefined && config.minVolume > 0) {
-        console.log(chalk.yellow(`  🗑️ Palette pruning: minVolume=${config.minVolume}%`));
-        const pruneResult = SeparationEngine.pruneWeakColors(
-            finalPaletteLab,
-            colorIndices,
-            width,
-            height,
-            config.minVolume,
-            { distanceMetric: config.distanceMetric }
-        );
-
-        if (pruneResult.mergedCount > 0) {
-            finalPaletteLab = pruneResult.prunedPalette;
-            colorIndices = pruneResult.remappedIndices;
-
-            // Build pruned RGB palette by filtering original palette using strong indices
-            const ColorSpace = require('../../reveal-core/lib/engines/ColorSpace');
-            finalPaletteRgb = finalPaletteLab.map(lab => ColorSpace.labToRgb(lab));
-
-            console.log(chalk.green(`  ✅ Pruned: ${posterizeResult.paletteLab.length} → ${finalPaletteLab.length} colors`));
+        console.log(chalk.yellow(`  🗑️ minVolume=${config.minVolume}%`));
+        const mvResult = MechanicalKnobs.applyMinVolume(colorIndices, finalPaletteLab, pixelCount, config.minVolume);
+        if (mvResult.remappedCount > 0) {
+            console.log(chalk.green(`  ✅ minVolume remapped ${mvResult.remappedCount} weak colors`));
         }
     }
 
-    // 8. Create masks from color indices
+    // 8. Build masks from (possibly remapped) color indices
     console.log(`  Creating layer masks...`);
-    const masks = [];
-    for (let colorIdx = 0; colorIdx < finalPaletteLab.length; colorIdx++) {
-        const mask = new Uint8ClampedArray(pixelCount);
-        for (let i = 0; i < colorIndices.length; i++) {
-            mask[i] = (colorIndices[i] === colorIdx) ? 255 : 0;
-        }
-        masks.push(mask);
-    }
-
-    // Apply shadowClamp and speckleRescue to masks
-    if (config.shadowClamp !== undefined && config.shadowClamp > 0) {
-        const clampThreshold = Math.round(config.shadowClamp * 255 / 100);
-        for (const mask of masks) {
-            for (let i = 0; i < mask.length; i++) {
-                if (mask[i] > 0 && mask[i] < clampThreshold) {
-                    mask[i] = clampThreshold;
-                }
-            }
-        }
-    }
+    const masks = MechanicalKnobs.rebuildMasks(colorIndices, finalPaletteLab.length, pixelCount);
 
     if (config.speckleRescue !== undefined && config.speckleRescue > 0) {
-        for (const mask of masks) {
-            SeparationEngine._despeckleMask(mask, width, height, config.speckleRescue);
-        }
+        console.log(chalk.yellow(`  🧹 speckleRescue=${config.speckleRescue}px`));
+        MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, config.speckleRescue);
+    }
+
+    if (config.shadowClamp !== undefined && config.shadowClamp > 0) {
+        console.log(chalk.yellow(`  🔲 shadowClamp=${config.shadowClamp}%`));
+        MechanicalKnobs.applyShadowClamp(masks, colorIndices, finalPaletteLab, width, height, config.shadowClamp);
     }
 
     // Generate hex colors for display

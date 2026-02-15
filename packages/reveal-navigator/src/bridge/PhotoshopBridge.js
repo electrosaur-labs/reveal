@@ -13,7 +13,7 @@
  *   - Always outputs 16-bit encoding
  */
 
-const { app, core } = require("photoshop");
+const { app, core, action } = require("photoshop");
 const { imaging } = require("photoshop");
 
 class PhotoshopBridge {
@@ -181,6 +181,33 @@ class PhotoshopBridge {
             width: actualWidth,
             height: actualHeight
         };
+    }
+
+    /**
+     * Embed a separation manifest into the active document's metadata.
+     * Writes JSON to dc:description via batchPlay fileInfo.caption.
+     * Prefixed with "REVEAL:" for identification.
+     *
+     * Note: UXP does not expose doc.xmpMetadata.rawData, and batchPlay
+     * XMPMetadataAsUTF8 SET fails (-1715/-25920). fileInfo.caption is the
+     * only reliable write path in UXP.
+     *
+     * Must be called inside executeAsModal.
+     *
+     * @param {Object} manifest - Manifest object from SessionState.buildManifest()
+     */
+    static async writeManifestXMP(manifest) {
+        await action.batchPlay([{
+            _obj: "set",
+            _target: [
+                { _ref: "property", _property: "fileInfo" },
+                { _ref: "document", _enum: "ordinal", _value: "targetEnum" }
+            ],
+            to: {
+                _obj: "fileInfo",
+                caption: "REVEAL:" + JSON.stringify(manifest)
+            }
+        }], {});
     }
 
     /**
