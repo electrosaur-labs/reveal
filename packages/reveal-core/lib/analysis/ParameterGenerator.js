@@ -79,7 +79,27 @@ class DynamicConfigurator {
         if (preprocessing.enabled) {
         }
 
-        // 5. Build complete configuration
+        // 5. Normalize archetype values to engine-canonical forms
+        // Dither types: archetypes may use PascalCase ("BlueNoise", "Atkinson")
+        // but SeparationEngine expects kebab-case ("blue-noise", "atkinson")
+        const DITHER_NORMALIZE = {
+            'bluenoise': 'blue-noise',
+            'floydsteinberg': 'floyd-steinberg',
+            'floyd-steinberg': 'floyd-steinberg',
+            'blue-noise': 'blue-noise',
+            'atkinson': 'atkinson',
+            'stucki': 'stucki',
+            'bayer': 'bayer',
+            'none': 'none'
+        };
+        const rawDither = (params.ditherType || 'blue-noise').toLowerCase();
+        const normalizedDither = DITHER_NORMALIZE[rawDither] || rawDither;
+
+        // Preprocessing: normalize "none" → "off" (canonical off state)
+        const rawPreproc = preprocessingIntensity;
+        const normalizedPreproc = rawPreproc === 'none' ? 'off' : rawPreproc;
+
+        // 6. Build complete configuration
         const config = {
             // Identity
             id: archetype.id,
@@ -96,7 +116,7 @@ class DynamicConfigurator {
 
             // Core parameters from archetype (FIXED - no overrides)
             targetColors: params.targetColorsSlider || params.targetColors || 10,
-            ditherType: params.ditherType || 'blue-noise',
+            ditherType: normalizedDither,
             distanceMetric: params.distanceMetric || 'cie76',
 
             // Saliency weights
@@ -149,12 +169,19 @@ class DynamicConfigurator {
             neutralSovereigntyThreshold: params.neutralSovereigntyThreshold || 0,
 
             // Conditional overrides (DNA v2.0 surgical fixes)
-            shadowClamp: params.shadowClamp,
-            chromaGate: params.chromaGate,
-            detailRescue: params.detailRescue,
-            speckleRescue: params.speckleRescue,
-            medianPass: params.medianPass,
-            minVolume: params.minVolume,
+            // Provide sensible defaults so state/UI always has a value
+            shadowClamp: params.shadowClamp !== undefined ? params.shadowClamp : 0,
+            chromaGate: params.chromaGate !== undefined ? params.chromaGate : 1.0,
+            detailRescue: params.detailRescue !== undefined ? params.detailRescue : 0,
+            speckleRescue: params.speckleRescue !== undefined ? params.speckleRescue : 0,
+            medianPass: params.medianPass !== undefined ? params.medianPass : false,
+            minVolume: params.minVolume !== undefined ? params.minVolume : 0,
+
+            // Preprocessing intensity (user-selectable, drives BilateralFilter)
+            preprocessingIntensity: normalizedPreproc,
+
+            // Screen mesh (TPI for LPI-aware dithering; 0 = pixel-level)
+            meshSize: params.meshSize || 0,
 
             // Legacy fields
             rangeClamp: [dna.minL || 0, dna.maxL || 100],

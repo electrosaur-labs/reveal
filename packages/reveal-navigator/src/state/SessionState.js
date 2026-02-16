@@ -942,7 +942,6 @@ class SessionState extends EventEmitter {
                 for (const key of ALL_KNOBS) {
                     if (this.state[key] !== undefined) k[key] = this.state[key];
                 }
-                k.preprocessingIntensity = this.currentConfig ? this.currentConfig.preprocessingIntensity : 'off';
                 return k;
             })(),
             surgery: {
@@ -995,9 +994,6 @@ class SessionState extends EventEmitter {
 
             // ALL posterization + knob parameters (generic from ALL_KNOBS)
             ...config,
-
-            // Preprocessing (from generated config, not user-adjustable)
-            preprocessingIntensity: this.currentConfig ? this.currentConfig.preprocessingIntensity : 'off',
 
             // Archetype
             activeArchetypeId: this.state.activeArchetypeId,
