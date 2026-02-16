@@ -534,7 +534,8 @@ async function handleFinalize() {
         const lines = [
             `Created ${result.layerCount} layers in ${(result.elapsedMs / 1000).toFixed(1)}s`,
             `Archetype: ${state.activeArchetypeId || 'unknown'}`,
-            `Knobs: Vol ${state.minVolume}% | Spkl ${state.speckleRescue}px | Shd ${state.shadowClamp}%`
+            `Knobs: Vol ${state.minVolume}% | Spkl ${state.speckleRescue}px | Shd ${state.shadowClamp}%` +
+                (state.trapSize > 0 ? ` | Trap ${state.trapSize}px` : '')
         ];
         const overrideCount = sessionState.paletteOverrides.size;
         if (overrideCount > 0) lines.push(`Palette overrides: ${overrideCount}`);

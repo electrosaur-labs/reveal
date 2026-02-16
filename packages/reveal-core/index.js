@@ -25,6 +25,7 @@ const ArchetypeMapper = require('./lib/analysis/ArchetypeMapper');
 const ArchetypeLoader = require('./lib/analysis/ArchetypeLoader');
 const PeakFinder = require('./lib/analysis/PeakFinder');
 const MechanicalKnobs = require('./lib/engines/MechanicalKnobs');
+const TrapEngine = require('./lib/engines/TrapEngine');
 const logger = require('./lib/utils/logger');
 
 /**
@@ -420,7 +421,10 @@ module.exports.engines = {
     PeakFinder: PeakFinder,
 
     // Mechanical Knobs - Shared post-separation mask processing (v2.3)
-    MechanicalKnobs: MechanicalKnobs
+    MechanicalKnobs: MechanicalKnobs,
+
+    // Trapping - Color trap expansion for press registration (v2.4)
+    TrapEngine: TrapEngine
 };
 
 // Export LabDistance at top level for convenient access
@@ -446,3 +450,6 @@ module.exports.PeakFinder = PeakFinder;
 
 // Export MechanicalKnobs at top level for shared knob processing
 module.exports.MechanicalKnobs = MechanicalKnobs;
+
+// Export TrapEngine at top level for color trapping
+module.exports.TrapEngine = TrapEngine;

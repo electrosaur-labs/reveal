@@ -56,7 +56,7 @@ class ProductionWorker {
         logger.log(`[ProductionWorker]   distanceMetric: ${prodConfig.distanceMetric}`);
         logger.log(`[ProductionWorker]   targetColors: ${prodConfig.targetColors}`);
         logger.log(`[ProductionWorker]   preprocessing: ${prodConfig.preprocessingIntensity}, dither: ${prodConfig.ditherType}`);
-        logger.log(`[ProductionWorker]   knobs: minVol=${prodConfig.minVolume} spkl=${prodConfig.speckleRescue} shd=${prodConfig.shadowClamp}`);
+        logger.log(`[ProductionWorker]   knobs: minVol=${prodConfig.minVolume} spkl=${prodConfig.speckleRescue} shd=${prodConfig.shadowClamp} trap=${prodConfig.trapSize || 0}`);
         logger.log(`[ProductionWorker]   paletteOverrides: ${JSON.stringify(prodConfig.paletteOverrides)}`);
         for (let i = 0; i < labPalette.length; i++) {
             const c = labPalette[i];
@@ -159,7 +159,8 @@ class ProductionWorker {
             const layers = self._buildLayers(
                 colorIndices, labPalette, hexColors,
                 actualWidth, actualHeight,
-                prodConfig.minVolume, prodConfig.shadowClamp, prodConfig.speckleRescue
+                prodConfig.minVolume, prodConfig.shadowClamp, prodConfig.speckleRescue,
+                prodConfig.trapSize || 0
             );
 
             logger.log(`[ProductionWorker] Separation complete: ${layers.length} layers`);
@@ -293,6 +294,12 @@ class ProductionWorker {
             MechanicalKnobs.applyShadowClamp(masks, colorIndices, labPalette, width, height, state.shadowClamp);
         }
 
+        // Apply trapping — loupe is native resolution so trap pixels are correct
+        if (state.trapSize > 0) {
+            const TrapEngine = Reveal.TrapEngine;
+            TrapEngine.applyTrapping(masks, labPalette, width, height, state.trapSize);
+        }
+
         // Generate RGBA preview from masks + colorIndices
         const PosterizationEngine = Reveal.engines.PosterizationEngine;
         const rgbPalette = labPalette.map(c => PosterizationEngine.labToRgb(c));
@@ -371,7 +378,7 @@ class ProductionWorker {
     // ─── Build Layer Objects ─────────────────────────────────────
     // Generates masks, applies knobs, skips empty layers.
 
-    _buildLayers(colorIndices, labPalette, hexColors, width, height, minVolume, shadowClamp, speckleRescue) {
+    _buildLayers(colorIndices, labPalette, hexColors, width, height, minVolume, shadowClamp, speckleRescue, trapSize) {
         const layers = [];
         const pixelCount = width * height;
         const MIN_COVERAGE = 0.001; // 0.1%
@@ -399,6 +406,14 @@ class ProductionWorker {
             MechanicalKnobs.applyShadowClamp(masks, colorIndices, labPalette, width, height, shadowClamp);
         }
 
+        // ── Apply trapping (production-only, after all other knobs) ──
+        // Expands lighter colors under darker colors to prevent white gaps
+        if (trapSize > 0) {
+            const TrapEngine = Reveal.TrapEngine;
+            const trapResult = TrapEngine.applyTrapping(masks, labPalette, width, height, trapSize);
+            logger.log(`[ProductionWorker] Trapping: ${trapResult.trappedCount} colors trapped (max=${trapSize}px)`);
+        }
+
         // Build layer objects, skipping empty layers
         for (let idx = 0; idx < labPalette.length; idx++) {
             const mask = masks[idx];
@@ -412,13 +427,22 @@ class ProductionWorker {
             if (opaqueCount === 0 || coverage < MIN_COVERAGE) continue;
 
             layers.push({
-                name: `[${layers.length + 1}] ${hexColors[idx]}`,
                 labColor: labPalette[idx],
                 hex: hexColors[idx],
                 mask,
                 width,
                 height
             });
+        }
+
+        // Sort layers by Lab L descending (lightest first).
+        // Photoshop creates each new layer on top, so lightest ends up
+        // at the bottom and darkest on top — correct for screen printing.
+        layers.sort((a, b) => b.labColor.L - a.labColor.L);
+
+        // Assign numbered names after sorting
+        for (let i = 0; i < layers.length; i++) {
+            layers[i].name = `[${i + 1}] ${layers[i].hex}`;
         }
 
         return layers;

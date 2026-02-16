@@ -19,6 +19,13 @@ const logger = Reveal.logger;
 // Parameters that only need mask/preview re-render (fast path via ProxyEngine.updateProxy)
 const MECHANICAL_KNOBS = new Set(['minVolume', 'speckleRescue', 'shadowClamp']);
 
+// Parameters that only affect production render (not proxy preview).
+// Trap pixel sizes are resolution-dependent — meaningless at 512px proxy.
+const PRODUCTION_KNOBS = new Set(['trapSize']);
+
+// Union of all user-facing knobs (for snapshot/restore/reset loops)
+const ALL_KNOBS = new Set([...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS]);
+
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy)
 const STRUCTURAL_PARAMS = new Set([
     'targetColors', 'engineType', 'centroidStrategy', 'distanceMetric',
@@ -48,6 +55,9 @@ class SessionState extends EventEmitter {
             minVolume: 1.5,
             speckleRescue: 4,
             shadowClamp: 8.0,
+
+            // Production-only knobs (not shown in proxy preview)
+            trapSize: 4,  // 0=off, 1-50px trap expansion
 
             // Structural tuning
             lWeight: 1.1,
@@ -129,6 +139,9 @@ class SessionState extends EventEmitter {
         this.state.proxyBufferReady = false;
         this.state.isKnobsCustomized = false;
         this.state.highlightColorIndex = -1;
+
+        // Reset production-only knobs (archetype configs don't define these)
+        this.state.trapSize = 4;
     }
 
     // ─── Lifecycle ───────────────────────────────────────────
@@ -298,7 +311,7 @@ class SessionState extends EventEmitter {
      */
     resetAllKnobs() {
         if (!this._archetypeDefaults) return;
-        for (const key of MECHANICAL_KNOBS) {
+        for (const key of ALL_KNOBS) {
             this.state[key] = this._archetypeDefaults[key];
             if (this.currentConfig) this.currentConfig[key] = this._archetypeDefaults[key];
         }
@@ -317,16 +330,19 @@ class SessionState extends EventEmitter {
         const cached = id ? this._tweakCache.get(id) : null;
         if (!cached) return;
 
-        for (const key of MECHANICAL_KNOBS) {
-            this.state[key] = cached[key];
-            if (this.currentConfig) this.currentConfig[key] = cached[key];
+        for (const key of ALL_KNOBS) {
+            if (cached[key] !== undefined) {
+                this.state[key] = cached[key];
+                if (this.currentConfig) this.currentConfig[key] = cached[key];
+            }
         }
 
         // Detect if restored values differ from archetype defaults
         this.state.isKnobsCustomized =
             this.state.minVolume !== this._archetypeDefaults.minVolume ||
             this.state.speckleRescue !== this._archetypeDefaults.speckleRescue ||
-            this.state.shadowClamp !== this._archetypeDefaults.shadowClamp;
+            this.state.shadowClamp !== this._archetypeDefaults.shadowClamp ||
+            this.state.trapSize !== this._archetypeDefaults.trapSize;
 
         this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
         this.emit('tweaksAvailable', { archetypeId: id, available: false }); // consumed
@@ -366,18 +382,23 @@ class SessionState extends EventEmitter {
         }
 
         // Detect knob customization vs archetype defaults
-        if (MECHANICAL_KNOBS.has(key) && this._archetypeDefaults) {
+        if ((MECHANICAL_KNOBS.has(key) || PRODUCTION_KNOBS.has(key)) && this._archetypeDefaults) {
             const wasCustomized = this.state.isKnobsCustomized;
             this.state.isKnobsCustomized =
                 this.state.minVolume !== this._archetypeDefaults.minVolume ||
                 this.state.speckleRescue !== this._archetypeDefaults.speckleRescue ||
-                this.state.shadowClamp !== this._archetypeDefaults.shadowClamp;
+                this.state.shadowClamp !== this._archetypeDefaults.shadowClamp ||
+                this.state.trapSize !== this._archetypeDefaults.trapSize;
             if (this.state.isKnobsCustomized !== wasCustomized) {
                 this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
             }
         }
 
         this.emit('parameterChanged', { key, value });
+
+        // Production-only knobs don't affect the 512px proxy preview
+        if (PRODUCTION_KNOBS.has(key)) return;
+
         this._scheduleProxyUpdate();
     }
 
@@ -498,11 +519,9 @@ class SessionState extends EventEmitter {
 
         // Snapshot outgoing knob tweaks (only if customized)
         if (this.state.isKnobsCustomized && this.state.activeArchetypeId) {
-            this._tweakCache.set(this.state.activeArchetypeId, {
-                minVolume: this.state.minVolume,
-                speckleRescue: this.state.speckleRescue,
-                shadowClamp: this.state.shadowClamp
-            });
+            const snapshot = {};
+            for (const key of ALL_KNOBS) snapshot[key] = this.state[key];
+            this._tweakCache.set(this.state.activeArchetypeId, snapshot);
         }
 
         // Regenerate config with manual archetype override
@@ -899,6 +918,7 @@ class SessionState extends EventEmitter {
                 minVolume: this.state.minVolume,
                 speckleRescue: this.state.speckleRescue,
                 shadowClamp: this.state.shadowClamp,
+                trapSize: this.state.trapSize,
                 distanceMetric: this.state.distanceMetric,
                 ditherType: this.currentConfig ? this.currentConfig.ditherType : 'none',
                 preprocessingIntensity: this.currentConfig ? this.currentConfig.preprocessingIntensity : 'off'
@@ -951,6 +971,9 @@ class SessionState extends EventEmitter {
             minVolume: this.state.minVolume,
             speckleRescue: this.state.speckleRescue,
             shadowClamp: this.state.shadowClamp,
+
+            // Production-only knobs
+            trapSize: this.state.trapSize,
 
             // Archetype
             activeArchetypeId: this.state.activeArchetypeId,
@@ -1107,6 +1130,7 @@ class SessionState extends EventEmitter {
         if (config.minVolume !== undefined) this.state.minVolume = config.minVolume;
         if (config.speckleRescue !== undefined) this.state.speckleRescue = config.speckleRescue;
         if (config.shadowClamp !== undefined) this.state.shadowClamp = config.shadowClamp;
+        if (config.trapSize !== undefined) this.state.trapSize = config.trapSize;
 
         if (config.id) this.state.activeArchetypeId = config.id;
 
@@ -1115,7 +1139,8 @@ class SessionState extends EventEmitter {
             targetColors: this.state.targetColors,
             minVolume: this.state.minVolume,
             speckleRescue: this.state.speckleRescue,
-            shadowClamp: this.state.shadowClamp
+            shadowClamp: this.state.shadowClamp,
+            trapSize: this.state.trapSize
         };
         this.state.isKnobsCustomized = false;
     }
@@ -1142,6 +1167,7 @@ class SessionState extends EventEmitter {
         this.currentConfig.minVolume = this.state.minVolume;
         this.currentConfig.speckleRescue = this.state.speckleRescue;
         this.currentConfig.shadowClamp = this.state.shadowClamp;
+        this.currentConfig.trapSize = this.state.trapSize;
     }
 
     /**

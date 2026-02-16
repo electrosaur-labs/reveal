@@ -838,6 +838,15 @@
                 </div>
                 <sp-slider id="knob-shadowClamp" min="0" max="40" step="0.5" value="8" variant="filled"></sp-slider>
 
+                <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
+
+                <div class="knob-row">
+                    <span class="knob-label">Trap</span>
+                    <button class="knob-revert" id="revert-trapSize" title="Revert to default">&#x21BA;</button>
+                    <span class="knob-val" id="trapSize-val">0px</span>
+                </div>
+                <sp-slider id="knob-trapSize" min="0" max="50" step="1" value="4" variant="filled"></sp-slider>
+
                 <button id="btn-reset-archetype" title="Reset all knobs to archetype defaults">Reset Archetype</button>
                 <button id="btn-restore-tweaks" title="Restore your previous slider tweaks for this archetype">Restore My Tweaks</button>
             </div>
