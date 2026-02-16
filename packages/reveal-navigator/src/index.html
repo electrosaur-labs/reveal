@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Navigator</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Adobe Clean', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #323232;
+            color: #e0e0e0;
+            font-size: 12px;
+            overflow: hidden;
+        }
+
+        /* ─── Pre-Flight Boot Screen ─── */
+        #progress-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #323232;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #progress-box {
+            width: 280px;
+            text-align: center;
+        }
+        #progress-title {
+            color: #e0e0e0;
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            margin-bottom: 20px;
+        }
+        #progress-track {
+            height: 3px;
+            background: #444;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        #progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #0d99ff;
+            border-radius: 2px;
+            transition: width 0.4s ease;
+        }
+        #progress-label {
+            color: #888;
+            font-size: 11px;
+            min-height: 14px;
+        }
+        @keyframes shimmer {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+        #progress-fill.active {
+            animation: shimmer 1.5s ease-in-out infinite;
+        }
+
+        /* ─── Dialog fills its allocation ─── */
+        #navigatorDialog {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: #323232;
+            overflow: hidden;
+        }
+
+        /* ─── Two-Column Root: Main (left) | HUD (right) ─── */
+        #root {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: row;
+            min-height: 0;
+        }
+
+        /* ─── Left Panel: Full workflow column ─── */
+        #main-panel {
+            flex: 1 1 0;
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            gap: 6px;
+            min-height: 0;
+            min-width: 0;
+        }
+
+        /* ─── Document Header ─── */
+        #doc-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 0;
+            border-bottom: 1px solid #444;
+            flex-shrink: 0;
+        }
+
+        #doc-name {
+            flex: 1;
+            font-size: 12px;
+            font-weight: 500;
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #doc-layer {
+            font-size: 10px;
+            color: #888;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 120px;
+        }
+
+        #btn-sync {
+            background: none;
+            border: 1px solid #555;
+            color: #aaa;
+            width: 24px;
+            height: 24px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 22px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        #btn-sync:hover { background: #505050; color: #ddd; }
+        #btn-sync:active { background: #404040; }
+        #btn-sync:disabled { opacity: 0.3; cursor: default; }
+
+        /* ─── Preview (maximized) ─── */
+        #preview-container {
+            flex: 1 1 0;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #preview-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            image-rendering: pixelated;
+        }
+
+        #preview-placeholder {
+            color: #666;
+            font-size: 11px;
+            text-align: center;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        #archetype-badge {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            background: rgba(0,0,0,0.65);
+            color: #ccc;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 2px;
+            display: none;
+        }
+
+        /* ─── Preview Stats Panel ─── */
+        #preview-stats {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 5px 4px;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            background: #2a2a2a;
+        }
+
+        .stat-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: #999;
+        }
+
+        .stat-row .stat-label {
+            color: #666;
+            font-size: 10px;
+            min-width: 0;
+        }
+
+        .stat-row .stat-val {
+            color: #ccc;
+        }
+
+        .stat-row .stat-highlight {
+            color: #8bb8e8;
+            font-weight: 500;
+        }
+
+        .stat-row .stat-score {
+            color: #e0c97f;
+            font-weight: 500;
+        }
+
+        .stat-row .stat-breakdown {
+            color: #888;
+            font-size: 10px;
+        }
+
+        .stat-row .stat-dim {
+            color: #777;
+        }
+
+        .stat-sep {
+            color: #555;
+            margin: 0 1px;
+        }
+
+        /* ─── Mechanical Knobs Panel ─── */
+        #knobs-panel {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 5px 4px;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            background: #2a2a2a;
+        }
+
+        .knob-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 1px;
+        }
+
+        .knob-label {
+            color: #666;
+            font-size: 10px;
+        }
+
+        .knob-val {
+            color: #ccc;
+            font-size: 10px;
+            min-width: 32px;
+            text-align: right;
+        }
+
+        .knob-revert {
+            display: none;
+            background: none;
+            border: none;
+            color: #f0a030;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 0 2px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .knob-revert:hover {
+            color: #ffc060;
+        }
+
+        #knobs-panel sp-slider {
+            width: 100%;
+            margin-bottom: 4px;
+            --spectrum-slider-track-color: #555;
+            --spectrum-slider-fill-track-color: #4da6ff;
+        }
+
+        #knobs-panel sp-slider:last-child {
+            margin-bottom: 0;
+        }
+
+        #btn-reset-archetype {
+            display: none;
+            width: 100%;
+            margin-top: 4px;
+        }
+
+        #btn-restore-tweaks {
+            display: none;
+            width: 100%;
+            margin-top: 4px;
+            background: #3a3520;
+            border: 1px solid #7a6a30;
+            color: #f0d070;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        #btn-restore-tweaks:hover {
+            background: #4a4528;
+            border-color: #9a8a40;
+        }
+
+        /* ─── Archetype Carousel (horizontal scroll) ─── */
+        #carousel {
+            display: flex;
+            gap: 4px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 4px 0;
+            scrollbar-width: thin;
+            scrollbar-color: #555 transparent;
+            flex-shrink: 0;
+            max-height: 90px;
+        }
+
+        .carousel-card {
+            flex: 0 0 auto;
+            width: 110px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 6px;
+            cursor: pointer;
+            transition: border-color 0.15s;
+        }
+
+        .carousel-card:hover {
+            border-color: #777;
+            background: #333;
+        }
+
+        .carousel-card.active {
+            border-color: #4da6ff;
+            background: #2d3545;
+        }
+
+        .card-name {
+            font-size: 10px;
+            font-weight: 500;
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .card-score-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+
+        .card-score-bar {
+            flex: 1;
+            height: 3px;
+            background: #444;
+            border-radius: 1px;
+            overflow: hidden;
+        }
+
+        .card-score-fill {
+            height: 100%;
+            background: #4da6ff;
+            border-radius: 1px;
+        }
+
+        .card-score-val {
+            font-size: 9px;
+            color: #888;
+            min-width: 18px;
+            text-align: right;
+        }
+
+        .card-swatches, .card-hue {
+            display: flex;
+            gap: 2px;
+        }
+
+        .card-swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 1px;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: inline-block;
+        }
+
+        .card-customized {
+            color: #f0a030;
+            margin-left: 4px;
+            font-weight: bold;
+        }
+
+        /* ─── Palette Surgeon ─── */
+        #palette-surgeon {
+            flex-shrink: 0;
+            display: none;
+            padding: 5px 4px;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            background: #2a2a2a;
+        }
+
+        .surgeon-header {
+            font-size: 10px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+
+        .surgeon-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .surgeon-swatch {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 4px;
+            border: 1px solid transparent;
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .surgeon-swatch.surgeon-hover {
+            border-color: #888;
+            background: #383838;
+        }
+
+        .surgeon-swatch.surgeon-selected {
+            border-color: #4da6ff;
+            background: #2d3545;
+        }
+
+        .surgeon-swatch.surgeon-merge-target {
+            border-color: #f0a030;
+            background: #3a3520;
+        }
+
+        .surgeon-color {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border-radius: 2px;
+            border: 1px solid rgba(255,255,255,0.15);
+            position: relative;
+        }
+
+        .surgeon-color.surgeon-overridden {
+            border-color: #f0a030;
+            box-shadow: 0 0 3px rgba(240, 160, 48, 0.4);
+        }
+
+        .surgeon-override-dot {
+            display: none;
+            position: absolute;
+            top: 1px;
+            right: 1px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #f0a030;
+        }
+
+        .surgeon-override-dot.visible {
+            display: block;
+        }
+
+        .surgeon-revert {
+            display: none;
+            background: none;
+            border: none;
+            color: #f0a030;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 0 2px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .surgeon-revert:hover {
+            color: #ffc060;
+        }
+
+        .surgeon-revert.visible {
+            display: inline;
+        }
+
+        .surgeon-merge-badge {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            font-size: 8px;
+            font-weight: bold;
+            color: #fff;
+            background: #4da6ff;
+            border-radius: 6px;
+            padding: 0 3px;
+            line-height: 13px;
+        }
+
+        .surgeon-swatch.surgeon-deleted {
+            opacity: 0.4;
+        }
+
+        .surgeon-delete-badge {
+            position: absolute;
+            top: 4px;
+            left: 7px;
+            color: #ff4444;
+            font-size: 14px;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        .surgeon-pct {
+            font-size: 10px;
+            color: #999;
+        }
+
+        /* ─── Finalize Row ─── */
+        #finalize-row {
+            flex-shrink: 0;
+            padding: 4px 0;
+            text-align: center;
+        }
+
+        #finalize-row sp-action-button {
+            width: 100%;
+        }
+
+        #finalize-summary {
+            display: none;
+            margin-top: 4px;
+            padding: 6px 8px;
+            background: #1e3a1e;
+            border: 1px solid #3a6a3a;
+            border-radius: 3px;
+            font-size: 10px;
+            color: #a0d8a0;
+            white-space: pre-line;
+            text-align: left;
+        }
+
+        #finalize-progress {
+            display: none;
+            margin-top: 4px;
+            padding: 4px 8px;
+            background: #2d3545;
+            border: 1px solid #4da6ff;
+            border-radius: 3px;
+            font-size: 10px;
+            color: #8bb8e8;
+            text-align: center;
+        }
+
+        /* ─── Right Panel: Knobs + HUD ─── */
+        #hud-panel {
+            flex: 0 0 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 8px;
+            border-left: 1px solid #444;
+            background: #2a2a2a;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        #radar-container {
+            flex: 0 0 auto;
+            position: relative;
+            width: 300px;
+            height: 300px;
+        }
+
+        #radar-img {
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        #hud-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
+        }
+
+        #status-bar {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 10px;
+            color: #777;
+        }
+
+        #status-text { }
+        #accuracy-text { color: #999; }
+
+        #dominant-sector {
+            font-size: 10px;
+            color: #888;
+        }
+
+        /* ─── Loupe Overlay ─── */
+        #loupe-container {
+            display: none;
+            position: absolute;
+            width: 256px;
+            height: 256px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 2px solid rgba(77, 166, 255, 0.7);
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        #loupe-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            image-rendering: pixelated;
+        }
+
+        #loupe-coords {
+            position: absolute;
+            bottom: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            color: #ccc;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 1px 6px;
+            border-radius: 8px;
+            white-space: nowrap;
+        }
+
+        #btn-loupe {
+            background: none;
+            border: 1px solid #555;
+            color: #aaa;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            margin-left: 4px;
+        }
+
+        #btn-loupe:hover { background: #505050; color: #ddd; }
+        #btn-loupe.active {
+            background: #2d3545;
+            border-color: #4da6ff;
+            color: #8bb8e8;
+        }
+
+        /* ─── Error Overlay ─── */
+        #error-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+
+        #error-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #e0e0e0;
+            padding: 16px;
+            max-width: 280px;
+            width: 90%;
+        }
+
+        #error-box h3 {
+            font-size: 13px;
+            margin-bottom: 8px;
+            color: #ff6b6b;
+        }
+
+        #error-box p {
+            font-size: 12px;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            color: #ccc;
+        }
+
+        #error-box button {
+            background: #505050;
+            border: 1px solid #666;
+            color: #e0e0e0;
+            padding: 5px 16px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            float: right;
+        }
+
+        #error-box button:hover { background: #606060; }
+
+    </style>
+</head>
+<body>
+    <dialog id="navigatorDialog">
+    <!-- Pre-Flight Boot Screen — covers dialog during ingest -->
+    <div id="progress-overlay" style="display:none;">
+        <div id="progress-box">
+            <div id="progress-title">Reveal Navigator</div>
+            <div id="progress-track"><div id="progress-fill"></div></div>
+            <div id="progress-label"></div>
+        </div>
+    </div>
+    <div id="root">
+        <!-- Left Panel: Full workflow -->
+        <div id="main-panel">
+            <!-- Document Header -->
+            <div id="doc-header">
+                <span id="doc-name">No document</span>
+                <span id="doc-layer"></span>
+                <button id="btn-loupe" title="Toggle 1:1 Loupe">1:1</button>
+                <button id="btn-sync" title="Re-sync from canvas">&#x21bb;</button>
+            </div>
+
+            <!-- Preview (maximized) -->
+            <div id="preview-container">
+                <img id="preview-img" style="display:none;" />
+                <div id="preview-placeholder">Open a Lab document to begin navigation.</div>
+                <div id="archetype-badge"></div>
+                <!-- 1:1 Loupe overlay (hidden until activated) -->
+                <div id="loupe-container">
+                    <img id="loupe-img" />
+                    <span id="loupe-coords"></span>
+                </div>
+            </div>
+
+            <!-- Stats panel -->
+            <div id="preview-stats" style="display:none;">
+                <div class="stat-row" id="stat-row-poster">
+                    <span class="stat-val" id="stat-colors"></span>
+                    <span class="stat-sep">&middot;</span>
+                    <span class="stat-highlight" id="stat-delta"></span>
+                    <span class="stat-sep">&middot;</span>
+                    <span class="stat-dim" id="stat-time"></span>
+                </div>
+                <div class="stat-row" id="stat-row-match">
+                    <span class="stat-label">Match</span>
+                    <span class="stat-score" id="stat-score"></span>
+                    <span class="stat-breakdown" id="stat-breakdown"></span>
+                </div>
+                <div class="stat-row" id="stat-row-dna">
+                    <span class="stat-label">DNA</span>
+                    <span class="stat-dim" id="stat-dna"></span>
+                </div>
+            </div>
+
+            <!-- Palette Surgeon (color isolation + merge) -->
+            <div id="palette-surgeon"></div>
+
+            <!-- Archetype Carousel (horizontal scroll) -->
+            <div id="carousel"></div>
+
+            <!-- Finalize Flight Plan -->
+            <div id="finalize-row" style="display:none;">
+                <sp-action-button id="btn-finalize" variant="accent">Commit to Press</sp-action-button>
+                <div id="finalize-progress"></div>
+                <div id="finalize-summary"></div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Knobs + HUD -->
+        <div id="hud-panel">
+            <!-- Mechanical Knobs -->
+            <div id="knobs-panel" style="display:none;">
+                <div class="knob-row">
+                    <span class="knob-label"># Colors</span>
+                    <button class="knob-revert" id="revert-targetColors" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="targetColors-val">8</span>
+                </div>
+                <sp-slider id="knob-targetColors" min="3" max="12" step="1" value="8" variant="filled"></sp-slider>
+
+                <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
+
+                <div class="knob-row">
+                    <span class="knob-label">Min Volume</span>
+                    <button class="knob-revert" id="revert-minVolume" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="minVolume-val">1.5%</span>
+                </div>
+                <sp-slider id="knob-minVolume" min="0" max="5" step="0.1" value="1.5" variant="filled"></sp-slider>
+
+                <div class="knob-row">
+                    <span class="knob-label">Speckle Rescue</span>
+                    <button class="knob-revert" id="revert-speckleRescue" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="speckleRescue-val">4px</span>
+                </div>
+                <sp-slider id="knob-speckleRescue" min="0" max="30" step="1" value="4" variant="filled"></sp-slider>
+
+                <div class="knob-row">
+                    <span class="knob-label">Shadow Clamp</span>
+                    <button class="knob-revert" id="revert-shadowClamp" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="shadowClamp-val">8.0%</span>
+                </div>
+                <sp-slider id="knob-shadowClamp" min="0" max="40" step="0.5" value="8" variant="filled"></sp-slider>
+
+                <button id="btn-reset-archetype" title="Reset all knobs to archetype defaults">Reset Archetype</button>
+                <button id="btn-restore-tweaks" title="Restore your previous slider tweaks for this archetype">Restore My Tweaks</button>
+            </div>
+
+            <div id="radar-container">
+                <img id="radar-img" width="300" height="300" />
+            </div>
+            <div id="hud-info">
+                <div id="status-bar">
+                    <span id="status-text">Waiting for document...</span>
+                    <span id="accuracy-text"></span>
+                </div>
+                <div id="dominant-sector"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Overlay (hidden by default) -->
+    <div id="error-overlay">
+        <div id="error-box">
+            <h3 id="error-title">Error</h3>
+            <p id="error-message"></p>
+            <button id="btn-error-ok">OK</button>
+        </div>
+    </div>
+    </dialog>
+
+    <script src="index.js"></script>
+</body>
+</html>

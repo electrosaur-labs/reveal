@@ -463,34 +463,20 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         }
     }
 
-    // 8. Create masks from color indices
+    // 8. Build masks and apply knobs (MechanicalKnobs — same algorithms as Navigator/ProductionWorker)
     console.log(`  Creating layer masks...`);
-    const masks = [];
-    for (let colorIdx = 0; colorIdx < finalPaletteLab.length; colorIdx++) {
-        const mask = new Uint8ClampedArray(pixelCount);
-        for (let i = 0; i < colorIndices.length; i++) {
-            mask[i] = (colorIndices[i] === colorIdx) ? 255 : 0;
-        }
-        masks.push(mask);
-    }
-
-    // Apply shadowClamp and speckleRescue to masks
-    if (config.shadowClamp !== undefined && config.shadowClamp > 0) {
-        const clampThreshold = Math.round(config.shadowClamp * 255 / 100);
-        for (const mask of masks) {
-            for (let i = 0; i < mask.length; i++) {
-                if (mask[i] > 0 && mask[i] < clampThreshold) {
-                    mask[i] = clampThreshold;
-                }
-            }
-        }
-    }
+    const MechanicalKnobs = require('../../reveal-core/lib/engines/MechanicalKnobs');
+    const masks = MechanicalKnobs.rebuildMasks(colorIndices, finalPaletteLab.length, pixelCount);
 
     if (config.speckleRescue !== undefined && config.speckleRescue > 0) {
-        for (const mask of masks) {
-            SeparationEngine._despeckleMask(mask, width, height, config.speckleRescue);
-        }
+        console.log(chalk.yellow(`  🧹 speckleRescue=${config.speckleRescue}px`));
+        MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, config.speckleRescue);
     }
+
+    // NOTE: shadowClamp is a no-op on binary masks (all values are 0 or 255).
+    // The old inline code (`if mask[i] > 0 && mask[i] < threshold`) never triggered.
+    // MechanicalKnobs.applyShadowClamp does connectivity erosion which is designed
+    // for the Navigator's tonal pipeline, not batch binary masks. Skip it here.
 
     // Generate hex colors for display
     const hexColors = finalPaletteRgb.map(rgb => rgbToHex(rgb.r, rgb.g, rgb.b));

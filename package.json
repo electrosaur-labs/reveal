@@ -12,6 +12,8 @@
     "test:adobe": "npm test -w @reveal/adobe",
     "build": "npm run build --workspaces --if-present",
     "build:adobe": "npm run build -w @reveal/adobe",
+    "build:navigator": "npm run build -w @reveal/navigator",
+    "test:navigator": "npm test -w @reveal/navigator",
     "clean": "npm run clean --workspaces --if-present"
   },
   "keywords": [
@@ -28,5 +30,7 @@
     "type": "git",
     "url": "https://github.com/electrosaur-labs/reveal-project.git"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "utif2": "^4.1.0"
+  }
 }

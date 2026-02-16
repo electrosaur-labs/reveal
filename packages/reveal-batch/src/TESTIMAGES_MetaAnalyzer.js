@@ -31,9 +31,9 @@ class TESTIMAGESMetaAnalyzer {
     static run() {
         console.log(`🔍 Scanning TESTIMAGES dataset...`);
 
-        // Collect JSON files (excluding batch-report.json)
+        // Collect JSON files (excluding non-image JSON files)
         const allFiles = fs.readdirSync(TESTIMAGES_OUTPUT)
-            .filter(f => f.endsWith('.json') && f !== 'batch-report.json')
+            .filter(f => f.endsWith('.json') && f !== 'batch-report.json' && f !== 'testimages_meta_analysis.json')
             .map(f => ({ file: f, fullPath: path.join(TESTIMAGES_OUTPUT, f) }));
 
         console.log(`  Found ${allFiles.length} JSON files`);

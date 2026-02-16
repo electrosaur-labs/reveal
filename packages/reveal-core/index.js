@@ -24,6 +24,7 @@ const DNAGenerator = require('./lib/analysis/DNAGenerator');
 const ArchetypeMapper = require('./lib/analysis/ArchetypeMapper');
 const ArchetypeLoader = require('./lib/analysis/ArchetypeLoader');
 const PeakFinder = require('./lib/analysis/PeakFinder');
+const MechanicalKnobs = require('./lib/engines/MechanicalKnobs');
 const logger = require('./lib/utils/logger');
 
 /**
@@ -333,7 +334,9 @@ function getPresetParameters(presetId) {
  * @returns {number} returns.b - Blue-yellow axis (-128 to +127)
  */
 function rgbToLab(r, g, b) {
-    return PosterizationEngine.rgbToLab(r, g, b);
+    // Accept both rgbToLab(r, g, b) and rgbToLab({r, g, b})
+    if (typeof r === 'object') return PosterizationEngine.rgbToLab(r);
+    return PosterizationEngine.rgbToLab({ r, g, b });
 }
 
 /**
@@ -351,7 +354,9 @@ function rgbToLab(r, g, b) {
  * @returns {number} returns.b - Blue (0-255)
  */
 function labToRgb(L, a, b) {
-    return PosterizationEngine.labToRgb(L, a, b);
+    // Accept both labToRgb(L, a, b) and labToRgb({L, a, b})
+    if (typeof L === 'object') return PosterizationEngine.labToRgb(L);
+    return PosterizationEngine.labToRgb({ L, a, b });
 }
 
 // Export agent-optimized API
@@ -412,7 +417,10 @@ module.exports.engines = {
     ArchetypeLoader: ArchetypeLoader,
 
     // Reveal Mk 1.5 - Identity Peak Detection
-    PeakFinder: PeakFinder
+    PeakFinder: PeakFinder,
+
+    // Mechanical Knobs - Shared post-separation mask processing (v2.3)
+    MechanicalKnobs: MechanicalKnobs
 };
 
 // Export LabDistance at top level for convenient access
@@ -435,3 +443,6 @@ module.exports.ProxyEngine = ProxyEngine;
 
 // Export PeakFinder at top level for convenient access (Reveal Mk 1.5)
 module.exports.PeakFinder = PeakFinder;
+
+// Export MechanicalKnobs at top level for shared knob processing
+module.exports.MechanicalKnobs = MechanicalKnobs;

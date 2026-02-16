@@ -20,6 +20,9 @@ npm run build
 # Build only Adobe plugin (most common during development)
 npm run build:adobe
 
+# Build only Navigator plugin
+npm run build:navigator
+
 # Test core engines (Vitest)
 npm run test:core
 
@@ -28,6 +31,9 @@ cd packages/reveal-core && npm run test:watch
 
 # Build Adobe plugin in watch mode
 cd packages/reveal-adobe && npm run watch
+
+# Build Navigator plugin in watch mode
+cd packages/reveal-navigator && npm run watch
 ```
 
 ### Package-Specific Commands
@@ -58,10 +64,11 @@ npm run test:coverage       # Coverage report
 The project uses strict separation of concerns:
 
 ```
-reveal-core (Pure Math)      → 100% pure JS, NO dependencies, NO I/O
+reveal-core (Pure Math)        → 100% pure JS, NO dependencies, NO I/O
      ↓
-reveal-adobe (UXP Adapter)   → Photoshop-specific layer creation
-reveal-batch (CLI Adapter)   → Node.js batch processing + PSD I/O
+reveal-adobe (UXP Adapter)     → Photoshop command dialog (full separation + layer creation)
+reveal-navigator (UXP Panel)   → Real-time archetype navigation with 512px proxy preview
+reveal-batch (CLI Adapter)     → Node.js batch processing + PSD I/O
 ```
 
 **Design rationale:** Keep algorithms portable and testable. Core engines can run anywhere—Node.js, browsers, Photoshop, AI agents—without modification.
@@ -81,10 +88,16 @@ reveal-project/
 │   │   │   └── validation/    # DocumentValidator
 │   │   └── index.js           # Agent-optimized mid-level API
 │   │
-│   ├── reveal-adobe/          # Photoshop UXP plugin
+│   ├── reveal-adobe/          # Photoshop UXP plugin (command dialog)
 │   │   ├── src/index.js       # Main plugin entry (~3000 lines)
 │   │   ├── src/api/           # PhotoshopAPI wrapper
 │   │   └── dist/              # Webpack-built bundle
+│   │
+│   ├── reveal-navigator/      # Photoshop UXP panel (real-time archetype navigation)
+│   │   ├── src/index.js       # Panel entry point
+│   │   ├── src/state/         # SessionState (ingest, proxy, archetype swap)
+│   │   ├── src/bridge/        # PhotoshopBridge (pixel I/O)
+│   │   └── src/components/    # ArchetypeCarousel, Preview, StatsPanel
 │   │
 │   ├── reveal-batch/          # CLI batch processor
 │   │   ├── src/
@@ -152,7 +165,19 @@ reveal-project/
 
 **When to modify:** Tuning color selection behavior, adjusting vibrancy algorithms
 
-### 4. ImageHeuristicAnalyzer (`packages/reveal-core/lib/analysis/ImageHeuristicAnalyzer.js`)
+### 4. ProxyEngine (`packages/reveal-core/lib/engines/ProxyEngine.js`)
+
+**Purpose:** Fast 512px proxy posterization for real-time preview (used by Navigator plugin)
+
+**Key methods:**
+- `ingest(labPixels, width, height)` — Downsamples to 512px proxy, runs DNA analysis
+- `rePosterize(archetypeId)` — Re-posterizes proxy with a different archetype (fast swap)
+
+**Proxy-safe config overrides:** At 512px, PosterizationEngine's snap/prune/densityFloor thresholds (calibrated for full-res) collapse palettes to 1 color. ProxyEngine forces `snapThreshold:0, enablePaletteReduction:false, densityFloor:0`.
+
+**When to modify:** Changing proxy preview behavior, adjusting proxy resolution, adding new real-time features
+
+### 5. ImageHeuristicAnalyzer (`packages/reveal-core/lib/analysis/ImageHeuristicAnalyzer.js`)
 
 **Purpose:** "DNA analysis" - detect artistic signatures and recommend parameters
 
@@ -168,7 +193,7 @@ reveal-project/
 
 **When to modify:** Adding new archetype detection, tuning signature thresholds
 
-### 4a. ArchetypeMapper (`packages/reveal-core/lib/analysis/ArchetypeMapper.js`)
+### 5a. ArchetypeMapper (`packages/reveal-core/lib/analysis/ArchetypeMapper.js`)
 
 **Purpose:** Match DNA signatures to archetype definitions using weighted scoring
 
@@ -181,7 +206,7 @@ reveal-project/
 
 **Key design:** No override gates — all archetypes compete purely through the 40/45/15 scoring. Previous hard-coded priority gates (blue rescue, high-chroma) were removed as they caused systemic misassignment.
 
-### 5. ParameterGenerator (`packages/reveal-core/lib/analysis/ParameterGenerator.js`)
+### 6. ParameterGenerator (`packages/reveal-core/lib/analysis/ParameterGenerator.js`)
 
 **Purpose:** Expert system - maps DNA analysis to ALL tunable UI parameters
 
@@ -197,7 +222,7 @@ reveal-project/
 
 **When to modify:** Changing parameter selection logic, adding new archetypes
 
-### 6. LabDistance (`packages/reveal-core/lib/color/LabDistance.js`)
+### 7. LabDistance (`packages/reveal-core/lib/color/LabDistance.js`)
 
 **Purpose:** Centralized Lab color distance calculations
 
@@ -344,6 +369,14 @@ Three user-facing parameters in the separation pipeline, applied per-layer after
 
 ## Known Pitfalls
 
+### UXP Plugin Constraints (reveal-adobe and reveal-navigator)
+
+**componentSize must be 8 for Lab reads:** `imaging.getPixels({ componentSize: 16, colorSpace: "Lab" })` returns neutral a/b channels (no chroma — grayscale only). Always use `componentSize: 8` and upconvert with `lab8to16()`. See reveal-adobe comments: "Always 8 for now (UXP limitation)".
+
+**No ImageData API:** UXP does not support `new ImageData()`, `ctx.createImageData()`, or `ctx.putImageData()`. To render pixels in plugin UI, encode RGBA buffers to JPEG using `jpeg-js`, convert to base64 data URL, and set as `<img>.src`. For writing to Photoshop layers, use `imaging.createImageDataFromBuffer()` + `imaging.putPixels()`.
+
+**No Canvas/SVG/CSS transforms for graphics:** UXP `<canvas>` is invisible in DOM, `ctx.fillText()` doesn't exist, `document.createElementNS()` silently fails, CSS `transform: rotate()` is ignored. The only proven rendering path for charts/graphics is: manual pixel rasterization → jpeg-js encode → base64 → `<img>.src`. Use `<span>` with absolute positioning for text labels.
+
 ### Distance Metric Scale Mismatch
 
 When using spatial locality optimizations with distance thresholds (e.g., snap-to-last-winner), thresholds must be calibrated per metric. CIE76/CIE94 return squared distances in 16-bit range (0–3.2 billion), while CIE2000 returns perceptual dE² (0–10,000). A threshold tuned for CIE76 will cause CIE2000 to always snap to the first candidate, mapping every pixel to index 0. See `SeparationEngine._mapPixelsNearestNeighbor()` for the metric-aware implementation.
@@ -469,6 +502,10 @@ npm run test:watch  # Run tests in watch mode
 cd ../reveal-adobe
 npm run build
 
+# Build Navigator plugin to test changes
+cd ../reveal-navigator
+npm run build
+
 # Run batch validation (regression testing)
 cd ../reveal-batch
 npm run analyze-sp100
@@ -491,7 +528,11 @@ git commit -m "feat(reveal-core): description"
 | **Parameter Mapping** | `packages/reveal-core/lib/analysis/ParameterGenerator.js` | Expert system (DNA→Config) |
 | **Distance Metrics** | `packages/reveal-core/lib/color/LabDistance.js` | CIE76/CIE94/CIE2000 |
 | **Photoshop Plugin** | `packages/reveal-adobe/src/index.js` | UXP adapter and UI |
+| **ProxyEngine** | `packages/reveal-core/lib/engines/ProxyEngine.js` | 512px proxy preview for Navigator |
 | **Archetype Mapper** | `packages/reveal-core/lib/analysis/ArchetypeMapper.js` | 40/45/15 DNA scoring |
 | **Archetype Defs** | `packages/reveal-core/archetypes/*.json` | Archetype centroids and weights |
+| **Navigator Entry** | `packages/reveal-navigator/src/index.js` | UXP panel entry point |
+| **Navigator State** | `packages/reveal-navigator/src/state/SessionState.js` | Ingest, proxy, archetype swap |
+| **Navigator Bridge** | `packages/reveal-navigator/src/bridge/PhotoshopBridge.js` | Pixel I/O for navigator |
 | **Batch Processor** | `packages/reveal-batch/src/reveal-batch.js` | CLI pipeline |
 | **Per-Image Pipeline** | `packages/reveal-batch/src/posterize-psd.js` | Single-image processing (bilateral → posterize → separate) |

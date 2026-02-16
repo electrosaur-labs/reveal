@@ -1,11 +1,12 @@
 /**
  * ProxyEngine - Low-resolution proxy for real-time parameter updates
  *
- * Maintains a 512px "digital twin" for <30ms response time during UI scrubbing.
+ * Maintains an 800px "digital twin" for fast response during UI scrubbing.
  * Architecture:
- * - Fixed 512px resolution (long edge)
+ * - Fixed 800px resolution (long edge)
  * - 16-bit LAB buffer (maintains full tonal range)
  * - Bilinear downsampling from source
+ * - Bilateral filter preprocessing (matches reveal-adobe pipeline)
  * - State persistence: holds current separation state in memory
  * - Incremental updates: re-runs only affected steps
  *
@@ -15,13 +16,16 @@
 const PosterizationEngine = require('./PosterizationEngine');
 const SeparationEngine = require('./SeparationEngine');
 const PreviewEngine = require('./PreviewEngine');
+const BilateralFilter = require('../preprocessing/BilateralFilter');
+const MechanicalKnobs = require('./MechanicalKnobs');
 
 class ProxyEngine {
-    static PROXY_SIZE = 512; // Fixed resolution for long edge
+    static PROXY_SIZE = 800; // Fixed resolution for long edge
 
     constructor() {
         this.proxyBuffer = null;        // 512px 16-bit LAB buffer
-        this.separationState = null;    // Cached palette + indices + masks
+        this.separationState = null;    // Cached palette + indices + masks (may be mutated by knobs)
+        this._baselineState = null;     // Clean snapshot from last posterize (never mutated by knobs)
         this.sourceMetadata = null;     // Original dimensions, DNA
     }
 
@@ -36,21 +40,94 @@ class ProxyEngine {
     async initializeProxy(labPixels, width, height, initialConfig) {
         const startTime = performance.now();
 
-        // 1. Bilinear downsample to 512px
-        const { buffer: proxyBuffer, width: proxyW, height: proxyH } =
-            this._downsampleBilinear(labPixels, width, height);
+        // 1. Downsample to 800px (long edge) — skip if input already at proxy size
+        //    When Photoshop GPU handles downsampling via targetSize, the input
+        //    arrives pre-sized and redundant bilinear is wasteful.
+        let proxyBuffer, proxyW, proxyH;
+        const longEdge = Math.max(width, height);
+        if (longEdge <= ProxyEngine.PROXY_SIZE) {
+            // Already at or below proxy size — use input directly
+            proxyBuffer = labPixels;
+            proxyW = width;
+            proxyH = height;
+        } else {
+            const result = this._downsampleBilinear(labPixels, width, height);
+            proxyBuffer = result.buffer;
+            proxyW = result.width;
+            proxyH = result.height;
+        }
+
+        // 2. Bilateral filter preprocessing (matches reveal-adobe pipeline)
+        const preprocessingIntensity = initialConfig.preprocessingIntensity || 'auto';
+        if (preprocessingIntensity !== 'off') {
+            const is16Bit = true; // ProxyEngine always uses 16-bit Lab
+            const isHeavy = preprocessingIntensity === 'heavy';
+            const radius = isHeavy ? 5 : 3;
+            const sigmaR = is16Bit ? 5000 : 3000;
+            BilateralFilter.applyBilateralFilterLab(proxyBuffer, proxyW, proxyH, radius, sigmaR);
+        }
 
         this.proxyBuffer = proxyBuffer;
 
-        // 2. Run initial posterization (full pipeline)
+        // Proxy-safe config: disable snap/prune/densityFloor to prevent palette
+        // collapse at proxy resolution. Even at 800px, CIE94/CIE2000 archetypes
+        // with enablePaletteReduction=true can merge minority colors (e.g. green
+        // on the Jethro image). Production uses the locked proxy palette (no
+        // re-posterization), so these overrides don't cause preview-vs-production
+        // divergence.
+        // format: 'lab' is CRITICAL — input is 16-bit Lab, not RGB.
+        const proxyConfig = {
+            ...initialConfig,
+            format: 'lab',
+            snapThreshold: 0,
+            enablePaletteReduction: false,
+            densityFloor: 0,
+            preservedUnifyThreshold: 0.5
+        };
+
+        // ═══ DIAGNOSTIC: Full posterize config dump ═══
+        console.log(`\n═══ [ProxyEngine.initializeProxy] POSTERIZE PARAMS ═══`);
+        console.log(`  Image: ${proxyW}×${proxyH} (from ${width}×${height}), format=${proxyConfig.format}, bitDepth=${proxyConfig.bitDepth}`);
+        console.log(`  targetColors: ${proxyConfig.targetColors}`);
+        console.log(`  engineType: ${proxyConfig.engineType}`);
+        console.log(`  centroidStrategy: ${proxyConfig.centroidStrategy}`);
+        console.log(`  distanceMetric: ${proxyConfig.distanceMetric}`);
+        console.log(`  enableHueGapAnalysis: ${proxyConfig.enableHueGapAnalysis}`);
+        console.log(`  enablePaletteReduction: ${proxyConfig.enablePaletteReduction}`);
+        console.log(`  paletteReduction: ${proxyConfig.paletteReduction}`);
+        console.log(`  densityFloor: ${proxyConfig.densityFloor}`);
+        console.log(`  snapThreshold: ${proxyConfig.snapThreshold}`);
+        console.log(`  preservedUnifyThreshold: ${proxyConfig.preservedUnifyThreshold}`);
+        console.log(`  preserveWhite: ${proxyConfig.preserveWhite}, preserveBlack: ${proxyConfig.preserveBlack}`);
+        console.log(`  substrateMode: ${proxyConfig.substrateMode}, substrateTolerance: ${proxyConfig.substrateTolerance}`);
+        console.log(`  vibrancyMode: ${proxyConfig.vibrancyMode}, vibrancyBoost: ${proxyConfig.vibrancyBoost}`);
+        console.log(`  highlightThreshold: ${proxyConfig.highlightThreshold}, highlightBoost: ${proxyConfig.highlightBoost}`);
+        console.log(`  lWeight: ${proxyConfig.lWeight}, cWeight: ${proxyConfig.cWeight}, blackBias: ${proxyConfig.blackBias}`);
+        console.log(`  isolationThreshold: ${proxyConfig.isolationThreshold}`);
+        console.log(`  hueLockAngle: ${proxyConfig.hueLockAngle}, shadowPoint: ${proxyConfig.shadowPoint}`);
+        console.log(`  tuning: ${proxyConfig.tuning ? JSON.stringify(proxyConfig.tuning) : 'NONE (using flat params)'}`);
+        console.log(`  archetype: ${proxyConfig.name || 'unknown'} (id=${proxyConfig.id || 'unknown'})`);
+        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, enablePaletteReduction=false, densityFloor=0, preservedUnifyThreshold=0.5`);
+        console.log(`═══ END ProxyEngine.initializeProxy PARAMS ═══\n`);
+
         const posterizeResult = await PosterizationEngine.posterize(
             proxyBuffer,
             proxyW,
             proxyH,
-            initialConfig.targetColors,
-            initialConfig
+            proxyConfig.targetColors,
+            proxyConfig
         );
 
+        // ═══ DIAGNOSTIC: Posterize result ═══
+        if (posterizeResult.paletteLab) {
+            console.log(`\n═══ [ProxyEngine.initializeProxy] POSTERIZE RESULT: ${posterizeResult.paletteLab.length} colors ═══`);
+            posterizeResult.paletteLab.forEach((lab, i) => {
+                const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
+                const H = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
+                console.log(`  [${i}] L=${lab.L.toFixed(1)} a=${lab.a.toFixed(1)} b=${lab.b.toFixed(1)} C=${C.toFixed(1)} H=${H.toFixed(0)}°`);
+            });
+            console.log(`═══ END ProxyEngine.initializeProxy RESULT ═══\n`);
+        }
 
         // 3. Run separation - get color indices
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -80,8 +157,12 @@ class ProxyEngine {
             masks: masks,
             width: proxyW,
             height: proxyH,
+            distanceMetric: initialConfig.distanceMetric || 'cie76',
             statistics: posterizeResult.statistics || {}
         };
+
+        // Snapshot baseline so mechanical knobs can restore from clean state
+        this._snapshotBaseline();
 
         // 5. Store source metadata
         this.sourceMetadata = {
@@ -91,7 +172,8 @@ class ProxyEngine {
             bitDepth: initialConfig.bitDepth || 16
         };
 
-        // 6. Generate initial preview from color indices
+        // 6. Generate clean preview (no knobs yet).
+        // Caller (SessionState) follows up with updateProxy() to apply knobs.
         const previewBuffer = this._generatePreviewFromIndices(
             this.separationState.colorIndices,
             this.separationState.rgbPalette,
@@ -111,7 +193,138 @@ class ProxyEngine {
     }
 
     /**
+     * Re-posterize the existing proxyBuffer with a new config.
+     * Skips downsampling — uses the stored 512px buffer directly.
+     * Used for archetype swaps where the source pixels haven't changed.
+     *
+     * @param {Object} config - New posterization config
+     * @returns {Promise<Object>} Updated proxy state
+     */
+    async rePosterize(config) {
+        if (!this.proxyBuffer || !this.separationState) {
+            throw new Error('Proxy not initialized — call initializeProxy first');
+        }
+
+        const startTime = performance.now();
+        const proxyW = this.separationState.width;
+        const proxyH = this.separationState.height;
+
+        // Proxy-safe overrides (same as initializeProxy — prevent palette collapse)
+        const proxyConfig = {
+            ...config,
+            format: 'lab',
+            snapThreshold: 0,
+            enablePaletteReduction: false,
+            densityFloor: 0,
+            preservedUnifyThreshold: 0.5
+        };
+
+        // ═══ DIAGNOSTIC: Full posterize config dump ═══
+        console.log(`\n═══ [ProxyEngine.rePosterize] POSTERIZE PARAMS ═══`);
+        console.log(`  Image: ${proxyW}×${proxyH}, format=${proxyConfig.format}, bitDepth=${proxyConfig.bitDepth}`);
+        console.log(`  targetColors: ${proxyConfig.targetColors}`);
+        console.log(`  engineType: ${proxyConfig.engineType}`);
+        console.log(`  centroidStrategy: ${proxyConfig.centroidStrategy}`);
+        console.log(`  distanceMetric: ${proxyConfig.distanceMetric}`);
+        console.log(`  enableHueGapAnalysis: ${proxyConfig.enableHueGapAnalysis}`);
+        console.log(`  enablePaletteReduction: ${proxyConfig.enablePaletteReduction}`);
+        console.log(`  paletteReduction: ${proxyConfig.paletteReduction}`);
+        console.log(`  densityFloor: ${proxyConfig.densityFloor}`);
+        console.log(`  snapThreshold: ${proxyConfig.snapThreshold}`);
+        console.log(`  preservedUnifyThreshold: ${proxyConfig.preservedUnifyThreshold}`);
+        console.log(`  preserveWhite: ${proxyConfig.preserveWhite}, preserveBlack: ${proxyConfig.preserveBlack}`);
+        console.log(`  substrateMode: ${proxyConfig.substrateMode}, substrateTolerance: ${proxyConfig.substrateTolerance}`);
+        console.log(`  vibrancyMode: ${proxyConfig.vibrancyMode}, vibrancyBoost: ${proxyConfig.vibrancyBoost}`);
+        console.log(`  highlightThreshold: ${proxyConfig.highlightThreshold}, highlightBoost: ${proxyConfig.highlightBoost}`);
+        console.log(`  lWeight: ${proxyConfig.lWeight}, cWeight: ${proxyConfig.cWeight}, blackBias: ${proxyConfig.blackBias}`);
+        console.log(`  isolationThreshold: ${proxyConfig.isolationThreshold}`);
+        console.log(`  hueLockAngle: ${proxyConfig.hueLockAngle}, shadowPoint: ${proxyConfig.shadowPoint}`);
+        console.log(`  tuning: ${proxyConfig.tuning ? JSON.stringify(proxyConfig.tuning) : 'NONE (using flat params)'}`);
+        console.log(`  archetype: ${proxyConfig.name || 'unknown'} (id=${proxyConfig.id || 'unknown'})`);
+        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, enablePaletteReduction=false, densityFloor=0, preservedUnifyThreshold=0.5`);
+        console.log(`═══ END ProxyEngine.rePosterize PARAMS ═══\n`);
+
+        const posterizeResult = await PosterizationEngine.posterize(
+            this.proxyBuffer,
+            proxyW,
+            proxyH,
+            proxyConfig.targetColors,
+            proxyConfig
+        );
+
+        // ═══ DIAGNOSTIC: Posterize result ═══
+        if (posterizeResult.paletteLab) {
+            console.log(`\n═══ [ProxyEngine.rePosterize] POSTERIZE RESULT: ${posterizeResult.paletteLab.length} colors ═══`);
+            posterizeResult.paletteLab.forEach((lab, i) => {
+                const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
+                const H = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
+                console.log(`  [${i}] L=${lab.L.toFixed(1)} a=${lab.a.toFixed(1)} b=${lab.b.toFixed(1)} C=${C.toFixed(1)} H=${H.toFixed(0)}°`);
+            });
+            console.log(`═══ END ProxyEngine.rePosterize RESULT ═══\n`);
+        }
+
+        // 2. Separation
+        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+            this.proxyBuffer,
+            posterizeResult.paletteLab,
+            null,
+            proxyW,
+            proxyH,
+            {
+                ditherType: config.ditherType || 'none',
+                distanceMetric: config.distanceMetric || 'cie76'
+            }
+        );
+
+        // 3. Masks
+        const masks = [];
+        for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
+            masks.push(SeparationEngine.generateLayerMask(colorIndices, i, proxyW, proxyH));
+        }
+
+        // 4. Update cached state (proxyBuffer unchanged)
+        this.separationState = {
+            palette: posterizeResult.paletteLab,
+            rgbPalette: posterizeResult.palette,
+            colorIndices,
+            masks,
+            width: proxyW,
+            height: proxyH,
+            distanceMetric: config.distanceMetric || 'cie76',
+            statistics: posterizeResult.statistics || {}
+        };
+
+        // Snapshot baseline so mechanical knobs can restore from clean state
+        this._snapshotBaseline();
+
+        // 5. Generate clean preview (no knobs yet).
+        // Caller (SessionState) follows up with updateProxy() to apply knobs.
+        const previewBuffer = this._generatePreviewFromIndices(
+            colorIndices,
+            posterizeResult.palette,
+            proxyW,
+            proxyH
+        );
+
+        const elapsed = performance.now() - startTime;
+
+        return {
+            previewBuffer,
+            palette: this.separationState.palette,
+            dimensions: { width: proxyW, height: proxyH },
+            statistics: this.separationState.statistics,
+            elapsedMs: elapsed
+        };
+    }
+
+    /**
      * Update proxy with new parameters (FAST PATH)
+     *
+     * Restores from baseline before applying knobs so that changes are
+     * always relative to the clean posterization output — not accumulated
+     * on top of previous knob mutations. This makes slider changes fully
+     * reversible.
+     *
      * @param {Object} paramChanges - Only changed parameters
      * @returns {Promise<Object>} Updated preview data
      */
@@ -122,27 +335,35 @@ class ProxyEngine {
 
         const startTime = performance.now();
 
-        // Fast path: only re-run affected steps
-        if ('minVolume' in paramChanges) {
-            await this._applyMinVolume(paramChanges.minVolume);
+        // Restore clean baseline before applying any changes.
+        // Without this, knob effects accumulate destructively
+        // (e.g. pruned colors can never come back).
+        if (this._baselineState) {
+            this._restoreFromBaseline();
         }
 
-        if ('speckleRescue' in paramChanges) {
-            await this._applySpeckleRescue(paramChanges.speckleRescue);
-        }
-
-        if ('shadowClamp' in paramChanges) {
-            await this._applyShadowClamp(paramChanges.shadowClamp);
-        }
-
+        // Apply palette override — swap ink colors without re-separating.
+        // In screen printing, "override" means "same plate, different ink."
+        // Plate assignments (colorIndices + masks) stay fixed from baseline;
+        // only the palette and rgbPalette update so the preview shows
+        // the new ink color on the existing plate coverage.
+        // DO NOT call _recomputeSeparation() — that would redistribute
+        // every pixel to nearest color, causing cascade: swatches rearrange,
+        // paper reassigns, coverage shifts, revert lands on wrong swatch.
         if ('paletteOverride' in paramChanges) {
             this.separationState.palette = paramChanges.paletteOverride;
-            // Re-run separation with new palette
-            await this._recomputeSeparation();
+            this.separationState.rgbPalette = paramChanges.paletteOverride.map(
+                lab => PosterizationEngine.labToRgb(lab)
+            );
         }
 
-        // Generate updated preview from color indices
-        const previewBuffer = this._generatePreviewFromIndices(
+        // Apply knobs on top (may prune, despeckle, clamp)
+        await this._applyKnobs(paramChanges);
+
+        // Generate preview from masks (reflects despeckle + shadowClamp).
+        // Pixels where all masks are 0 (isolated speckles removed) show as white.
+        const previewBuffer = this._generatePreviewFromMasks(
+            this.separationState.masks,
             this.separationState.colorIndices,
             this.separationState.rgbPalette,
             this.separationState.width,
@@ -160,6 +381,43 @@ class ProxyEngine {
     }
 
     /**
+     * Posterize the proxy buffer with a given config and return ONLY the palette.
+     * Does NOT modify separationState or _baselineState — purely read-only.
+     * Used for progressive palette preview on non-active archetype cards.
+     *
+     * @param {Object} config - Posterization config (from ParameterGenerator)
+     * @returns {Promise<{labPalette: Array, rgbPalette: Array}>}
+     */
+    async getPaletteForConfig(config) {
+        if (!this.proxyBuffer || !this.separationState) {
+            throw new Error('Proxy not initialized');
+        }
+
+        const proxyW = this.separationState.width;
+        const proxyH = this.separationState.height;
+
+        // Proxy-safe overrides (same as initializeProxy/rePosterize)
+        const proxyConfig = {
+            ...config,
+            format: 'lab',
+            snapThreshold: 0,
+            enablePaletteReduction: false,
+            densityFloor: 0,
+            preservedUnifyThreshold: 0.5
+        };
+
+        const result = await PosterizationEngine.posterize(
+            this.proxyBuffer,
+            proxyW,
+            proxyH,
+            proxyConfig.targetColors,
+            proxyConfig
+        );
+
+        return { labPalette: result.paletteLab, rgbPalette: result.palette };
+    }
+
+    /**
      * Get full-res parameters for production render
      * @returns {Object} Parameters for high-res posterization
      */
@@ -172,11 +430,52 @@ class ProxyEngine {
     }
 
     /**
-     * Bilinear downsample to 512px (long edge)
+     * Deep-copy current separationState as the clean baseline.
+     * Called after initializeProxy and rePosterize — never after knob application.
+     * @private
+     */
+    _snapshotBaseline() {
+        const s = this.separationState;
+        this._baselineState = {
+            palette: s.palette.map(c => ({ ...c })),
+            rgbPalette: s.rgbPalette ? s.rgbPalette.map(c =>
+                typeof c === 'string' ? c : { ...c }
+            ) : null,
+            colorIndices: new Uint8Array(s.colorIndices),
+            masks: s.masks.map(m => new Uint8Array(m)),
+            width: s.width,
+            height: s.height,
+            distanceMetric: s.distanceMetric || 'cie76',
+            statistics: { ...s.statistics }
+        };
+    }
+
+    /**
+     * Restore separationState from the clean baseline snapshot.
+     * @private
+     */
+    _restoreFromBaseline() {
+        const b = this._baselineState;
+        this.separationState = {
+            palette: b.palette.map(c => ({ ...c })),
+            rgbPalette: b.rgbPalette ? b.rgbPalette.map(c =>
+                typeof c === 'string' ? c : { ...c }
+            ) : null,
+            colorIndices: new Uint8Array(b.colorIndices),
+            masks: b.masks.map(m => new Uint8Array(m)),
+            width: b.width,
+            height: b.height,
+            distanceMetric: b.distanceMetric || 'cie76',
+            statistics: { ...b.statistics }
+        };
+    }
+
+    /**
+     * Bilinear downsample to 800px (long edge)
      * @private
      */
     _downsampleBilinear(labPixels, srcWidth, srcHeight) {
-        // Calculate target dimensions (512px on long edge)
+        // Calculate target dimensions (800px on long edge)
         const longEdge = Math.max(srcWidth, srcHeight);
         const scale = ProxyEngine.PROXY_SIZE / longEdge;
 
@@ -223,146 +522,59 @@ class ProxyEngine {
     }
 
     /**
-     * Apply minVolume pruning (palette reduction)
+     * Apply all mechanical knobs from a config/paramChanges object.
+     * @private
+     */
+    async _applyKnobs(params) {
+        if (params.minVolume !== undefined) {
+            await this._applyMinVolume(params.minVolume);
+        }
+        if (params.speckleRescue !== undefined) {
+            await this._applySpeckleRescue(params.speckleRescue);
+        }
+        if (params.shadowClamp !== undefined) {
+            await this._applyShadowClamp(params.shadowClamp);
+        }
+    }
+
+    /**
+     * Apply minVolume pruning — delegates to MechanicalKnobs.
      * @private
      */
     async _applyMinVolume(minVolumePercent) {
-        const totalPixels = this.separationState.width * this.separationState.height;
-        const minPixels = Math.round(totalPixels * minVolumePercent / 100);
+        const { palette, colorIndices, width, height } = this.separationState;
+        const pixelCount = width * height;
 
-        // Count pixels per color
-        const colorCounts = new Array(this.separationState.palette.length).fill(0);
-        for (let i = 0; i < this.separationState.colorIndices.length; i++) {
-            colorCounts[this.separationState.colorIndices[i]]++;
-        }
+        MechanicalKnobs.applyMinVolume(colorIndices, palette, pixelCount, minVolumePercent);
 
-        // Identify colors below threshold
-        const weakIndices = [];
-        colorCounts.forEach((count, idx) => {
-            if (count < minPixels && count > 0) {
-                weakIndices.push(idx);
-            }
-        });
-
-        if (weakIndices.length === 0) {
-            return;
-        }
-
-
-        // Remap weak colors to nearest strong colors
-        const strongIndices = [];
-        for (let i = 0; i < this.separationState.palette.length; i++) {
-            if (!weakIndices.includes(i) && colorCounts[i] > 0) {
-                strongIndices.push(i);
-            }
-        }
-
-        // Build remapping table
-        const remapTable = new Array(this.separationState.palette.length);
-        for (let i = 0; i < remapTable.length; i++) {
-            remapTable[i] = i; // Identity by default
-        }
-
-        // Remap weak to nearest strong
-        for (const weakIdx of weakIndices) {
-            const weakColor = this.separationState.palette[weakIdx];
-            let nearestStrongIdx = strongIndices[0];
-            let minDist = Infinity;
-
-            for (const strongIdx of strongIndices) {
-                const strongColor = this.separationState.palette[strongIdx];
-                const dL = weakColor.L - strongColor.L;
-                const da = weakColor.a - strongColor.a;
-                const db = weakColor.b - strongColor.b;
-                const dist = Math.sqrt(dL * dL + da * da + db * db);
-
-                if (dist < minDist) {
-                    minDist = dist;
-                    nearestStrongIdx = strongIdx;
-                }
-            }
-
-            remapTable[weakIdx] = nearestStrongIdx;
-        }
-
-        // Apply remapping to color indices
-        for (let i = 0; i < this.separationState.colorIndices.length; i++) {
-            const oldIdx = this.separationState.colorIndices[i];
-            this.separationState.colorIndices[i] = remapTable[oldIdx];
-        }
-
-        // Rebuild palette (remove weak colors)
-        const newPalette = [];
-        const newRgbPalette = [];
-        const indexMapping = new Map();
-
-        for (let i = 0; i < this.separationState.palette.length; i++) {
-            if (!weakIndices.includes(i)) {
-                indexMapping.set(i, newPalette.length);
-                newPalette.push(this.separationState.palette[i]);
-                if (this.separationState.rgbPalette) {
-                    newRgbPalette.push(this.separationState.rgbPalette[i]);
-                }
-            }
-        }
-
-        // Remap color indices to new palette
-        for (let i = 0; i < this.separationState.colorIndices.length; i++) {
-            const oldIdx = this.separationState.colorIndices[i];
-            this.separationState.colorIndices[i] = indexMapping.get(oldIdx);
-        }
-
-        this.separationState.palette = newPalette;
-        this.separationState.rgbPalette = newRgbPalette;
-
-        // Rebuild masks
+        // Rebuild masks (pruned colors get all-zero masks)
         await this._rebuildMasks();
-
     }
 
     /**
-     * Apply speckle rescue (morphological erosion)
+     * Apply speckle rescue — delegates to MechanicalKnobs.
+     * Passes originalWidth for proxy-aware threshold scaling.
      * @private
      */
-    async _applySpeckleRescue(radiusPixels) {
-        if (radiusPixels === 0) {
-            return;
-        }
+    async _applySpeckleRescue(thresholdPixels) {
+        const { masks, colorIndices, width, height } = this.separationState;
+        const originalWidth = this.sourceMetadata && this.sourceMetadata.originalWidth;
 
-
-        const { width, height } = this.separationState;
-
-        // Apply erosion to each mask
-        for (let colorIdx = 0; colorIdx < this.separationState.masks.length; colorIdx++) {
-            const mask = this.separationState.masks[colorIdx];
-            const eroded = this._erodeMask(mask, width, height, radiusPixels);
-            this.separationState.masks[colorIdx] = eroded;
-        }
-
+        MechanicalKnobs.applySpeckleRescue(
+            masks, colorIndices, width, height, thresholdPixels, originalWidth
+        );
     }
 
     /**
-     * Apply shadow clamp (minimum ink density)
+     * Apply shadow clamp — delegates to MechanicalKnobs.
      * @private
      */
     async _applyShadowClamp(clampPercent) {
-        if (clampPercent === 0) {
-            return;
-        }
+        const { masks, colorIndices, palette, width, height } = this.separationState;
 
-        const clampValue = Math.round(clampPercent * 255 / 100);
-
-
-        // Clamp mask values below threshold to threshold
-        this.separationState.masks.forEach(mask => {
-            for (let i = 0; i < mask.length; i++) {
-                const val = mask[i];
-                if (val > 0 && val < clampValue) {
-                    mask[i] = clampValue;
-                }
-            }
-        });
-
+        MechanicalKnobs.applyShadowClamp(
+            masks, colorIndices, palette, width, height, clampPercent
+        );
     }
 
     /**
@@ -371,14 +583,14 @@ class ProxyEngine {
      */
     async _recomputeSeparation() {
 
-        // Get new color indices
+        // Get new color indices — use the archetype's metric (not hardcoded CIE76)
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
             this.proxyBuffer,
             this.separationState.palette,
             null,
             this.separationState.width,
             this.separationState.height,
-            { ditherType: 'none', distanceMetric: 'cie76' }
+            { ditherType: 'none', distanceMetric: this.separationState.distanceMetric || 'cie76' }
         );
 
         // Generate new masks
@@ -423,51 +635,6 @@ class ProxyEngine {
     }
 
     /**
-     * Erode mask using simple box kernel
-     * @private
-     */
-    _erodeMask(mask, width, height, radius) {
-        const eroded = new Uint8Array(mask.length);
-
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const idx = y * width + x;
-
-                if (mask[idx] === 0) {
-                    eroded[idx] = 0;
-                    continue;
-                }
-
-                // Check if all neighbors within radius are non-zero
-                let allNeighborsSet = true;
-
-                for (let dy = -radius; dy <= radius; dy++) {
-                    for (let dx = -radius; dx <= radius; dx++) {
-                        const nx = x + dx;
-                        const ny = y + dy;
-
-                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
-                            allNeighborsSet = false;
-                            break;
-                        }
-
-                        const nIdx = ny * width + nx;
-                        if (mask[nIdx] === 0) {
-                            allNeighborsSet = false;
-                            break;
-                        }
-                    }
-                    if (!allNeighborsSet) break;
-                }
-
-                eroded[idx] = allNeighborsSet ? 255 : 0;
-            }
-        }
-
-        return eroded;
-    }
-
-    /**
      * Generate RGBA preview buffer from color indices
      * @private
      */
@@ -509,6 +676,57 @@ class ProxyEngine {
             previewBuffer[idx + 1] = color.g;
             previewBuffer[idx + 2] = color.b;
             previewBuffer[idx + 3] = 255; // Alpha
+        }
+
+        return previewBuffer;
+    }
+
+    /**
+     * Generate preview RGBA buffer from masks (post-knob).
+     * Pixels where the assigned mask was removed (despeckled) are shown in
+     * the color of whatever mask still covers them. If NO mask covers a pixel
+     * (minVolume pruned the color entirely), fall back to colorIndices.
+     * Speckle-removed pixels visually merge into their surroundings — they
+     * don't show as white because in print they'd absorb into the adjacent ink.
+     * @private
+     */
+    _generatePreviewFromMasks(masks, colorIndices, rgbPalette, width, height) {
+        const pixelCount = width * height;
+        const previewBuffer = new Uint8ClampedArray(pixelCount * 4);
+        const numColors = masks.length;
+
+        for (let i = 0; i < pixelCount; i++) {
+            const idx = i * 4;
+            const ci = colorIndices[i];
+            let colorIdx = ci;
+
+            // If assigned color's mask was eroded, find another active mask
+            if (ci >= numColors || masks[ci][i] === 0) {
+                let found = -1;
+                for (let c = 0; c < numColors; c++) {
+                    if (masks[c][i] > 0) {
+                        found = c;
+                        break;
+                    }
+                }
+                // Fall back to original colorIndices if no mask active
+                // (e.g. minVolume pruned the color — it remaps via colorIndices)
+                colorIdx = found >= 0 ? found : ci;
+            }
+
+            if (colorIdx < rgbPalette.length) {
+                const color = typeof rgbPalette[colorIdx] === 'string'
+                    ? this._hexToRgb(rgbPalette[colorIdx])
+                    : rgbPalette[colorIdx];
+                previewBuffer[idx]     = color.r;
+                previewBuffer[idx + 1] = color.g;
+                previewBuffer[idx + 2] = color.b;
+            } else {
+                previewBuffer[idx]     = 255;
+                previewBuffer[idx + 1] = 255;
+                previewBuffer[idx + 2] = 255;
+            }
+            previewBuffer[idx + 3] = 255;
         }
 
         return previewBuffer;
