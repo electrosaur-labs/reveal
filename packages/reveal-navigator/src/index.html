@@ -22,6 +22,55 @@
             overflow: hidden;
         }
 
+        /* ─── Pre-Flight Boot Screen ─── */
+        #progress-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #323232;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #progress-box {
+            width: 280px;
+            text-align: center;
+        }
+        #progress-title {
+            color: #e0e0e0;
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            margin-bottom: 20px;
+        }
+        #progress-track {
+            height: 3px;
+            background: #444;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        #progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #0d99ff;
+            border-radius: 2px;
+            transition: width 0.4s ease;
+        }
+        #progress-label {
+            color: #888;
+            font-size: 11px;
+            min-height: 14px;
+        }
+        @keyframes shimmer {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+        #progress-fill.active {
+            animation: shimmer 1.5s ease-in-out infinite;
+        }
+
         /* ─── Dialog fills its allocation ─── */
         #navigatorDialog {
             width: 100%;
@@ -690,6 +739,14 @@
 </head>
 <body>
     <dialog id="navigatorDialog">
+    <!-- Pre-Flight Boot Screen — covers dialog during ingest -->
+    <div id="progress-overlay" style="display:none;">
+        <div id="progress-box">
+            <div id="progress-title">Reveal Navigator</div>
+            <div id="progress-track"><div id="progress-fill"></div></div>
+            <div id="progress-label"></div>
+        </div>
+    </div>
     <div id="root">
         <!-- Left Panel: Full workflow -->
         <div id="main-panel">

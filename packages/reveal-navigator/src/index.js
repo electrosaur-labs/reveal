@@ -151,6 +151,11 @@ function initPlugin() {
             });
         }
 
+        // Progress events from SessionState (heavy CPU phases during loadImage)
+        sessionState.on('progress', (data) => {
+            _showProgress(data.label, data.percent);
+        });
+
         // Pulse 1: dnaReady fires ~50ms after ingest — update radar + DNA stats immediately
         sessionState.on('dnaReady', (dna) => {
             const sectorEl = document.getElementById('dominant-sector');
@@ -344,6 +349,9 @@ async function ingestActiveDocument(showDialog) {
     const btnSync = document.getElementById('btn-sync');
     if (btnSync) btnSync.disabled = true;
 
+    // Show boot screen immediately — user sees feedback within 1 frame
+    _showProgress('Preparing\u2026', 0);
+
     try {
         const validation = validateDocument();
         if (!validation.ok) {
@@ -363,7 +371,10 @@ async function ingestActiveDocument(showDialog) {
         }
 
         updateDocumentHeader(validation.info);
-        setStatus('Reading pixels...');
+
+        // ── Phase 1: INGEST — the slow bridge call (2-3s for large docs) ──
+        _showProgress('Acquiring 16-bit Lab data\u2026', 10);
+        await new Promise(r => setTimeout(r, 20)); // yield so boot screen paints
 
         // Read full-res pixels — ProxyEngine handles downsampling internally.
         // PS GPU downsampling (targetSize) was tested but loses minority color
@@ -374,8 +385,10 @@ async function ingestActiveDocument(showDialog) {
             await PhotoshopBridge.getDocumentLab();
         logger.log(`[Navigator] Ingested ${width}x${height} from ${validation.info.name}`);
 
-        setStatus('Analyzing DNA...');
+        // ── Phases 2-4 are driven by SessionState.loadImage progress events ──
         await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
+
+        _showProgress('Ready', 100);
 
     } catch (err) {
         logger.log(`[Navigator] Ingest failed: ${err.message}`);
@@ -384,6 +397,7 @@ async function ingestActiveDocument(showDialog) {
         }
         setStatus('Error: ' + err.message);
     } finally {
+        _hideProgress();
         isIngesting = false;
         if (btnSync) btnSync.disabled = false;
     }
@@ -452,6 +466,33 @@ function updateDNADisplay() {
 function setStatus(text) {
     const el = document.getElementById('status-text');
     if (el) el.textContent = text;
+}
+
+function _showProgress(label, percent) {
+    const overlay = document.getElementById('progress-overlay');
+    const labelEl = document.getElementById('progress-label');
+    const fill = document.getElementById('progress-fill');
+    if (overlay) overlay.style.display = 'flex';
+    if (labelEl) labelEl.textContent = label;
+    if (fill) {
+        fill.style.width = percent + '%';
+        // Shimmer while in progress, solid when complete
+        if (percent < 100) {
+            fill.classList.add('active');
+        } else {
+            fill.classList.remove('active');
+        }
+    }
+}
+
+function _hideProgress() {
+    const overlay = document.getElementById('progress-overlay');
+    const fill = document.getElementById('progress-fill');
+    if (overlay) overlay.style.display = 'none';
+    if (fill) {
+        fill.classList.remove('active');
+        fill.style.width = '0%';
+    }
 }
 
 // ─── Finalize ────────────────────────────────────────────

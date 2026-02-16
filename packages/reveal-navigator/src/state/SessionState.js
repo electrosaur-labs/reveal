@@ -167,15 +167,20 @@ class SessionState extends EventEmitter {
         this.deletedColors.clear();
         this._tweakCache.clear();
 
-        // ── Pulse 1: DNA + score all archetypes (~51ms) ──
+        // ── Phase 2: STRUCTURAL — DNA analysis (~51ms) ──
+        this.emit('progress', { phase: 'structural', label: 'Analyzing image DNA\u2026', percent: 35 });
+        await new Promise(r => setTimeout(r, 20)); // yield for repaint
+
         const dnaGen = new Reveal.DNAGenerator();
         this.imageDNA = dnaGen.generate(labPixels, width, height, { bitDepth: 16 });
         logger.log(`[SessionState] Pulse 1: DNA generated (dominant_sector=${this.imageDNA.dominant_sector})`);
 
         this.emit('dnaReady', this.imageDNA);
 
-        // Score ALL archetypes immediately (<1ms) — carousel cards appear
-        // before the heavy proxy init so user sees structure early.
+        // ── Phase 3: STRATEGIC — score all archetypes (<1ms) ──
+        this.emit('progress', { phase: 'strategic', label: 'Mapping archetypes\u2026', percent: 50 });
+        await new Promise(r => setTimeout(r, 20)); // yield for repaint
+
         const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
         const mapper = new Reveal.ArchetypeMapper(archetypes);
         const allScores = mapper.getTopMatches(this.imageDNA, archetypes.length);
@@ -184,10 +189,10 @@ class SessionState extends EventEmitter {
 
         this.emit('carouselReady', { scores: allScores, topMatchId: topMatch.id });
 
-        // Yield so the browser can paint carousel cards before heavy CPU work
-        await new Promise(r => setTimeout(r, 0));
+        // ── Phase 4: VISUAL — proxy posterization + knob init (~400ms) ──
+        this.emit('progress', { phase: 'visual', label: 'Initializing navigator\u2026', percent: 65 });
+        await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        // ── Pulse 2: Best-Fit Preview (~400ms) ──
         this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
             manualArchetypeId: topMatch.id
         });
@@ -209,6 +214,8 @@ class SessionState extends EventEmitter {
 
         logger.log(`[SessionState] Pulse 2: Posterized ${proxyResult.palette.length} colors, ${proxyResult.dimensions.width}x${proxyResult.dimensions.height} in ${proxyResult.elapsedMs.toFixed(0)}ms`);
         this.emit('proxyReady', proxyResult);
+        this.emit('progress', { phase: 'visual', label: 'Applying knobs\u2026', percent: 85 });
+        await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
         // Apply knobs (speckleRescue, shadowClamp, minVolume) with explicit state values
         const knobResult = await this.proxyEngine.updateProxy({
