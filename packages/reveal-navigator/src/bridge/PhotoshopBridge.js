@@ -38,7 +38,8 @@ class PhotoshopBridge {
             layerName: layerName,
             mode: String(doc.mode),
             width: doc.width,
-            height: doc.height
+            height: doc.height,
+            layerCount: doc.layers ? doc.layers.length : 1
         };
     }
 

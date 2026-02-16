@@ -316,6 +316,14 @@ function validateDocument() {
         };
     }
 
+    if (info.layerCount > 1) {
+        return {
+            ok: false,
+            title: 'Flatten First',
+            message: `Navigator requires a single-layer document.\n\nCurrent layers: ${info.layerCount}\n\nFlatten via Layer \u2192 Flatten Image.`
+        };
+    }
+
     return { ok: true, info };
 }
 
