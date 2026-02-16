@@ -265,7 +265,7 @@
         }
 
         .knob-label {
-            color: #666;
+            color: #e0e0e0;
             font-size: 10px;
         }
 
@@ -301,6 +301,46 @@
 
         #knobs-panel sp-slider:last-child {
             margin-bottom: 0;
+        }
+
+        .knob-group-label {
+            font-size: 10px;
+            color: #e0e0e0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 8px 0 2px 0;
+        }
+
+        #advanced-panel summary {
+            font-size: 10px;
+            color: #888;
+            cursor: pointer;
+            padding: 4px 0;
+            user-select: none;
+        }
+
+        #advanced-panel summary:hover {
+            color: #bbb;
+        }
+
+        #advanced-panel select {
+            width: 100%;
+            margin-bottom: 4px;
+            padding: 3px 4px;
+            background: #383838;
+            color: #ccc;
+            border: 1px solid #555;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+
+        #advanced-panel select:focus {
+            border-color: #4da6ff;
+            outline: none;
+        }
+
+        #advanced-panel .adv-checkbox {
+            accent-color: #4da6ff;
         }
 
         #btn-reset-archetype {
@@ -847,13 +887,300 @@
                 </div>
                 <sp-slider id="knob-trapSize" min="0" max="10" step="1" value="4" variant="filled"></sp-slider>
 
+                <div id="radar-container">
+                    <img id="radar-img" width="300" height="300" />
+                </div>
+
+                <!-- ─── Advanced (Engine Room) ─── -->
+                <details id="advanced-panel">
+                    <summary>Advanced</summary>
+
+                    <!-- Group: Engine -->
+                    <div class="knob-group-label">Engine</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Engine</span>
+                        <button class="knob-revert" id="revert-engineType">&#x21BA;</button>
+                    </div>
+                    <select id="picker-engineType">
+                        <option value="reveal-mk1.5">Reveal MK1.5</option>
+                        <option value="reveal">Reveal (Hue-Aware)</option>
+                        <option value="balanced">Balanced (Fast)</option>
+                        <option value="classic">Classic (RGB)</option>
+                        <option value="stencil">Stencil (Mono)</option>
+                    </select>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Metric</span>
+                        <button class="knob-revert" id="revert-distanceMetric">&#x21BA;</button>
+                    </div>
+                    <select id="picker-distanceMetric">
+                        <option value="cie76">CIE76 (fast)</option>
+                        <option value="cie94">CIE94 (balanced)</option>
+                        <option value="cie2000">CIE2000 (precise)</option>
+                    </select>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Strategy</span>
+                        <button class="knob-revert" id="revert-centroidStrategy">&#x21BA;</button>
+                    </div>
+                    <select id="picker-centroidStrategy">
+                        <option value="SALIENCY">Saliency</option>
+                        <option value="VOLUMETRIC">Volumetric</option>
+                        <option value="AVERAGE">Average</option>
+                    </select>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Color Mode</span>
+                        <button class="knob-revert" id="revert-colorMode">&#x21BA;</button>
+                    </div>
+                    <select id="picker-colorMode">
+                        <option value="color">Color</option>
+                        <option value="bw">B/W</option>
+                    </select>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Preprocessing</span>
+                        <button class="knob-revert" id="revert-preprocessingIntensity">&#x21BA;</button>
+                    </div>
+                    <select id="picker-preprocessingIntensity">
+                        <option value="off">Off</option>
+                        <option value="auto">Auto</option>
+                        <option value="light">Light</option>
+                        <option value="heavy">Heavy</option>
+                    </select>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Neutral Clamp</span>
+                        <button class="knob-revert" id="revert-neutralCentroidClampThreshold">&#x21BA;</button>
+                        <span class="knob-val" id="neutralCentroidClampThreshold-val">0.5</span>
+                    </div>
+                    <sp-slider id="knob-neutralCentroidClampThreshold" min="0" max="20" step="0.5" value="0.5" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Neutral Sovereignty</span>
+                        <button class="knob-revert" id="revert-neutralSovereigntyThreshold">&#x21BA;</button>
+                        <span class="knob-val" id="neutralSovereigntyThreshold-val">0</span>
+                    </div>
+                    <sp-slider id="knob-neutralSovereigntyThreshold" min="0" max="100" step="1" value="0" variant="filled"></sp-slider>
+
+                    <!-- Group: Chroma -->
+                    <div class="knob-group-label">Chroma</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Vibrancy</span>
+                        <button class="knob-revert" id="revert-vibrancyBoost">&#x21BA;</button>
+                        <span class="knob-val" id="vibrancyBoost-val">1.4×</span>
+                    </div>
+                    <sp-slider id="knob-vibrancyBoost" min="0.5" max="3" step="0.05" value="1.4" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Vib Threshold</span>
+                        <button class="knob-revert" id="revert-vibrancyThreshold">&#x21BA;</button>
+                        <span class="knob-val" id="vibrancyThreshold-val">10</span>
+                    </div>
+                    <sp-slider id="knob-vibrancyThreshold" min="0" max="50" step="1" value="10" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Vib Mode</span>
+                        <button class="knob-revert" id="revert-vibrancyMode">&#x21BA;</button>
+                    </div>
+                    <select id="picker-vibrancyMode">
+                        <option value="linear">Linear</option>
+                        <option value="subtle">Subtle</option>
+                        <option value="moderate">Moderate</option>
+                        <option value="aggressive">Aggressive</option>
+                        <option value="exponential">Exponential</option>
+                    </select>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Chroma Gate</span>
+                        <button class="knob-revert" id="revert-chromaGate">&#x21BA;</button>
+                        <span class="knob-val" id="chromaGate-val">—</span>
+                    </div>
+                    <sp-slider id="knob-chromaGate" min="1" max="3" step="0.1" value="1" variant="filled"></sp-slider>
+
+                    <!-- Group: Palette -->
+                    <div class="knob-group-label">Palette</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Prune ΔE</span>
+                        <button class="knob-revert" id="revert-paletteReduction">&#x21BA;</button>
+                        <span class="knob-val" id="paletteReduction-val">6.0</span>
+                    </div>
+                    <sp-slider id="knob-paletteReduction" min="0" max="20" step="0.5" value="6" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Palette Prune</span>
+                        <button class="knob-revert" id="revert-enablePaletteReduction">&#x21BA;</button>
+                        <input type="checkbox" id="chk-enablePaletteReduction" class="adv-checkbox" checked>
+                    </div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Hue Gap</span>
+                        <button class="knob-revert" id="revert-enableHueGapAnalysis">&#x21BA;</button>
+                        <input type="checkbox" id="chk-enableHueGapAnalysis" class="adv-checkbox" checked>
+                    </div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Hue Lock</span>
+                        <button class="knob-revert" id="revert-hueLockAngle">&#x21BA;</button>
+                        <span class="knob-val" id="hueLockAngle-val">20°</span>
+                    </div>
+                    <sp-slider id="knob-hueLockAngle" min="0" max="90" step="1" value="20" variant="filled"></sp-slider>
+
+                    <!-- Group: Weights -->
+                    <div class="knob-group-label">Weights</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">L Weight</span>
+                        <button class="knob-revert" id="revert-lWeight">&#x21BA;</button>
+                        <span class="knob-val" id="lWeight-val">1.2×</span>
+                    </div>
+                    <sp-slider id="knob-lWeight" min="0.5" max="3" step="0.1" value="1.2" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">C Weight</span>
+                        <button class="knob-revert" id="revert-cWeight">&#x21BA;</button>
+                        <span class="knob-val" id="cWeight-val">2.0×</span>
+                    </div>
+                    <sp-slider id="knob-cWeight" min="0.5" max="6" step="0.1" value="2" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Black Bias</span>
+                        <button class="knob-revert" id="revert-blackBias">&#x21BA;</button>
+                        <span class="knob-val" id="blackBias-val">3.0</span>
+                    </div>
+                    <sp-slider id="knob-blackBias" min="0" max="10" step="0.5" value="3" variant="filled"></sp-slider>
+
+                    <!-- Group: Tone -->
+                    <div class="knob-group-label">Tone</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Highlight</span>
+                        <button class="knob-revert" id="revert-highlightThreshold">&#x21BA;</button>
+                        <span class="knob-val" id="highlightThreshold-val">90 L</span>
+                    </div>
+                    <sp-slider id="knob-highlightThreshold" min="80" max="100" step="1" value="90" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Highlight Boost</span>
+                        <button class="knob-revert" id="revert-highlightBoost">&#x21BA;</button>
+                        <span class="knob-val" id="highlightBoost-val">1.5×</span>
+                    </div>
+                    <sp-slider id="knob-highlightBoost" min="0" max="3" step="0.1" value="1.5" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Shadow Pt</span>
+                        <button class="knob-revert" id="revert-shadowPoint">&#x21BA;</button>
+                        <span class="knob-val" id="shadowPoint-val">15 L</span>
+                    </div>
+                    <sp-slider id="knob-shadowPoint" min="5" max="25" step="1" value="15" variant="filled"></sp-slider>
+
+                    <!-- Group: Substrate -->
+                    <div class="knob-group-label">Substrate</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Mode</span>
+                        <button class="knob-revert" id="revert-substrateMode">&#x21BA;</button>
+                    </div>
+                    <select id="picker-substrateMode">
+                        <option value="auto">Auto</option>
+                        <option value="white">White</option>
+                        <option value="dark">Dark</option>
+                        <option value="transparent">Transparent</option>
+                    </select>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Tolerance</span>
+                        <button class="knob-revert" id="revert-substrateTolerance">&#x21BA;</button>
+                        <span class="knob-val" id="substrateTolerance-val">2.0</span>
+                    </div>
+                    <sp-slider id="knob-substrateTolerance" min="0" max="5" step="0.5" value="2" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Keep White</span>
+                        <button class="knob-revert" id="revert-preserveWhite">&#x21BA;</button>
+                        <input type="checkbox" id="chk-preserveWhite" class="adv-checkbox" checked>
+                    </div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Keep Black</span>
+                        <button class="knob-revert" id="revert-preserveBlack">&#x21BA;</button>
+                        <input type="checkbox" id="chk-preserveBlack" class="adv-checkbox" checked>
+                    </div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Skip Transparent</span>
+                        <button class="knob-revert" id="revert-ignoreTransparent">&#x21BA;</button>
+                        <input type="checkbox" id="chk-ignoreTransparent" class="adv-checkbox" checked>
+                    </div>
+
+                    <!-- Group: Noise -->
+                    <div class="knob-group-label">Noise</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Median Pass</span>
+                        <button class="knob-revert" id="revert-medianPass">&#x21BA;</button>
+                        <input type="checkbox" id="chk-medianPass" class="adv-checkbox">
+                    </div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Detail Rescue</span>
+                        <button class="knob-revert" id="revert-detailRescue">&#x21BA;</button>
+                        <span class="knob-val" id="detailRescue-val">—</span>
+                    </div>
+                    <sp-slider id="knob-detailRescue" min="0" max="20" step="1" value="0" variant="filled"></sp-slider>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Dither</span>
+                        <button class="knob-revert" id="revert-ditherType">&#x21BA;</button>
+                    </div>
+                    <select id="picker-ditherType">
+                        <option value="none">None</option>
+                        <option value="blue-noise">Blue Noise</option>
+                        <option value="floyd-steinberg">Floyd-Steinberg</option>
+                        <option value="bayer">Bayer</option>
+                        <option value="atkinson">Atkinson</option>
+                        <option value="stucki">Stucki</option>
+                    </select>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Screen Mesh</span>
+                        <button class="knob-revert" id="revert-meshSize">&#x21BA;</button>
+                    </div>
+                    <select id="picker-meshSize">
+                        <option value="0">Pixel-Level</option>
+                        <option value="110">110 TPI</option>
+                        <option value="156">156 TPI</option>
+                        <option value="200">200 TPI</option>
+                        <option value="230">230 TPI</option>
+                        <option value="280">280 TPI</option>
+                        <option value="305">305 TPI</option>
+                        <option value="355">355 TPI</option>
+                    </select>
+
+                    <!-- Group: Output -->
+                    <div class="knob-group-label">Output</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Edge Quality</span>
+                        <button class="knob-revert" id="revert-maskProfile">&#x21BA;</button>
+                    </div>
+                    <select id="picker-maskProfile">
+                        <option value="Gray Gamma 2.2">Hard Edges</option>
+                        <option value="Dot Gain 20%">Soft Edges</option>
+                        <option value="Gray Gamma 1.8">Mac Legacy</option>
+                        <option value="sGray">sRGB Gray</option>
+                    </select>
+
+                </details>
+
                 <button id="btn-reset-archetype" title="Reset all knobs to archetype defaults">Reset Archetype</button>
                 <button id="btn-restore-tweaks" title="Restore your previous slider tweaks for this archetype">Restore My Tweaks</button>
             </div>
 
-            <div id="radar-container">
-                <img id="radar-img" width="300" height="300" />
-            </div>
+            <!-- radar moved above Advanced panel -->
             <div id="hud-info">
                 <div id="status-bar">
                     <span id="status-text">Waiting for document...</span>

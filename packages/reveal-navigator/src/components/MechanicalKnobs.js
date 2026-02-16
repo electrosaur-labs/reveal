@@ -17,11 +17,41 @@
  */
 
 const KNOB_DEFS = [
+    // Primary knobs
     { key: 'targetColors',   sliderId: 'knob-targetColors',   valId: 'targetColors-val',   revertId: 'revert-targetColors',   decimals: 0, unit: ''   },
     { key: 'minVolume',      sliderId: 'knob-minVolume',      valId: 'minVolume-val',      revertId: 'revert-minVolume',      decimals: 1, unit: '%'  },
     { key: 'speckleRescue',  sliderId: 'knob-speckleRescue',  valId: 'speckleRescue-val',  revertId: 'revert-speckleRescue',  decimals: 0, unit: 'px' },
     { key: 'shadowClamp',    sliderId: 'knob-shadowClamp',    valId: 'shadowClamp-val',    revertId: 'revert-shadowClamp',    decimals: 1, unit: '%'  },
-    { key: 'trapSize',       sliderId: 'knob-trapSize',       valId: 'trapSize-val',       revertId: 'revert-trapSize',       decimals: 0, unit: 'px' }
+    { key: 'trapSize',       sliderId: 'knob-trapSize',       valId: 'trapSize-val',       revertId: 'revert-trapSize',       decimals: 0, unit: 'px' },
+
+    // Advanced: Chroma
+    { key: 'vibrancyBoost',      sliderId: 'knob-vibrancyBoost',      valId: 'vibrancyBoost-val',      revertId: 'revert-vibrancyBoost',      decimals: 2, unit: '×' },
+    { key: 'vibrancyThreshold',  sliderId: 'knob-vibrancyThreshold',  valId: 'vibrancyThreshold-val',  revertId: 'revert-vibrancyThreshold',  decimals: 0, unit: ''  },
+    { key: 'chromaGate',         sliderId: 'knob-chromaGate',         valId: 'chromaGate-val',         revertId: 'revert-chromaGate',         decimals: 1, unit: '×' },
+
+    // Advanced: Palette
+    { key: 'paletteReduction',   sliderId: 'knob-paletteReduction',   valId: 'paletteReduction-val',   revertId: 'revert-paletteReduction',   decimals: 1, unit: ''  },
+    { key: 'hueLockAngle',       sliderId: 'knob-hueLockAngle',       valId: 'hueLockAngle-val',       revertId: 'revert-hueLockAngle',       decimals: 0, unit: '°' },
+
+    // Advanced: Weights
+    { key: 'lWeight',            sliderId: 'knob-lWeight',            valId: 'lWeight-val',            revertId: 'revert-lWeight',            decimals: 1, unit: '×' },
+    { key: 'cWeight',            sliderId: 'knob-cWeight',            valId: 'cWeight-val',            revertId: 'revert-cWeight',            decimals: 1, unit: '×' },
+    { key: 'blackBias',          sliderId: 'knob-blackBias',          valId: 'blackBias-val',          revertId: 'revert-blackBias',          decimals: 1, unit: ''  },
+
+    // Advanced: Tone
+    { key: 'highlightThreshold', sliderId: 'knob-highlightThreshold', valId: 'highlightThreshold-val', revertId: 'revert-highlightThreshold', decimals: 0, unit: ' L' },
+    { key: 'highlightBoost',     sliderId: 'knob-highlightBoost',     valId: 'highlightBoost-val',     revertId: 'revert-highlightBoost',     decimals: 1, unit: '×' },
+    { key: 'shadowPoint',        sliderId: 'knob-shadowPoint',        valId: 'shadowPoint-val',        revertId: 'revert-shadowPoint',        decimals: 0, unit: ' L' },
+
+    // Advanced: Substrate
+    { key: 'substrateTolerance', sliderId: 'knob-substrateTolerance', valId: 'substrateTolerance-val', revertId: 'revert-substrateTolerance', decimals: 1, unit: ''  },
+
+    // Advanced: Noise
+    { key: 'detailRescue',       sliderId: 'knob-detailRescue',       valId: 'detailRescue-val',       revertId: 'revert-detailRescue',       decimals: 0, unit: ''  },
+
+    // Advanced: Engine
+    { key: 'neutralCentroidClampThreshold', sliderId: 'knob-neutralCentroidClampThreshold', valId: 'neutralCentroidClampThreshold-val', revertId: 'revert-neutralCentroidClampThreshold', decimals: 1, unit: '' },
+    { key: 'neutralSovereigntyThreshold',   sliderId: 'knob-neutralSovereigntyThreshold',   valId: 'neutralSovereigntyThreshold-val',   revertId: 'revert-neutralSovereigntyThreshold',   decimals: 0, unit: '' }
 ];
 
 class MechanicalKnobs {

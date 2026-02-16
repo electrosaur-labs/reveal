@@ -23,13 +23,48 @@ const MECHANICAL_KNOBS = new Set(['minVolume', 'speckleRescue', 'shadowClamp']);
 // Trap pixel sizes are resolution-dependent — meaningless at 512px proxy.
 const PRODUCTION_KNOBS = new Set(['trapSize']);
 
-// Union of all user-facing knobs (for snapshot/restore/reset loops)
-const ALL_KNOBS = new Set([...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS]);
-
-// Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy)
+// Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
+// This is the complete set from ParameterGenerator output — any change triggers rePosterize.
 const STRUCTURAL_PARAMS = new Set([
     'targetColors', 'engineType', 'centroidStrategy', 'distanceMetric',
-    'lWeight', 'cWeight', 'vibrancyBoost', 'paletteReduction'
+    // Saliency weights
+    'lWeight', 'cWeight', 'blackBias',
+    // Vibrancy
+    'vibrancyMode', 'vibrancyBoost', 'vibrancyThreshold',
+    // Highlights
+    'highlightThreshold', 'highlightBoost',
+    // Palette merging
+    'paletteReduction', 'enablePaletteReduction',
+    // Substrate
+    'substrateMode', 'substrateTolerance',
+    // Hue analysis
+    'enableHueGapAnalysis', 'hueLockAngle',
+    // Shadow/tone
+    'shadowPoint',
+    // Color mode
+    'colorMode',
+    // Preservation
+    'preserveWhite', 'preserveBlack',
+    // Neutral clamping
+    'neutralCentroidClampThreshold', 'neutralSovereigntyThreshold',
+    // Surgical
+    'chromaGate', 'detailRescue', 'medianPass',
+    // Dither
+    'ditherType',
+    // Preprocessing
+    'preprocessingIntensity',
+    // Transparency
+    'ignoreTransparent',
+    // Mask / Edge
+    'maskProfile',
+    // Screen mesh
+    'meshSize'
+]);
+
+// Union of all user-facing knobs (for snapshot/restore/reset/dirty loops).
+// Includes mechanical, production, and ALL structural params from config.
+const ALL_KNOBS = new Set([
+    ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS
 ]);
 
 const DEBOUNCE_MS = 50;
@@ -39,31 +74,16 @@ class SessionState extends EventEmitter {
     constructor() {
         super();
 
-        // Reactive state — UI-facing parameters
+        // Reactive state — UI-facing parameters.
+        // ALL config-driven params start undefined — populated by _applyConfigToState()
+        // when the first archetype loads. No hardcoded defaults; the archetype IS the default.
         this.state = {
-            // Core posterization
-            targetColors: 8,
-            engineType: 'reveal-mk1.5',
-            centroidStrategy: 'SALIENCY',
-            distanceMetric: 'cie76',
-
             // Archetype context
             activeArchetypeId: null,
             isArchetypeDirty: false,
 
-            // Print quality knobs (scrubbable)
-            minVolume: 1.5,
-            speckleRescue: 4,
-            shadowClamp: 8.0,
-
-            // Production-only knobs (not shown in proxy preview)
+            // Production-only (not in archetype config)
             trapSize: 4,  // 0=off, 1-50px trap expansion
-
-            // Structural tuning
-            lWeight: 1.1,
-            cWeight: 2.0,
-            vibrancyBoost: 1.6,
-            paletteReduction: 9.0,
 
             // Engine & preview state
             isProcessing: false,
@@ -338,11 +358,13 @@ class SessionState extends EventEmitter {
         }
 
         // Detect if restored values differ from archetype defaults
-        this.state.isKnobsCustomized =
-            this.state.minVolume !== this._archetypeDefaults.minVolume ||
-            this.state.speckleRescue !== this._archetypeDefaults.speckleRescue ||
-            this.state.shadowClamp !== this._archetypeDefaults.shadowClamp ||
-            this.state.trapSize !== this._archetypeDefaults.trapSize;
+        this.state.isKnobsCustomized = false;
+        for (const k of ALL_KNOBS) {
+            if (this.state[k] !== this._archetypeDefaults[k]) {
+                this.state.isKnobsCustomized = true;
+                break;
+            }
+        }
 
         this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
         this.emit('tweaksAvailable', { archetypeId: id, available: false }); // consumed
@@ -382,13 +404,15 @@ class SessionState extends EventEmitter {
         }
 
         // Detect knob customization vs archetype defaults
-        if ((MECHANICAL_KNOBS.has(key) || PRODUCTION_KNOBS.has(key)) && this._archetypeDefaults) {
+        if (ALL_KNOBS.has(key) && this._archetypeDefaults) {
             const wasCustomized = this.state.isKnobsCustomized;
-            this.state.isKnobsCustomized =
-                this.state.minVolume !== this._archetypeDefaults.minVolume ||
-                this.state.speckleRescue !== this._archetypeDefaults.speckleRescue ||
-                this.state.shadowClamp !== this._archetypeDefaults.shadowClamp ||
-                this.state.trapSize !== this._archetypeDefaults.trapSize;
+            this.state.isKnobsCustomized = false;
+            for (const k of ALL_KNOBS) {
+                if (this.state[k] !== this._archetypeDefaults[k]) {
+                    this.state.isKnobsCustomized = true;
+                    break;
+                }
+            }
             if (this.state.isKnobsCustomized !== wasCustomized) {
                 this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
             }
@@ -913,16 +937,14 @@ class SessionState extends EventEmitter {
                 bitDepth: 16
             },
             archetype: archetypeSection,
-            knobs: {
-                targetColors: this.state.targetColors,
-                minVolume: this.state.minVolume,
-                speckleRescue: this.state.speckleRescue,
-                shadowClamp: this.state.shadowClamp,
-                trapSize: this.state.trapSize,
-                distanceMetric: this.state.distanceMetric,
-                ditherType: this.currentConfig ? this.currentConfig.ditherType : 'none',
-                preprocessingIntensity: this.currentConfig ? this.currentConfig.preprocessingIntensity : 'off'
-            },
+            knobs: (() => {
+                const k = {};
+                for (const key of ALL_KNOBS) {
+                    if (this.state[key] !== undefined) k[key] = this.state[key];
+                }
+                k.preprocessingIntensity = this.currentConfig ? this.currentConfig.preprocessingIntensity : 'off';
+                return k;
+            })(),
             surgery: {
                 overrides,
                 merges,
@@ -947,33 +969,35 @@ class SessionState extends EventEmitter {
     exportProductionConfig() {
         const palette = this._buildOverriddenPalette();
 
+        // Start with all knob values from state
+        const config = {};
+        for (const key of ALL_KNOBS) {
+            if (this.state[key] !== undefined) {
+                config[key] = this.state[key];
+            }
+        }
+
+        // Build merge remap: sourceIndex → targetIndex (inverted from mergeHistory)
+        // Production render uses this to collapse duplicate palette entries
+        // after fresh nearest-neighbor separation at full resolution.
+        const mergeRemap = {};
+        for (const [target, sources] of this.mergeHistory) {
+            for (const src of sources) {
+                mergeRemap[src] = target;
+            }
+        }
+
         return {
             // Source metadata
             width: this.imageWidth,
             height: this.imageHeight,
             dna: this.imageDNA,
 
-            // Posterization parameters
-            targetColors: this.state.targetColors,
-            engineType: this.state.engineType,
-            centroidStrategy: this.state.centroidStrategy,
-            distanceMetric: this.state.distanceMetric,
-            lWeight: this.state.lWeight,
-            cWeight: this.state.cWeight,
-            vibrancyBoost: this.state.vibrancyBoost,
-            paletteReduction: this.state.paletteReduction,
+            // ALL posterization + knob parameters (generic from ALL_KNOBS)
+            ...config,
 
-            // Preprocessing & dithering (must match proxy for preview=production)
+            // Preprocessing (from generated config, not user-adjustable)
             preprocessingIntensity: this.currentConfig ? this.currentConfig.preprocessingIntensity : 'off',
-            ditherType: this.currentConfig ? this.currentConfig.ditherType : 'none',
-
-            // Mechanical knobs
-            minVolume: this.state.minVolume,
-            speckleRescue: this.state.speckleRescue,
-            shadowClamp: this.state.shadowClamp,
-
-            // Production-only knobs
-            trapSize: this.state.trapSize,
 
             // Archetype
             activeArchetypeId: this.state.activeArchetypeId,
@@ -981,6 +1005,9 @@ class SessionState extends EventEmitter {
             // Palette (with overrides baked in)
             palette: palette,
             paletteOverrides: Object.fromEntries(this.paletteOverrides),
+
+            // Merge remap: source → target for collapsed colors
+            mergeRemap: Object.keys(mergeRemap).length > 0 ? mergeRemap : null,
 
             // Full config snapshot (for reference)
             generatedConfig: this.currentConfig
@@ -1115,33 +1142,29 @@ class SessionState extends EventEmitter {
      * @private
      */
     _applyConfigToState(config) {
+        // Handle targetColorsSlider → targetColors alias
         if (config.targetColorsSlider !== undefined) {
             this.state.targetColors = config.targetColorsSlider;
         } else if (config.targetColors !== undefined) {
             this.state.targetColors = config.targetColors;
         }
-        if (config.engineType !== undefined) this.state.engineType = config.engineType;
-        if (config.centroidStrategy !== undefined) this.state.centroidStrategy = config.centroidStrategy;
-        if (config.distanceMetric !== undefined) this.state.distanceMetric = config.distanceMetric;
-        if (config.lWeight !== undefined) this.state.lWeight = config.lWeight;
-        if (config.cWeight !== undefined) this.state.cWeight = config.cWeight;
-        if (config.vibrancyBoost !== undefined) this.state.vibrancyBoost = config.vibrancyBoost;
-        if (config.paletteReduction !== undefined) this.state.paletteReduction = config.paletteReduction;
-        if (config.minVolume !== undefined) this.state.minVolume = config.minVolume;
-        if (config.speckleRescue !== undefined) this.state.speckleRescue = config.speckleRescue;
-        if (config.shadowClamp !== undefined) this.state.shadowClamp = config.shadowClamp;
-        if (config.trapSize !== undefined) this.state.trapSize = config.trapSize;
+
+        // Generic sync: copy all known knob values from config → state.
+        // ALL_KNOBS is the canonical set derived from ParameterGenerator output.
+        for (const key of ALL_KNOBS) {
+            if (key === 'targetColors') continue; // handled above (alias)
+            if (config[key] !== undefined) {
+                this.state[key] = config[key];
+            }
+        }
 
         if (config.id) this.state.activeArchetypeId = config.id;
 
-        // Snapshot archetype defaults for dirty detection
-        this._archetypeDefaults = {
-            targetColors: this.state.targetColors,
-            minVolume: this.state.minVolume,
-            speckleRescue: this.state.speckleRescue,
-            shadowClamp: this.state.shadowClamp,
-            trapSize: this.state.trapSize
-        };
+        // Snapshot archetype defaults for dirty detection (all user-facing knobs)
+        this._archetypeDefaults = {};
+        for (const k of ALL_KNOBS) {
+            this._archetypeDefaults[k] = this.state[k];
+        }
         this.state.isKnobsCustomized = false;
     }
 
@@ -1153,21 +1176,17 @@ class SessionState extends EventEmitter {
     _rebuildConfigFromState() {
         if (!this.currentConfig) return;
 
-        this.currentConfig.targetColors = this.state.targetColors;
+        // Generic sync: copy ALL knob values from state → config.
+        for (const key of ALL_KNOBS) {
+            if (this.state[key] !== undefined) {
+                this.currentConfig[key] = this.state[key];
+            }
+        }
+
+        // targetColorsSlider alias (config uses both names)
         if (this.state.targetColors) {
             this.currentConfig.targetColorsSlider = this.state.targetColors;
         }
-        this.currentConfig.engineType = this.state.engineType;
-        this.currentConfig.centroidStrategy = this.state.centroidStrategy;
-        this.currentConfig.distanceMetric = this.state.distanceMetric;
-        this.currentConfig.lWeight = this.state.lWeight;
-        this.currentConfig.cWeight = this.state.cWeight;
-        this.currentConfig.vibrancyBoost = this.state.vibrancyBoost;
-        this.currentConfig.paletteReduction = this.state.paletteReduction;
-        this.currentConfig.minVolume = this.state.minVolume;
-        this.currentConfig.speckleRescue = this.state.speckleRescue;
-        this.currentConfig.shadowClamp = this.state.shadowClamp;
-        this.currentConfig.trapSize = this.state.trapSize;
     }
 
     /**

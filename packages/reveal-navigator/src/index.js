@@ -151,6 +151,94 @@ function initPlugin() {
             });
         }
 
+        // ─── Advanced Panel: Dropdowns & Checkboxes ───────────────
+        // Wire all <select> dropdowns (change → updateParameter)
+        const PICKER_DEFS = [
+            'engineType', 'distanceMetric', 'centroidStrategy', 'vibrancyMode',
+            'substrateMode', 'ditherType', 'colorMode', 'preprocessingIntensity',
+            'meshSize', 'maskProfile'
+        ];
+        for (const key of PICKER_DEFS) {
+            const picker = document.getElementById(`picker-${key}`);
+            if (picker) {
+                picker.addEventListener('change', (e) => {
+                    const val = key === 'meshSize' ? parseInt(e.target.value, 10) : e.target.value;
+                    sessionState.updateParameter(key, val);
+                });
+            }
+            // Revert button
+            const revertBtn = document.getElementById(`revert-${key}`);
+            if (revertBtn) {
+                revertBtn.addEventListener('click', () => {
+                    sessionState.resetKnob(key);
+                });
+            }
+        }
+
+        // Wire all <input type="checkbox"> controls (change → updateParameter)
+        const CHECKBOX_DEFS = [
+            'enableHueGapAnalysis', 'enablePaletteReduction',
+            'preserveWhite', 'preserveBlack', 'ignoreTransparent', 'medianPass'
+        ];
+        for (const key of CHECKBOX_DEFS) {
+            const chk = document.getElementById(`chk-${key}`);
+            if (chk) {
+                chk.addEventListener('change', (e) => {
+                    sessionState.updateParameter(key, e.target.checked);
+                });
+            }
+            // Revert button
+            const revertBtn = document.getElementById(`revert-${key}`);
+            if (revertBtn) {
+                revertBtn.addEventListener('click', () => {
+                    sessionState.resetKnob(key);
+                });
+            }
+        }
+
+        // Sync Advanced pickers/checkboxes from config or state
+        function syncAdvancedControls(source) {
+            // Sync pickers — read from source (config obj or state)
+            for (const key of PICKER_DEFS) {
+                const picker = document.getElementById(`picker-${key}`);
+                if (!picker) continue;
+                const val = source[key];
+                if (val !== undefined) {
+                    picker.value = String(val);
+                }
+            }
+
+            // Sync checkboxes
+            for (const key of CHECKBOX_DEFS) {
+                const chk = document.getElementById(`chk-${key}`);
+                if (!chk) continue;
+                const val = source[key];
+                if (val !== undefined) {
+                    chk.checked = !!val;
+                }
+            }
+
+            // Sync revert icons for pickers and checkboxes
+            for (const key of [...PICKER_DEFS, ...CHECKBOX_DEFS]) {
+                const revertBtn = document.getElementById(`revert-${key}`);
+                if (revertBtn) {
+                    const dflt = sessionState.getKnobDefault(key);
+                    const cur = source[key];
+                    revertBtn.style.display = (dflt !== null && cur !== dflt) ? 'inline-block' : 'none';
+                }
+            }
+        }
+
+        // Sync on config change (archetype swap, structural param change, reset)
+        sessionState.on('configChanged', (config) => {
+            syncAdvancedControls(config);
+        });
+
+        // Sync on proxy ready (initial load — pickers must reflect archetype values)
+        sessionState.on('proxyReady', () => {
+            syncAdvancedControls(sessionState.getState());
+        });
+
         // Progress events from SessionState (heavy CPU phases during loadImage)
         sessionState.on('progress', (data) => {
             _showProgress(data.label, data.percent);

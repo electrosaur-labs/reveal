@@ -145,6 +145,25 @@ class ProductionWorker {
 
             logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms (metric=${metric})`);
 
+            // ── Remap merged/deleted colors to their merge targets ──
+            // The overridden palette has duplicate Lab entries for merged colors.
+            // Nearest-neighbor splits pixels arbitrarily between duplicates due
+            // to spatial locality. Remap source indices → target indices so merged
+            // colors collapse into a single layer.
+            if (prodConfig.mergeRemap) {
+                let remapped = 0;
+                for (let i = 0; i < pixelCount; i++) {
+                    const target = prodConfig.mergeRemap[colorIndices[i]];
+                    if (target !== undefined) {
+                        colorIndices[i] = target;
+                        remapped++;
+                    }
+                }
+                if (remapped > 0) {
+                    logger.log(`[ProductionWorker] Merge remap: ${remapped} pixels reassigned`);
+                }
+            }
+
             // Diagnostic: per-color pixel counts
             const pixCounts = new Uint32Array(labPalette.length);
             for (let i = 0; i < pixelCount; i++) pixCounts[colorIndices[i]]++;
@@ -273,6 +292,18 @@ class ProductionWorker {
                 labPixels, labPalette, null, width, height,
                 { ditherType: 'none', distanceMetric: metric }
             );
+        }
+
+        // Remap merged/deleted colors (same fix as production render)
+        if (this._sessionState.mergeHistory.size > 0) {
+            const remap = {};
+            for (const [target, sources] of this._sessionState.mergeHistory) {
+                for (const src of sources) remap[src] = target;
+            }
+            for (let i = 0; i < pixelCount; i++) {
+                const t = remap[colorIndices[i]];
+                if (t !== undefined) colorIndices[i] = t;
+            }
         }
 
         // Apply knobs using shared MechanicalKnobs (same as _buildLayers and ProxyEngine)
