@@ -1,16 +1,17 @@
 /**
  * PhotoshopBridge - Image ingest from active Photoshop document
  *
- * Follows the EXACT proven pattern from reveal-adobe's PhotoshopAPI:
- * - Always reads componentSize: 8 (UXP limitation — 16-bit reads lose chroma)
- * - Uses imaging.getPixels() with targetSize for proxy-size reads
- * - Extracts via imageData.getData() or pixelData.pixels
- * - Upconverts 8-bit Lab → 16-bit Lab for engine compatibility
+ * Reads Lab pixels via imaging.getPixels() with componentSize: 16.
+ * Returns native 16-bit Lab encoding (L: 0-32768, a/b: 0-32768, 16384=neutral).
+ *
+ * History: Previously forced componentSize:8 due to suspected UXP bug where
+ * 16-bit reads returned neutral a/b channels. Diagnostic testing (2026-02-16)
+ * confirmed componentSize:16 returns correct chroma — switched to native 16-bit.
  *
  * Requirements:
  *   - Document must be in Lab color mode
  *   - Returns 3-channel Lab data (no alpha)
- *   - Always outputs 16-bit encoding
+ *   - Always outputs 16-bit encoding (Photoshop standard: 0-32768)
  */
 
 const { app, core, action } = require("photoshop");
@@ -46,9 +47,8 @@ class PhotoshopBridge {
     /**
      * Read the active document's pixels as 16-bit Lab.
      *
-     * CRITICAL: Always reads componentSize: 8. UXP's imaging.getPixels()
-     * does not return correct a/b channels at componentSize: 16.
-     * This matches the reveal-adobe proven pattern.
+     * Uses native componentSize: 16 — returns Photoshop standard encoding
+     * (L: 0-32768, a/b: 0-32768, 16384=neutral) directly as Uint16Array.
      *
      * @param {number} [maxSize] - Maximum dimension (long edge). Photoshop handles resize.
      * @returns {Promise<{labPixels: Uint16Array, width: number, height: number, originalWidth: number, originalHeight: number}>}
@@ -62,11 +62,10 @@ class PhotoshopBridge {
         const docWidth = doc.width;
         const docHeight = doc.height;
 
-        // Build getPixels args
-        // ALWAYS componentSize: 8 — UXP limitation (reveal-adobe proven pattern)
+        // Build getPixels args — native 16-bit Lab read
         const getPixelsArgs = {
             documentID: doc.id,
-            componentSize: 8,
+            componentSize: 16,
             targetComponentCount: 3,
             colorSpace: "Lab"
         };
@@ -112,11 +111,9 @@ class PhotoshopBridge {
             );
         }
 
-        // Upconvert 8-bit Lab → 16-bit Lab encoding for engine compatibility
-        const lab16 = PhotoshopBridge.lab8to16(rawPixels);
-
+        // rawPixels is already native 16-bit Lab (Uint16Array, 0-32768 encoding)
         return {
-            labPixels: lab16,
+            labPixels: rawPixels,
             width: actualWidth,
             height: actualHeight,
             originalWidth: docWidth,
@@ -149,7 +146,7 @@ class PhotoshopBridge {
 
         const getPixelsArgs = {
             documentID: doc.id,
-            componentSize: 8,
+            componentSize: 16,
             targetComponentCount: 3,
             colorSpace: "Lab",
             sourceBounds: { left, top, right, bottom }
@@ -175,10 +172,9 @@ class PhotoshopBridge {
             throw new Error('Unexpected pixel data format from imaging.getPixels');
         }
 
-        const lab16 = PhotoshopBridge.lab8to16(rawPixels);
-
+        // rawPixels is already native 16-bit Lab (Uint16Array, 0-32768 encoding)
         return {
-            labPixels: lab16,
+            labPixels: rawPixels,
             width: actualWidth,
             height: actualHeight
         };
@@ -212,7 +208,7 @@ class PhotoshopBridge {
     }
 
     /**
-     * Convert 8-bit Lab encoding to 16-bit Lab encoding.
+     * Convert 8-bit Lab encoding to 16-bit Lab encoding (legacy utility).
      *
      * 8-bit:  L 0-255 (→0-100), a/b 0-255 (128=neutral, →-128..+127)
      * 16-bit: L 0-32768 (→0-100), a/b 0-32768 (16384=neutral, →-128..+128)
