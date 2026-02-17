@@ -128,31 +128,19 @@ function initPlugin() {
             });
         }
 
-        // Wire Reset Archetype button (master knob reset)
+        // Wire Reset to Defaults button (knobs + palette surgery)
         const btnReset = document.getElementById('btn-reset-archetype');
         if (btnReset) {
             btnReset.addEventListener('click', () => {
-                sessionState.resetAllKnobs();
+                sessionState.resetToDefaults();
             });
-            // Show/hide based on knob customization state
-            sessionState.on('knobsCustomizedChanged', (data) => {
-                btnReset.style.display = data.customized ? 'block' : 'none';
-            });
-        }
-
-        // Wire Restore My Tweaks button (Option B: Snapshot)
-        const btnRestore = document.getElementById('btn-restore-tweaks');
-        if (btnRestore) {
-            btnRestore.addEventListener('click', () => {
-                sessionState.restoreTweaks();
-            });
-            sessionState.on('tweaksAvailable', (data) => {
-                btnRestore.style.display = data.available ? 'block' : 'none';
-            });
-            // Hide on knob customization (user is already tweaking — no need to restore)
-            sessionState.on('knobsCustomizedChanged', (data) => {
-                if (data.customized) btnRestore.style.display = 'none';
-            });
+            // Always visible, disabled when nothing is customized
+            btnReset.disabled = true;
+            const updateResetState = () => {
+                btnReset.disabled = !sessionState.isCustomized();
+            };
+            sessionState.on('knobsCustomizedChanged', updateResetState);
+            sessionState.on('paletteChanged', updateResetState);
         }
 
         // ─── Advanced Panel: Dropdowns & Checkboxes ───────────────

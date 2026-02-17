@@ -54,9 +54,12 @@ class ArchetypeCarousel {
         // Progressive palette previews — fill in real swatches on non-active cards
         this._session.on('archetypePaletteReady', (data) => this._addPaletteToCard(data));
 
-        // Dirty indicator — orange dot when knobs are customized
-        this._session.on('knobsCustomizedChanged', (data) => {
-            this._updateCustomizedBadge(data.customized);
+        // Dirty indicator — orange dot when knobs OR palette surgery is customized
+        this._session.on('knobsCustomizedChanged', () => {
+            this._updateCustomizedBadge(this._session.isCustomized());
+        });
+        this._session.on('paletteChanged', () => {
+            this._updateCustomizedBadge(this._session.isCustomized());
         });
     }
 

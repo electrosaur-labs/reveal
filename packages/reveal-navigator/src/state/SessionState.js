@@ -23,6 +23,10 @@ const MECHANICAL_KNOBS = new Set(['minVolume', 'speckleRescue', 'shadowClamp']);
 // Trap pixel sizes are resolution-dependent — meaningless at 512px proxy.
 const PRODUCTION_KNOBS = new Set(['trapSize']);
 
+// Initial defaults for production-only knobs (archetype configs don't define these).
+// Without explicit reset, stale values leak across archetype swaps.
+const PRODUCTION_KNOB_DEFAULTS = { trapSize: 0 };
+
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
 // This is the complete set from ParameterGenerator output — any change triggers rePosterize.
 const STRUCTURAL_PARAMS = new Set([
@@ -111,10 +115,9 @@ class SessionState extends EventEmitter {
         // Snapshot of knob values from archetype config (for dirty detection)
         this._archetypeDefaults = null;
 
-        // Snapshot cache: archetypeId → {minVolume, speckleRescue, shadowClamp}
-        // Saved on swap-out when knobs are customized. NOT auto-restored —
-        // user must click "Restore My Tweaks" to apply (Option B: Snapshot).
-        this._tweakCache = new Map();
+        // Per-archetype state cache: archetypeId → {knobs, paletteOverrides, mergeHistory, deletedColors}
+        // Auto-saved on swap-out, auto-restored on swap-in (seamless round-trip).
+        this._archetypeStateCache = new Map();
 
         // Progressive palette generation counter (incremented to cancel in-flight loops)
         this._paletteGeneration = 0;
@@ -139,7 +142,7 @@ class SessionState extends EventEmitter {
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
         this.deletedColors.clear();
-        this._tweakCache.clear();
+        this._archetypeStateCache.clear();
         this._paletteGeneration = 0;
         this.proxyEngine = null;
         this.currentConfig = null;
@@ -198,7 +201,7 @@ class SessionState extends EventEmitter {
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
         this.deletedColors.clear();
-        this._tweakCache.clear();
+        this._archetypeStateCache.clear();
 
         // ── Phase 2: STRUCTURAL — DNA analysis (~51ms) ──
         this.emit('progress', { phase: 'structural', label: 'Analyzing image DNA\u2026', percent: 35 });
@@ -327,52 +330,35 @@ class SessionState extends EventEmitter {
     }
 
     /**
-     * Reset ALL mechanical knobs to archetype defaults ("Factory Reset").
+     * Reset ALL knobs to archetype defaults AND clear palette surgery.
+     * Deletes the cache entry for the current archetype so swapping away
+     * and back arrives at fresh defaults (no stale restored state).
      */
-    resetAllKnobs() {
+    resetToDefaults() {
         if (!this._archetypeDefaults) return;
+
+        // Reset all knobs to archetype defaults
         for (const key of ALL_KNOBS) {
             this.state[key] = this._archetypeDefaults[key];
             if (this.currentConfig) this.currentConfig[key] = this._archetypeDefaults[key];
         }
+
+        // Clear palette surgery
+        this.paletteOverrides.clear();
+        this.mergeHistory.clear();
+        this.deletedColors.clear();
+
+        // Delete cache entry so re-entering doesn't restore stale state
+        const id = this.state.activeArchetypeId;
+        if (id) this._archetypeStateCache.delete(id);
+
         this.state.isKnobsCustomized = false;
+        this.state.highlightColorIndex = -1;
+        this.emit('highlightChanged', { colorIndex: -1 });
         this.emit('knobsCustomizedChanged', { customized: false });
+        this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
         this.emit('configChanged', this.currentConfig);  // triggers MechanicalKnobs sync
         this._scheduleProxyUpdate();
-    }
-
-    /**
-     * Restore previously cached knob tweaks for the active archetype.
-     * Called by the "Restore My Tweaks" UI action.
-     */
-    restoreTweaks() {
-        const id = this.state.activeArchetypeId;
-        const cached = id ? this._tweakCache.get(id) : null;
-        if (!cached) return;
-
-        for (const key of ALL_KNOBS) {
-            if (cached[key] !== undefined) {
-                this.state[key] = cached[key];
-                if (this.currentConfig) this.currentConfig[key] = cached[key];
-            }
-        }
-
-        // Detect if restored values differ from archetype defaults
-        this.state.isKnobsCustomized = false;
-        for (const k of ALL_KNOBS) {
-            if (this.state[k] !== this._archetypeDefaults[k]) {
-                this.state.isKnobsCustomized = true;
-                break;
-            }
-        }
-
-        this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
-        this.emit('tweaksAvailable', { archetypeId: id, available: false }); // consumed
-        this.emit('configChanged', this.currentConfig);  // sync sliders
-        this._scheduleProxyUpdate();
-
-        // Clear cache entry — one-shot restore
-        this._tweakCache.delete(id);
     }
 
     /**
@@ -541,59 +527,62 @@ class SessionState extends EventEmitter {
         // Cancel any in-flight progressive palette generation
         this._paletteGeneration++;
 
-        // Snapshot outgoing knob tweaks (only if customized)
-        if (this.state.isKnobsCustomized && this.state.activeArchetypeId) {
-            const snapshot = {};
-            for (const key of ALL_KNOBS) snapshot[key] = this.state[key];
-            this._tweakCache.set(this.state.activeArchetypeId, snapshot);
-        }
+        // 1. Snapshot outgoing archetype state (always — no gate)
+        this._snapshotArchetypeState(this.state.activeArchetypeId);
 
-        // Regenerate config with manual archetype override
-        // Sliders always revert to the archetype's recommended values (Option A: Purist)
+        // 2. Generate fresh config from new archetype (clean slate)
         this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
             manualArchetypeId: archetypeId
         });
         this._applyConfigToState(this.currentConfig);
-        // Backfill engineType: archetype doesn't define it, state has the correct default
         if (!this.currentConfig.engineType) {
             this.currentConfig.engineType = this.state.engineType;
         }
 
         this.state.activeArchetypeId = archetypeId;
         this.state.isArchetypeDirty = false;
+
+        // 3. Clear palette surgery (clean slate before re-posterize)
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
         this.deletedColors.clear();
 
-        // Reset decision support state on archetype swap
+        // Reset decision support state
         this.state.highlightColorIndex = -1;
         this.emit('highlightChanged', { colorIndex: -1 });
         this.state.isKnobsCustomized = false;
-        this.emit('knobsCustomizedChanged', { customized: false });
-
-        // Notify UI if this archetype has cached tweaks (Option B: Snapshot)
-        const hasTweaks = this._tweakCache.has(archetypeId);
-        this.emit('tweaksAvailable', { archetypeId, available: hasTweaks });
 
         logger.log(`[SessionState] Archetype swap: ${archetypeId}`);
 
         this.emit('archetypeChanged', { archetypeId, config: this.currentConfig });
-        this.emit('configChanged', this.currentConfig);
 
-        logger.log(`[SessionState] Swap config: targetColors=${this.currentConfig.targetColors}, metric=${this.currentConfig.distanceMetric}`);
-
-        // Use rePosterize — re-runs posterize/separate/preview on existing proxyBuffer
-        // WITHOUT re-downsampling (avoids data loss from redundant 512→512 copy)
+        // 4. Re-posterize with fresh archetype config (deterministic palette)
         const result = await this.proxyEngine.rePosterize(this.currentConfig);
-
         logger.log(`[SessionState] Swap result: ${result.palette.length} colors, ${result.elapsedMs.toFixed(0)}ms`);
 
-        // Apply knobs with explicit state values (not config which may have undefined knobs)
-        const knobResult = await this.proxyEngine.updateProxy({
+        // 5. Auto-restore cached state if returning to a previously visited archetype
+        const restored = this._restoreArchetypeState(archetypeId);
+
+        // Emit configChanged so sliders sync (must happen after restore so values are current)
+        this.emit('configChanged', this.currentConfig);
+        this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
+        this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+
+        if (restored) {
+            logger.log(`[SessionState] Auto-restored cached state for ${archetypeId}`);
+        }
+
+        // 6. Apply knobs + palette overrides via proxy update
+        const updateParams = {
             minVolume: this.state.minVolume,
             speckleRescue: this.state.speckleRescue,
             shadowClamp: this.state.shadowClamp
-        });
+        };
+        if (this.paletteOverrides.size > 0) {
+            updateParams.paletteOverride = this._buildOverriddenPalette();
+        }
+
+        const knobResult = await this.proxyEngine.updateProxy(updateParams);
 
         this.previewBuffer = knobResult.previewBuffer;
         this.state.proxyBufferReady = true;
@@ -1099,6 +1088,104 @@ class SessionState extends EventEmitter {
         return this._buildOverriddenPalette();
     }
 
+    // ─── Archetype State Cache ─────────────────────────────────
+
+    /**
+     * Snapshot the full customizable state for the given archetype.
+     * Always saves — no isKnobsCustomized gate — so returning is seamless.
+     *
+     * @param {string} id - Archetype ID to snapshot
+     * @private
+     */
+    _snapshotArchetypeState(id) {
+        if (!id) return;
+
+        const knobs = {};
+        for (const key of ALL_KNOBS) knobs[key] = this.state[key];
+
+        // Deep-copy Maps and Sets to prevent cross-archetype mutation
+        const paletteOverrides = new Map();
+        for (const [idx, color] of this.paletteOverrides) {
+            paletteOverrides.set(idx, { ...color });
+        }
+
+        const mergeHistory = new Map();
+        for (const [target, sources] of this.mergeHistory) {
+            mergeHistory.set(target, new Set(sources));
+        }
+
+        const deletedColors = new Set(this.deletedColors);
+
+        this._archetypeStateCache.set(id, {
+            knobs,
+            paletteOverrides,
+            mergeHistory,
+            deletedColors
+        });
+    }
+
+    /**
+     * Restore cached state for the given archetype, if it exists.
+     * Applies knobs to state/config and restores palette surgery maps.
+     *
+     * @param {string} id - Archetype ID to restore
+     * @returns {boolean} true if state was restored, false if no cache entry
+     * @private
+     */
+    _restoreArchetypeState(id) {
+        const cached = id ? this._archetypeStateCache.get(id) : null;
+        if (!cached) return false;
+
+        // Restore knobs
+        for (const key of ALL_KNOBS) {
+            if (cached.knobs[key] !== undefined) {
+                this.state[key] = cached.knobs[key];
+                if (this.currentConfig) this.currentConfig[key] = cached.knobs[key];
+            }
+        }
+
+        // Restore palette surgery (deep-copy back to prevent cache mutation)
+        this.paletteOverrides.clear();
+        for (const [idx, color] of cached.paletteOverrides) {
+            this.paletteOverrides.set(idx, { ...color });
+        }
+
+        this.mergeHistory.clear();
+        for (const [target, sources] of cached.mergeHistory) {
+            this.mergeHistory.set(target, new Set(sources));
+        }
+
+        this.deletedColors.clear();
+        for (const idx of cached.deletedColors) {
+            this.deletedColors.add(idx);
+        }
+
+        // Detect if restored values differ from archetype defaults
+        this.state.isKnobsCustomized = false;
+        if (this._archetypeDefaults) {
+            for (const k of ALL_KNOBS) {
+                if (this.state[k] !== this._archetypeDefaults[k]) {
+                    this.state.isKnobsCustomized = true;
+                    break;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Returns true if any customization exists (knobs or palette surgery).
+     * Used by UI to show/hide "Reset to Defaults" button and orange dot.
+     *
+     * @returns {boolean}
+     */
+    isCustomized() {
+        return this.state.isKnobsCustomized ||
+            this.paletteOverrides.size > 0 ||
+            this.deletedColors.size > 0;
+    }
+
     // ─── Private Helpers ─────────────────────────────────────
 
     /**
@@ -1138,6 +1225,16 @@ class SessionState extends EventEmitter {
      * @private
      */
     _applyConfigToState(config) {
+        // Reset production-only knobs to initial values FIRST.
+        // Archetype configs don't define these, so without explicit reset
+        // stale values from the previous archetype leak through.
+        // Also inject into config so MechanicalKnobs._syncFromConfig() can
+        // sync sliders — generateConfiguration() never includes these.
+        for (const [key, val] of Object.entries(PRODUCTION_KNOB_DEFAULTS)) {
+            this.state[key] = val;
+            config[key] = val;
+        }
+
         // Handle targetColorsSlider → targetColors alias
         if (config.targetColorsSlider !== undefined) {
             this.state.targetColors = config.targetColorsSlider;

@@ -319,30 +319,28 @@
         }
 
         #btn-reset-archetype {
-            display: none;
             width: 100%;
             margin-top: 4px;
-        }
-
-        #btn-restore-tweaks {
-            display: none;
-            width: 100%;
-            margin-top: 4px;
-            background: #3a3520;
-            border: 1px solid #7a6a30;
-            color: #f0d070;
             padding: 4px 8px;
+            background: #383838;
+            border: 1px solid #555;
+            color: #ccc;
             border-radius: 3px;
             font-size: 11px;
             cursor: pointer;
         }
 
-        #btn-restore-tweaks:hover {
-            background: #4a4528;
-            border-color: #9a8a40;
+        #btn-reset-archetype:hover:not(:disabled) {
+            background: #4a4a4a;
+            border-color: #777;
         }
 
-        /* ─── Archetype Carousel (horizontal scroll) ─── */
+        #btn-reset-archetype:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+
+/* ─── Archetype Carousel (horizontal scroll) ─── */
         #carousel {
             display: flex;
             gap: 4px;
@@ -863,6 +861,8 @@
                     <img id="radar-img" width="300" height="300" />
                 </div>
 
+                <button id="btn-reset-archetype" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
+
                 <!-- ─── Advanced (Engine Room) ─── -->
                 <details id="advanced-panel">
                     <summary>Advanced</summary>
@@ -1150,9 +1150,6 @@
                         <option value="sGray">sRGB Gray</option>
                     </select>
                 </details>
-
-                <button id="btn-reset-archetype" title="Reset all knobs to archetype defaults">Reset Archetype</button>
-                <button id="btn-restore-tweaks" title="Restore your previous slider tweaks for this archetype">Restore My Tweaks</button>
             </div>
 
             <!-- radar moved above Advanced panel -->

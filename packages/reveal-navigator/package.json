@@ -7,7 +7,9 @@
     "build": "webpack --mode production && node scripts/copy-assets.js",
     "build:dev": "webpack --mode development && node scripts/copy-assets.js",
     "watch": "webpack --mode development --watch",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@reveal/core": "*",
