@@ -113,13 +113,17 @@ function initPlugin() {
             logger.log('[Navigator] Loupe init failed: ' + err.message);
         }
 
-        // Wire Loupe toggle button
-        const btnLoupe = document.getElementById('btn-loupe');
-        if (btnLoupe) {
-            btnLoupe.addEventListener('click', () => {
-                if (loupe) {
-                    loupe.toggle();
-                    btnLoupe.classList.toggle('active', loupe.isActive);
+        // Wire Loupe zoom dropdown
+        const loupeZoom = document.getElementById('loupe-zoom');
+        if (loupeZoom) {
+            loupeZoom.addEventListener('change', (e) => {
+                if (!loupe) return;
+                const factor = parseInt(e.target.value, 10);
+                if (factor === 0) {
+                    loupe.deactivate();
+                } else {
+                    if (!loupe.isActive) loupe.activate();
+                    loupe.setZoom(factor);
                 }
             });
         }
@@ -334,11 +338,18 @@ function initPlugin() {
             if (e.key === 'Escape' && surgeon) {
                 surgeon.deselect();
             }
-            // Z key → toggle 1:1 Loupe
+            // Z key → toggle Loupe (uses current dropdown zoom, defaults to 1:1)
             if ((e.key === 'z' || e.key === 'Z') && loupe && !e.ctrlKey && !e.metaKey) {
-                loupe.toggle();
-                const btnLoupeEl = document.getElementById('btn-loupe');
-                if (btnLoupeEl) btnLoupeEl.classList.toggle('active', loupe.isActive);
+                const zoomEl = document.getElementById('loupe-zoom');
+                if (loupe.isActive) {
+                    loupe.deactivate();
+                    if (zoomEl) zoomEl.value = '0';
+                } else {
+                    const factor = zoomEl ? parseInt(zoomEl.value, 10) : 0;
+                    if (factor === 0 && zoomEl) zoomEl.value = '1'; // default to 1:1
+                    loupe.activate();
+                    loupe.setZoom(factor || 1);
+                }
             }
         });
 
@@ -627,7 +638,7 @@ async function handleFinalize() {
             `Created ${result.layerCount} layers in ${(result.elapsedMs / 1000).toFixed(1)}s`,
             `Archetype: ${state.activeArchetypeId || 'unknown'}`,
             `Knobs: Vol ${state.minVolume}% | Spkl ${state.speckleRescue}px | Shd ${state.shadowClamp}%` +
-                (state.trapSize > 0 ? ` | Trap ${state.trapSize}px` : '')
+                (state.trapSize > 0 ? ` | Trap ${state.trapSize}pt` : '')
         ];
         const overrideCount = sessionState.paletteOverrides.size;
         if (overrideCount > 0) lines.push(`Palette overrides: ${overrideCount}`);

@@ -22,7 +22,7 @@ const KNOB_DEFS = [
     { key: 'minVolume',      sliderId: 'knob-minVolume',      valId: 'minVolume-val',      revertId: 'revert-minVolume',      decimals: 1, unit: '%'  },
     { key: 'speckleRescue',  sliderId: 'knob-speckleRescue',  valId: 'speckleRescue-val',  revertId: 'revert-speckleRescue',  decimals: 0, unit: 'px' },
     { key: 'shadowClamp',    sliderId: 'knob-shadowClamp',    valId: 'shadowClamp-val',    revertId: 'revert-shadowClamp',    decimals: 1, unit: '%'  },
-    { key: 'trapSize',       sliderId: 'knob-trapSize',       valId: 'trapSize-val',       revertId: 'revert-trapSize',       decimals: 0, unit: 'px' },
+    { key: 'trapSize',       sliderId: 'knob-trapSize',       valId: 'trapSize-val',       revertId: 'revert-trapSize',       decimals: 0, unit: 'pt' },
 
     // Advanced: Chroma
     { key: 'vibrancyBoost',      sliderId: 'knob-vibrancyBoost',      valId: 'vibrancyBoost-val',      revertId: 'revert-vibrancyBoost',      decimals: 2, unit: '×' },

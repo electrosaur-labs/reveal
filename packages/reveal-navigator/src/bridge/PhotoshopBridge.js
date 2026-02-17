@@ -128,7 +128,7 @@ class PhotoshopBridge {
      * @param {{left: number, top: number, right: number, bottom: number}} rect - Document pixel bounds
      * @returns {Promise<{labPixels: Uint16Array, width: number, height: number}>}
      */
-    static async getTileLab(rect) {
+    static async getTileLab(rect, targetSize) {
         const doc = app.activeDocument;
         if (!doc) {
             throw new Error('No active document');
@@ -152,6 +152,11 @@ class PhotoshopBridge {
             sourceBounds: { left, top, right, bottom }
         };
 
+        // Optional PS-side downsampling (used by loupe zoom > 1:1)
+        if (targetSize) {
+            getPixelsArgs.targetSize = targetSize;
+        }
+
         const pixelData = await core.executeAsModal(async () => {
             return await imaging.getPixels(getPixelsArgs);
         }, { commandName: "Navigator: Read Tile Pixels" });
@@ -165,8 +170,9 @@ class PhotoshopBridge {
                 return await pixelData.imageData.getData({ chunky: true });
             }, { commandName: "Navigator: Extract Tile Data" });
         } else if (pixelData.pixels) {
-            actualWidth = right - left;
-            actualHeight = bottom - top;
+            // When targetSize is used, PS returns downsampled dimensions
+            actualWidth = targetSize ? targetSize.width : (right - left);
+            actualHeight = targetSize ? targetSize.height : (bottom - top);
             rawPixels = pixelData.pixels;
         } else {
             throw new Error('Unexpected pixel data format from imaging.getPixels');

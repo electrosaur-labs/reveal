@@ -83,7 +83,7 @@ class SessionState extends EventEmitter {
             isArchetypeDirty: false,
 
             // Production-only (not in archetype config)
-            trapSize: 4,  // 0=off, 1-50px trap expansion
+            trapSize: 0,  // 0=off, 1-10px trap expansion
 
             // Engine & preview state
             isProcessing: false,
@@ -161,7 +161,7 @@ class SessionState extends EventEmitter {
         this.state.highlightColorIndex = -1;
 
         // Reset production-only knobs (archetype configs don't define these)
-        this.state.trapSize = 4;
+        this.state.trapSize = 0;
     }
 
     // ─── Lifecycle ───────────────────────────────────────────

@@ -43,9 +43,11 @@ class Loupe {
         this._previewImg = previewImg;
         this._session = sessionState;
         this._active = false;
+        this._zoomFactor = 1;       // 1 = 1:1, 2 = 1:2, 4 = 1:4, 8 = 1:8
         this._debounceTimer = null;
         this._worker = null;
-        this._fetchGeneration = 0;  // Cancellation counter — stale fetches are discarded
+        this._isFetching = false;   // Serialize fetches — only one in flight at a time
+        this._pendingFetch = null;  // Queued {proxyX, proxyY} while fetch is in flight
         this._lastProxyX = null;
         this._lastProxyY = null;
 
@@ -69,6 +71,15 @@ class Loupe {
     /** Is loupe mode currently active? */
     get isActive() { return this._active; }
 
+    /** Set zoom factor (1, 2, 4, 8). Tile covers factor × 256 native pixels. */
+    setZoom(factor) {
+        this._zoomFactor = factor;
+        // Re-render current tile at new zoom if active
+        if (this._active && this._lastProxyX != null) {
+            this._fetchAndRender(this._lastProxyX, this._lastProxyY);
+        }
+    }
+
     /** Toggle loupe on/off. */
     toggle() {
         if (this._active) this.deactivate();
@@ -91,7 +102,7 @@ class Loupe {
         if (!this._active) return;
         this._active = false;
         this._worker = null;
-        this._fetchGeneration++;  // Cancel any in-flight fetch
+        this._pendingFetch = null;  // Drop any queued fetch
         this._container.style.display = 'none';
         this._previewImg.removeEventListener('mousemove', this._onMouseMove);
         this._previewImg.removeEventListener('mouseleave', this._onMouseLeave);
@@ -166,14 +177,16 @@ class Loupe {
             this._coords.textContent = `${docCoords.x}, ${docCoords.y}`;
         }
 
-        // Debounced tile fetch — position updates instantly, content follows
+        // Debounced tile fetch — position updates instantly, content follows.
+        // Scale debounce with zoom: higher zoom = larger PS read = longer fetch.
         this._lastProxyX = proxyX;
         this._lastProxyY = proxyY;
         if (this._debounceTimer) clearTimeout(this._debounceTimer);
+        const debounce = this._zoomFactor > 1 ? DEBOUNCE_MS * 2 : DEBOUNCE_MS;
         this._debounceTimer = setTimeout(() => {
             this._debounceTimer = null;
             this._fetchAndRender(proxyX, proxyY);
-        }, DEBOUNCE_MS);
+        }, debounce);
     }
 
     _handleMouseLeave() {
@@ -187,11 +200,19 @@ class Loupe {
     async _fetchAndRender(proxyX, proxyY) {
         if (!this._active || !this._worker) return;
 
-        // Generation counter: bump on every new request, stale fetches discard themselves
-        const gen = ++this._fetchGeneration;
+        // Serialize fetches: only one in flight at a time.
+        // At zoom > 1:1, PS getPixels with targetSize takes longer; concurrent
+        // modal calls congest the UXP queue causing intermittent failures/white frames.
+        if (this._isFetching) {
+            this._pendingFetch = { proxyX, proxyY };
+            return;
+        }
+
+        this._isFetching = true;
+        this._pendingFetch = null;
 
         const docCoords = this._session.getDocumentCoords(proxyX, proxyY);
-        const halfTile = Math.round(LOUPE_TILE_SIZE / 2);
+        const halfTile = Math.round((LOUPE_TILE_SIZE * this._zoomFactor) / 2);
         const rect = {
             left: docCoords.x - halfTile,
             top: docCoords.y - halfTile,
@@ -199,11 +220,16 @@ class Loupe {
             bottom: docCoords.y + halfTile
         };
 
-        try {
-            const { buffer, width, height } = await this._worker.renderLoupeTile(rect);
+        // When zoomed out (>1:1), pass the downsample factor so renderLoupeTile
+        // reads native-res pixels and box-filter downsamples before separation.
+        // (PS getPixels sourceBounds + targetSize produces wrong crops.)
+        const downsampleFactor = this._zoomFactor > 1 ? this._zoomFactor : undefined;
 
-            // Discard if a newer fetch has started or loupe was deactivated
-            if (gen !== this._fetchGeneration || !this._active) return;
+        try {
+            const { buffer, width, height } = await this._worker.renderLoupeTile(rect, downsampleFactor);
+
+            // Only render if loupe is still active (may have been deactivated during fetch)
+            if (!this._active) return;
 
             // Apply highlight isolation if a swatch is selected
             const highlightIdx = this._session.state.highlightColorIndex;
@@ -213,9 +239,20 @@ class Loupe {
 
             this._renderBuffer(buffer, width, height);
         } catch (err) {
-            // Silently ignore (cursor near edge, document closed, etc.)
-            if (gen === this._fetchGeneration) {
+            if (this._active) {
                 console.error('[Loupe] Tile fetch failed:', err.message);
+            }
+        } finally {
+            this._isFetching = false;
+
+            // If a newer position was requested while we were fetching, use the
+            // LATEST cursor position (not the stale queued one) so the tile
+            // always matches where the loupe circle currently sits.
+            if (this._active && this._pendingFetch) {
+                this._pendingFetch = null;
+                if (this._lastProxyX != null) {
+                    this._fetchAndRender(this._lastProxyX, this._lastProxyY);
+                }
             }
         }
     }

@@ -680,23 +680,17 @@
             white-space: nowrap;
         }
 
-        #btn-loupe {
-            background: none;
+        #loupe-zoom {
+            background: #383838;
             border: 1px solid #555;
             color: #aaa;
-            padding: 2px 8px;
+            padding: 2px 4px;
             border-radius: 3px;
-            cursor: pointer;
             font-size: 10px;
             margin-left: 4px;
+            cursor: pointer;
         }
-
-        #btn-loupe:hover { background: #505050; color: #ddd; }
-        #btn-loupe.active {
-            background: #2d3545;
-            border-color: #4da6ff;
-            color: #8bb8e8;
-        }
+        #loupe-zoom:focus { border-color: #4da6ff; outline: none; }
 
         /* ─── Error Overlay ─── */
         #error-overlay {
@@ -766,7 +760,13 @@
             <div id="doc-header">
                 <span id="doc-name">No document</span>
                 <span id="doc-layer"></span>
-                <button id="btn-loupe" title="Toggle 1:1 Loupe">1:1</button>
+                <select id="loupe-zoom" title="Loupe zoom level">
+                    <option value="0">Loupe</option>
+                    <option value="1">1:1</option>
+                    <option value="2">1:2</option>
+                    <option value="4">1:4</option>
+                    <option value="8">1:8</option>
+                </select>
                 <button id="btn-sync" title="Re-sync from canvas">&#x21bb;</button>
             </div>
 
@@ -855,9 +855,9 @@
                 <div class="knob-row">
                     <span class="knob-label">Trap</span>
                     <button class="knob-revert" id="revert-trapSize" title="Revert to default">&#x21BA;</button>
-                    <span class="knob-val" id="trapSize-val">0px</span>
+                    <span class="knob-val" id="trapSize-val">0pt</span>
                 </div>
-                <sp-slider id="knob-trapSize" min="0" max="10" step="1" value="4" variant="filled"></sp-slider>
+                <sp-slider id="knob-trapSize" min="0" max="10" step="1" value="0" variant="filled"></sp-slider>
 
                 <div id="radar-container">
                     <img id="radar-img" width="300" height="300" />

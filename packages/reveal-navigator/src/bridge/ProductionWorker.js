@@ -262,23 +262,44 @@ class ProductionWorker {
      * Reads native-res pixels from PS, maps to locked palette, applies knobs,
      * returns RGBA preview buffer.
      *
+     * For zoom > 1:1, reads the full native-res source rect and downsamples
+     * ourselves (box filter) before separation. PS getPixels' sourceBounds +
+     * targetSize combination produces incorrect crops, so we avoid combining them.
+     *
      * @param {{left: number, top: number, right: number, bottom: number}} rect - Document bounds
+     * @param {number} [downsampleFactor] - Box-filter downsample factor (2, 4, 8). Omit for 1:1.
      * @returns {Promise<{buffer: Uint8ClampedArray, width: number, height: number}>}
      */
-    async renderLoupeTile(rect) {
+    async renderLoupeTile(rect, downsampleFactor) {
         const labPalette = this._sessionState.getPalette();
         if (!labPalette || labPalette.length === 0) {
             throw new Error('No palette available for loupe');
         }
 
-        const { labPixels, width, height } = await PhotoshopBridge.getTileLab(rect);
+        const tile = await PhotoshopBridge.getTileLab(rect);
+
+        let labPixels = tile.labPixels;
+        let width = tile.width;
+        let height = tile.height;
+
+        // Box-filter downsample for zoom > 1:1 — reduces native-res tile
+        // to ~256px before separation. Fast integer averaging in Lab space.
+        if (downsampleFactor && downsampleFactor > 1) {
+            const ds = ProductionWorker._downsampleLab(labPixels, width, height, downsampleFactor);
+            labPixels = ds.labPixels;
+            width = ds.width;
+            height = ds.height;
+        }
+
         const pixelCount = width * height;
 
         // Bilateral filter preprocessing — matches the proxy pipeline so loupe
         // colors look consistent with the main preview (no raw noise artifacts).
-        // Uses the same radius=3, sigmaR=5000 as ProxyEngine.initializeProxy.
+        // Skip when downsampled (zoom > 1:1): the box filter already averages
+        // pixels, and bilateral on a downsampled tile doesn't match the proxy
+        // pipeline (which filters at proxy resolution, not tile resolution).
         const BilateralFilter = Reveal.BilateralFilter;
-        if (BilateralFilter) {
+        if (BilateralFilter && !downsampleFactor) {
             BilateralFilter.applyBilateralFilterLab(labPixels, width, height, 3, 5000);
         }
 
@@ -677,6 +698,40 @@ class ProductionWorker {
         }], {});
 
         return createdLayer;
+    }
+
+    // ─── Lab Downsample ──────────────────────────────────────
+    // Box-filter downsample for loupe zoom > 1:1.
+    // Averages factor×factor blocks in 16-bit Lab space.
+
+    static _downsampleLab(labPixels, srcW, srcH, factor) {
+        const dstW = Math.floor(srcW / factor);
+        const dstH = Math.floor(srcH / factor);
+        const out = new Uint16Array(dstW * dstH * 3);
+        const area = factor * factor;
+
+        for (let dy = 0; dy < dstH; dy++) {
+            const srcRowBase = dy * factor;
+            for (let dx = 0; dx < dstW; dx++) {
+                const srcColBase = dx * factor;
+                let sumL = 0, sumA = 0, sumB = 0;
+                for (let iy = 0; iy < factor; iy++) {
+                    const rowOff = (srcRowBase + iy) * srcW;
+                    for (let ix = 0; ix < factor; ix++) {
+                        const si = (rowOff + srcColBase + ix) * 3;
+                        sumL += labPixels[si];
+                        sumA += labPixels[si + 1];
+                        sumB += labPixels[si + 2];
+                    }
+                }
+                const di = (dy * dstW + dx) * 3;
+                out[di]     = (sumL / area + 0.5) | 0;
+                out[di + 1] = (sumA / area + 0.5) | 0;
+                out[di + 2] = (sumB / area + 0.5) | 0;
+            }
+        }
+
+        return { labPixels: out, width: dstW, height: dstH };
     }
 }
 
