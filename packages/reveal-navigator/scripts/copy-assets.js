@@ -25,4 +25,12 @@ if (fs.existsSync(htmlSrc)) {
     console.log('✓ Copied index.html');
 }
 
+// Copy src/squeegee.gif → dist/
+const gifSrc = path.join(srcDir, 'squeegee.gif');
+const gifDst = path.join(distDir, 'squeegee.gif');
+if (fs.existsSync(gifSrc)) {
+    fs.copyFileSync(gifSrc, gifDst);
+    console.log('✓ Copied squeegee.gif');
+}
+
 console.log('Asset copying complete!');

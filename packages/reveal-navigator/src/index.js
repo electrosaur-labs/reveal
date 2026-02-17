@@ -256,6 +256,7 @@ function initPlugin() {
             }
             // Show DNA stats immediately
             updateDNADisplay();
+
         });
 
         // Show dominant sector in HUD info (kept for backward compat with imageLoaded)
@@ -566,29 +567,24 @@ function setStatus(text) {
 
 function _showProgress(label, percent) {
     const overlay = document.getElementById('progress-overlay');
-    const labelEl = document.getElementById('progress-label');
-    const fill = document.getElementById('progress-fill');
-    if (overlay) overlay.style.display = 'flex';
-    if (labelEl) labelEl.textContent = label;
-    if (fill) {
-        fill.style.width = percent + '%';
-        // Shimmer while in progress, solid when complete
-        if (percent < 100) {
-            fill.classList.add('active');
-        } else {
-            fill.classList.remove('active');
-        }
+    const status = document.getElementById('splash-status');
+    if (overlay) {
+        overlay.style.display = 'flex';
+        overlay.classList.remove('fade-out');
     }
+    if (status) status.textContent = label;
 }
 
 function _hideProgress() {
     const overlay = document.getElementById('progress-overlay');
-    const fill = document.getElementById('progress-fill');
-    if (overlay) overlay.style.display = 'none';
-    if (fill) {
-        fill.classList.remove('active');
-        fill.style.width = '0%';
-    }
+    if (!overlay) return;
+    overlay.classList.add('fade-out');
+    setTimeout(() => {
+        overlay.style.display = 'none';
+        overlay.classList.remove('fade-out');
+        const status = document.getElementById('splash-status');
+        if (status) status.textContent = '';
+    }, 350);
 }
 
 // ─── Finalize ────────────────────────────────────────────
