@@ -352,6 +352,14 @@ class ProductionWorker {
             TrapEngine.applyTrapping(masks, labPalette, width, height, state.trapSize);
         }
 
+        // Compute E_rev (Revelation Error) for this tile
+        const RevelationError = Reveal.RevelationError;
+        let eRev = 0;
+        if (RevelationError) {
+            const result = RevelationError.fromIndices(labPixels, colorIndices, labPalette, pixelCount);
+            eRev = result.eRev;
+        }
+
         // Generate RGBA preview from masks + colorIndices
         const PosterizationEngine = Reveal.engines.PosterizationEngine;
         const rgbPalette = labPalette.map(c => PosterizationEngine.labToRgb(c));
@@ -369,7 +377,7 @@ class ProductionWorker {
             buffer[idx + 3] = 255;
         }
 
-        return { buffer, width, height };
+        return { buffer, width, height, eRev };
     }
 
     // ─── Fast Pixel Mapping ──────────────────────────────────────

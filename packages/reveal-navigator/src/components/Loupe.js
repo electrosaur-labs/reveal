@@ -35,11 +35,13 @@ class Loupe {
      * @param {HTMLElement} coordsLabel - #loupe-coords element
      * @param {HTMLImageElement} previewImg - The main preview <img> for mouse tracking
      * @param {import('../state/SessionState')} sessionState
+     * @param {HTMLElement} [erevLabel] - #loupe-erev element (optional)
      */
-    constructor(container, loupeImg, coordsLabel, previewImg, sessionState) {
+    constructor(container, loupeImg, coordsLabel, previewImg, sessionState, erevLabel) {
         this._container = container;
         this._img = loupeImg;
         this._coords = coordsLabel;
+        this._erevLabel = erevLabel || null;
         this._previewImg = previewImg;
         this._session = sessionState;
         this._active = false;
@@ -104,6 +106,7 @@ class Loupe {
         this._worker = null;
         this._pendingFetch = null;  // Drop any queued fetch
         this._container.style.display = 'none';
+        if (this._erevLabel) this._erevLabel.setAttribute('style', 'display: none');
         this._previewImg.removeEventListener('mousemove', this._onMouseMove);
         this._previewImg.removeEventListener('mouseleave', this._onMouseLeave);
         this._previewImg.style.cursor = '';
@@ -226,10 +229,23 @@ class Loupe {
         const downsampleFactor = this._zoomFactor > 1 ? this._zoomFactor : undefined;
 
         try {
-            const { buffer, width, height } = await this._worker.renderLoupeTile(rect, downsampleFactor);
+            const result = await this._worker.renderLoupeTile(rect, downsampleFactor);
+            const { buffer, width, height, eRev } = result;
 
             // Only render if loupe is still active (may have been deactivated during fetch)
             if (!this._active) return;
+
+            // Update E_rev display
+            if (this._erevLabel) {
+                if (eRev != null) {
+                    this._erevLabel.textContent = `\u0394E ${eRev.toFixed(1)}`;
+                    const color = eRev < 5 ? '#6fcf6f' : eRev < 10 ? '#e0a030' : '#e05050';
+                    this._erevLabel.setAttribute('style',
+                        `display: inline; color: ${color}`);
+                } else {
+                    this._erevLabel.setAttribute('style', 'display: none');
+                }
+            }
 
             // Apply highlight isolation if a swatch is selected
             const highlightIdx = this._session.state.highlightColorIndex;

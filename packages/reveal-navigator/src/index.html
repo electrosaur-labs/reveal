@@ -678,6 +678,21 @@
             white-space: nowrap;
         }
 
+        #loupe-erev {
+            position: absolute;
+            top: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+            color: #ccc;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 1px 6px;
+            border-radius: 8px;
+            white-space: nowrap;
+            display: none;
+        }
+
         #loupe-zoom {
             background: #383838;
             border: 1px solid #555;
@@ -776,6 +791,7 @@
                 <!-- 1:1 Loupe overlay (hidden until activated) -->
                 <div id="loupe-container">
                     <img id="loupe-img" />
+                    <span id="loupe-erev"></span>
                     <span id="loupe-coords"></span>
                 </div>
             </div>

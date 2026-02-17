@@ -107,7 +107,8 @@ function initPlugin() {
                 document.getElementById('loupe-img'),
                 document.getElementById('loupe-coords'),
                 document.getElementById('preview-img'),
-                sessionState
+                sessionState,
+                document.getElementById('loupe-erev')
             );
         } catch (err) {
             logger.log('[Navigator] Loupe init failed: ' + err.message);
