@@ -42,6 +42,7 @@
     "neutralSovereigntyThreshold": 10,
     "neutralCentroidClampThreshold": 2,
     "preprocessingIntensity": "auto",
-    "speckleRescue": 4
+    "speckleRescue": 4,
+    "refinementPasses": 1
   }
 }

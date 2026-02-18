@@ -52,6 +52,7 @@
     "shadowClamp": 4,
     "speckleRescue": 4,
     "medianPass": false,
-    "minVolume": 1
+    "minVolume": 1,
+    "refinementPasses": 2
   }
 }

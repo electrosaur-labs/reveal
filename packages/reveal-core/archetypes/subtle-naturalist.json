@@ -3,9 +3,17 @@
   "version": "1.0.0",
   "name": "Subtle Naturalist / Architectural",
   "description": "Baseline for 16-bit photographic scans. High entropy target protects clinical color diversity.",
+  "preferred_sectors": [
+    "cyan",
+    "chartreuse",
+    "orange",
+    "magenta",
+    "blue",
+    "green"
+  ],
   "centroid": {
     "l": 52.3,
-    "c": 18.7,
+    "c": 30,
     "k": 94.2,
     "l_std_dev": 28.6,
     "hue_entropy": 0.75,
@@ -50,6 +58,7 @@
     "detailRescue": 5,
     "speckleRescue": 4,
     "medianPass": false,
-    "minVolume": 1.5
+    "minVolume": 1.5,
+    "refinementPasses": 2
   }
 }

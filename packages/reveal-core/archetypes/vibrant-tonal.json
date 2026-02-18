@@ -49,6 +49,7 @@
     "shadowClamp": 6,
     "chromaGate": 1.5,
     "speckleRescue": 4,
-    "minVolume": 1
+    "minVolume": 1,
+    "refinementPasses": 1
   }
 }

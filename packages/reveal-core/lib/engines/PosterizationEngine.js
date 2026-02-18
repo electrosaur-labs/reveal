@@ -1948,6 +1948,81 @@ class PosterizationEngine {
     }
 
     /**
+     * K-MEANS REFINEMENT — 1-pass centroid correction after median cut.
+     *
+     * Median cut splits along axis-aligned boundaries that can bisect natural
+     * clusters (e.g. splitting yellow into bright/dark instead of yellow vs green).
+     * One pass of k-means reassignment snaps centroids to actual cluster centers.
+     *
+     * Uses simple weighted mean (NOT SALIENCY) to avoid pulling centroids
+     * toward outliers. Only affects median-cut colors — forced peaks and
+     * preserved white/black are added later and are not touched.
+     *
+     * @private
+     * @param {Float32Array|Uint16Array} labPixels - Lab pixel data (L,a,b triples)
+     * @param {Array<{L,a,b}>} palette - Initial palette from median cut
+     * @returns {Array<{L,a,b}>} Refined palette (new array, metadata preserved)
+     */
+    static _refineKMeans(labPixels, palette) {
+        const GRID_STRIDE = 4; // Sample every 4th pixel for performance
+        const pixelCount = labPixels.length / 3;
+
+        if (!palette || palette.length <= 1 || pixelCount === 0) return palette;
+
+        const numColors = palette.length;
+        const currentPalette = palette.map(c => ({ L: c.L, a: c.a, b: c.b }));
+
+        // Step 1: Reassign each sampled pixel to nearest centroid (CIE76 squared)
+        const sumL = new Float64Array(numColors);
+        const sumA = new Float64Array(numColors);
+        const sumB = new Float64Array(numColors);
+        const counts = new Uint32Array(numColors);
+
+        for (let i = 0; i < pixelCount; i += GRID_STRIDE) {
+            const idx = i * 3;
+            const L = labPixels[idx];
+            const a = labPixels[idx + 1];
+            const b = labPixels[idx + 2];
+
+            let bestIdx = 0;
+            let bestDist = Infinity;
+
+            for (let c = 0; c < numColors; c++) {
+                const p = currentPalette[c];
+                const dL = L - p.L;
+                const da = a - p.a;
+                const db = b - p.b;
+                const dist = dL * dL + da * da + db * db;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestIdx = c;
+                }
+            }
+
+            sumL[bestIdx] += L;
+            sumA[bestIdx] += a;
+            sumB[bestIdx] += b;
+            counts[bestIdx]++;
+        }
+
+        // Step 2: Recompute centroids using simple weighted mean
+        for (let c = 0; c < numColors; c++) {
+            if (counts[c] === 0) continue; // Keep previous centroid for empty clusters
+            currentPalette[c] = {
+                L: sumL[c] / counts[c],
+                a: sumA[c] / counts[c],
+                b: sumB[c] / counts[c]
+            };
+        }
+
+        // Preserve metadata for downstream hue gap analysis
+        if (palette._allColors) currentPalette._allColors = palette._allColors;
+        if (palette._labPixels) currentPalette._labPixels = palette._labPixels;
+
+        return currentPalette;
+    }
+
+    /**
      * TUNING-AWARE PALETTE PRUNING
      *
      * Merges colors using centralized tuning parameters.
@@ -3135,7 +3210,7 @@ class PosterizationEngine {
             } else {
             }
         }
-        const initialPaletteLab = this.medianCutInLabSpace(
+        let initialPaletteLab = this.medianCutInLabSpace(
             nonPreservedLabPixels,
             medianCutTarget,
             grayscaleOnly,
@@ -3150,6 +3225,14 @@ class PosterizationEngine {
             options.strategy || null,
             options.tuning || null
         );
+
+        // Step 2.5: K-means refinement — snap centroids to actual cluster centers
+        const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : 1;
+        if (!grayscaleOnly && initialPaletteLab.length > 1 && refinementPasses > 0) {
+            for (let pass = 0; pass < refinementPasses; pass++) {
+                initialPaletteLab = this._refineKMeans(nonPreservedLabPixels, initialPaletteLab);
+            }
+        }
 
         // Step 3: Detect grayscale and apply adaptive perceptual snap
         // "Luma-Aware" Perceptual Snapping per Architect guidance
@@ -3881,7 +3964,7 @@ class PosterizationEngine {
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_median_cut');
 
         // Step 2: Run median cut with reduced target
-        const initialPaletteLab = this.medianCutInLabSpace(
+        let initialPaletteLab = this.medianCutInLabSpace(
             nonPreservedLabPixels,
             medianCutTarget,
             grayscaleOnly,
@@ -3899,6 +3982,14 @@ class PosterizationEngine {
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_median_cut_done');
 
         logger.log(`[Mk1.5] Median cut produced ${initialPaletteLab.length} colors: ${initialPaletteLab.map(c => `L=${c.L.toFixed(1)} a=${c.a.toFixed(1)} b=${c.b.toFixed(1)}`).join(' | ')}`);
+
+        // Step 2.5: K-means refinement — snap centroids to actual cluster centers
+        const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : 1;
+        if (!grayscaleOnly && initialPaletteLab.length > 1 && refinementPasses > 0) {
+            for (let pass = 0; pass < refinementPasses; pass++) {
+                initialPaletteLab = this._refineKMeans(nonPreservedLabPixels, initialPaletteLab);
+            }
+        }
 
         // Step 3: Apply perceptual snap
         const colorSpaceAnalysis = this._analyzeColorSpace(labPixels);

@@ -62,7 +62,9 @@ const STRUCTURAL_PARAMS = new Set([
     // Mask / Edge
     'maskProfile',
     // Screen mesh
-    'meshSize'
+    'meshSize',
+    // K-means refinement
+    'refinementPasses'
 ]);
 
 // Union of all user-facing knobs (for snapshot/restore/reset/dirty loops).

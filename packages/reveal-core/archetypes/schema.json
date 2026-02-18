@@ -123,6 +123,13 @@
           "minimum": 0,
           "maximum": 10,
           "description": "Palette post-pruning: merge colors with pixel coverage below N%. Resource allocation - weak colors (<minVolume) are merged to nearest neighbors. Prevents outlier/noise colors from claiming screens."
+        },
+        "refinementPasses": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 1,
+          "description": "K-means refinement passes after median cut. 0=skip (graphic/grayscale archetypes), 1=default single pass, 2+=extra convergence for complex photographic content."
         }
       }
     }

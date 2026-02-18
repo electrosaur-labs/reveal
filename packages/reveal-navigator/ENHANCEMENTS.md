@@ -200,3 +200,148 @@ creates a feedback loop that doesn't exist in either tool today.
 3. **`#accuracy-text` span does not exist** in the current `index.html`. The Architect's
    refined plan references it as if it's already there. It would need to be added to the
    `#doc-header` or status bar area.
+
+---
+
+## Patent Analysis — Developer Assessment
+
+**Context:** A patent application was proposed for the technology embodied by the
+Navigator. The codebase is currently unreleased with a single contributor, so licensing
+can be changed freely. The following analysis evaluates the negatives in depth.
+
+### What's Potentially Patentable
+
+- The DNA → Archetype → Parameter pipeline (image signature drives all downstream config)
+- The 40/45/15 weighted archetype matching system (7D centroids)
+- The 512px proxy engine with resolution-aware threshold overrides
+- The progressive pulse ingest (DNA → Carousel → Preview in <550ms)
+- The mechanical knobs as post-separation print-quality controls
+- The Loupe with native-res tile fetch through the proxy separation pipeline
+
+### Negative #1: Prior Art Exposure Is Deep
+
+The individual techniques are well-established:
+
+- **Median cut color quantization** — Heckbert, 1982. Forty-four years old.
+- **CIE Lab perceptual distance** — CIE76 (1976), CIE94 (1994), CIEDE2000 (2001).
+  International standards.
+- **Expert systems mapping image features to parameters** — predates AI/ML by decades.
+  Photoshop's Auto Color (2002) does a simpler version of this.
+- **Proxy/thumbnail preview with full-res commit** — standard in Lightroom, Capture One,
+  every RAW processor since the 2000s.
+- **Halftone/separation software** — Spot Process (2003), AccuRIP, FastFilms, Separation
+  Studio. All do color separation for screen printing.
+
+The novelty would need to be in the *specific combination* — the DNA fingerprint driving
+archetype selection driving parameter generation driving proxy preview with mechanical
+knobs. But "combining known techniques in a predictable way" is exactly what Alice Corp
+v. CLS Bank (2014) and subsequent case law attacks. The USPTO and courts have become
+increasingly hostile to software patents that combine existing ideas, even if the
+combination is clever.
+
+A patent examiner will decompose claims into: (a) analyze image features, (b) match to
+templates, (c) generate parameters, (d) apply color reduction, (e) show preview. Each
+step has deep prior art. Prosecution could take years arguing the combination is
+non-obvious.
+
+### Negative #2: Disclosure Destroys the Actual Competitive Advantage
+
+A patent application is a **public document**. The entire specification — algorithms,
+thresholds, 40/45/15 scoring weights, 7D centroid structure, proxy-safe threshold
+overrides — becomes searchable public knowledge 18 months after filing.
+
+The competitive moat is not the algorithm — it's the *tuning*. The TUNING object in
+PosterizationEngine, the archetype centroid JSONs, the ParameterGenerator mapping rules,
+the Green Rescue activation thresholds — these are hard-won empirical values from
+hundreds of hours of testing against the CQ100 and SP100 datasets. A competitor reading
+source code could replicate the architecture, but getting the tuning right requires the
+same investment.
+
+A patent application would organize and explain these tuning decisions in a way that's
+far more accessible than reading raw source code — effectively writing a manual for
+competitors. And after 20 years (or sooner if the patent is invalidated), they can use
+it royalty-free.
+
+### Negative #3: Cost vs. Market Size
+
+- Patent prosecution: $15,000-$30,000 (filing, office actions, grant)
+- Maintenance fees over 20 years: ~$12,000
+- International filing (PCT + national phase, 3-5 countries): $50,000-$100,000+
+- **Total: $80,000-$130,000** for meaningful protection
+
+Patent enforcement (litigation): **$1M-$5M minimum** for an infringement case through
+trial.
+
+The addressable market for screen printing color separation software is small. Screen
+printing is a $10B industry, but the software tools segment is a tiny fraction. Direct
+competitors (Spot Process, Separation Studio) are small companies. Even if one infringed,
+damages collected would likely not cover litigation costs.
+
+### Negative #4: Claims Scope Dilemma
+
+If claims are broad ("a method for automatically selecting color separation parameters
+based on image analysis"), the examiner will cite Photoshop Auto Color, adaptive image
+processing papers, and reject.
+
+If claims are narrow enough to survive prosecution ("a method using a 7-dimensional
+centroid comprising lightness, chroma, blackness, L-standard-deviation, entropy, color
+temperature, and sector weight, scored with 40% structural, 45% sector affinity, and
+15% pattern weighting to select from a plurality of archetype templates"), any competitor
+can design around it by using 6 dimensions, different weights, or a neural network
+instead of centroid matching.
+
+This is the fundamental dilemma with software patents on algorithmic innovations: the
+novelty is in the specific numbers, and specific numbers are trivially varied.
+
+### Negative #5: Timeline vs. Technology Lifecycle
+
+Patent prosecution takes 2-4 years. The patent lasts 20 years from filing. But:
+
+- UXP may be replaced by Adobe's next plugin framework
+- AI-driven approaches (diffusion models, neural color transfer) may make algorithmic
+  separation obsolete
+- The screen printing industry is consolidating toward DTG and DTF
+  (direct-to-garment/film), reducing demand for traditional separation
+
+The investment would protect a technique that may be superseded before the patent grants.
+
+### Negative #6: Defensive Patent Value Is Low
+
+The common counterargument: "We just need it defensively, so nobody can patent our
+approach and sue us." This has merit in patent-dense industries (mobile, semiconductors)
+where trolls and cross-licensing are realities. But in screen printing software:
+
+- **Adobe** doesn't care about screen printing separation (30,000+ patents, not patenting
+  color quantization)
+- **Spot Process / AccuRIP / competitors** are small companies almost certainly not filing
+  patents
+- **Patent trolls** target large companies with deep pockets, not niche plugin developers
+
+The threat being defended against is largely theoretical.
+
+### Negative #7: Unreleased Code Makes Patent Unnecessary
+
+Since the codebase is unreleased with a single contributor, full trade secret protection
+already exists — for free, indefinitely, with no public disclosure. Filing a patent
+would actually *weaken* the current position by requiring disclosure of what is currently
+completely private.
+
+### Recommendation: Trade Secret, Not Patent
+
+The strongest IP position for an unreleased codebase:
+
+1. **Keep the engines proprietary** — do not open-source the core algorithms
+2. **Distribute only as compiled UXP plugins** — obfuscated webpack bundles
+3. **Document the invention internally with dated records** — establishes prior art
+   defense if a competitor attempts to patent similar techniques
+4. **Ship and iterate faster** than anyone who tries to replicate
+
+This provides all the protection of a patent (nobody can use the exact approach) plus
+indefinite duration, zero cost, and no public disclosure. The only thing lost is the
+ability to sue someone who independently invents the same technique — but given the
+market size, that lawsuit would never be worth filing.
+
+The competitive moat for Reveal is not the algorithm — it's the calibration, the
+archetype library, the print-validated tuning, and the user experience. None of those
+are well-served by a patent. All of them are well-served by shipping faster than
+competitors.

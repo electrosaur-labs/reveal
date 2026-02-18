@@ -56,6 +56,7 @@
     "detailRescue": 8,
     "speckleRescue": 4,
     "shadowClamp": 6,
-    "minVolume": 0.5
+    "minVolume": 0.5,
+    "refinementPasses": 0
   }
 }

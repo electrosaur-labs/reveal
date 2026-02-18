@@ -50,6 +50,7 @@
     "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 5,
     "neutralCentroidClampThreshold": 1.2,
-    "preprocessingIntensity": "heavy"
+    "preprocessingIntensity": "heavy",
+    "refinementPasses": 1
   }
 }

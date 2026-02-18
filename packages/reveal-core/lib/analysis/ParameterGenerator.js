@@ -114,8 +114,12 @@ class DynamicConfigurator {
             // Callers with true 16-bit source data (e.g. reveal-batch reading PSD files)
             // should pass bitDepth explicitly in options.
 
-            // Core parameters from archetype (FIXED - no overrides)
-            targetColors: params.targetColorsSlider || params.targetColors || 10,
+            // Core parameters — adaptive color count raises the floor when
+            // DNA sectors indicate the image needs more colors than the archetype default
+            targetColors: Math.max(
+                this._computeAdaptiveColorCount(dna, archetype) || 0,
+                params.targetColorsSlider || params.targetColors || 10
+            ),
             ditherType: normalizedDither,
             distanceMetric: params.distanceMetric || 'cie76',
 
@@ -180,6 +184,9 @@ class DynamicConfigurator {
             // Preprocessing intensity (user-selectable, drives BilateralFilter)
             preprocessingIntensity: normalizedPreproc,
 
+            // K-means refinement passes (0 = skip, 1 = default, 2+ = extra convergence)
+            refinementPasses: params.refinementPasses !== undefined ? params.refinementPasses : 1,
+
             // Screen mesh (TPI for LPI-aware dithering; 0 = pixel-level)
             meshSize: params.meshSize || 0,
 
@@ -214,6 +221,78 @@ class DynamicConfigurator {
         const peakChroma = dna.maxC || meanC;
 
         return config;
+    }
+
+    /**
+     * Compute adaptive target color count from image DNA sectors.
+     *
+     * Algorithm:
+     * - Count hue sectors with >3% pixel coverage
+     * - +1 if significant neutral mass (>10% pixels outside any sector)
+     * - +1 if wide tonal range (l_std_dev > 22)
+     * - +1 if high hue entropy (>0.7)
+     * - Clamp to [5, 10]
+     *
+     * @param {Object} dna - DNA v2.0 analysis with sectors
+     * @param {Object} archetype - Matched archetype definition
+     * @returns {number|null} Adaptive count, or null if DNA lacks sectors
+     */
+    static _computeAdaptiveColorCount(dna, archetype) {
+        if (!dna.sectors || !dna.global) return null;
+
+        const SECTOR_MIN_COVERAGE = 0.03;
+        const NEUTRAL_MASS_THRESHOLD = 0.10;
+
+        // Count occupied sectors
+        let occupiedSectors = 0;
+        let totalSectorWeight = 0;
+        for (const sector of Object.values(dna.sectors)) {
+            if (sector.weight > SECTOR_MIN_COVERAGE) occupiedSectors++;
+            totalSectorWeight += sector.weight;
+        }
+
+        let count = occupiedSectors;
+
+        // Neutral mass: tiered contribution — large neutral mass spanning wide
+        // tonal range needs separate light/mid/dark neutral bands
+        const neutralMass = 1.0 - totalSectorWeight;
+        if (neutralMass > NEUTRAL_MASS_THRESHOLD) count++;
+        if (neutralMass > 0.25) count++;
+        if (neutralMass > 0.40) count++;
+
+        // Tonal range bonus
+        if (dna.global.l_std_dev > 22) count++;
+
+        // Entropy bonus
+        if (dna.global.hue_entropy > 0.7) count++;
+
+        // Hue spread bonus — occupied sectors spanning wide hue arc need
+        // distinct palette slots to avoid merging perceptually distant hues
+        const SECTOR_CENTER = {
+            red: 0, orange: 30, yellow: 60, chartreuse: 90,
+            green: 120, cyan: 150, azure: 180, blue: 210,
+            purple: 240, magenta: 270, pink: 300, rose: 330
+        };
+        const occupiedAngles = [];
+        for (const [name, sector] of Object.entries(dna.sectors)) {
+            if (sector.weight > SECTOR_MIN_COVERAGE && SECTOR_CENTER[name] !== undefined) {
+                occupiedAngles.push(SECTOR_CENTER[name]);
+            }
+        }
+        if (occupiedAngles.length >= 3) {
+            occupiedAngles.sort((a, b) => a - b);
+            // Find largest gap on the hue wheel — spread = 360 - largest gap
+            let maxGap = 0;
+            for (let i = 1; i < occupiedAngles.length; i++) {
+                maxGap = Math.max(maxGap, occupiedAngles[i] - occupiedAngles[i - 1]);
+            }
+            // Wrap-around gap
+            maxGap = Math.max(maxGap, 360 - occupiedAngles[occupiedAngles.length - 1] + occupiedAngles[0]);
+            const hueSpread = 360 - maxGap;
+            if (hueSpread > 150) count++;
+        }
+
+        return Math.max(5, Math.min(10, Math.round(count)));
     }
 
     /**

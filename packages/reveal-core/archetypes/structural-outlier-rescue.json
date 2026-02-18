@@ -48,6 +48,7 @@
     "preprocessingIntensity": "light",
     "shadowClamp": 6,
     "speckleRescue": 4,
-    "minVolume": 1
+    "minVolume": 1,
+    "refinementPasses": 1
   }
 }
