@@ -371,7 +371,7 @@ Three user-facing parameters in the separation pipeline, applied per-layer after
 
 ### UXP Plugin Constraints (reveal-adobe and reveal-navigator)
 
-**componentSize must be 8 for Lab reads:** `imaging.getPixels({ componentSize: 16, colorSpace: "Lab" })` returns neutral a/b channels (no chroma — grayscale only). Always use `componentSize: 8` and upconvert with `lab8to16()`. See reveal-adobe comments: "Always 8 for now (UXP limitation)".
+**componentSize 16 for Lab reads now works (2026-02-16):** Previously broken (returned neutral a/b), `componentSize: 16` with Lab colorspace is confirmed working. `reveal-navigator` uses native 16-bit reads. `reveal-adobe` still uses `componentSize: 8` with `lab8to16()` upconversion (pending upgrade).
 
 **No ImageData API:** UXP does not support `new ImageData()`, `ctx.createImageData()`, or `ctx.putImageData()`. To render pixels in plugin UI, encode RGBA buffers to JPEG using `jpeg-js`, convert to base64 data URL, and set as `<img>.src`. For writing to Photoshop layers, use `imaging.createImageDataFromBuffer()` + `imaging.putPixels()`.
 
