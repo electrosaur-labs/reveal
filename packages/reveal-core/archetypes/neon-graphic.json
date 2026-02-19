@@ -26,7 +26,8 @@
     "primary_sector_weight": 3
   },
   "parameters": {
-    "targetColorsSlider": 8,
+    "minColors": 6,
+    "maxColors": 12,
     "ditherType": "none",
     "distanceMetric": "cie76",
     "lWeight": 0.5,

@@ -219,6 +219,19 @@ class ProductionWorker {
                     allLayers[allLayers.length - 1].visible = false;
                 }
 
+                // ── Embed separation manifest as XMP ──
+                // Write inside suspendHistory so it collapses into the single
+                // "Reveal" undo step (no separate "File Info" history entry).
+                try {
+                    const elapsedMs = Date.now() - t0;
+                    const prodResult = { layerCount: layers.length, elapsedMs };
+                    const manifest = self._sessionState.buildManifest(prodResult);
+                    await PhotoshopBridge.writeManifestXMP(manifest);
+                    logger.log(`[ProductionWorker] Manifest embedded in XMP`);
+                } catch (xmpErr) {
+                    logger.log(`[ProductionWorker] Manifest XMP failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
+                }
+
                 if (suspensionID !== null) {
                     await executionContext.hostControl.resumeHistory(suspensionID);
                 }
@@ -237,20 +250,7 @@ class ProductionWorker {
         const elapsedMs = Date.now() - t0;
         logger.log(`[ProductionWorker] Done: ${result.layerCount} layers in ${elapsedMs}ms`);
 
-        const productionResult = { layerCount: result.layerCount, elapsedMs };
-
-        // ── Embed separation manifest as XMP ──
-        try {
-            const manifest = this._sessionState.buildManifest(productionResult);
-            await core.executeAsModal(async () => {
-                await PhotoshopBridge.writeManifestXMP(manifest);
-            }, { commandName: "Reveal: Write Manifest" });
-            logger.log(`[ProductionWorker] Manifest embedded in XMP`);
-        } catch (err) {
-            logger.log(`[ProductionWorker] Manifest XMP failed (non-fatal): ${err && err.message || String(err)}`);
-        }
-
-        return productionResult;
+        return { layerCount: result.layerCount, elapsedMs };
     }
 
     // ─── Loupe Tile Rendering ─────────────────────────────────────

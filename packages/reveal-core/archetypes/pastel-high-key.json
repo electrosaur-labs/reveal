@@ -20,7 +20,8 @@
     "hue_entropy": 1
   },
   "parameters": {
-    "targetColorsSlider": 8,
+    "minColors": 4,
+    "maxColors": 8,
     "ditherType": "none",
     "distanceMetric": "cie94",
     "lWeight": 1,

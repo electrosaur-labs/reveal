@@ -25,7 +25,8 @@
   },
   "parameters": {
     "centroidStrategy": "SALIENCY",
-    "targetColorsSlider": 10,
+    "minColors": 6,
+    "maxColors": 10,
     "distanceMetric": "cie76",
     "lWeight": 1,
     "cWeight": 2.5,

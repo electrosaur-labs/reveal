@@ -20,7 +20,8 @@
     "primary_sector_weight": 2.5
   },
   "parameters": {
-    "targetColorsSlider": 8,
+    "minColors": 6,
+    "maxColors": 12,
     "ditherType": "blue-noise",
     "distanceMetric": "cie94",
     "lWeight": 1.8,

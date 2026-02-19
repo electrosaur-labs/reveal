@@ -324,19 +324,19 @@ describe('ParameterGenerator._computeAdaptiveColorCount', () => {
 
         // 3 occupied sectors + neutral mass bonus (1 - 0.47 = 0.53 > 0.40 → +3)
         // + entropy <0.7 so no entropy bonus, l_std_dev<22 so no tonal bonus
-        // Total: 3 + 3 = 6, clamped to [5,10] = 6
-        expect(result).toBeGreaterThanOrEqual(5);
-        expect(result).toBeLessThanOrEqual(10);
+        // Total: 3 + 3 = 6, clamped to [4,12] (fallback bounds) = 6
+        expect(result).toBeGreaterThanOrEqual(4);
+        expect(result).toBeLessThanOrEqual(12);
     });
 
-    test('should clamp result to [5, 10]', () => {
+    test('should clamp result to archetype minColors/maxColors (fallback [4, 12])', () => {
         // Minimal image: 1 sector, low entropy, narrow tonal range
         const dnaLow = {
             global: { l_std_dev: 10, hue_entropy: 0.1 },
             sectors: { red: { weight: 0.8 } }
         };
         const resultLow = DynamicConfigurator._computeAdaptiveColorCount(dnaLow, {});
-        expect(resultLow).toBe(5); // Floor
+        expect(resultLow).toBe(4); // Floor (fallback minColors=4)
 
         // Rainbow image: many sectors, high entropy, wide tonal range
         const dnaHigh = {
@@ -357,7 +357,7 @@ describe('ParameterGenerator._computeAdaptiveColorCount', () => {
             }
         };
         const resultHigh = DynamicConfigurator._computeAdaptiveColorCount(dnaHigh, {});
-        expect(resultHigh).toBe(10); // Ceiling
+        expect(resultHigh).toBe(12); // Ceiling (fallback maxColors=12)
     });
 
     test('should add bonus for high neutral mass', () => {
@@ -373,8 +373,8 @@ describe('ParameterGenerator._computeAdaptiveColorCount', () => {
         const result = DynamicConfigurator._computeAdaptiveColorCount(dna, {});
 
         // 1 sector + neutral mass >0.1 (+1) + >0.25 (+1) + >0.40 (+1) = 4
-        // Clamped to [5, 10] = 5
-        expect(result).toBeGreaterThanOrEqual(5);
+        // Clamped to [4, 12] (fallback bounds) = 4
+        expect(result).toBeGreaterThanOrEqual(4);
     });
 });
 

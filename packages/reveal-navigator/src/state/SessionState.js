@@ -860,20 +860,32 @@ class SessionState extends EventEmitter {
         const PhotoshopBridge = require('../bridge/PhotoshopBridge');
         const docInfo = PhotoshopBridge.getDocumentInfo();
 
-        // ── Archetype score + breakdown ──
-        let archetypeSection = { id: null, name: null, score: 0, breakdown: {} };
+        // ── Archetype scores + rankings ──
+        let archetypeSection = { id: null, name: null, score: 0, breakdown: {}, rankings: [] };
         const activeId = this.state.activeArchetypeId;
         if (activeId) {
-            const scores = this.getAllArchetypeScores();
-            const match = scores.find(s => s.id === activeId);
+            const allScores = this.getAllArchetypeScores();
+            // Build name lookup from loaded archetypes
+            const archetypeDefs = Reveal.ArchetypeLoader.loadArchetypes();
+            const nameMap = {};
+            for (const a of archetypeDefs) nameMap[a.id] = a.name;
+
+            const match = allScores.find(s => s.id === activeId);
             if (match) {
                 archetypeSection = {
                     id: match.id,
-                    name: match.name || match.id,
+                    name: nameMap[match.id] || match.id,
                     score: Math.round(match.score * 100) / 100,
                     breakdown: match.breakdown || {}
                 };
             }
+            // Include full ranked list (all archetypes with scores)
+            archetypeSection.rankings = allScores.map(s => ({
+                id: s.id,
+                name: nameMap[s.id] || s.id,
+                score: Math.round(s.score * 100) / 100,
+                breakdown: s.breakdown || {}
+            }));
         }
 
         // ── Surgery section ──
@@ -922,6 +934,23 @@ class SessionState extends EventEmitter {
             };
         });
 
+        // ── Engine config (ParameterGenerator output) ──
+        // Captures the full computed config including adaptive color count
+        const configSection = {};
+        if (this.currentConfig) {
+            const cfg = this.currentConfig;
+            configSection.targetColors = cfg.targetColors;
+            configSection.distanceMetric = cfg.distanceMetric;
+            configSection.ditherType = cfg.ditherType;
+            configSection.engineType = cfg.engineType;
+            configSection.preprocessingIntensity = cfg.preprocessingIntensity;
+            // Archetype color bounds (drives adaptive count clamping)
+            if (cfg.meta) {
+                configSection.archetypeId = cfg.meta.archetypeId;
+                configSection.matchScore = cfg.meta.matchScore;
+            }
+        }
+
         return {
             meta: {
                 generator: 'Reveal Navigator v1.0.0',
@@ -932,6 +961,7 @@ class SessionState extends EventEmitter {
                 bitDepth: 16
             },
             archetype: archetypeSection,
+            config: configSection,
             knobs: (() => {
                 const k = {};
                 for (const key of ALL_KNOBS) {

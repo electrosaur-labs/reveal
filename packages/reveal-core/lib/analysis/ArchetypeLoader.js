@@ -217,7 +217,8 @@ class ArchetypeLoader {
             centroid: { l: 50, c: 25, k: 50, l_std_dev: 25 },
             weights: { l: 0.5, c: 1.5, k: 1.0, l_std_dev: 2.0 },
             parameters: {
-                targetColorsSlider: 10,
+                minColors: 4,
+                maxColors: 10,
                 ditherType: 'blue-noise',
                 distanceMetric: 'cie76',
                 lWeight: 1.2,

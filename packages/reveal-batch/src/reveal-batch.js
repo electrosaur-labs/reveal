@@ -149,43 +149,19 @@ function rgbToHex(r, g, b) {
 }
 
 /**
- * Calculate image DNA from 8-bit Lab data
+ * Calculate full DNA v2.0 from 8-bit Lab data using DNAGenerator.
+ * Returns flattened DNA structure compatible with ArchetypeMapper.
  */
-function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
-    const pixelCount = width * height;
-    let sumL = 0, sumC = 0;
-    let minL = 100, maxL = 0, maxC = 0;
-    let sampleCount = 0;
-    const lValues = [];
-
-    for (let i = 0; i < pixelCount; i += sampleStep) {
-        const L = (lab8bit[i * 3] / 255) * 100;
-        const a = lab8bit[i * 3 + 1] - 128;
-        const b = lab8bit[i * 3 + 2] - 128;
-        const C = Math.sqrt(a * a + b * b);
-
-        sumL += L;
-        sumC += C;
-        lValues.push(L);
-        if (L < minL) minL = L;
-        if (L > maxL) maxL = L;
-        if (C > maxC) maxC = C;
-        sampleCount++;
-    }
-
-    const avgL = sumL / sampleCount;
-    const avgC = sumC / sampleCount;
-    const lVariance = lValues.reduce((sum, l) => sum + Math.pow(l - avgL, 2), 0) / sampleCount;
-    const lStdDev = Math.sqrt(lVariance);
-
+function calculateFullDNA(lab8bit, width, height, basename) {
+    const dnaGen = new DNAGenerator();
+    const fullDNA = dnaGen.generate(lab8bit, width, height, { bitDepth: 8 });
+    // Flatten global fields to top level for ArchetypeMapper compatibility
     return {
-        l: parseFloat(avgL.toFixed(1)),
-        c: parseFloat(avgC.toFixed(1)),
-        k: parseFloat((maxL - minL).toFixed(1)),
-        minL: parseFloat(minL.toFixed(1)),
-        maxL: parseFloat(maxL.toFixed(1)),
-        maxC: parseFloat(maxC.toFixed(1)),
-        l_std_dev: parseFloat(lStdDev.toFixed(1))
+        ...fullDNA.global,
+        sectors: fullDNA.sectors,
+        dominant_sector: fullDNA.dominant_sector,
+        version: fullDNA.version,
+        filename: basename
     };
 }
 
@@ -220,12 +196,15 @@ async function processImage(inputPath, outputDir) {
             lab8bit = convert16bitTo8bitLab(labData, pixelCount);
         }
 
-        // 3. Calculate image DNA
-        console.log(`  Calculating image DNA...`);
-        const dna = calculateImageDNA(lab8bit, width, height);
-        dna.filename = basename;
+        // 3. Calculate full DNA v2.0 (with sectors for adaptive color count)
+        console.log(`  Calculating image DNA v2.0...`);
+        const dna = calculateFullDNA(lab8bit, width, height, basename);
 
         console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, StdDev=${dna.l_std_dev}, maxC=${dna.maxC}`);
+        if (dna.sectors) {
+            const occupied = Object.entries(dna.sectors).filter(([,s]) => s.weight > 0.03).map(([n]) => n);
+            console.log(`  Sectors: ${occupied.join(', ') || 'none >3%'}`);
+        }
 
         // 4. Generate configuration
         const config = DynamicConfigurator.generate(dna);

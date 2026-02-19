@@ -114,12 +114,11 @@ class DynamicConfigurator {
             // Callers with true 16-bit source data (e.g. reveal-batch reading PSD files)
             // should pass bitDepth explicitly in options.
 
-            // Core parameters — adaptive color count raises the floor when
-            // DNA sectors indicate the image needs more colors than the archetype default
-            targetColors: Math.max(
-                this._computeAdaptiveColorCount(dna, archetype) || 0,
-                params.targetColorsSlider || params.targetColors || 10
-            ),
+            // Core parameters — DNA-driven adaptive color count is the primary driver.
+            // Archetype provides min/max bounds; targetColorsSlider is fallback only
+            // when DNA lacks sector data (legacy simplified DNA).
+            targetColors: this._computeAdaptiveColorCount(dna, archetype)
+                || params.targetColorsSlider || params.targetColors || 8,
             ditherType: normalizedDither,
             distanceMetric: params.distanceMetric || 'cie76',
 
@@ -297,7 +296,9 @@ class DynamicConfigurator {
             if (hueSpread > 150) count++;
         }
 
-        return Math.max(5, Math.min(10, Math.round(count)));
+        const minColors = archetype.parameters?.minColors || 4;
+        const maxColors = archetype.parameters?.maxColors || 12;
+        return Math.max(minColors, Math.min(maxColors, Math.round(count)));
     }
 
     /**

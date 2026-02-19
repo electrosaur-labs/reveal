@@ -25,7 +25,8 @@
     "hue_entropy": 1.5
   },
   "parameters": {
-    "targetColorsSlider": 8,
+    "minColors": 4,
+    "maxColors": 8,
     "ditherType": "BlueNoise",
     "distanceMetric": "cie94",
     "lWeight": 0.8,

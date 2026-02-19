@@ -25,7 +25,8 @@
     "temperature_bias": 1.5
   },
   "parameters": {
-    "targetColorsSlider": 8,
+    "minColors": 4,
+    "maxColors": 10,
     "ditherType": "blue-noise",
     "distanceMetric": "cie94",
     "lWeight": 1.5,
