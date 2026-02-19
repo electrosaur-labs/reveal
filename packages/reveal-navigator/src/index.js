@@ -294,6 +294,19 @@ function initPlugin() {
                 timeEl.textContent = `${data.elapsedMs.toFixed(0)}ms`;
             }
 
+            // DNA Fidelity display
+            const dnaFidelityEl = document.getElementById('dna-fidelity-text');
+            if (dnaFidelityEl && data.dnaFidelity) {
+                const f = data.dnaFidelity;
+                const score = Math.round(f.fidelity);
+                dnaFidelityEl.textContent = `DNA ${score}`;
+                dnaFidelityEl.className = score >= 80 ? 'fidelity-good'
+                    : score >= 60 ? 'fidelity-warn' : 'fidelity-bad';
+                dnaFidelityEl.title = f.alerts.length
+                    ? f.alerts.join('\n')
+                    : 'No drift detected';
+            }
+
             // Row 2: Archetype match score + breakdown
             updateMatchScore();
 

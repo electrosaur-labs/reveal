@@ -126,6 +126,7 @@ class DynamicConfigurator {
             // Saliency weights
             lWeight: params.lWeight || 1.2,
             cWeight: params.cWeight || 2.0,
+            bWeight: params.bWeight !== undefined ? params.bWeight : 1.0,
             blackBias: params.blackBias || 3.0,
 
             // Vibrancy
@@ -180,6 +181,10 @@ class DynamicConfigurator {
             speckleRescue: params.speckleRescue !== undefined ? params.speckleRescue : 0,
             medianPass: params.medianPass !== undefined ? params.medianPass : false,
             minVolume: params.minVolume !== undefined ? params.minVolume : 0,
+
+            // Shadow chroma gate: dark low-chroma pixels → achromatic before median cut
+            // Prevents dark backgrounds from consuming palette slots (e.g. "brown" plate)
+            shadowChromaGateL: params.shadowChromaGateL !== undefined ? params.shadowChromaGateL : 0,
 
             // Preprocessing intensity (user-selectable, drives BilateralFilter)
             preprocessingIntensity: normalizedPreproc,

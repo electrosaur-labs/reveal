@@ -95,10 +95,11 @@ class PaletteSurgeon {
         this._swatchElements.clear();
 
         for (let i = 0; i < rgbPalette.length; i++) {
-            if (counts[i] === 0) continue;   // skip merged/empty — 'i' stays stable
+            const isDeleted = this._session.deletedColors.has(i);
+            if (counts[i] === 0 && !isDeleted) continue;   // skip truly empty, keep deleted
 
             const c = rgbPalette[i];
-            const pct = ((counts[i] / pixelCount) * 100).toFixed(1);
+            const pct = isDeleted ? '—' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
             const isOverridden = this._session.paletteOverrides.has(i);
 
             // ── Swatch container with HARD-BOUND index ──
@@ -121,7 +122,6 @@ class PaletteSurgeon {
             if (isOverridden) dot.classList.add('visible');
 
             // ── Deleted swatch styling (Alt+click delete) ──
-            const isDeleted = this._session.deletedColors.has(i);
             if (isDeleted) {
                 swatch.classList.add('surgeon-deleted');
                 const xBadge = document.createElement('span');
@@ -144,13 +144,13 @@ class PaletteSurgeon {
             // ── Percentage label ──
             const label = document.createElement('span');
             label.className = 'surgeon-pct';
-            label.textContent = `${pct}%`;
+            label.textContent = pct;
 
             // ── Revert button (only visible when selected + overridden) ──
             const revertBtn = document.createElement('button');
             revertBtn.className = 'surgeon-revert';
             const isSelected = (this._state === 'SELECTED' && i === this._selectedIndex);
-            if (isOverridden && isSelected) revertBtn.classList.add('visible');
+            if ((isOverridden || isDeleted) && isSelected) revertBtn.classList.add('visible');
             revertBtn.textContent = '\u21BA';
             revertBtn.title = 'Revert to original color';
             revertBtn.onclick = (e) => {
@@ -195,9 +195,27 @@ class PaletteSurgeon {
     _onSwatchClick(i, shiftKey, altKey) {
         if (this._pickerOpen) return;
 
+        const isDeleted = this._session.deletedColors.has(i);
+
         // Alt+click → delete swatch (merge into nearest neighbor)
+        // On already-deleted swatch, Alt+click reverts instead
         if (altKey) {
-            this._onDeleteSwatch(i);
+            if (isDeleted) {
+                this._onRevert(i);
+            } else {
+                this._onDeleteSwatch(i);
+            }
+            return;
+        }
+
+        // Deleted swatches: single-click selects (to show revert), no double-click picker
+        if (isDeleted) {
+            this._state = 'SELECTED';
+            this._selectedIndex = i;
+            this._header.textContent = `Deleted — click \u21BA or Alt+click to restore`;
+            this._session.setHighlight(i);
+            this._updateSelectionCSS();
+            this.rebuild();
             return;
         }
 

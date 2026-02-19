@@ -18,6 +18,7 @@ const SeparationEngine = require('./SeparationEngine');
 const PreviewEngine = require('./PreviewEngine');
 const BilateralFilter = require('../preprocessing/BilateralFilter');
 const MechanicalKnobs = require('./MechanicalKnobs');
+const DNAFidelity = require('../metrics/DNAFidelity');
 
 class ProxyEngine {
     static PROXY_SIZE = 800; // Fixed resolution for long edge
@@ -169,7 +170,8 @@ class ProxyEngine {
             originalWidth: width,
             originalHeight: height,
             dna: posterizeResult.dna,
-            bitDepth: initialConfig.bitDepth || 16
+            bitDepth: initialConfig.bitDepth || 16,
+            targetColors: initialConfig.targetColors || initialConfig.targetColorsSlider || 0
         };
 
         // 6. Generate clean preview (no knobs yet).
@@ -294,6 +296,10 @@ class ProxyEngine {
             statistics: posterizeResult.statistics || {}
         };
 
+        // Update sourceMetadata.targetColors for the new archetype
+        // (different archetypes may request different screen counts)
+        this.sourceMetadata.targetColors = config.targetColors || config.targetColorsSlider || 0;
+
         // Snapshot baseline so mechanical knobs can restore from clean state
         this._snapshotBaseline();
 
@@ -415,6 +421,53 @@ class ProxyEngine {
         );
 
         return { labPalette: result.paletteLab, rgbPalette: result.palette };
+    }
+
+    /**
+     * Like getPaletteForConfig but also runs separation and computes DNAFidelity.
+     * Used by background palette loop to collect per-archetype fidelity scores.
+     *
+     * @param {Object} config - Posterization config
+     * @param {Object} inputDNA - Original image DNA for fidelity comparison
+     * @returns {Promise<{labPalette, rgbPalette, fidelity: number}>}
+     */
+    async getPaletteWithFidelity(config, inputDNA) {
+        if (!this.proxyBuffer || !this.separationState) {
+            throw new Error('Proxy not initialized');
+        }
+
+        const proxyW = this.separationState.width;
+        const proxyH = this.separationState.height;
+
+        const proxyConfig = {
+            ...config,
+            format: 'lab',
+            snapThreshold: 0,
+            enablePaletteReduction: false,
+            densityFloor: 0,
+            preservedUnifyThreshold: 0.5
+        };
+
+        const result = await PosterizationEngine.posterize(
+            this.proxyBuffer, proxyW, proxyH,
+            proxyConfig.targetColors, proxyConfig
+        );
+
+        // Run separation to get colorIndices for fidelity calculation
+        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+            this.proxyBuffer, result.paletteLab, null, proxyW, proxyH,
+            { ditherType: 'none', distanceMetric: config.distanceMetric || 'cie76' }
+        );
+
+        const fidelityResult = DNAFidelity.fromIndices(
+            inputDNA, colorIndices, result.paletteLab, proxyW, proxyH
+        );
+
+        return {
+            labPalette: result.paletteLab,
+            rgbPalette: result.palette,
+            fidelity: fidelityResult.fidelity
+        };
     }
 
     /**
@@ -544,8 +597,10 @@ class ProxyEngine {
     async _applyMinVolume(minVolumePercent) {
         const { palette, colorIndices, width, height } = this.separationState;
         const pixelCount = width * height;
+        const target = this.sourceMetadata?.targetColors || 0;
+        const maxColors = target > 0 ? target + 2 : 0;
 
-        MechanicalKnobs.applyMinVolume(colorIndices, palette, pixelCount, minVolumePercent);
+        MechanicalKnobs.applyMinVolume(colorIndices, palette, pixelCount, minVolumePercent, { maxColors });
 
         // Rebuild masks (pruned colors get all-zero masks)
         await this._rebuildMasks();

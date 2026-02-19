@@ -540,6 +540,13 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     console.log(`  Revelation Score: ${metrics.feature_preservation.revelationScore}`);
     console.log(`  Integrity: ${metrics.physical_feasibility.integrityScore}%`);
 
+    // 9b. DNA Fidelity — closed-loop posterization audit
+    console.log(`  Computing DNA fidelity...`);
+    const outputDNA = Reveal.DNAGenerator.fromIndices(colorIndices, filteredPaletteLab, width, height);
+    const dnaFidelity = Reveal.DNAFidelity.compare(dna, outputDNA);
+    const fidelityAlerts = dnaFidelity.alerts.length > 0 ? ` ⚠ ${dnaFidelity.alerts.join(', ')}` : '';
+    console.log(`  DNA Fidelity: ${dnaFidelity.fidelity}, Sector Drift: ${dnaFidelity.sectorDrift.toFixed(2)}${fidelityAlerts}`);
+
     // 10. Calculate coverage (colorIndices already map to filtered palette)
     const coverageCounts = new Uint32Array(filteredPaletteLab.length);
     for (let i = 0; i < pixelCount; i++) {
@@ -640,6 +647,12 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
             breakdown: config.meta.matchBreakdown
         },
         deltaE: metrics.global_fidelity.avgDeltaE,
+        dnaFidelity: {
+            fidelity: dnaFidelity.fidelity,
+            sectorDrift: dnaFidelity.sectorDrift,
+            alerts: dnaFidelity.alerts,
+            global: dnaFidelity.global
+        },
         ranking: (config.meta.matchRanking || []).map(m => ({
             id: m.id,
             score: m.score,
@@ -668,7 +681,12 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
         filename: basename,
         colors: palette.length,
         dna: dna,
-        metrics: metrics
+        metrics: metrics,
+        dnaFidelity: {
+            fidelity: dnaFidelity.fidelity,
+            sectorDrift: dnaFidelity.sectorDrift,
+            alerts: dnaFidelity.alerts
+        }
     };
 }
 

@@ -151,10 +151,40 @@ class DNAGenerator {
     }
 
     /**
+     * Generate DNA from posterization output (palette + color indices).
+     * Reconstructs perceptual Lab from palette entries and runs generate().
+     *
+     * @param {Uint8Array} colorIndices - Per-pixel palette index
+     * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab (L: 0-100, a/b: -128..+127)
+     * @param {number} width
+     * @param {number} height
+     * @returns {Object} DNA v2.0 structure
+     */
+    static fromIndices(colorIndices, labPalette, width, height) {
+        const pixelCount = width * height;
+        const labPixels = new Float32Array(pixelCount * 3);
+
+        for (let i = 0; i < pixelCount; i++) {
+            const ci = colorIndices[i];
+            const pal = labPalette[ci];
+            const off = i * 3;
+            labPixels[off]     = pal.L;
+            labPixels[off + 1] = pal.a;
+            labPixels[off + 2] = pal.b;
+        }
+
+        const gen = new DNAGenerator();
+        return gen.generate(labPixels, width, height, { bitDepth: 'perceptual' });
+    }
+
+    /**
      * Normalize Lab values from encoded format to standard range
      */
     _normalizeLab(value, component, bitDepth) {
-        if (bitDepth === 16) {
+        if (bitDepth === 'perceptual') {
+            // Already in standard Lab range (L: 0-100, a/b: -128..+127)
+            return value;
+        } else if (bitDepth === 16) {
             // 16-bit: L: 0-32768 → 0-100, a/b: 0-32768 (16384=neutral) → -128 to +127
             if (component === 'L') {
                 return (value / 32768) * 100;

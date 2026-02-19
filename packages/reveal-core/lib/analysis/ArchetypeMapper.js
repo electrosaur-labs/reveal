@@ -27,6 +27,11 @@ class ArchetypeMapper {
                 tonalRange: 'bright',        // lMean > 50
                 expects_flat: true           // Low l_std_dev
             },
+            'chiaroscuro': {
+                chromaProfile: 'low',        // cMax < 30
+                tonalRange: 'dark',          // lMean < 50
+                expects_warm: true           // temperature_bias > 0.4
+            },
             'cinematic_moody': {
                 chromaProfile: 'low',        // cMax < 30
                 tonalRange: 'dark',          // lMean < 45

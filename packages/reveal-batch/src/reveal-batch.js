@@ -15,6 +15,7 @@ const { PSDWriter } = require('@reveal/psd-writer');
 const { readPsd } = require('@reveal/psd-reader');
 const DynamicConfigurator = require('./DynamicConfigurator');
 const MetricsCalculator = require('./MetricsCalculator');
+const { DNAFidelity, DNAGenerator } = Reveal;
 const chalk = require('chalk');
 const sharp = require('sharp');
 
@@ -231,33 +232,14 @@ async function processImage(inputPath, outputDir) {
         console.log(chalk.green(`  ✓ Archetype: ${config.meta?.archetype || 'unknown'}`));
         console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
-        // 5. Prepare params
+        // 5. Prepare params — use archetype config directly, add batch-specific overrides
         const params = {
+            ...config,
             targetColorsSlider: config.targetColors,
-            blackBias: config.blackBias,
-            ditherType: config.ditherType,
             format: 'lab',
             bitDepth: depth,
             engineType: 'reveal',
-            centroidStrategy: 'SALIENCY',
-            lWeight: 1.0,
-            cWeight: 1.0,
-            substrateMode: 'auto',
-            substrateTolerance: 2.0,
-            vibrancyMode: 'moderate',
-            vibrancyBoost: config.saturationBoost,
-            highlightThreshold: 85,
-            highlightBoost: 1.0,
-            enablePaletteReduction: true,
-            paletteReduction: 10.0,
-            hueLockAngle: 20,
-            shadowPoint: 15,
-            colorMode: 'color',
-            preserveWhite: true,
-            preserveBlack: true,
-            ignoreTransparent: true,
-            enableHueGapAnalysis: true,
-            maskProfile: 'Gray Gamma 2.2'
+            centroidStrategy: 'SALIENCY'
         };
 
         // 6. Posterize
@@ -277,19 +259,46 @@ async function processImage(inputPath, outputDir) {
             lab16bit,
             posterizeResult.paletteLab,
             width, height,
-            { ditherType: params.ditherType }
+            { ditherType: params.ditherType, distanceMetric: params.distanceMetric }
         );
 
-        // 8. Generate masks
-        console.log(`  Generating masks...`);
-        const masks = [];
-        for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
-            const mask = Reveal.generateMask(
-                separateResult.colorIndices,
-                i,
-                width, height
+        let finalPaletteLab = posterizeResult.paletteLab;
+        let finalPaletteRgb = posterizeResult.palette;
+        let colorIndices = separateResult.colorIndices;
+
+        // 7.5. Palette pruning — remove ghost plates + enforce screen cap
+        const SeparationEngine = require('@reveal/core/lib/engines/SeparationEngine');
+        const targetColors = params.targetColorsSlider || params.targetColors || 8;
+        const minVolume = (params.minVolume !== undefined && params.minVolume > 0) ? params.minVolume : 0;
+        const needsPrune = minVolume > 0 || finalPaletteLab.length > targetColors;
+
+        if (needsPrune) {
+            const pruneResult = SeparationEngine.pruneWeakColors(
+                finalPaletteLab,
+                colorIndices,
+                width,
+                height,
+                minVolume,
+                { distanceMetric: params.distanceMetric, maxColors: targetColors + 2 }
             );
-            masks.push(mask);
+
+            if (pruneResult.mergedCount > 0) {
+                console.log(chalk.yellow(`  Pruned: ${finalPaletteLab.length} → ${pruneResult.prunedPalette.length} colors (minVolume=${minVolume}%, cap=${targetColors})`));
+                finalPaletteLab = pruneResult.prunedPalette;
+                const ColorSpace = require('@reveal/core/lib/engines/ColorSpace');
+                finalPaletteRgb = finalPaletteLab.map(lab => ColorSpace.labToRgb(lab));
+                colorIndices = pruneResult.remappedIndices;
+            }
+        }
+
+        // 8. Generate masks + apply mechanical knobs
+        console.log(`  Generating masks...`);
+        const MechanicalKnobs = require('@reveal/core/lib/engines/MechanicalKnobs');
+        const masks = MechanicalKnobs.rebuildMasks(colorIndices, finalPaletteLab.length, pixelCount);
+
+        if (params.speckleRescue !== undefined && params.speckleRescue > 0) {
+            console.log(chalk.yellow(`  SpeckleRescue=${params.speckleRescue}px`));
+            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, params.speckleRescue);
         }
 
         // 9. Reconstruct virtual composite for metrics
@@ -297,8 +306,8 @@ async function processImage(inputPath, outputDir) {
         const processedLab = new Uint8ClampedArray(pixelCount * 3);
 
         for (let i = 0; i < pixelCount; i++) {
-            const colorIdx = separateResult.colorIndices[i];
-            const color = posterizeResult.paletteLab[colorIdx];
+            const colorIdx = colorIndices[i];
+            const color = finalPaletteLab[colorIdx];
             processedLab[i * 3] = (color.L / 100) * 255;
             processedLab[i * 3 + 1] = color.a + 128;
             processedLab[i * 3 + 2] = color.b + 128;
@@ -308,7 +317,7 @@ async function processImage(inputPath, outputDir) {
         console.log(`  Computing validation metrics...`);
         const layers = masks.map((mask, i) => ({
             name: `Ink ${i + 1}`,
-            color: posterizeResult.paletteLab[i],
+            color: finalPaletteLab[i],
             mask: mask
         }));
 
@@ -320,14 +329,21 @@ async function processImage(inputPath, outputDir) {
             height
         );
 
+        // 10.5. DNAFidelity — compare input vs posterized DNA
+        console.log(`  Computing DNA fidelity...`);
+        const dnaGen = new DNAGenerator();
+        const inputDNA = dnaGen.generate(lab8bit, width, height, { bitDepth: 8 });
+        const dnaFidelity = DNAFidelity.fromIndices(inputDNA, colorIndices, finalPaletteLab, width, height);
+        console.log(`  DNA Fidelity: ${dnaFidelity.fidelity.toFixed(1)}`);
+
         // 11. Calculate coverage
-        const coverageCounts = new Uint32Array(posterizeResult.paletteLab.length);
+        const coverageCounts = new Uint32Array(finalPaletteLab.length);
         for (let i = 0; i < pixelCount; i++) {
-            coverageCounts[separateResult.colorIndices[i]]++;
+            coverageCounts[colorIndices[i]]++;
         }
 
-        const palette = posterizeResult.paletteLab.map((color, idx) => {
-            const rgbColor = posterizeResult.palette[idx];
+        const palette = finalPaletteLab.map((color, idx) => {
+            const rgbColor = finalPaletteRgb[idx];
             const hex = rgbToHex(rgbColor.r, rgbColor.g, rgbColor.b);
             const coverage = ((coverageCounts[idx] / pixelCount) * 100).toFixed(2);
 
@@ -361,10 +377,10 @@ async function processImage(inputPath, outputDir) {
 
         // Sort layers by lightness (light to dark)
         console.log(`  Sorting layers by lightness (light→dark)...`);
-        const layersToWrite = posterizeResult.paletteLab.map((color, i) => ({
+        const layersToWrite = finalPaletteLab.map((color, i) => ({
             index: i,
             color: color,
-            rgb: posterizeResult.palette[i],
+            rgb: finalPaletteRgb[i],
             mask: masks[i],
             coverage: coverageCounts[i]
         }));
@@ -410,6 +426,7 @@ async function processImage(inputPath, outputDir) {
             input_parameters: params,
             palette,
             metrics: metrics,
+            dnaFidelity: dnaFidelity,
             timing: {
                 totalMs: Date.now() - timingStart
             }

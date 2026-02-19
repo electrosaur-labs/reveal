@@ -27,6 +27,7 @@ const PeakFinder = require('./lib/analysis/PeakFinder');
 const MechanicalKnobs = require('./lib/engines/MechanicalKnobs');
 const TrapEngine = require('./lib/engines/TrapEngine');
 const RevelationError = require('./lib/metrics/RevelationError');
+const DNAFidelity = require('./lib/metrics/DNAFidelity');
 const logger = require('./lib/utils/logger');
 
 /**
@@ -457,3 +458,6 @@ module.exports.TrapEngine = TrapEngine;
 
 // Export RevelationError at top level for E_rev computation
 module.exports.RevelationError = RevelationError;
+
+// Export DNAFidelity at top level for closed-loop posterization audit
+module.exports.DNAFidelity = DNAFidelity;

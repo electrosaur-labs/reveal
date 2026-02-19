@@ -32,10 +32,13 @@ class MechanicalKnobs {
      * @param {Array<{L,a,b}>} palette - Lab palette
      * @param {number} pixelCount - Total pixels
      * @param {number} minVolumePercent - Threshold (0-5%)
+     * @param {Object} [options]
+     * @param {number} [options.maxColors=0] - Hard screen cap (0 = no cap). Lowest-coverage colors demoted to weak if count exceeds this.
      * @returns {{remappedCount: number}} Number of weak colors remapped
      */
-    static applyMinVolume(colorIndices, palette, pixelCount, minVolumePercent) {
-        if (minVolumePercent <= 0) return { remappedCount: 0 };
+    static applyMinVolume(colorIndices, palette, pixelCount, minVolumePercent, options = {}) {
+        const maxColors = options.maxColors || 0;
+        if (minVolumePercent <= 0 && maxColors <= 0) return { remappedCount: 0 };
 
         const minPixels = Math.round(pixelCount * minVolumePercent / 100);
 
@@ -45,14 +48,72 @@ class MechanicalKnobs {
             colorCounts[colorIndices[i]]++;
         }
 
-        // Partition into weak and strong
+        // Classify each color into a 30° hue sector (12 sectors).
+        // Achromatic colors (C < 5) get sector -1 (no sector protection).
+        const HUE_SECTORS = 12;
+        const colorSectors = new Int8Array(palette.length);
+        for (let i = 0; i < palette.length; i++) {
+            const c = palette[i];
+            const C = Math.sqrt(c.a * c.a + c.b * c.b);
+            if (C < 5) {
+                colorSectors[i] = -1;
+            } else {
+                const hue = (Math.atan2(c.b, c.a) * 180 / Math.PI + 360) % 360;
+                colorSectors[i] = Math.floor(hue / 30) % HUE_SECTORS;
+            }
+        }
+
+        // Partition into weak and strong.
+        // Colors tagged _minVolumeExempt (hue gap injections, PeakFinder peaks)
+        // are always strong — they were explicitly added to capture minority signals.
         const weakIndices = [];
         const strongIndices = [];
         for (let i = 0; i < palette.length; i++) {
-            if (colorCounts[i] > 0 && colorCounts[i] < minPixels) {
-                weakIndices.push(i);
-            } else if (colorCounts[i] > 0) {
+            if (colorCounts[i] === 0) continue;
+            if (palette[i]._minVolumeExempt || colorCounts[i] >= minPixels) {
                 strongIndices.push(i);
+            } else {
+                weakIndices.push(i);
+            }
+        }
+
+        // Sector-aware rescue: if pruning a weak color would eliminate the last
+        // chromatic representative of its hue sector, promote it to strong.
+        // This prevents minVolume from destroying minority hue diversity —
+        // e.g. a single chartreuse in a warm-dominant palette.
+        if (weakIndices.length > 0 && strongIndices.length > 0) {
+            const strongSectors = new Set();
+            for (const idx of strongIndices) {
+                if (colorSectors[idx] >= 0) strongSectors.add(colorSectors[idx]);
+            }
+
+            const rescued = [];
+            for (let w = weakIndices.length - 1; w >= 0; w--) {
+                const weakIdx = weakIndices[w];
+                const sector = colorSectors[weakIdx];
+                if (sector >= 0 && !strongSectors.has(sector)) {
+                    // This is the last representative of its sector — rescue it
+                    strongIndices.push(weakIdx);
+                    strongSectors.add(sector);
+                    weakIndices.splice(w, 1);
+                    rescued.push(weakIdx);
+                }
+            }
+        }
+
+        // Screen cap — if active colors exceed maxColors, demote lowest-coverage
+        // strong colors to weak so they get merged into nearest neighbor.
+        if (maxColors > 0 && strongIndices.length > maxColors) {
+            const ranked = strongIndices
+                .map(idx => ({ idx, count: colorCounts[idx] }))
+                .sort((a, b) => a.count - b.count);
+
+            const demoteCount = strongIndices.length - maxColors;
+            for (let i = 0; i < demoteCount; i++) {
+                const demotedIdx = ranked[i].idx;
+                weakIndices.push(demotedIdx);
+                const strongPos = strongIndices.indexOf(demotedIdx);
+                strongIndices.splice(strongPos, 1);
             }
         }
 

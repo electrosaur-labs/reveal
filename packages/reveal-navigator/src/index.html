@@ -638,6 +638,10 @@
 
         #status-text { }
         #accuracy-text { color: #999; }
+        #dna-fidelity-text { font-weight: 500; }
+        #dna-fidelity-text.fidelity-good { color: #6bc46b; }
+        #dna-fidelity-text.fidelity-warn { color: #e0c97f; }
+        #dna-fidelity-text.fidelity-bad { color: #e07f7f; }
 
         #dominant-sector {
             font-size: 10px;
@@ -802,6 +806,8 @@
                     <span class="stat-val" id="stat-colors"></span>
                     <span class="stat-sep">&middot;</span>
                     <span class="stat-highlight" id="stat-delta"></span>
+                    <span class="stat-sep">&middot;</span>
+                    <span id="dna-fidelity-text"></span>
                     <span class="stat-sep">&middot;</span>
                     <span class="stat-dim" id="stat-time"></span>
                 </div>

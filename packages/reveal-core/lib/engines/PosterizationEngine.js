@@ -154,6 +154,7 @@ class PosterizationEngine {
             centroid: {
                 lWeight: options.lWeight !== undefined ? options.lWeight : this.TUNING.centroid.lWeight,
                 cWeight: options.cWeight !== undefined ? options.cWeight : this.TUNING.centroid.cWeight,
+                bWeight: options.bWeight !== undefined ? options.bWeight : 1.0,
                 blackBias: options.blackBias !== undefined ? options.blackBias : this.TUNING.centroid.blackBias,
                 // Normalize bitDepth: handle "bitDepth16" string or number 16
                 bitDepth: this._normalizeBitDepth(options.bitDepth),
@@ -222,7 +223,7 @@ class PosterizationEngine {
                 return this._posterizeRevealMk1_5(pixels, width, height, targetColors, {
                     ...options,
                     enableGridOptimization,
-                    enableHueGapAnalysis: false,  // Disable for Mk 1.5
+                    enableHueGapAnalysis,  // Respect user setting (same as Mk 1.0)
                     snapThreshold,
                     strategy,
                     strategyName,
@@ -1718,7 +1719,6 @@ class PosterizationEngine {
         // to detect desaturated greens (chroma 2-4) that would otherwise be ignored
         const CHROMA_THRESHOLD = chromaThreshold;
         const hueCounts = new Array(12).fill(0);
-        const totalPixels = labPixels.length / 3;
         let chromaSum = 0;
         let chromaCount = 0;
 
@@ -1741,15 +1741,11 @@ class PosterizationEngine {
 
         const avgChroma = chromaCount > 0 ? chromaSum / chromaCount : 0;
 
-        // Convert counts to percentages
-        const huePercentages = hueCounts.map(count => (count / totalPixels) * 100);
-
-        const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
-                            'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
-        huePercentages.forEach((pct, idx) => {
-            if (pct > 0.5) {  // Show all sectors with >0.5% presence
-            }
-        });
+        // Normalize by chromatic pixel count, not total pixels.
+        // Substrate (paper white) and achromatic pixels carry no hue information —
+        // including them in the denominator suppresses minority hue sectors.
+        const denominator = chromaCount > 0 ? chromaCount : 1;
+        const huePercentages = hueCounts.map(count => (count / denominator) * 100);
 
         return huePercentages;
     }
@@ -1798,8 +1794,8 @@ class PosterizationEngine {
      * @returns {Array<number>} - Array of gap sector indices
      */
     static _identifyHueGaps(imageHues, paletteCoverage, paletteColorCountsBySector = null) {
-        const GAP_THRESHOLD = 2.0; // Sector must have >2% of image pixels to be considered significant
-        const HEAVY_SECTOR_THRESHOLD = 20.0; // If sector has >20% of image, needs multiple palette colors
+        const GAP_THRESHOLD = 1.0; // Sector must have >1% of chromatic pixels to be considered significant
+        const HEAVY_SECTOR_THRESHOLD = 40.0; // If sector has >40% of chromatic pixels, needs multiple palette colors
         const gaps = [];
         const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
                             'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
@@ -2172,6 +2168,17 @@ class PosterizationEngine {
 
         const binSamples = new Array(12).fill(null);
 
+        // Count chromatic pixels for viability normalization.
+        // Substrate (paper white) and achromatic pixels carry no hue —
+        // including them inflates the denominator and suppresses minority hues.
+        let chromaticPixelCount = 0;
+        for (let i = 0; i < labPixels.length; i += 3) {
+            const a = labPixels[i + 1];
+            const b = labPixels[i + 2];
+            if (Math.sqrt(a * a + b * b) > CHROMA_THRESHOLD) chromaticPixelCount++;
+        }
+        const viabilityDenominator = chromaticPixelCount > 0 ? chromaticPixelCount : totalPixels;
+
         // Diagnostic counters per sector
         const diagnostics = gaps.map(gapIdx => ({
             sector: sectorNames[gapIdx],
@@ -2255,8 +2262,9 @@ class PosterizationEngine {
             const sample = binSamples[gapIdx];
             const diag = diagMap.get(gapIdx);
 
-            // Calculate coverage based on totalScanned pixels in this sector
-            const coverage = diag.totalScanned / totalPixels;
+            // Calculate coverage relative to chromatic pixels (not total).
+            // Substrate and achromatic pixels don't carry hue information.
+            const coverage = diag.totalScanned / viabilityDenominator;
 
             if (coverage < MIN_HUE_COVERAGE) {
                 // This "gap" is just noise - not enough pixels to warrant a screen
@@ -2717,10 +2725,13 @@ class PosterizationEngine {
             const avgA = colors.reduce((sum, c) => sum + c.a, 0) / colors.length;
             const avgB = colors.reduce((sum, c) => sum + c.b, 0) / colors.length;
 
-            // Apply weights to variance - cWeight makes chroma dominate
+            // Apply weights to variance - cWeight makes chroma dominate.
+            // bWeight (optional) further boosts b-axis splits — in warm images,
+            // b separates yellow from orange more effectively than a or L.
+            const bWeight = tuning?.centroid?.bWeight ?? 1.0;
             const varL = colors.reduce((sum, c) => sum + (c.L - avgL) ** 2, 0) * lWeight;
             const varA = colors.reduce((sum, c) => sum + (c.a - avgA) ** 2, 0) * cWeight;
-            const varB = colors.reduce((sum, c) => sum + (c.b - avgB) ** 2, 0) * cWeight;
+            const varB = colors.reduce((sum, c) => sum + (c.b - avgB) ** 2, 0) * cWeight * bWeight;
 
             // Choose channel with highest WEIGHTED variance
             let splitChannel = 'L';
@@ -3379,6 +3390,8 @@ class PosterizationEngine {
 
                     if (forcedColors.length === 0) {
                     } else {
+                        // Tag injected colors so minVolume won't prune them
+                        forcedColors.forEach(c => { c._minVolumeExempt = true; });
                         // Add forced colors to curated palette (AFTER snap, so they won't be merged)
                         curatedPaletteLab = curatedPaletteLab.concat(forcedColors);
 
@@ -3835,6 +3848,32 @@ class PosterizationEngine {
         }
         // =================================================================
 
+        // ========== Shadow Chroma Gate ==========
+        // Dark pixels with low chroma are visually indistinguishable from black/gray.
+        // In screen printing, they belong on the black plate — not consuming a palette
+        // slot for "brown" or "dark navy." Force them achromatic so the median cut
+        // merges them with the black cluster instead of creating a separate dark bucket.
+        //
+        // shadowChromaGateL: pixels below this L get tested (default 0 = off)
+        // Chroma threshold is fixed at 20 — anything below is perceptually neutral.
+        const shadowChromaGateL = options.shadowChromaGateL !== undefined ? options.shadowChromaGateL : 0;
+
+        if (shadowChromaGateL > 0) {
+            let gatedCount = 0;
+            for (let i = 0; i < labPixels.length; i += 3) {
+                if (labPixels[i] < shadowChromaGateL) {
+                    const a = labPixels[i + 1];
+                    const b = labPixels[i + 2];
+                    const chroma = Math.sqrt(a * a + b * b);
+                    if (chroma < 20) {
+                        labPixels[i + 1] = 0;
+                        labPixels[i + 2] = 0;
+                        gatedCount++;
+                    }
+                }
+            }
+        }
+        // =========================================
 
         // ========== [NEW] Mk 1.5: Auto-detect OR use pre-defined anchors ==========
         // Extract PeakFinder parameters from options (set by archetype)
@@ -4052,6 +4091,45 @@ class PosterizationEngine {
             }
         }
 
+        // Step 4.5: Hue gap analysis — detect missing minority hues and inject
+        // Runs AFTER snap/prune so injected colors won't be merged away.
+        // Uses the same algorithm as Mk 1.0 (scan original pixels for distinct
+        // high-chroma candidates in missing sectors).
+        const enableHueGapAnalysis = options.enableHueGapAnalysis !== undefined
+            ? options.enableHueGapAnalysis : false;
+
+        if (enableHueGapAnalysis && !grayscaleOnly && initialPaletteLab._labPixels) {
+            const hueChromaThreshold = vibrancyMode === 'exponential' ? 1.0 : 5.0;
+            const imageHues = this._analyzeImageHueSectors(initialPaletteLab._labPixels, hueChromaThreshold);
+            const { coveredSectors, colorCountsBySector } = this._analyzePaletteHueCoverage(snappedPaletteLab, hueChromaThreshold);
+            const gaps = this._identifyHueGaps(imageHues, coveredSectors, colorCountsBySector);
+            gaps.sort((a, b) => imageHues[b] - imageHues[a]);
+
+            if (gaps.length > 0) {
+                // Allow exceeding target count for hue diversity (max 3 extra)
+                const gapsToFill = gaps.length > 3 ? gaps.slice(0, 3) : gaps;
+                const candidateColors = this._findTrueMissingHues(labPixels, snappedPaletteLab, gapsToFill);
+
+                const MIN_GAP_DISTANCE = 15.0;
+                const forcedColors = candidateColors.filter(candidate => {
+                    const minDist = Math.min(
+                        ...snappedPaletteLab.map(p => this._labDistance(candidate, p))
+                    );
+                    return minDist >= MIN_GAP_DISTANCE;
+                });
+
+                if (forcedColors.length > 0) {
+                    // Tag injected colors so minVolume won't prune them —
+                    // the whole point of hue gap analysis is to preserve minority hues.
+                    forcedColors.forEach(c => { c._minVolumeExempt = true; });
+                    snappedPaletteLab = snappedPaletteLab.concat(forcedColors);
+                    logger.log(`[Mk1.5] Hue gap rescue: injected ${forcedColors.length} colors for sectors [${gapsToFill.join(', ')}]`);
+                } else {
+                    logger.log(`[Mk1.5] Hue gap: ${gaps.length} gaps found but no candidates passed ΔE≥${MIN_GAP_DISTANCE} filter`);
+                }
+            }
+        }
+
         // ========== [NEW] Anchor injection (after perceptual snap) ==========
         const mergedPalette = [...snappedPaletteLab];
         let addedCount = 0;
@@ -4066,6 +4144,9 @@ class PosterizationEngine {
             if (isDuplicate) {
                 skippedCount++;
             } else {
+                // Tag forced centroids (identity peaks) as exempt from minVolume —
+                // they were explicitly added to capture important color signals.
+                forced._minVolumeExempt = true;
                 mergedPalette.push(forced);
                 addedCount++;
             }

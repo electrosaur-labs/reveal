@@ -7,7 +7,10 @@
     "l": 50,
     "c": 60,
     "k": 70,
-    "l_std_dev": 25
+    "l_std_dev": 25,
+    "hue_entropy": 0.4,
+    "temperature_bias": 0,
+    "primary_sector_weight": 0.35
   },
   "weights": {
     "l": 0.5,

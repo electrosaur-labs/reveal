@@ -267,13 +267,15 @@ class SessionState extends EventEmitter {
         this.state.isProcessing = false;
 
         const initialAccuracy = this.calculateCurrentAccuracy();
+        const initialFidelity = this.calculateDNAFidelity();
         this.emit('previewUpdated', {
             previewBuffer: knobResult.previewBuffer,
             palette: knobResult.palette,
             activeColorCount: this._countActiveColors(),
             elapsedMs: proxyResult.elapsedMs + knobResult.elapsedMs,
             dimensions: proxyResult.dimensions,
-            accuracyDeltaE: initialAccuracy
+            accuracyDeltaE: initialAccuracy,
+            dnaFidelity: initialFidelity
         });
 
         // ── Pulse 3: Progressive palette previews (background) ──
@@ -591,13 +593,15 @@ class SessionState extends EventEmitter {
         this.state.isProcessing = false;
 
         const swapAccuracy = this.calculateCurrentAccuracy();
+        const swapFidelity = this.calculateDNAFidelity();
         this.emit('previewUpdated', {
             previewBuffer: knobResult.previewBuffer,
             palette: knobResult.palette,
             activeColorCount: this._countActiveColors(),
             elapsedMs: result.elapsedMs + knobResult.elapsedMs,
             dimensions: result.dimensions,
-            accuracyDeltaE: swapAccuracy
+            accuracyDeltaE: swapAccuracy,
+            dnaFidelity: swapFidelity
         });
 
         return result;
@@ -1046,6 +1050,28 @@ class SessionState extends EventEmitter {
         return sumDE / pixelCount;
     }
 
+    /**
+     * Calculate DNA fidelity between input image DNA and posterized output.
+     * Detects structural drift (chroma, entropy, temperature) that per-pixel
+     * ΔE cannot catch.
+     *
+     * @returns {Object|null} { global, sectors, sectorDrift, fidelity, alerts }
+     */
+    calculateDNAFidelity() {
+        if (!this.imageDNA || !this.proxyEngine || !this.proxyEngine.separationState) return null;
+
+        const sep = this.proxyEngine.separationState;
+        if (!sep.colorIndices || !sep.palette) return null;
+
+        return Reveal.DNAFidelity.fromIndices(
+            this.imageDNA,
+            sep.colorIndices,
+            sep.palette,
+            sep.width,
+            sep.height
+        );
+    }
+
     // ─── State Access ────────────────────────────────────────
 
     /** Returns a frozen copy of the reactive state. */
@@ -1213,12 +1239,14 @@ class SessionState extends EventEmitter {
      */
     _emitPreviewUpdated(result) {
         const accuracyDeltaE = this.calculateCurrentAccuracy();
+        const dnaFidelity = this.calculateDNAFidelity();
         this.emit('previewUpdated', {
             previewBuffer: result.previewBuffer,
             palette: result.palette,
             activeColorCount: this._countActiveColors(),
             elapsedMs: result.elapsedMs,
-            accuracyDeltaE
+            accuracyDeltaE,
+            dnaFidelity
         });
     }
 

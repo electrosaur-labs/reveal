@@ -910,7 +910,7 @@ describe('MechanicalKnobs shared algorithm correctness', () => {
 
         const palette = [
             { L: 50, a: 0, b: 0 },   // neutral gray (strong)
-            { L: 50, a: 10, b: 0 }    // slightly chromatic (weak - 1% coverage)
+            { L: 55, a: 2, b: 2 }    // near-neutral (weak - 1% coverage, same achromatic sector)
         ];
 
         // 2% threshold → color 1 (1% coverage) should be remapped

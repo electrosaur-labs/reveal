@@ -115,11 +115,6 @@ class ArchetypeLoader {
         if (manualArchetypeId) {
             const manualArchetype = archetypes.find(a => a.id === manualArchetypeId);
             if (manualArchetype) {
-                console.log(`🛑 DNA Matcher Bypassed. Loading Sovereign Static Settings.`);
-                console.log(`   User-selected archetype: ${manualArchetype.name}`);
-                console.log(`   Parameters locked: ${manualArchetype.parameters?.distanceMetric}, ` +
-                           `cWeight=${manualArchetype.parameters?.cWeight}, ` +
-                           `vibrancyBoost=${manualArchetype.parameters?.vibrancyBoost}`);
                 return manualArchetype;
             } else {
                 console.warn(`⚠️ Manual archetype not found: ${manualArchetypeId}, falling back to DNA matching`);

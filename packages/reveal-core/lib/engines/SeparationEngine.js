@@ -565,7 +565,7 @@ class SeparationEngine {
     static pruneWeakColors(labPalette, colorIndices, width, height, minVolume, options = {}) {
         const pixelCount = width * height;
         const minPixels = Math.ceil((minVolume / 100) * pixelCount);
-        const distanceMetric = options.distanceMetric || 'cie76';
+        const maxColors = options.maxColors || 0; // 0 = no cap
 
         // 1. Count pixels per color
         const colorCounts = new Array(labPalette.length).fill(0);
@@ -584,6 +584,23 @@ class SeparationEngine {
                 weakIndices.push(i);
             } else {
                 strongIndices.push(i);
+            }
+        }
+
+        // 2.5. Screen cap — if strong colors exceed maxColors, demote the
+        //      lowest-coverage strong colors to weak so they get merged
+        if (maxColors > 0 && strongIndices.length > maxColors) {
+            // Sort strong by coverage ascending
+            const ranked = strongIndices
+                .map(idx => ({ idx, count: colorCounts[idx] }))
+                .sort((a, b) => a.count - b.count);
+
+            const demoteCount = strongIndices.length - maxColors;
+            for (let i = 0; i < demoteCount; i++) {
+                const demotedIdx = ranked[i].idx;
+                weakIndices.push(demotedIdx);
+                const strongPos = strongIndices.indexOf(demotedIdx);
+                strongIndices.splice(strongPos, 1);
             }
         }
 
