@@ -226,8 +226,18 @@ class ProductionWorker {
                     const elapsedMs = Date.now() - t0;
                     const prodResult = { layerCount: layers.length, elapsedMs };
                     const manifest = self._sessionState.buildManifest(prodResult);
+
+                    // Tier 1: IPTC fields (headline, instructions, author, keywords, caption JSON)
                     await PhotoshopBridge.writeManifestXMP(manifest);
-                    logger.log(`[ProductionWorker] Manifest embedded in XMP`);
+                    logger.log(`[ProductionWorker] Tier 1: IPTC fields embedded`);
+
+                    // Tier 2: Structured XMP with custom reveal: namespace (experimental, non-fatal)
+                    try {
+                        await PhotoshopBridge.writeStructuredXMP(manifest);
+                        logger.log(`[ProductionWorker] Tier 2: Structured XMP written`);
+                    } catch (tier2Err) {
+                        logger.log(`[ProductionWorker] Tier 2: Structured XMP failed (non-fatal): ${tier2Err && tier2Err.message || String(tier2Err)}`);
+                    }
                 } catch (xmpErr) {
                     logger.log(`[ProductionWorker] Manifest XMP failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
                 }
