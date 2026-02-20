@@ -18,9 +18,9 @@
     "c": 1.0,
     "k": 5.0,
     "l_std_dev": 5.0,
-    "hue_entropy": 0.5,
-    "temperature_bias": 0.3,
-    "primary_sector_weight": 1.0
+    "hue_entropy": 2.0,
+    "temperature_bias": 1.5,
+    "primary_sector_weight": 2.0
   },
   "parameters": {
     "minColors": 5,

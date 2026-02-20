@@ -39,6 +39,7 @@ function initPlugin() {
     try {
         logger.log('Navigator plugin loaded');
         logger.log(`Build: ${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev'}`);
+        logger.log(`Build time: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'unknown'}`);
 
         sessionState = new SessionState();
 

@@ -78,7 +78,7 @@ class ArchetypeMapper {
                 chromaProfile: 'low',        // Poster inks on paper: avg cMax ~30
                 tonalRange: 'mid-bright',    // lMean 50-70
                 expects_warm: true,          // Most posters are warm-toned
-                rewards_high_texture: true   // +20 affinity for l_std_dev > 18
+                expects_dominance: true      // Poster color is concentrated (psw > 0.4)
             },
             'warm_dramatic': {
                 chromaProfile: 'low',        // cMax < 30

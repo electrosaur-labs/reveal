@@ -471,6 +471,74 @@ class ProxyEngine {
     }
 
     /**
+     * Like getPaletteForConfig but also runs separation and computes mean ΔE.
+     * Used by background palette loop to rank archetypes by actual quality.
+     *
+     * @param {Object} config - Posterization config
+     * @returns {Promise<{labPalette, rgbPalette, meanDeltaE: number}>}
+     */
+    async getPaletteWithQuality(config) {
+        if (!this.proxyBuffer || !this.separationState) {
+            throw new Error('Proxy not initialized');
+        }
+
+        const proxyW = this.separationState.width;
+        const proxyH = this.separationState.height;
+
+        const proxyConfig = {
+            ...config,
+            format: 'lab',
+            snapThreshold: 0,
+            enablePaletteReduction: false,
+            densityFloor: 0,
+            preservedUnifyThreshold: 0.5
+        };
+
+        const result = await PosterizationEngine.posterize(
+            this.proxyBuffer, proxyW, proxyH,
+            proxyConfig.targetColors, proxyConfig
+        );
+
+        // Run nearest-neighbor separation (no dither) to get pixel assignments
+        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+            this.proxyBuffer, result.paletteLab, null, proxyW, proxyH,
+            { ditherType: 'none', distanceMetric: 'cie76' }
+        );
+
+        // Compute mean CIE76 ΔE between original proxy and posterized assignment
+        const palette = result.paletteLab;
+        const buf = this.proxyBuffer;
+        const pixelCount = proxyW * proxyH;
+        const palL = new Float64Array(palette.length);
+        const palA = new Float64Array(palette.length);
+        const palB = new Float64Array(palette.length);
+        for (let j = 0; j < palette.length; j++) {
+            palL[j] = palette[j].L;
+            palA[j] = palette[j].a;
+            palB[j] = palette[j].b;
+        }
+
+        let sumDE = 0;
+        for (let i = 0; i < pixelCount; i++) {
+            const off = i * 3;
+            const L = (buf[off] / 32768) * 100;
+            const a = ((buf[off + 1] - 16384) / 16384) * 128;
+            const b = ((buf[off + 2] - 16384) / 16384) * 128;
+            const ci = colorIndices[i];
+            const dL = L - palL[ci];
+            const da = a - palA[ci];
+            const db = b - palB[ci];
+            sumDE += Math.sqrt(dL * dL + da * da + db * db);
+        }
+
+        return {
+            labPalette: result.paletteLab,
+            rgbPalette: result.palette,
+            meanDeltaE: sumDE / pixelCount
+        };
+    }
+
+    /**
      * Get full-res parameters for production render
      * @returns {Object} Parameters for high-res posterization
      */

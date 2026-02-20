@@ -28,7 +28,11 @@ const MechanicalKnobs = require('./lib/engines/MechanicalKnobs');
 const TrapEngine = require('./lib/engines/TrapEngine');
 const RevelationError = require('./lib/metrics/RevelationError');
 const DNAFidelity = require('./lib/metrics/DNAFidelity');
+const InterpolatorEngine = require('./lib/analysis/InterpolatorEngine').InterpolatorEngine;
 const logger = require('./lib/utils/logger');
+
+// Lazy-loaded interpolator engine singleton
+let _interpolatorEngine = null;
 
 /**
  * Tool 0: Generate Configuration from DNA
@@ -56,6 +60,50 @@ const logger = require('./lib/utils/logger');
  */
 function generateConfiguration(dna, options = {}) {
     return ParameterGenerator.generate(dna, options);
+}
+
+/**
+ * Tool 0a: Generate Configuration from DNA via Mk II Interpolator
+ *
+ * Uses cluster-then-interpolate engine (12 learned clusters) instead of
+ * the archetype-based ParameterGenerator. Same posterization algorithm
+ * (Mk 1.5), different parameter generation — soft blending from learned
+ * clusters instead of hard assignment from hand-crafted archetypes.
+ *
+ * @param {Object} dna - DNA analysis result (7D vector: l, c, k, l_std_dev, hue_entropy, temperature_bias, primary_sector_weight)
+ * @returns {Object} Complete configuration object (same shape as generateConfiguration output)
+ */
+function generateConfigurationMk2(dna) {
+    if (!_interpolatorEngine) {
+        const model = require('./lib/analysis/interpolator-model.json');
+        _interpolatorEngine = new InterpolatorEngine(model);
+    }
+
+    // InterpolatorEngine expects flat {l, c, k, ...} but DNAGenerator
+    // produces nested {global: {l, c, k, ...}}. Flatten for compatibility.
+    const flatDna = dna.global ? { ...dna.global } : dna;
+    const { parameters, blendInfo } = _interpolatorEngine.interpolate(flatDna);
+
+    // Build a config object compatible with PosterizationEngine / ProxyEngine.
+    // The interpolator returns flat parameters — wrap them in the same shape
+    // that ParameterGenerator.generate() produces.
+    const config = { ...parameters };
+
+    // Ensure engineType is set to reveal-mk2 so PosterizationEngine dispatches correctly
+    config.engineType = 'reveal-mk2';
+
+    // Map minColors/maxColors to targetColors (use maxColors as the target)
+    if (config.maxColors !== undefined) {
+        config.targetColors = config.maxColors;
+    }
+    if (config.targetColorsSlider === undefined && config.targetColors !== undefined) {
+        config.targetColorsSlider = config.targetColors;
+    }
+
+    // Attach blend info for diagnostics
+    config.meta = { blendInfo, engine: 'mk2-interpolator' };
+
+    return config;
 }
 
 /**
@@ -366,6 +414,7 @@ function labToRgb(L, a, b) {
 module.exports = {
     // Configuration generation (new in v2.0)
     generateConfiguration,
+    generateConfigurationMk2,
     preprocessImage,
     calculateEntropy,
 
@@ -426,7 +475,10 @@ module.exports.engines = {
     MechanicalKnobs: MechanicalKnobs,
 
     // Trapping - Color trap expansion for press registration (v2.4)
-    TrapEngine: TrapEngine
+    TrapEngine: TrapEngine,
+
+    // Reveal Mk II - Cluster-then-interpolate parameter generation
+    InterpolatorEngine: InterpolatorEngine
 };
 
 // Export LabDistance at top level for convenient access

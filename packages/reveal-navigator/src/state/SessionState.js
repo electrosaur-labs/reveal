@@ -222,8 +222,29 @@ class SessionState extends EventEmitter {
         const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
         const mapper = new Reveal.ArchetypeMapper(archetypes);
         const allScores = mapper.getTopMatches(this.imageDNA, archetypes.length);
+
+        // Inject Chameleon — score derived from blend distance to nearest cluster.
+        // Close to a cluster centroid → high confidence → higher score.
+        // Linear decay: score = 75 - 10 * distance, clamped to [30, 85].
+        this._chameleonConfig = Reveal.generateConfigurationMk2(this.imageDNA);
+        const nearestDist = this._chameleonConfig.meta.blendInfo.neighbors[0].distance;
+        const chameleonScore = Math.max(30, Math.min(85, 75 - 10 * nearestDist));
+        const dynamicEntry = {
+            id: 'dynamic_interpolator',
+            score: chameleonScore,
+            _synthetic: { name: 'Chameleon', preferred_sectors: [] }
+        };
+
+        // Insert at correct position (allScores already sorted descending by getTopMatches).
+        // Avoids Array.sort() which can misbehave in JSC with NaN-adjacent comparisons.
+        let insertIdx = allScores.length;
+        for (let i = 0; i < allScores.length; i++) {
+            if (chameleonScore >= allScores[i].score) { insertIdx = i; break; }
+        }
+        allScores.splice(insertIdx, 0, dynamicEntry);
+
         const topMatch = allScores[0];
-        logger.log(`[SessionState] Pulse 1: Scored ${allScores.length} archetypes, top=${topMatch.id} (${topMatch.score.toFixed(0)})`);
+        logger.log(`[SessionState] Pulse 1: Scored ${allScores.length} entries, Chameleon=${chameleonScore.toFixed(0)} (dist=${nearestDist.toFixed(2)}), top=${topMatch.id} (${topMatch.score.toFixed(0)})`);
 
         this.emit('carouselReady', { scores: allScores, topMatchId: topMatch.id });
 
@@ -231,9 +252,15 @@ class SessionState extends EventEmitter {
         this.emit('progress', { phase: 'visual', label: 'Initializing navigator\u2026', percent: 65 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
-            manualArchetypeId: topMatch.id
-        });
+        // Generate config from the top match.
+        // Chameleon uses cached Mk2 config; archetypes use ParameterGenerator.
+        if (topMatch.id === 'dynamic_interpolator') {
+            this.currentConfig = this._chameleonConfig;
+        } else {
+            this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
+                manualArchetypeId: topMatch.id
+            });
+        }
         this._applyConfigToState(this.currentConfig);
         if (!this.currentConfig.engineType) {
             this.currentConfig.engineType = this.state.engineType;
@@ -285,41 +312,81 @@ class SessionState extends EventEmitter {
     }
 
     /**
-     * Background task: progressively generate palette previews for each
-     * non-active archetype card. Scoring already happened in Pulse 1.
-     *
-     * Palette swatches fill in one by one via archetypePaletteReady events.
-     * If the user swaps archetype mid-loop, _paletteGeneration increments
-     * and this loop aborts.
+     * Background task (Pulse 3): generate palette previews + ΔE quality scores
+     * for each archetype card. After all palettes are computed, re-sort the
+     * carousel by ΔE (ascending = best quality first) and re-emit carouselReady.
      *
      * @private
      */
     async _generateRemainingPalettes(topMatch, scores) {
         const generation = ++this._paletteGeneration;
 
+        // Active archetype's ΔE is already known from proxy separation
+        const activeDE = this.calculateCurrentAccuracy();
+        const activeMatch = scores.find(s => s.id === topMatch.id);
+        if (activeMatch) activeMatch.meanDeltaE = activeDE;
+
+        let computed = 1;  // active already done
         for (const match of scores) {
-            if (match.id === topMatch.id) continue;  // Active already has real swatches
-            if (generation !== this._paletteGeneration) return;  // Stale — user swapped archetype
+            if (match.id === topMatch.id) continue;
+            if (generation !== this._paletteGeneration) return;
 
             try {
-                const config = Reveal.generateConfiguration(this.imageDNA, {
-                    manualArchetypeId: match.id
-                });
-                const palette = await this.proxyEngine.getPaletteForConfig(config);
+                const config = match.id === 'dynamic_interpolator'
+                    ? Reveal.generateConfigurationMk2(this.imageDNA)
+                    : Reveal.generateConfiguration(this.imageDNA, {
+                        manualArchetypeId: match.id
+                    });
+                const palette = await this.proxyEngine.getPaletteWithQuality(config);
 
-                if (generation !== this._paletteGeneration) return;  // Check again after async
+                if (generation !== this._paletteGeneration) return;
+
+                match.meanDeltaE = palette.meanDeltaE;
+                computed++;
 
                 this.emit('archetypePaletteReady', {
                     archetypeId: match.id,
                     rgbPalette: palette.rgbPalette
                 });
 
-                // Yield after each DOM update so the browser can paint the new swatch
+                // Progressive re-sort every 5 archetypes (+ final).
+                // Entries with ΔE go first (ascending), without ΔE go after.
+                if (computed % 5 === 0) {
+                    this.emit('carouselReady', { scores: this._sortByDeltaE(scores), topMatchId: topMatch.id });
+                }
+
                 await new Promise(r => setTimeout(r, 0));
             } catch (err) {
                 logger.log(`[SessionState] Palette gen failed for ${match.id}: ${err.message}`);
             }
         }
+
+        if (generation !== this._paletteGeneration) return;
+        // Final re-sort with all ΔE values
+        this.emit('carouselReady', { scores: this._sortByDeltaE(scores), topMatchId: topMatch.id });
+        logger.log(`[SessionState] Pulse 3 complete: ${computed} archetypes scored by ΔE`);
+    }
+
+    /**
+     * Sort scores by meanDeltaE ascending (best quality first).
+     * Entries without ΔE are appended in their original order.
+     * Uses manual insertion to avoid Array.sort() JSC issues.
+     * @private
+     */
+    _sortByDeltaE(scores) {
+        const withDE = [];
+        const withoutDE = [];
+        for (const s of scores) {
+            const de = s.meanDeltaE;
+            if (de == null || de !== de) { withoutDE.push(s); continue; }
+            // Insert ascending
+            let idx = withDE.length;
+            for (let i = 0; i < withDE.length; i++) {
+                if (de <= withDE[i].meanDeltaE) { idx = i; break; }
+            }
+            withDE.splice(idx, 0, s);
+        }
+        return withDE.concat(withoutDE);
     }
 
     // ─── Knob Reset ─────────────────────────────────────────
@@ -462,7 +529,9 @@ class SessionState extends EventEmitter {
                 // Uses rePosterize to avoid redundant downsample.
                 // Clear palette overrides — old indices are meaningless
                 // against the new baseline from re-posterization.
+
                 this._rebuildConfigFromState();
+
                 this.paletteOverrides.clear();
                 this.mergeHistory.clear();
                 this.deletedColors.clear();
@@ -534,10 +603,15 @@ class SessionState extends EventEmitter {
         // 1. Snapshot outgoing archetype state (always — no gate)
         this._snapshotArchetypeState(this.state.activeArchetypeId);
 
-        // 2. Generate fresh config from new archetype (clean slate)
-        this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
-            manualArchetypeId: archetypeId
-        });
+        // 2. Generate fresh config (clean slate).
+        // Chameleon uses Mk2 interpolation from DNA.
+        if (archetypeId === 'dynamic_interpolator') {
+            this.currentConfig = Reveal.generateConfigurationMk2(this.imageDNA);
+        } else {
+            this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
+                manualArchetypeId: archetypeId
+            });
+        }
         this._applyConfigToState(this.currentConfig);
         if (!this.currentConfig.engineType) {
             this.currentConfig.engineType = this.state.engineType;
@@ -618,7 +692,25 @@ class SessionState extends EventEmitter {
 
         const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
         const mapper = new Reveal.ArchetypeMapper(archetypes);
-        return mapper.getTopMatches(this.imageDNA, archetypes.length);
+        const scores = mapper.getTopMatches(this.imageDNA, archetypes.length);
+
+        // Inject Chameleon at its scored position
+        const config = this._chameleonConfig || Reveal.generateConfigurationMk2(this.imageDNA);
+        const nearestDist = config.meta.blendInfo.neighbors[0].distance;
+        const chameleonScore = Math.max(30, Math.min(85, 75 - 10 * nearestDist));
+        const entry = {
+            id: 'dynamic_interpolator',
+            score: chameleonScore,
+            _synthetic: { name: 'Chameleon', preferred_sectors: [] }
+        };
+        // Insert at correct position (scores already sorted descending)
+        let insertIdx = scores.length;
+        for (let i = 0; i < scores.length; i++) {
+            if (chameleonScore >= scores[i].score) { insertIdx = i; break; }
+        }
+        scores.splice(insertIdx, 0, entry);
+
+        return scores;
     }
 
     // ─── Highlight / Isolation ─────────────────────────────────

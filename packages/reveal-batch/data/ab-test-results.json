@@ -1,0 +1,6200 @@
+{
+  "timestamp": "2026-02-20T10:54:31.552Z",
+  "mode": "pipeline",
+  "imageCount": 147,
+  "processed": 147,
+  "successful": 147,
+  "errors": 0,
+  "elapsedSeconds": 4284.4,
+  "summary": {
+    "revelationScore": {
+      "improved": 63,
+      "degraded": 62,
+      "same": 22,
+      "meanDelta": 0.18,
+      "medianDelta": 0
+    },
+    "avgDeltaE": {
+      "improved": 60,
+      "degraded": 78,
+      "meanDelta": -0.0327,
+      "medianDelta": 0.01
+    }
+  },
+  "results": [
+    {
+      "filename": "aic_131827",
+      "dataset": "SP100/aic",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 54.6,
+        "avgDeltaE": 7.15,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 60.4,
+        "avgDeltaE": 6.43,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 5.8,
+        "avgDeltaE": -0.72
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.1514,
+            "weight": 0.4174
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.6333,
+            "weight": 0.2942
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.6666,
+            "weight": 0.2884
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_135128",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 67.7,
+        "avgDeltaE": 2.42,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 67.7,
+        "avgDeltaE": 2.4,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": -0.02
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.7602,
+            "weight": 0.3866
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.1198,
+            "weight": 0.321
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.3272,
+            "weight": 0.2924
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_137226",
+      "dataset": "SP100/aic",
+      "currentArchetype": "subtle_naturalist",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 50.6,
+        "avgDeltaE": 10.06,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 51.3,
+        "avgDeltaE": 9.85,
+        "colorCount": 12
+      },
+      "delta": {
+        "revelationScore": 0.7,
+        "avgDeltaE": -0.21
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 3,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.286,
+            "weight": 0.4935
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.4948,
+            "weight": 0.2544
+          },
+          {
+            "clusterId": 2,
+            "sourceArchetype": "chromatic_polyphony",
+            "distance": 2.5177,
+            "weight": 0.2521
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_140604",
+      "dataset": "SP100/aic",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 49.8,
+        "avgDeltaE": 10.36,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 48.5,
+        "avgDeltaE": 10.82,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -1.3,
+        "avgDeltaE": 0.46
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.3803,
+            "weight": 0.4522
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1769,
+            "weight": 0.2867
+          },
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 2.3901,
+            "weight": 0.2611
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_14572",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 53.9,
+        "avgDeltaE": 11.13,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 57,
+        "avgDeltaE": 9.69,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 3.1,
+        "avgDeltaE": -1.44
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.2467,
+            "weight": 0.3887
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4367,
+            "weight": 0.3584
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 3.4519,
+            "weight": 0.253
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_149035",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 63.7,
+        "avgDeltaE": 6.2,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 63.2,
+        "avgDeltaE": 6.45,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.5,
+        "avgDeltaE": 0.25
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.8143,
+            "weight": 0.3987
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 3.4655,
+            "weight": 0.3238
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 4.0424,
+            "weight": 0.2776
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_15468",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 51.7,
+        "avgDeltaE": 11.45,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 51.5,
+        "avgDeltaE": 11.62,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": -0.2,
+        "avgDeltaE": 0.17
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.0152,
+            "weight": 0.5181
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.131,
+            "weight": 0.2468
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.2384,
+            "weight": 0.235
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_158483",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 60.1,
+        "avgDeltaE": 5.71,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 60.1,
+        "avgDeltaE": 5.71,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.8241,
+            "weight": 0.5495
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.7202,
+            "weight": 0.2632
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4172,
+            "weight": 0.1873
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_16568",
+      "dataset": "SP100/aic",
+      "currentArchetype": "blue_rescue",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 51.4,
+        "avgDeltaE": 11.2,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 51.3,
+        "avgDeltaE": 11.21,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.1,
+        "avgDeltaE": 0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 3,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.09,
+            "weight": 0.4746
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 3.4011,
+            "weight": 0.2917
+          },
+          {
+            "clusterId": 2,
+            "sourceArchetype": "chromatic_polyphony",
+            "distance": 4.2447,
+            "weight": 0.2337
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_16622",
+      "dataset": "SP100/aic",
+      "currentArchetype": "structural_outlier_rescue",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 49.2,
+        "avgDeltaE": 11.92,
+        "colorCount": 11
+      },
+      "interpolated": {
+        "revelationScore": 48.5,
+        "avgDeltaE": 12.12,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -0.7,
+        "avgDeltaE": 0.2
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 0.9198,
+            "weight": 0.5333
+          },
+          {
+            "clusterId": 3,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.0628,
+            "weight": 0.2378
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1438,
+            "weight": 0.2288
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_188629",
+      "dataset": "SP100/aic",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 62.9,
+        "avgDeltaE": 4.71,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 63.7,
+        "avgDeltaE": 4.98,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 0.8,
+        "avgDeltaE": 0.27
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.4505,
+            "weight": 0.4851
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.6121,
+            "weight": 0.2694
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.8648,
+            "weight": 0.2456
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_204686",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 57.2,
+        "avgDeltaE": 7.15,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 56.9,
+        "avgDeltaE": 7.21,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.3,
+        "avgDeltaE": 0.06
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.4901,
+            "weight": 0.399
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.8696,
+            "weight": 0.318
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.1014,
+            "weight": 0.2829
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_243810",
+      "dataset": "SP100/aic",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 61,
+        "avgDeltaE": 6.74,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 62,
+        "avgDeltaE": 6.58,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 1,
+        "avgDeltaE": -0.16
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.2855,
+            "weight": 0.4799
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.151,
+            "weight": 0.2868
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.6435,
+            "weight": 0.2334
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_24645",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 59.4,
+        "avgDeltaE": 7.25,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 60.5,
+        "avgDeltaE": 6.21,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 1.1,
+        "avgDeltaE": -1.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.4066,
+            "weight": 0.4439
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.198,
+            "weight": 0.2841
+          },
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 2.2954,
+            "weight": 0.272
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_259173",
+      "dataset": "SP100/aic",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 53.5,
+        "avgDeltaE": 10.3,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 46.7,
+        "avgDeltaE": 12.51,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -6.8,
+        "avgDeltaE": 2.21
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.4174,
+            "weight": 0.4078
+          },
+          {
+            "clusterId": 3,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.6214,
+            "weight": 0.3565
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.4515,
+            "weight": 0.2358
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_28560",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 49.9,
+        "avgDeltaE": 11.91,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 48.8,
+        "avgDeltaE": 12.17,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": -1.1,
+        "avgDeltaE": 0.26
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1513,
+            "weight": 0.3722
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.518,
+            "weight": 0.318
+          },
+          {
+            "clusterId": 2,
+            "sourceArchetype": "chromatic_polyphony",
+            "distance": 2.5842,
+            "weight": 0.3098
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_36504",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 43.1,
+        "avgDeltaE": 8.68,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 43.5,
+        "avgDeltaE": 8.77,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 0.4,
+        "avgDeltaE": 0.09
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 3,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1117,
+            "weight": 0.3962
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.301,
+            "weight": 0.3636
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 3.4815,
+            "weight": 0.2403
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_5519",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 63.4,
+        "avgDeltaE": 3.53,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 66.9,
+        "avgDeltaE": 2.97,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 3.5,
+        "avgDeltaE": -0.56
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.4136,
+            "weight": 0.4707
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.3179,
+            "weight": 0.287
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.7456,
+            "weight": 0.2423
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_5520",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 67.3,
+        "avgDeltaE": 3.8,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 67.3,
+        "avgDeltaE": 3.8,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.5678,
+            "weight": 0.4079
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.6811,
+            "weight": 0.3804
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 3.0221,
+            "weight": 0.2116
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_68433",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 57.6,
+        "avgDeltaE": 9.45,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 57.9,
+        "avgDeltaE": 9.61,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0.3,
+        "avgDeltaE": 0.16
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.2431,
+            "weight": 0.4371
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.8371,
+            "weight": 0.2958
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.0341,
+            "weight": 0.2671
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_77333",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 61.1,
+        "avgDeltaE": 6.79,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 59.3,
+        "avgDeltaE": 7.45,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -1.8,
+        "avgDeltaE": 0.66
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.4989,
+            "weight": 0.3961
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.9539,
+            "weight": 0.3039
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.9796,
+            "weight": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_79763",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 50.6,
+        "avgDeltaE": 10.37,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 50.6,
+        "avgDeltaE": 10.37,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.6927,
+            "weight": 0.4441
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.5855,
+            "weight": 0.2907
+          },
+          {
+            "clusterId": 5,
+            "sourceArchetype": "warm_naturalist",
+            "distance": 2.8351,
+            "weight": 0.2651
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_81558",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 59.2,
+        "avgDeltaE": 8.28,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 58.7,
+        "avgDeltaE": 8.5,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -0.5,
+        "avgDeltaE": 0.22
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.4759,
+            "weight": 0.4241
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.1607,
+            "weight": 0.2897
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.1866,
+            "weight": 0.2863
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_87088",
+      "dataset": "SP100/aic",
+      "currentArchetype": "chromatic_polyphony",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 52.3,
+        "avgDeltaE": 11.43,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 52.5,
+        "avgDeltaE": 11.34,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0.2,
+        "avgDeltaE": -0.09
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.9788,
+            "weight": 0.4015
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.4774,
+            "weight": 0.3207
+          },
+          {
+            "clusterId": 3,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.8595,
+            "weight": 0.2778
+          }
+        ]
+      }
+    },
+    {
+      "filename": "aic_88793",
+      "dataset": "SP100/aic",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 54.2,
+        "avgDeltaE": 8.44,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 50.1,
+        "avgDeltaE": 9.04,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -4.1,
+        "avgDeltaE": 0.6
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.1784,
+            "weight": 0.4308
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.7291,
+            "weight": 0.2936
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.8428,
+            "weight": 0.2755
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_11742_The_Marquis_de_Lafayette",
+      "dataset": "SP100/met",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 62.7,
+        "avgDeltaE": 7.64,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 61.2,
+        "avgDeltaE": 8.05,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -1.5,
+        "avgDeltaE": 0.41
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.8838,
+            "weight": 0.397
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.2488,
+            "weight": 0.3326
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.7649,
+            "weight": 0.2705
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_16687_Michael_Angelo_and_Emma_Clara_Peale",
+      "dataset": "SP100/met",
+      "currentArchetype": "subtle_naturalist",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 50.5,
+        "avgDeltaE": 9.9,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 50.5,
+        "avgDeltaE": 9.91,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.3755,
+            "weight": 0.3939
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.4233,
+            "weight": 0.3806
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.4023,
+            "weight": 0.2255
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_333990_Moulin_Rouge__La_Goulue",
+      "dataset": "SP100/met",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "warm_naturalist",
+      "baseline": {
+        "revelationScore": 37.8,
+        "avgDeltaE": 13.84,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 47.8,
+        "avgDeltaE": 12.07,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 10,
+        "avgDeltaE": -1.77
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 5,
+            "sourceArchetype": "warm_naturalist",
+            "distance": 1.4822,
+            "weight": 0.3995
+          },
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.8388,
+            "weight": 0.3221
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1273,
+            "weight": 0.2784
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_339108_The_New_York_Herald__Sunday__August_29th",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 55.1,
+        "avgDeltaE": 8.79,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 52.9,
+        "avgDeltaE": 9.87,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -2.2,
+        "avgDeltaE": 1.08
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.2463,
+            "weight": 0.4426
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.7354,
+            "weight": 0.3179
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.3033,
+            "weight": 0.2395
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_354631_Christ_Crucified_between_the_Two_Thieves__The_Thre",
+      "dataset": "SP100/met",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 64.6,
+        "avgDeltaE": 5.93,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 65.8,
+        "avgDeltaE": 5.78,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 1.2,
+        "avgDeltaE": -0.15
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.0831,
+            "weight": 0.4769
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.8968,
+            "weight": 0.2723
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.0596,
+            "weight": 0.2508
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_391544_Rembrandt_with_Raised_Sabre",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 63.3,
+        "avgDeltaE": 5.64,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 63.3,
+        "avgDeltaE": 5.64,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.1883,
+            "weight": 0.5202
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.2748,
+            "weight": 0.2718
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.9719,
+            "weight": 0.208
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_391614_The_Old_Bearded_Man_in_a_High_Fur_Cap__with_Eyes_C",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 66.7,
+        "avgDeltaE": 4.27,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 66.7,
+        "avgDeltaE": 4.28,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.2968,
+            "weight": 0.5308
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.7948,
+            "weight": 0.2463
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 3.0871,
+            "weight": 0.223
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_399781_The_Three_Trees__after_Rembrandt",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 59,
+        "avgDeltaE": 6.12,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 59.1,
+        "avgDeltaE": 6.16,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": 0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.2383,
+            "weight": 0.4161
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.3891,
+            "weight": 0.3709
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.4181,
+            "weight": 0.2131
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_399782_The_Three_Trees__after_Rembrandt",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 65.3,
+        "avgDeltaE": 5.68,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 65.4,
+        "avgDeltaE": 5.7,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": 0.02
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.6774,
+            "weight": 0.5987
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.976,
+            "weight": 0.2052
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.0676,
+            "weight": 0.1961
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_399783_The_Three_Trees__after_Rembrandt",
+      "dataset": "SP100/met",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 61.4,
+        "avgDeltaE": 6.43,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 62.3,
+        "avgDeltaE": 6.01,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0.9,
+        "avgDeltaE": -0.42
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.6884,
+            "weight": 0.5865
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.7305,
+            "weight": 0.2333
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.2418,
+            "weight": 0.1801
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_399786_The_Three_Trees__after_Rembrandt",
+      "dataset": "SP100/met",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 60.6,
+        "avgDeltaE": 6.27,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 60.7,
+        "avgDeltaE": 5.98,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": -0.29
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.0859,
+            "weight": 0.4841
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.9459,
+            "weight": 0.2702
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.1394,
+            "weight": 0.2457
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437385_Man_in_a_Turban",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 64.2,
+        "avgDeltaE": 6.5,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 65,
+        "avgDeltaE": 6.39,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.8,
+        "avgDeltaE": -0.11
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.5772,
+            "weight": 0.6662
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.2465,
+            "weight": 0.1712
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3646,
+            "weight": 0.1626
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437386_Portrait_of_a_Man__probably_a_Member_of_the_Van_Be",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 65.1,
+        "avgDeltaE": 6.8,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 67,
+        "avgDeltaE": 5.81,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 1.9,
+        "avgDeltaE": -0.99
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.7035,
+            "weight": 0.4629
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.8126,
+            "weight": 0.2804
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 3.0717,
+            "weight": 0.2567
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437387_Portrait_of_a_Man",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 67.9,
+        "avgDeltaE": 3.79,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 66.8,
+        "avgDeltaE": 3.89,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": -1.1,
+        "avgDeltaE": 0.1
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.6544,
+            "weight": 0.6467
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3632,
+            "weight": 0.1791
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4291,
+            "weight": 0.1742
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437388_Portrait_of_a_Woman__probably_a_Member_of_the_Van_",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 65.8,
+        "avgDeltaE": 5.84,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 66.1,
+        "avgDeltaE": 5.83,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 0.3,
+        "avgDeltaE": -0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.6988,
+            "weight": 0.616
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.0874,
+            "weight": 0.2062
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4226,
+            "weight": 0.1777
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437389_Bellona",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 60,
+        "avgDeltaE": 6.59,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 60.2,
+        "avgDeltaE": 5.99,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.2,
+        "avgDeltaE": -0.6
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.9902,
+            "weight": 0.5057
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.7971,
+            "weight": 0.2786
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.3214,
+            "weight": 0.2157
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437390_Portrait_of_a_Woman",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 66.6,
+        "avgDeltaE": 5,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 67.1,
+        "avgDeltaE": 4.9,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 0.5,
+        "avgDeltaE": -0.1
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.9746,
+            "weight": 0.5281
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.897,
+            "weight": 0.2713
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.5649,
+            "weight": 0.2006
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437391_Portrait_of_a_Young_Woman_with_a_Fan",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 65.9,
+        "avgDeltaE": 5.88,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 66.4,
+        "avgDeltaE": 5.47,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.5,
+        "avgDeltaE": -0.41
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.8466,
+            "weight": 0.5896
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.2101,
+            "weight": 0.2259
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.705,
+            "weight": 0.1845
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437392_Herman_Doomer__ca__1595_1650_",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 65.6,
+        "avgDeltaE": 6.69,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 65.8,
+        "avgDeltaE": 6.65,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.2,
+        "avgDeltaE": -0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.6177,
+            "weight": 0.6704
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4366,
+            "weight": 0.17
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.5936,
+            "weight": 0.1597
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437393_The_Toilet_of_Bathsheba",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 63.8,
+        "avgDeltaE": 5.94,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 63.8,
+        "avgDeltaE": 5.91,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": -0.03
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.3675,
+            "weight": 0.7464
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.158,
+            "weight": 0.1271
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1685,
+            "weight": 0.1265
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437394_Aristotle_with_a_Bust_of_Homer",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 68.1,
+        "avgDeltaE": 4.24,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 66.4,
+        "avgDeltaE": 4.49,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": -1.7,
+        "avgDeltaE": 0.25
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.245,
+            "weight": 0.4565
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.6213,
+            "weight": 0.3505
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.9444,
+            "weight": 0.193
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437395_The_Standard_Bearer__probably_Floris_Soop__1604_16",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 64,
+        "avgDeltaE": 5.47,
+        "colorCount": 5
+      },
+      "interpolated": {
+        "revelationScore": 62.1,
+        "avgDeltaE": 5.58,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": -1.9,
+        "avgDeltaE": 0.11
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.4297,
+            "weight": 0.4309
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.6532,
+            "weight": 0.3726
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 3.1355,
+            "weight": 0.1965
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437396_Hendrickje_Stoffels__1626_1663_",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 64.2,
+        "avgDeltaE": 6.2,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 64.2,
+        "avgDeltaE": 6.24,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.121,
+            "weight": 0.5509
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.7346,
+            "weight": 0.2258
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.7659,
+            "weight": 0.2233
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437397_Self_Portrait",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 66.8,
+        "avgDeltaE": 5.69,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 66.5,
+        "avgDeltaE": 5.72,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.3,
+        "avgDeltaE": 0.03
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.5273,
+            "weight": 0.6623
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.8999,
+            "weight": 0.1838
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.2689,
+            "weight": 0.1539
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437399_Man_with_a_Magnifying_Glass",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 65.5,
+        "avgDeltaE": 4.72,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 65.4,
+        "avgDeltaE": 4.76,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": -0.1,
+        "avgDeltaE": 0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.071,
+            "weight": 0.5514
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.6149,
+            "weight": 0.2258
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.6507,
+            "weight": 0.2228
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437400_Portrait_of_a_Man",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 64.1,
+        "avgDeltaE": 6,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 64.2,
+        "avgDeltaE": 6.07,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": 0.07
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.7086,
+            "weight": 0.6429
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.5152,
+            "weight": 0.1811
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.5881,
+            "weight": 0.176
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437402_Woman_with_a_Pink",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 65,
+        "avgDeltaE": 6.23,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 65.2,
+        "avgDeltaE": 6.63,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.2,
+        "avgDeltaE": 0.4
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.2989,
+            "weight": 0.7954
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3135,
+            "weight": 0.1028
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.3355,
+            "weight": 0.1018
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437403_Christ_and_the_Woman_of_Samaria",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 62,
+        "avgDeltaE": 7.51,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 63,
+        "avgDeltaE": 7.47,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 1,
+        "avgDeltaE": -0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.2053,
+            "weight": 0.4522
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.6869,
+            "weight": 0.3231
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4255,
+            "weight": 0.2247
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437404_Head_of_Christ",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 65.9,
+        "avgDeltaE": 5.98,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 65.3,
+        "avgDeltaE": 6.87,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.6,
+        "avgDeltaE": 0.89
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.7097,
+            "weight": 0.6192
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.0853,
+            "weight": 0.2108
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.585,
+            "weight": 0.17
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437406_Portrait_of_a_Man___The_Auctioneer__",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 65.1,
+        "avgDeltaE": 5.25,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 65.2,
+        "avgDeltaE": 5.53,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": 0.28
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.0605,
+            "weight": 0.5707
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.695,
+            "weight": 0.2246
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.9566,
+            "weight": 0.2047
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437407_Christ_with_a_Staff",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 63.7,
+        "avgDeltaE": 6.86,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 61.1,
+        "avgDeltaE": 7.09,
+        "colorCount": 4
+      },
+      "delta": {
+        "revelationScore": -2.6,
+        "avgDeltaE": 0.23
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.2109,
+            "weight": 0.501
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3116,
+            "weight": 0.2624
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.5649,
+            "weight": 0.2365
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437409_Portrait_of_a_Woman",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 63,
+        "avgDeltaE": 4.69,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 62.9,
+        "avgDeltaE": 4.7,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.1,
+        "avgDeltaE": 0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.438,
+            "weight": 0.7248
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.2822,
+            "weight": 0.1391
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.3322,
+            "weight": 0.1361
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437410_Portrait_of_a_Man_with_a_Breastplate_and_Plumed_Ha",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 63.1,
+        "avgDeltaE": 7.22,
+        "colorCount": 5
+      },
+      "interpolated": {
+        "revelationScore": 63.1,
+        "avgDeltaE": 7.25,
+        "colorCount": 4
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0.03
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.8025,
+            "weight": 0.6297
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.5988,
+            "weight": 0.1945
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.8741,
+            "weight": 0.1758
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437411_Man_with_a_Steel_Gorget",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 62.5,
+        "avgDeltaE": 5.53,
+        "colorCount": 5
+      },
+      "interpolated": {
+        "revelationScore": 62.5,
+        "avgDeltaE": 5.52,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": -0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.7309,
+            "weight": 0.6441
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4433,
+            "weight": 0.1927
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.8839,
+            "weight": 0.1632
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437412_Old_Woman_Cutting_Her_Nails",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 63.7,
+        "avgDeltaE": 6.33,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 63.5,
+        "avgDeltaE": 6.97,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": -0.2,
+        "avgDeltaE": 0.64
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.2964,
+            "weight": 0.7917
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.1779,
+            "weight": 0.1078
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3353,
+            "weight": 0.1005
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437413_Man_in_a_Red_Cloak",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 64.2,
+        "avgDeltaE": 6.26,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 65.9,
+        "avgDeltaE": 5.9,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 1.7,
+        "avgDeltaE": -0.36
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.2075,
+            "weight": 0.4567
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.5885,
+            "weight": 0.3472
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.8124,
+            "weight": 0.1961
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437414_Pilate_Washing_His_Hands",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 64.1,
+        "avgDeltaE": 6.48,
+        "colorCount": 5
+      },
+      "interpolated": {
+        "revelationScore": 63.7,
+        "avgDeltaE": 6.54,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": -0.4,
+        "avgDeltaE": 0.06
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.6505,
+            "weight": 0.6273
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.049,
+            "weight": 0.1991
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.3506,
+            "weight": 0.1736
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437416_Man_in_Armor__Mars__",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 63.8,
+        "avgDeltaE": 6.58,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 64.2,
+        "avgDeltaE": 6.47,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.4,
+        "avgDeltaE": -0.11
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.736,
+            "weight": 0.6115
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3083,
+            "weight": 0.195
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.3253,
+            "weight": 0.1936
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437417_Lieven_Willemsz_van_Coppenol__born_about_1599__die",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 64.4,
+        "avgDeltaE": 6.34,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 64.2,
+        "avgDeltaE": 6.4,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -0.2,
+        "avgDeltaE": 0.06
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.3849,
+            "weight": 0.4723
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.3968,
+            "weight": 0.2729
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.5677,
+            "weight": 0.2548
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437418_Man_with_a_Beard",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 62,
+        "avgDeltaE": 5.01,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 59.7,
+        "avgDeltaE": 6.09,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": -2.3,
+        "avgDeltaE": 1.08
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.8104,
+            "weight": 0.6215
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.5629,
+            "weight": 0.1965
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.7676,
+            "weight": 0.182
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437419_Rembrandt__1606_1669__as_a_Young_Man",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 66.3,
+        "avgDeltaE": 4.94,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 64.9,
+        "avgDeltaE": 4.99,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": -1.4,
+        "avgDeltaE": 0.05
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.7751,
+            "weight": 0.598
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.2932,
+            "weight": 0.2021
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3196,
+            "weight": 0.1998
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437420_Rembrandt_s_Son_Titus__1641_1668_",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 62.5,
+        "avgDeltaE": 5.86,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 62.4,
+        "avgDeltaE": 5.9,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": -0.1,
+        "avgDeltaE": 0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.3643,
+            "weight": 0.7588
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.1244,
+            "weight": 0.1301
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.4884,
+            "weight": 0.1111
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_437421_Study_Head_of_an_Old_Man",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 65.3,
+        "avgDeltaE": 5.78,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 65,
+        "avgDeltaE": 5.52,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": -0.3,
+        "avgDeltaE": -0.26
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.8544,
+            "weight": 0.5911
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4548,
+            "weight": 0.2057
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.4848,
+            "weight": 0.2032
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_459082_Portrait_of_Gerard_de_Lairesse",
+      "dataset": "SP100/met",
+      "currentArchetype": "tenebrist_gold",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 66.2,
+        "avgDeltaE": 3.8,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 65.9,
+        "avgDeltaE": 3.93,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.3,
+        "avgDeltaE": 0.13
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.5264,
+            "weight": 0.6999
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.2827,
+            "weight": 0.1614
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.6576,
+            "weight": 0.1386
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_459194_The_Last_Supper__after_Leonardo_da_Vinci",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 67.3,
+        "avgDeltaE": 4.65,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 67.3,
+        "avgDeltaE": 4.66,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.8082,
+            "weight": 0.4273
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.5749,
+            "weight": 0.3001
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.834,
+            "weight": 0.2726
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_459210_Satire_on_Art_Criticism",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 62.8,
+        "avgDeltaE": 4.82,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 62.8,
+        "avgDeltaE": 4.78,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": -0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.9026,
+            "weight": 0.5559
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.0375,
+            "weight": 0.2463
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.5362,
+            "weight": 0.1978
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_459238_Cottage_near_the_Entrance_to_a_Wood",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 66.3,
+        "avgDeltaE": 4.06,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 66.3,
+        "avgDeltaE": 4.05,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": -0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.1402,
+            "weight": 0.4848
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.0321,
+            "weight": 0.272
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.2728,
+            "weight": 0.2432
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_459255_Elsje_Christiaens_Hanging_on_a_Gibbet",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 66,
+        "avgDeltaE": 4.1,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 65.3,
+        "avgDeltaE": 4.17,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.7,
+        "avgDeltaE": 0.07
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.8465,
+            "weight": 0.5938
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.451,
+            "weight": 0.2051
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.4986,
+            "weight": 0.2012
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_459317_Old_Man_Leaning_on_a_Stick",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 70.9,
+        "avgDeltaE": 3.13,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 70.7,
+        "avgDeltaE": 3.06,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.2,
+        "avgDeltaE": -0.07
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.3812,
+            "weight": 0.4137
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 3.0261,
+            "weight": 0.3256
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 3.7785,
+            "weight": 0.2607
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_459318_Two_Cottages",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 63,
+        "avgDeltaE": 5.07,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 62.9,
+        "avgDeltaE": 5.08,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -0.1,
+        "avgDeltaE": 0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.9581,
+            "weight": 0.5662
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.2178,
+            "weight": 0.2446
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.8674,
+            "weight": 0.1892
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_692466_The_Inland_Printer__June_1901",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 65,
+        "avgDeltaE": 4.23,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 61.3,
+        "avgDeltaE": 4.5,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": -3.7,
+        "avgDeltaE": 0.27
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.9096,
+            "weight": 0.5456
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.7806,
+            "weight": 0.2788
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.8265,
+            "weight": 0.1756
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_692469_Advertisement_for_Philadelphia_Sunday_Press__Febru",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 63.7,
+        "avgDeltaE": 7.28,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 60.2,
+        "avgDeltaE": 4.46,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -3.5,
+        "avgDeltaE": -2.82
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.7447,
+            "weight": 0.364
+          },
+          {
+            "clusterId": 3,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.8508,
+            "weight": 0.3504
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 3.4971,
+            "weight": 0.2856
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_692470_Advertisement_for_Philadelphia_Sunday_Press__May_1",
+      "dataset": "SP100/met",
+      "currentArchetype": "golden_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 50.5,
+        "avgDeltaE": 5.27,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 50.2,
+        "avgDeltaE": 5.32,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -0.3,
+        "avgDeltaE": 0.05
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.378,
+            "weight": 0.4738
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.4386,
+            "weight": 0.2677
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.5257,
+            "weight": 0.2585
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_692471_Advertisement_for_Philadelphia_Sunday_Press__Oct__",
+      "dataset": "SP100/met",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 63.6,
+        "avgDeltaE": 4.45,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 64.4,
+        "avgDeltaE": 4.48,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 0.8,
+        "avgDeltaE": 0.03
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.2003,
+            "weight": 0.5364
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.6733,
+            "weight": 0.2408
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.89,
+            "weight": 0.2228
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_696945_Advertisement_for_Philadelphia_Sunday_Press__April",
+      "dataset": "SP100/met",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 45.5,
+        "avgDeltaE": 7.26,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 51.9,
+        "avgDeltaE": 6.63,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 6.4,
+        "avgDeltaE": -0.63
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.8514,
+            "weight": 0.5649
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.9092,
+            "weight": 0.2519
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.6262,
+            "weight": 0.1831
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_696946_Advertisement_for_Philadelphia_Sunday_Press__Easte",
+      "dataset": "SP100/met",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 48.2,
+        "avgDeltaE": 7.69,
+        "colorCount": 11
+      },
+      "interpolated": {
+        "revelationScore": 47.4,
+        "avgDeltaE": 7.89,
+        "colorCount": 11
+      },
+      "delta": {
+        "revelationScore": -0.8,
+        "avgDeltaE": 0.2
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.9239,
+            "weight": 0.56
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.0076,
+            "weight": 0.2577
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.8395,
+            "weight": 0.1822
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_696947_Advertisement_for_Philadelphia_Sunday_Press__May_1",
+      "dataset": "SP100/met",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 58.8,
+        "avgDeltaE": 5.28,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 58.4,
+        "avgDeltaE": 5.34,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -0.4,
+        "avgDeltaE": 0.06
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.3963,
+            "weight": 0.3999
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.6007,
+            "weight": 0.3488
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.222,
+            "weight": 0.2513
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_728386_Rembrandt",
+      "dataset": "SP100/met",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 57.3,
+        "avgDeltaE": 4.5,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 60.5,
+        "avgDeltaE": 3.87,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 3.2,
+        "avgDeltaE": -0.63
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.0635,
+            "weight": 0.3682
+          },
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 2.304,
+            "weight": 0.3298
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.5157,
+            "weight": 0.302
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_732437_Advertisement_for_Philadelphia_Sunday_Press__Febru",
+      "dataset": "SP100/met",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 43.8,
+        "avgDeltaE": 10.65,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 61.8,
+        "avgDeltaE": 3.36,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 18,
+        "avgDeltaE": -7.29
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.787,
+            "weight": 0.3955
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3041,
+            "weight": 0.3067
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.3727,
+            "weight": 0.2978
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_732445_Advertisement_for_Philadelphia_Sunday_Press__May_1",
+      "dataset": "SP100/met",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 57.4,
+        "avgDeltaE": 6.23,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 54.8,
+        "avgDeltaE": 7.14,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -2.6,
+        "avgDeltaE": 0.91
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.9707,
+            "weight": 0.5871
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.408,
+            "weight": 0.2367
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 3.2332,
+            "weight": 0.1763
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_828418_Landscape__after_Rembrandt",
+      "dataset": "SP100/met",
+      "currentArchetype": "structural_outlier_rescue",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 64,
+        "avgDeltaE": 5.19,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 64,
+        "avgDeltaE": 5.19,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.1161,
+            "weight": 0.536
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4368,
+            "weight": 0.2455
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.7379,
+            "weight": 0.2185
+          }
+        ]
+      }
+    },
+    {
+      "filename": "met_899898_The_New_York_Sunday_World__November_17th",
+      "dataset": "SP100/met",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 53.5,
+        "avgDeltaE": 6.01,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 54.3,
+        "avgDeltaE": 5.76,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 0.8,
+        "avgDeltaE": -0.25
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.4255,
+            "weight": 0.4399
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.1894,
+            "weight": 0.2864
+          },
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 2.291,
+            "weight": 0.2737
+          }
+        ]
+      }
+    },
+    {
+      "filename": "art_burn_keep",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 48.6,
+        "avgDeltaE": 4.69,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 55,
+        "avgDeltaE": 7.44,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 6.4,
+        "avgDeltaE": 2.75
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.4127,
+            "weight": 0.475
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.5152,
+            "weight": 0.2668
+          },
+          {
+            "clusterId": 5,
+            "sourceArchetype": "warm_naturalist",
+            "distance": 2.5996,
+            "weight": 0.2582
+          }
+        ]
+      }
+    },
+    {
+      "filename": "biko",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 53.8,
+        "avgDeltaE": 4.43,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 55.6,
+        "avgDeltaE": 4.51,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 1.8,
+        "avgDeltaE": 0.08
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.4531,
+            "weight": 0.5169
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 3.0707,
+            "weight": 0.2446
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 3.1493,
+            "weight": 0.2385
+          }
+        ]
+      }
+    },
+    {
+      "filename": "ethnic_cleansing",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 49.2,
+        "avgDeltaE": 4.48,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 51.6,
+        "avgDeltaE": 4.57,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 2.4,
+        "avgDeltaE": 0.09
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.4618,
+            "weight": 0.4547
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3776,
+            "weight": 0.2795
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.5003,
+            "weight": 0.2658
+          }
+        ]
+      }
+    },
+    {
+      "filename": "guantanamo_bay",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 48.2,
+        "avgDeltaE": 9.12,
+        "colorCount": 12
+      },
+      "interpolated": {
+        "revelationScore": 47.7,
+        "avgDeltaE": 9.18,
+        "colorCount": 11
+      },
+      "delta": {
+        "revelationScore": -0.5,
+        "avgDeltaE": 0.06
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.4498,
+            "weight": 0.4271
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.0821,
+            "weight": 0.2974
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.2474,
+            "weight": 0.2755
+          }
+        ]
+      }
+    },
+    {
+      "filename": "justice_trumps2",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 38.2,
+        "avgDeltaE": 5.77,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 31.6,
+        "avgDeltaE": 6.43,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": -6.6,
+        "avgDeltaE": 0.66
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.9663,
+            "weight": 0.3954
+          },
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 2.5054,
+            "weight": 0.3103
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.6417,
+            "weight": 0.2943
+          }
+        ]
+      }
+    },
+    {
+      "filename": "little_money",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 41.1,
+        "avgDeltaE": 2.07,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 41.3,
+        "avgDeltaE": 2.06,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.2,
+        "avgDeltaE": -0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.5395,
+            "weight": 0.5271
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 3.4153,
+            "weight": 0.2376
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 3.4482,
+            "weight": 0.2353
+          }
+        ]
+      }
+    },
+    {
+      "filename": "mayakovski",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 43.5,
+        "avgDeltaE": 9.9,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 41.2,
+        "avgDeltaE": 9.9,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": -2.3,
+        "avgDeltaE": 0
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.633,
+            "weight": 0.4021
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1513,
+            "weight": 0.3052
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.244,
+            "weight": 0.2926
+          }
+        ]
+      }
+    },
+    {
+      "filename": "police_crimes",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 49.6,
+        "avgDeltaE": 6.22,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 49.4,
+        "avgDeltaE": 6.27,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": -0.2,
+        "avgDeltaE": 0.05
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.5004,
+            "weight": 0.4622
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.5287,
+            "weight": 0.2743
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.6322,
+            "weight": 0.2635
+          }
+        ]
+      }
+    },
+    {
+      "filename": "self_censorship",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 43.3,
+        "avgDeltaE": 7.85,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 42.1,
+        "avgDeltaE": 8.77,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -1.2,
+        "avgDeltaE": 0.92
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.7122,
+            "weight": 0.4315
+          },
+          {
+            "clusterId": 3,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.352,
+            "weight": 0.3142
+          },
+          {
+            "clusterId": 2,
+            "sourceArchetype": "chromatic_polyphony",
+            "distance": 2.9057,
+            "weight": 0.2543
+          }
+        ]
+      }
+    },
+    {
+      "filename": "to_those_who",
+      "dataset": "SP100/minkler",
+      "currentArchetype": "bold_graphic",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 48.6,
+        "avgDeltaE": 8.64,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 50.2,
+        "avgDeltaE": 8.73,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 1.6,
+        "avgDeltaE": 0.09
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.75,
+            "weight": 0.3657
+          },
+          {
+            "clusterId": 2,
+            "sourceArchetype": "chromatic_polyphony",
+            "distance": 1.8912,
+            "weight": 0.3384
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1631,
+            "weight": 0.2959
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-1100_Een_leeuw_uit_de_menagerie_van_koning_Lodewijk_Nap",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 62.4,
+        "avgDeltaE": 5.1,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 64.8,
+        "avgDeltaE": 5.54,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 2.4,
+        "avgDeltaE": 0.44
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.1236,
+            "weight": 0.5405
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.642,
+            "weight": 0.2299
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.6446,
+            "weight": 0.2296
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-1252_Portrait_of_Jacoba_Bontemantel__1643___",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "subtle_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 59.5,
+        "avgDeltaE": 8.33,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 63.1,
+        "avgDeltaE": 6.41,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 3.6,
+        "avgDeltaE": -1.92
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.5141,
+            "weight": 0.3771
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.7045,
+            "weight": 0.335
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.9838,
+            "weight": 0.2878
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-1453_Portrait_of_Willem_Bilderdijk",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 60.3,
+        "avgDeltaE": 7.84,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 62.3,
+        "avgDeltaE": 7.17,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 2,
+        "avgDeltaE": -0.67
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.9059,
+            "weight": 0.4774
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.5031,
+            "weight": 0.2877
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.842,
+            "weight": 0.2348
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-1485_De_ontmoeting_van_Jacob_en_Rachel",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 57.3,
+        "avgDeltaE": 9.66,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 56.8,
+        "avgDeltaE": 9.64,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -0.5,
+        "avgDeltaE": -0.02
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 0.5952,
+            "weight": 0.6292
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.975,
+            "weight": 0.1896
+          },
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 2.0672,
+            "weight": 0.1812
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-183_Willem_III__1650_1702___prins_van_Oranje_en_sinds_",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 57.3,
+        "avgDeltaE": 7.15,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 57.6,
+        "avgDeltaE": 7.11,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.3,
+        "avgDeltaE": -0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.5472,
+            "weight": 0.6511
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.9522,
+            "weight": 0.1825
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.1406,
+            "weight": 0.1664
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-1856_De_ontmoeting_van_Granida_en_Daifilo",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 59.4,
+        "avgDeltaE": 8.72,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 58.6,
+        "avgDeltaE": 8.54,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.8,
+        "avgDeltaE": -0.18
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.1425,
+            "weight": 0.415
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.554,
+            "weight": 0.3051
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.6938,
+            "weight": 0.2799
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-1935_Landschap_met_stenen_brug",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 59.8,
+        "avgDeltaE": 8.72,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 62.8,
+        "avgDeltaE": 7.84,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 3,
+        "avgDeltaE": -0.88
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.144,
+            "weight": 0.4148
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.5752,
+            "weight": 0.3013
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.6715,
+            "weight": 0.2839
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-201_Portrait_of_a_Couple_and_Four_Children",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 62.1,
+        "avgDeltaE": 7.34,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 62.1,
+        "avgDeltaE": 7.32,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": -0.02
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.7397,
+            "weight": 0.6294
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.4375,
+            "weight": 0.191
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.5931,
+            "weight": 0.1795
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-2121_Portrait_of_Paulus_Joseph_Gabri_l",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 65.2,
+        "avgDeltaE": 6.28,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 63.4,
+        "avgDeltaE": 7.31,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -1.8,
+        "avgDeltaE": 1.03
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.985,
+            "weight": 0.5087
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.9936,
+            "weight": 0.2513
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.0876,
+            "weight": 0.24
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-2567_The_Virgin_and_Child",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 61.2,
+        "avgDeltaE": 8.46,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 61.8,
+        "avgDeltaE": 8.32,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 0.6,
+        "avgDeltaE": -0.14
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 0.8127,
+            "weight": 0.5378
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.603,
+            "weight": 0.2726
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.3053,
+            "weight": 0.1896
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-2568_Dancing_Couple",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 63.9,
+        "avgDeltaE": 5,
+        "colorCount": 5
+      },
+      "interpolated": {
+        "revelationScore": 64.6,
+        "avgDeltaE": 4.99,
+        "colorCount": 5
+      },
+      "delta": {
+        "revelationScore": 0.7,
+        "avgDeltaE": -0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.7164,
+            "weight": 0.4085
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.1082,
+            "weight": 0.3326
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.7087,
+            "weight": 0.2589
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-2670_Pinken_in_de_branding",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "subtle_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 62.1,
+        "avgDeltaE": 7.88,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 62.5,
+        "avgDeltaE": 7.93,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0.4,
+        "avgDeltaE": 0.05
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.7843,
+            "weight": 0.5389
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.7149,
+            "weight": 0.2465
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.9699,
+            "weight": 0.2146
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-270_Mooy_Aal_en_haar_aanbidders",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 53.1,
+        "avgDeltaE": 10.76,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 48.9,
+        "avgDeltaE": 11.58,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -4.2,
+        "avgDeltaE": 0.82
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 0.8647,
+            "weight": 0.5232
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.8773,
+            "weight": 0.241
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.9185,
+            "weight": 0.2358
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-2727_Portrait_of_Frederik_Houtman__1571_1627_",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 63.8,
+        "avgDeltaE": 5.13,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 63.9,
+        "avgDeltaE": 5.65,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": 0.52
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.0464,
+            "weight": 0.5718
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.5589,
+            "weight": 0.2338
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 3.0796,
+            "weight": 0.1943
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-276_Een_herderin",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 61.7,
+        "avgDeltaE": 7.07,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 61.8,
+        "avgDeltaE": 7.12,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": 0.05
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.4938,
+            "weight": 0.3605
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.5931,
+            "weight": 0.3381
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.7868,
+            "weight": 0.3014
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-292_Portret_van_Constantijn_Huygens__1596_1687_",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 63.8,
+        "avgDeltaE": 6.12,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 60.7,
+        "avgDeltaE": 6.05,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -3.1,
+        "avgDeltaE": -0.07
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.5734,
+            "weight": 0.3865
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.9615,
+            "weight": 0.31
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.004,
+            "weight": 0.3035
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-294_The_Battle_of_Livorno",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "subtle_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 61.2,
+        "avgDeltaE": 8.04,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 61.8,
+        "avgDeltaE": 7.62,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0.6,
+        "avgDeltaE": -0.42
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4524,
+            "weight": 0.3549
+          },
+          {
+            "clusterId": 3,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.6745,
+            "weight": 0.3255
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.7234,
+            "weight": 0.3196
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3089_Katjesspel",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "subtle_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 64,
+        "avgDeltaE": 7.32,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 63.7,
+        "avgDeltaE": 7.14,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -0.3,
+        "avgDeltaE": -0.18
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.4117,
+            "weight": 0.4099
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.9019,
+            "weight": 0.3043
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.0248,
+            "weight": 0.2858
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3118_Portraits_of_Sir_Thomas_Gresham_and_Anne_Fernely",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 64.3,
+        "avgDeltaE": 6.4,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 64.3,
+        "avgDeltaE": 6.4,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.5894,
+            "weight": 0.6818
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.5027,
+            "weight": 0.1606
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.5492,
+            "weight": 0.1576
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3119_Portraits_of_Sir_Thomas_Gresham_and_Anne_Fernely",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 65.3,
+        "avgDeltaE": 5.28,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 66.5,
+        "avgDeltaE": 5.35,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 1.2,
+        "avgDeltaE": 0.07
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.6036,
+            "weight": 0.6463
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.104,
+            "weight": 0.1854
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.3182,
+            "weight": 0.1683
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3229_Distant_View_of_the_Meadows_at__s_Graveland",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "bold_graphic",
+      "baseline": {
+        "revelationScore": 60.3,
+        "avgDeltaE": 7.18,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 59.8,
+        "avgDeltaE": 7.32,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.5,
+        "avgDeltaE": 0.14
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.6175,
+            "weight": 0.3897
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.0421,
+            "weight": 0.3087
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.09,
+            "weight": 0.3016
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3230_De_vaart_bij__s_Graveland",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 62.1,
+        "avgDeltaE": 8.07,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 62.1,
+        "avgDeltaE": 8.03,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": -0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.2306,
+            "weight": 0.4348
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.5316,
+            "weight": 0.3494
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4795,
+            "weight": 0.2158
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3245_River_View_by_Moonlight",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 61.7,
+        "avgDeltaE": 8.21,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 61.4,
+        "avgDeltaE": 7.93,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -0.3,
+        "avgDeltaE": -0.28
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.2249,
+            "weight": 0.386
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.4032,
+            "weight": 0.3369
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.7062,
+            "weight": 0.2771
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3256_Winter_Landscape_near_a_Town_with_Bare_Trees",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 56,
+        "avgDeltaE": 9.25,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 56.1,
+        "avgDeltaE": 9.36,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": 0.11
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.2475,
+            "weight": 0.4509
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.8719,
+            "weight": 0.3005
+          },
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.2633,
+            "weight": 0.2485
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3331_Portrait_of_Willem_III__1650_1702___Prince_of_Oran",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 59.1,
+        "avgDeltaE": 8.67,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 59.2,
+        "avgDeltaE": 8.64,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": -0.03
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.9567,
+            "weight": 0.4988
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.7135,
+            "weight": 0.2785
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.1422,
+            "weight": 0.2227
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3843_Een_vrouw",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "subtle_naturalist",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 54.5,
+        "avgDeltaE": 10.63,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 57.2,
+        "avgDeltaE": 10.26,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 2.7,
+        "avgDeltaE": -0.37
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.9189,
+            "weight": 0.3917
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.2379,
+            "weight": 0.3358
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.7585,
+            "weight": 0.2725
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-3901_De_boom_van_Jesse",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 49.5,
+        "avgDeltaE": 12.81,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 50.2,
+        "avgDeltaE": 12.6,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 0.7,
+        "avgDeltaE": -0.21
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 0.9179,
+            "weight": 0.4377
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.1309,
+            "weight": 0.3553
+          },
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.9407,
+            "weight": 0.207
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-4013_Portrait_of_Govert_van_Slingelandt__1623_1690___wi",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 58.1,
+        "avgDeltaE": 8.76,
+        "colorCount": 10
+      },
+      "interpolated": {
+        "revelationScore": 59.3,
+        "avgDeltaE": 9.02,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 1.2,
+        "avgDeltaE": 0.26
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.2826,
+            "weight": 0.399
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.5379,
+            "weight": 0.3328
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.9078,
+            "weight": 0.2683
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-4223_Berglandschap_bij_D_sseldorf",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 54.7,
+        "avgDeltaE": 10.77,
+        "colorCount": 11
+      },
+      "interpolated": {
+        "revelationScore": 55.8,
+        "avgDeltaE": 10.25,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 1.1,
+        "avgDeltaE": -0.52
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.0034,
+            "weight": 0.4905
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.8982,
+            "weight": 0.2593
+          },
+          {
+            "clusterId": 9,
+            "sourceArchetype": "bold_graphic",
+            "distance": 1.9664,
+            "weight": 0.2503
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-4232_Zelfportret",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 66.4,
+        "avgDeltaE": 5.25,
+        "colorCount": 4
+      },
+      "interpolated": {
+        "revelationScore": 66.4,
+        "avgDeltaE": 5.32,
+        "colorCount": 4
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0.07
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.0552,
+            "weight": 0.5724
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.4755,
+            "weight": 0.244
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 3.2892,
+            "weight": 0.1836
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-4474_VOC_vestigingen",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "subtle_naturalist",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 60.9,
+        "avgDeltaE": 7.65,
+        "colorCount": 11
+      },
+      "interpolated": {
+        "revelationScore": 61.7,
+        "avgDeltaE": 7.61,
+        "colorCount": 11
+      },
+      "delta": {
+        "revelationScore": 0.8,
+        "avgDeltaE": -0.04
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.1515,
+            "weight": 0.4074
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.2882,
+            "weight": 0.3642
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.0534,
+            "weight": 0.2285
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-4644_Schipbreuk_op_een_rotsachtige_kust",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 57.6,
+        "avgDeltaE": 9.19,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 57.6,
+        "avgDeltaE": 9.19,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.9667,
+            "weight": 0.4709
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.4772,
+            "weight": 0.3082
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.0608,
+            "weight": 0.2209
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-4760_Portret_van_Jacob_de_Witt__1589_1674_",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 66.3,
+        "avgDeltaE": 5.79,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 64.9,
+        "avgDeltaE": 5.91,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": -1.4,
+        "avgDeltaE": 0.12
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.8317,
+            "weight": 0.5838
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.9655,
+            "weight": 0.2471
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.8716,
+            "weight": 0.1691
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-4761_Portrait_of_Anna_van_den_Corput__1599_1645___Wife_",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 64.8,
+        "avgDeltaE": 5.24,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 64.3,
+        "avgDeltaE": 5.62,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.5,
+        "avgDeltaE": 0.38
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.6439,
+            "weight": 0.6413
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1819,
+            "weight": 0.1893
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.4365,
+            "weight": 0.1695
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-4878_A_Young_Woman_Warming_her_Hands_over_a_Brazier__Al",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 67.5,
+        "avgDeltaE": 5.13,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 68.1,
+        "avgDeltaE": 5.1,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 0.6,
+        "avgDeltaE": -0.03
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 0.5437,
+            "weight": 0.6955
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.4643,
+            "weight": 0.1535
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.504,
+            "weight": 0.151
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-5082_De_Aanbidding_van_de_koningen",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 63.7,
+        "avgDeltaE": 7.26,
+        "colorCount": 11
+      },
+      "interpolated": {
+        "revelationScore": 63.7,
+        "avgDeltaE": 7.25,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": -0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.4321,
+            "weight": 0.5089
+          },
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.8334,
+            "weight": 0.2572
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 3.1151,
+            "weight": 0.2339
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-5110_Self_Portrait",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 65.9,
+        "avgDeltaE": 5.61,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 65.5,
+        "avgDeltaE": 5.68,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.4,
+        "avgDeltaE": 0.07
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 0,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.4194,
+            "weight": 0.3729
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.5709,
+            "weight": 0.3369
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.8241,
+            "weight": 0.2902
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-671_The_Adoration_of_the_Magi",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 53.2,
+        "avgDeltaE": 11.02,
+        "colorCount": 11
+      },
+      "interpolated": {
+        "revelationScore": 55.3,
+        "avgDeltaE": 10.02,
+        "colorCount": 10
+      },
+      "delta": {
+        "revelationScore": 2.1,
+        "avgDeltaE": -1
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 0.4794,
+            "weight": 0.6732
+          },
+          {
+            "clusterId": 6,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.7615,
+            "weight": 0.1832
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.2471,
+            "weight": 0.1436
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-A-956_Portret_van_een_jongetje__wellicht_Lodewijk_van_Na",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "subtle_naturalist",
+      "baseline": {
+        "revelationScore": 60.4,
+        "avgDeltaE": 8.54,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 59.3,
+        "avgDeltaE": 8.71,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -1.1,
+        "avgDeltaE": 0.17
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.3535,
+            "weight": 0.4016
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.7236,
+            "weight": 0.3154
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.9209,
+            "weight": 0.283
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-1215_Thomas_Hees_en_zijn_bediende_Thomas_en_neven_Jan_e",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 60.2,
+        "avgDeltaE": 8.6,
+        "colorCount": 6
+      },
+      "interpolated": {
+        "revelationScore": 60.1,
+        "avgDeltaE": 8.59,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": -0.1,
+        "avgDeltaE": -0.01
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.7208,
+            "weight": 0.6094
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.1369,
+            "weight": 0.2056
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.3741,
+            "weight": 0.185
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-140_Woman_Playing_the_Virginal",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 62.9,
+        "avgDeltaE": 7.2,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 63.2,
+        "avgDeltaE": 7.13,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": 0.3,
+        "avgDeltaE": -0.07
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.8586,
+            "weight": 0.5038
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.5221,
+            "weight": 0.2842
+          },
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.0407,
+            "weight": 0.212
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-1440_Portret_van_een_man__vermoedelijk_uit_het_geslacht",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 65.5,
+        "avgDeltaE": 5.99,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 64.5,
+        "avgDeltaE": 6.11,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": -1,
+        "avgDeltaE": 0.12
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.7335,
+            "weight": 0.5725
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.7996,
+            "weight": 0.2334
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.1635,
+            "weight": 0.1941
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-1454_Portret_van_Lysbeth_van_Duvenvoirde",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "tenebrist_gold",
+      "baseline": {
+        "revelationScore": 63.4,
+        "avgDeltaE": 6.61,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 63,
+        "avgDeltaE": 6.9,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -0.4,
+        "avgDeltaE": 0.29
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 0.6241,
+            "weight": 0.6301
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.9891,
+            "weight": 0.1977
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.2837,
+            "weight": 0.1722
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-1535_The_Raampoortje_in_Amsterdam",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "subtle_naturalist",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 61.3,
+        "avgDeltaE": 6.79,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 61.3,
+        "avgDeltaE": 6.79,
+        "colorCount": 8
+      },
+      "delta": {
+        "revelationScore": 0,
+        "avgDeltaE": 0
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 0.6321,
+            "weight": 0.6062
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.9269,
+            "weight": 0.1989
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.966,
+            "weight": 0.1949
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-1586_Portrait_of_Aernout_van_Beeftingh__his_Wife_Jacoba",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 61.5,
+        "avgDeltaE": 8.13,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 59.3,
+        "avgDeltaE": 8.89,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -2.2,
+        "avgDeltaE": 0.76
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.0706,
+            "weight": 0.57
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.7896,
+            "weight": 0.2188
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 2.8895,
+            "weight": 0.2112
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-1726_Misty_Sea",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 58.9,
+        "avgDeltaE": 8.89,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 57.4,
+        "avgDeltaE": 9.64,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": -1.5,
+        "avgDeltaE": 0.75
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 7,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 2.7656,
+            "weight": 0.4603
+          },
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 4.5096,
+            "weight": 0.2823
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 4.9444,
+            "weight": 0.2575
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-197_De_harddraver_De_Vlugge_van_Adriaan_van_der_Hoop_i",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "structural_outlier_rescue",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 61.9,
+        "avgDeltaE": 7.15,
+        "colorCount": 9
+      },
+      "interpolated": {
+        "revelationScore": 61.8,
+        "avgDeltaE": 7.33,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -0.1,
+        "avgDeltaE": 0.18
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.2165,
+            "weight": 0.3967
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.4277,
+            "weight": 0.338
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.8189,
+            "weight": 0.2653
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-198_Adriaan_van_der_Hoop_s_Trotter__De_Rot__at_the_Coa",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "chiaroscuro",
+      "interpArchetype": "golden_naturalist",
+      "baseline": {
+        "revelationScore": 60.5,
+        "avgDeltaE": 8.56,
+        "colorCount": 8
+      },
+      "interpolated": {
+        "revelationScore": 59.2,
+        "avgDeltaE": 8.8,
+        "colorCount": 9
+      },
+      "delta": {
+        "revelationScore": -1.3,
+        "avgDeltaE": 0.24
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 11,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 1.1421,
+            "weight": 0.5274
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.3674,
+            "weight": 0.2545
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.7618,
+            "weight": 0.2181
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-200_Boerengezelschap_binnenshuis",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 63.1,
+        "avgDeltaE": 6.8,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 63.2,
+        "avgDeltaE": 6.59,
+        "colorCount": 6
+      },
+      "delta": {
+        "revelationScore": 0.1,
+        "avgDeltaE": -0.21
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.246,
+            "weight": 0.4827
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 2.1951,
+            "weight": 0.274
+          },
+          {
+            "clusterId": 8,
+            "sourceArchetype": "golden_naturalist",
+            "distance": 2.472,
+            "weight": 0.2433
+          }
+        ]
+      }
+    },
+    {
+      "filename": "rijks_SK-C-528_Portret_van_Johannes_Hudde",
+      "dataset": "SP100/rijks",
+      "currentArchetype": "warm_dramatic",
+      "interpArchetype": "warm_dramatic",
+      "baseline": {
+        "revelationScore": 58.6,
+        "avgDeltaE": 8.41,
+        "colorCount": 7
+      },
+      "interpolated": {
+        "revelationScore": 60.9,
+        "avgDeltaE": 7.99,
+        "colorCount": 7
+      },
+      "delta": {
+        "revelationScore": 2.3,
+        "avgDeltaE": -0.42
+      },
+      "blendInfo": {
+        "neighbors": [
+          {
+            "clusterId": 4,
+            "sourceArchetype": "warm_dramatic",
+            "distance": 1.1885,
+            "weight": 0.3891
+          },
+          {
+            "clusterId": 1,
+            "sourceArchetype": "tenebrist_gold",
+            "distance": 1.3374,
+            "weight": 0.3458
+          },
+          {
+            "clusterId": 10,
+            "sourceArchetype": "subtle_naturalist",
+            "distance": 1.7443,
+            "weight": 0.2651
+          }
+        ]
+      }
+    }
+  ]
+}

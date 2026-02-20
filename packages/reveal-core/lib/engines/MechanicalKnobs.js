@@ -65,12 +65,17 @@ class MechanicalKnobs {
 
         // Partition into weak and strong.
         // Colors tagged _minVolumeExempt (hue gap injections, PeakFinder peaks)
-        // are always strong — they were explicitly added to capture minority signals.
+        // get a reduced threshold — they were explicitly added to capture minority
+        // signals but still need meaningful coverage to justify a screen.
+        // Floor: 0.1% of image or 50 pixels, whichever is larger.
+        const exemptMinPixels = Math.max(50, Math.round(pixelCount * 0.001));
         const weakIndices = [];
         const strongIndices = [];
         for (let i = 0; i < palette.length; i++) {
             if (colorCounts[i] === 0) continue;
-            if (palette[i]._minVolumeExempt || colorCounts[i] >= minPixels) {
+            if (colorCounts[i] >= minPixels) {
+                strongIndices.push(i);
+            } else if (palette[i]._minVolumeExempt && colorCounts[i] >= exemptMinPixels) {
                 strongIndices.push(i);
             } else {
                 weakIndices.push(i);

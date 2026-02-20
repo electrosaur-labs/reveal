@@ -27,7 +27,11 @@
     "test-astronaut": "node test-astronaut.js",
     "debug-ppm": "node debug-ppm.js",
     "debug-lab": "node debug-lab-conversion.js",
-    "posterize": "node src/posterize-psd.js"
+    "posterize": "node src/posterize-psd.js",
+    "harvest-dna": "node src/harvest-dna.js",
+    "cluster-explore": "node src/cluster-explore.js",
+    "build-interpolator": "node src/build-interpolator.js",
+    "ab-test": "node src/ab-test-interpolator.js"
   },
   "dependencies": {
     "@reveal/core": "*",

@@ -220,6 +220,7 @@ class PosterizationEngine {
                 });
 
             case 'reveal-mk1.5':
+            case 'reveal-mk2':   // Same posterization as Mk 1.5, different param generation
                 return this._posterizeRevealMk1_5(pixels, width, height, targetColors, {
                     ...options,
                     enableGridOptimization,

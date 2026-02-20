@@ -36,7 +36,7 @@ class ArchetypeCarousel {
     }
 
     _bindEvents() {
-        // Pulse 1: carouselReady fires right after DNA scoring — all card frames appear
+        // Pulse 1: carouselReady fires right after DNA scoring — all card frames appear.
         this._session.on('carouselReady', (data) => this._rebuild(data.scores));
         this._session.on('archetypeChanged', (data) => {
             this._activeId = data.archetypeId;
@@ -65,8 +65,7 @@ class ArchetypeCarousel {
 
     /**
      * Rebuild the full card strip from scored archetypes.
-     * @param {Array} [scores] - Pre-computed scores from carouselReady event.
-     *                           Falls back to getAllArchetypeScores() if not provided.
+     * @param {Array} [scores] - Pre-sorted scores from carouselReady event (descending by DNA score).
      */
     _rebuild(scores) {
         if (!scores) scores = this._session.getAllArchetypeScores();
@@ -83,7 +82,8 @@ class ArchetypeCarousel {
         this._container.innerHTML = '';
 
         for (const match of scores) {
-            const archetype = archetypeMap.get(match.id);
+            // Chameleon is synthetic — not in ArchetypeLoader
+            const archetype = archetypeMap.get(match.id) || match._synthetic;
             if (!archetype) continue;
 
             const card = this._createCard(match, archetype);
@@ -105,8 +105,12 @@ class ArchetypeCarousel {
         card.className = 'carousel-card' + (isActive ? ' active' : '');
         card.dataset.archetypeId = match.id;
 
-        // Score bar (visual width proportional to score)
-        const scorePercent = Math.min(100, Math.max(0, match.score));
+        // Score bar — show ΔE when available (Pulse 3), otherwise DNA score (Pulse 1)
+        const hasDE = match.meanDeltaE != null;
+        const scoreLabel = hasDE ? match.meanDeltaE.toFixed(1) : match.score.toFixed(0);
+        const scorePercent = hasDE
+            ? Math.min(100, Math.max(0, 100 - match.meanDeltaE * 4))  // Lower ΔE = fuller bar
+            : Math.min(100, Math.max(0, match.score));
 
         // Store hue indicator HTML for reverting when card becomes inactive
         const hueIndicator = this._buildHueIndicator(archetype);
@@ -116,7 +120,7 @@ class ArchetypeCarousel {
             `<div class="card-name">${archetype.name}</div>` +
             `<div class="card-score-row">` +
                 `<div class="card-score-bar"><div class="card-score-fill" style="width:${scorePercent}%"></div></div>` +
-                `<span class="card-score-val">${match.score.toFixed(0)}</span>` +
+                `<span class="card-score-val">${scoreLabel}</span>` +
             `</div>` +
             `<div class="card-hue">${hueIndicator}</div>`;
 
