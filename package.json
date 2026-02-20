@@ -31,6 +31,7 @@
     "url": "https://github.com/electrosaur-labs/reveal-project.git"
   },
   "devDependencies": {
+    "omggif": "^1.0.10",
     "utif2": "^4.1.0"
   }
 }
