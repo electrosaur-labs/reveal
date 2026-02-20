@@ -309,7 +309,7 @@ class MetricsCalculator {
 
     /**
      * Calculate Revelation Error Score (E_rev)
-     * Chroma-weighted CIE76 distance: chromatic regions penalized 11× more than achromatic.
+     * Delegates to @reveal/core RevelationError.fromBuffers().
      *
      * @param {Uint8ClampedArray} originalLab - Original Lab pixels (byte encoding, 3 bytes/pixel)
      * @param {Uint8ClampedArray} processedLab - Posterized Lab pixels (byte encoding, 3 bytes/pixel)
@@ -320,77 +320,8 @@ class MetricsCalculator {
      * @returns {{ eRev: number, chromaStats: { cMax: number, avgChroma: number, chromaPixelRatio: number } }}
      */
     static calculateRevelationErrorScore(originalLab, processedLab, width, height, options = {}) {
-        const stride = options.stride || 1;
-        const pixelCount = width * height;
-
-        // First pass: find cMax across sampled pixels
-        let cMax = 0;
-        for (let y = 0; y < height; y += stride) {
-            for (let x = 0; x < width; x += stride) {
-                const i = y * width + x;
-                const idx = i * 3;
-                const a = originalLab[idx + 1] - 128;
-                const b = originalLab[idx + 2] - 128;
-                const c = Math.sqrt(a * a + b * b);
-                if (c > cMax) cMax = c;
-            }
-        }
-
-        // Avoid division by zero
-        if (cMax < 1) cMax = 1;
-
-        // Second pass: compute weighted error
-        let sumWeightedDeltaE = 0;
-        let sumWeights = 0;
-        let sumChroma = 0;
-        let chromaCount = 0;
-        let sampleCount = 0;
-
-        for (let y = 0; y < height; y += stride) {
-            for (let x = 0; x < width; x += stride) {
-                const i = y * width + x;
-                const idx = i * 3;
-
-                // Original pixel in perceptual space
-                const L1 = (originalLab[idx] / 255) * 100;
-                const a1 = originalLab[idx + 1] - 128;
-                const b1 = originalLab[idx + 2] - 128;
-
-                // Processed pixel in perceptual space
-                const L2 = (processedLab[idx] / 255) * 100;
-                const a2 = processedLab[idx + 1] - 128;
-                const b2 = processedLab[idx + 2] - 128;
-
-                // Chroma of original pixel
-                const C_i = Math.sqrt(a1 * a1 + b1 * b1);
-
-                // CIE76 distance
-                const dL = L1 - L2;
-                const da = a1 - a2;
-                const db = b1 - b2;
-                const dE = Math.sqrt(dL * dL + da * da + db * db);
-
-                // Weight: 1 (achromatic) to 11 (peak chroma)
-                const w = 1 + 10 * (C_i / cMax);
-
-                sumWeightedDeltaE += w * dE;
-                sumWeights += w;
-                sumChroma += C_i;
-                sampleCount++;
-                if (C_i > 5) chromaCount++;
-            }
-        }
-
-        const eRev = sumWeights > 0 ? sumWeightedDeltaE / sumWeights : 0;
-
-        return {
-            eRev: parseFloat(eRev.toFixed(3)),
-            chromaStats: {
-                cMax: parseFloat(cMax.toFixed(1)),
-                avgChroma: parseFloat((sumChroma / Math.max(sampleCount, 1)).toFixed(1)),
-                chromaPixelRatio: parseFloat((chromaCount / Math.max(sampleCount, 1)).toFixed(3))
-            }
-        };
+        const RevelationError = require('@reveal/core/lib/metrics/RevelationError');
+        return RevelationError.fromBuffers(originalLab, processedLab, width, height, options);
     }
 }
 

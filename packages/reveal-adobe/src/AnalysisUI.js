@@ -18,52 +18,14 @@ const { resolveDistanceMetric } = require('./ColorUtils');
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 const DNAGenerator = require("./DNAGenerator");
 
+const RevelationError = require("@reveal/core/lib/metrics/RevelationError");
+
 /**
- * Compute E_rev (chroma-weighted CIE76 error) on 8-bit Lab arrays.
- * Inlined here because MetricsCalculator lives in reveal-batch (not bundled).
- *
- * @param {Uint8Array} originalLab8 - Original 8-bit Lab (3 bytes/pixel)
- * @param {Uint8Array} processedLab8 - Reconstructed 8-bit Lab (3 bytes/pixel)
- * @param {number} width
- * @param {number} height
- * @param {number} stride - Sample every Nth pixel in each dimension
- * @returns {number} E_rev score
+ * Compute E_rev score. Delegates to @reveal/core RevelationError.fromBuffers().
  */
 function computeERev(originalLab8, processedLab8, width, height, stride) {
-    // Pass 1: find cMax
-    let cMax = 0;
-    for (let y = 0; y < height; y += stride) {
-        for (let x = 0; x < width; x += stride) {
-            const idx = (y * width + x) * 3;
-            const a = originalLab8[idx + 1] - 128;
-            const b = originalLab8[idx + 2] - 128;
-            const c = Math.sqrt(a * a + b * b);
-            if (c > cMax) cMax = c;
-        }
-    }
-    if (cMax < 1) cMax = 1;
-
-    // Pass 2: weighted error
-    let sumWE = 0, sumW = 0;
-    for (let y = 0; y < height; y += stride) {
-        for (let x = 0; x < width; x += stride) {
-            const idx = (y * width + x) * 3;
-            const L1 = (originalLab8[idx] / 255) * 100;
-            const a1 = originalLab8[idx + 1] - 128;
-            const b1 = originalLab8[idx + 2] - 128;
-            const L2 = (processedLab8[idx] / 255) * 100;
-            const a2 = processedLab8[idx + 1] - 128;
-            const b2 = processedLab8[idx + 2] - 128;
-
-            const C_i = Math.sqrt(a1 * a1 + b1 * b1);
-            const dL = L1 - L2, da = a1 - a2, db = b1 - b2;
-            const dE = Math.sqrt(dL * dL + da * da + db * db);
-            const w = 1 + 10 * (C_i / cMax);
-            sumWE += w * dE;
-            sumW += w;
-        }
-    }
-    return sumW > 0 ? sumWE / sumW : 0;
+    const result = RevelationError.fromBuffers(originalLab8, processedLab8, width, height, { stride });
+    return result.eRev;
 }
 
 /**

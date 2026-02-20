@@ -23,7 +23,7 @@
     "primary_sector_weight": 5
   },
   "parameters": {
-    "minColors": 6,
+    "minColors": 10,
     "maxColors": 12,
     "ditherType": "blue-noise",
     "distanceMetric": "cie94",

@@ -32,8 +32,9 @@ class TESTIMAGESMetaAnalyzer {
         console.log(`🔍 Scanning TESTIMAGES dataset...`);
 
         // Collect JSON files (excluding non-image JSON files)
+        const NON_IMAGE = new Set(['batch-report.json', 'testimages_meta_analysis.json', 'testimages_analysis.json']);
         const allFiles = fs.readdirSync(TESTIMAGES_OUTPUT)
-            .filter(f => f.endsWith('.json') && f !== 'batch-report.json' && f !== 'testimages_meta_analysis.json')
+            .filter(f => f.endsWith('.json') && !NON_IMAGE.has(f))
             .map(f => ({ file: f, fullPath: path.join(TESTIMAGES_OUTPUT, f) }));
 
         console.log(`  Found ${allFiles.length} JSON files`);
@@ -55,7 +56,9 @@ class TESTIMAGESMetaAnalyzer {
                 avgProcessingTime: 0,
                 avgIntegrity: 0,
                 avgDensityIntegrity: 0,
-                avgScreenCount: 0
+                avgScreenCount: 0,
+                avgDnaFidelity: 0,
+                avgSectorDrift: 0
             },
             byArchetype: {},  // Distribution by archetype
             byColorCount: {}, // Distribution by screen count
@@ -66,7 +69,9 @@ class TESTIMAGESMetaAnalyzer {
                 worstIntegrity: { val: 100, file: '' },
                 slowestProcess: { val: 0, file: '' },
                 mostScreens: { val: 0, file: '' },
-                highestSaliencyLoss: { val: 0, file: '' }
+                highestSaliencyLoss: { val: 0, file: '' },
+                lowestDnaFidelity: { val: 100, file: '' },
+                highestSectorDrift: { val: 0, file: '' }
             },
             qualityDistribution: {
                 excellent: 0,    // Revelation > 60
@@ -77,7 +82,7 @@ class TESTIMAGESMetaAnalyzer {
             failures: []
         };
 
-        const csvRows = ['Filename,Archetype,Colors,AvgDeltaE,MaxDeltaE,RevScore,BaseScore,EffPenalty,SaliencyLoss,Integrity,DensIntegrity,Breaches,DitherType,ProcTime'];
+        const csvRows = ['Filename,Archetype,Colors,AvgDeltaE,MaxDeltaE,RevScore,BaseScore,EffPenalty,SaliencyLoss,Integrity,DensIntegrity,Breaches,DnaFidelity,SectorDrift,DnaAlerts,DitherType,ProcTime'];
 
         allFiles.forEach(({ file, fullPath }) => {
             try {
@@ -97,6 +102,9 @@ class TESTIMAGESMetaAnalyzer {
                 const colorCount = data.palette?.length || 'unknown';
                 const archetype = data.configuration?.meta?.archetype || 'unknown';
                 const ditherType = data.configuration?.ditherType || 'unknown';
+                const dnaFidelity = data.dnaFidelity?.fidelity ?? null;
+                const sectorDrift = data.dnaFidelity?.sectorDrift ?? null;
+                const dnaAlerts = data.dnaFidelity?.alerts?.length || 0;
 
                 // Add to CSV buffer
                 csvRows.push([
@@ -112,6 +120,9 @@ class TESTIMAGESMetaAnalyzer {
                     data.metrics.physical_feasibility.integrityScore,
                     data.metrics.physical_feasibility.densityIntegrity,
                     data.metrics.physical_feasibility.densityFloorBreaches,
+                    dnaFidelity ?? '',
+                    sectorDrift != null ? sectorDrift.toFixed(3) : '',
+                    dnaAlerts,
                     ditherType,
                     data.timing.totalMs
                 ].join(','));
@@ -146,6 +157,8 @@ class TESTIMAGESMetaAnalyzer {
         stats.global.avgIntegrity += data.metrics.physical_feasibility.integrityScore;
         stats.global.avgDensityIntegrity += data.metrics.physical_feasibility.densityIntegrity || 0;
         stats.global.avgScreenCount += data.metrics.feature_preservation.screenCount;
+        stats.global.avgDnaFidelity += data.dnaFidelity?.fidelity || 0;
+        stats.global.avgSectorDrift += data.dnaFidelity?.sectorDrift || 0;
     }
 
     static accumulateArchetype(stats, data) {
@@ -156,7 +169,8 @@ class TESTIMAGESMetaAnalyzer {
                 avgDeltaE: 0,
                 avgScore: 0,
                 avgIntegrity: 0,
-                avgScreens: 0
+                avgScreens: 0,
+                avgDnaFidelity: 0
             };
         }
         const arch = stats.byArchetype[archetype];
@@ -165,6 +179,7 @@ class TESTIMAGESMetaAnalyzer {
         arch.avgScore += data.metrics.feature_preservation.revelationScore;
         arch.avgIntegrity += data.metrics.physical_feasibility.integrityScore;
         arch.avgScreens += data.metrics.feature_preservation.screenCount;
+        arch.avgDnaFidelity += data.dnaFidelity?.fidelity || 0;
     }
 
     static accumulateColorCount(stats, data) {
@@ -213,6 +228,14 @@ class TESTIMAGESMetaAnalyzer {
         if (saliencyLoss > stats.outliers.highestSaliencyLoss.val) {
             stats.outliers.highestSaliencyLoss = { val: saliencyLoss, file };
         }
+        const dnaFidelity = data.dnaFidelity?.fidelity;
+        const sectorDrift = data.dnaFidelity?.sectorDrift;
+        if (dnaFidelity != null && dnaFidelity < stats.outliers.lowestDnaFidelity.val) {
+            stats.outliers.lowestDnaFidelity = { val: dnaFidelity, file };
+        }
+        if (sectorDrift != null && sectorDrift > stats.outliers.highestSectorDrift.val) {
+            stats.outliers.highestSectorDrift = { val: sectorDrift, file };
+        }
     }
 
     static checkQualityDistribution(stats, data) {
@@ -258,6 +281,8 @@ class TESTIMAGESMetaAnalyzer {
         stats.global.avgIntegrity = (stats.global.avgIntegrity / n).toFixed(1);
         stats.global.avgDensityIntegrity = (stats.global.avgDensityIntegrity / n).toFixed(1);
         stats.global.avgScreenCount = (stats.global.avgScreenCount / n).toFixed(1);
+        stats.global.avgDnaFidelity = (stats.global.avgDnaFidelity / n).toFixed(1);
+        stats.global.avgSectorDrift = (stats.global.avgSectorDrift / n).toFixed(3);
 
         // Finalize by-archetype
         Object.keys(stats.byArchetype).forEach(arch => {
@@ -266,6 +291,7 @@ class TESTIMAGESMetaAnalyzer {
             data.avgScore = (data.avgScore / data.count).toFixed(1);
             data.avgIntegrity = (data.avgIntegrity / data.count).toFixed(1);
             data.avgScreens = (data.avgScreens / data.count).toFixed(1);
+            data.avgDnaFidelity = (data.avgDnaFidelity / data.count).toFixed(1);
         });
 
         // Finalize by-dither
@@ -289,6 +315,8 @@ class TESTIMAGESMetaAnalyzer {
         console.log(`  Avg Integrity:         ${stats.global.avgIntegrity}`);
         console.log(`  Avg Density Integrity: ${stats.global.avgDensityIntegrity}`);
         console.log(`  Avg Screen Count:      ${stats.global.avgScreenCount}`);
+        console.log(`  Avg DNA Fidelity:      ${stats.global.avgDnaFidelity}`);
+        console.log(`  Avg Sector Drift:      ${stats.global.avgSectorDrift}`);
         console.log(`  Avg Processing Time:   ${stats.global.avgProcessingTime}ms`);
 
         console.log(`\n${'='.repeat(70)}`);
@@ -313,6 +341,7 @@ class TESTIMAGESMetaAnalyzer {
                 console.log(`    Avg DeltaE:  ${data.avgDeltaE}`);
                 console.log(`    Avg Score:   ${data.avgScore} (${this.getScoreGrade(data.avgScore)})`);
                 console.log(`    Avg Integrity: ${data.avgIntegrity}`);
+                console.log(`    Avg DNA Fidelity: ${data.avgDnaFidelity}`);
                 console.log(`    Avg Screens: ${data.avgScreens}`);
             });
 
@@ -347,6 +376,8 @@ class TESTIMAGESMetaAnalyzer {
         console.log(`  Slowest Process:     ${stats.outliers.slowestProcess.val}ms (${stats.outliers.slowestProcess.file})`);
         console.log(`  Most Screens:        ${stats.outliers.mostScreens.val} (${stats.outliers.mostScreens.file})`);
         console.log(`  Highest Saliency Loss: ${stats.outliers.highestSaliencyLoss.val.toFixed(2)}% (${stats.outliers.highestSaliencyLoss.file})`);
+        console.log(`  Lowest DNA Fidelity: ${stats.outliers.lowestDnaFidelity.val} (${stats.outliers.lowestDnaFidelity.file})`);
+        console.log(`  Highest Sector Drift: ${stats.outliers.highestSectorDrift.val.toFixed(3)} (${stats.outliers.highestSectorDrift.file})`);
 
         if (stats.failures.length > 0) {
             console.log(`\n${'='.repeat(70)}`);

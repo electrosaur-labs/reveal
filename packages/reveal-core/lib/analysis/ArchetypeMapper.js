@@ -73,6 +73,28 @@ class ArchetypeMapper {
                 tonalRange: 'any',           // No tonal preference
                 expects_high_entropy: true,  // hue_entropy > 0.85
                 max_sector_gate: 0.25        // Hard gate: no sector can hold > 25%
+            },
+            'bold_graphic': {
+                chromaProfile: 'low',        // Poster inks on paper: avg cMax ~30
+                tonalRange: 'mid-bright',    // lMean 50-70
+                expects_warm: true,          // Most posters are warm-toned
+                rewards_high_texture: true   // +20 affinity for l_std_dev > 18
+            },
+            'warm_dramatic': {
+                chromaProfile: 'low',        // cMax < 30
+                tonalRange: 'mid-bright',    // lMean 50-70
+                expects_warm: true,          // temperature_bias > 0.4
+                max_l_std_dev_gate: 32.0     // Penalty for high-contrast posters (σL > 32)
+            },
+            'tenebrist_gold': {
+                chromaProfile: 'low',        // cMax < 30 (deep shadow palette)
+                tonalRange: 'dark',          // lMean < 50
+                expects_warm: true           // temperature_bias > 0.4
+            },
+            'golden_naturalist': {
+                chromaProfile: 'moderate',   // cMax 20-50 (varied painterly chroma)
+                tonalRange: 'mid-bright',    // lMean 50-70
+                expects_diversity: true      // hue_entropy > 0.7
             }
         };
     }

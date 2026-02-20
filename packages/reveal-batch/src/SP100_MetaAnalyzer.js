@@ -57,21 +57,25 @@ class SP100MetaAnalyzer {
                 avgDeltaE: 0,
                 avgRevelationScore: 0,
                 avgProcessingTime: 0,
-                avgIntegrity: 0
+                avgIntegrity: 0,
+                avgDnaFidelity: 0,
+                avgSectorDrift: 0
             },
-            bySource: {},     // loc vs wikiart
+            bySource: {},     // met, rijks, aic, minkler
             byPreset: {},     // Will auto-populate
             byColorCount: {}, // Distribution by screen count
             outliers: {
                 highestDeltaE: { val: 0, file: '' },
                 lowestScore: { val: 100, file: '' },
                 worstIntegrity: { val: 100, file: '' },
-                slowestProcess: { val: 0, file: '' }
+                slowestProcess: { val: 0, file: '' },
+                lowestDnaFidelity: { val: 100, file: '' },
+                highestSectorDrift: { val: 0, file: '' }
             },
             failures: []
         };
 
-        const csvRows = ['Filename,Source,Preset,Colors,AvgDeltaE,MaxDeltaE,RevScore,Integrity,Breaches,ProcTime'];
+        const csvRows = ['Filename,Source,Preset,Colors,AvgDeltaE,MaxDeltaE,RevScore,Integrity,Breaches,DnaFidelity,SectorDrift,DnaAlerts,ProcTime'];
 
         allFiles.forEach(({ file, fullPath, source }) => {
             try {
@@ -90,8 +94,13 @@ class SP100MetaAnalyzer {
                 const colorCount = data.palette?.length || 'unknown';
                 const presetId = data.configuration?.id || 'unknown';
 
+                // DNA fidelity fields
+                const dnaF = data.dnaFidelity?.fidelity ?? '';
+                const dnaD = data.dnaFidelity?.sectorDrift != null ? data.dnaFidelity.sectorDrift.toFixed(3) : '';
+                const dnaA = data.dnaFidelity?.alerts?.length || 0;
+
                 // Add to CSV buffer
-                csvRows.push(`${data.meta.filename},${source},${presetId},${colorCount},${data.metrics.global_fidelity.avgDeltaE},${data.metrics.global_fidelity.maxDeltaE},${data.metrics.feature_preservation.revelationScore},${data.metrics.physical_feasibility.integrityScore},${data.metrics.physical_feasibility.densityFloorBreaches},${data.timing.totalMs}`);
+                csvRows.push(`${data.meta.filename},${source},${presetId},${colorCount},${data.metrics.global_fidelity.avgDeltaE},${data.metrics.global_fidelity.maxDeltaE},${data.metrics.feature_preservation.revelationScore},${data.metrics.physical_feasibility.integrityScore},${data.metrics.physical_feasibility.densityFloorBreaches},${dnaF},${dnaD},${dnaA},${data.timing.totalMs}`);
 
             } catch (err) {
                 console.warn(`⚠️ Skipped corrupt file ${file}: ${err.message}`);
@@ -115,6 +124,8 @@ class SP100MetaAnalyzer {
         console.log(`  Avg DeltaE:         ${stats.global.avgDeltaE}`);
         console.log(`  Avg Revelation:     ${stats.global.avgRevelationScore}`);
         console.log(`  Avg Integrity:      ${stats.global.avgIntegrity}`);
+        console.log(`  Avg DNA Fidelity:   ${stats.global.avgDnaFidelity}`);
+        console.log(`  Avg Sector Drift:   ${stats.global.avgSectorDrift}`);
         console.log(`  Avg Process Time:   ${stats.global.avgProcessingTime}ms`);
 
         console.log(`\n${'='.repeat(60)}`);
@@ -126,6 +137,7 @@ class SP100MetaAnalyzer {
             console.log(`    Avg DeltaE:  ${data.avgDeltaE}`);
             console.log(`    Avg Score:   ${data.avgScore}`);
             console.log(`    Avg Integrity: ${data.avgIntegrity}`);
+            console.log(`    Avg DNA F:   ${data.avgDnaFidelity}`);
         });
 
         console.log(`\n${'='.repeat(60)}`);
@@ -148,6 +160,7 @@ class SP100MetaAnalyzer {
                 console.log(`    Count:       ${data.count} images`);
                 console.log(`    Avg DeltaE:  ${data.avgDeltaE}`);
                 console.log(`    Avg Score:   ${data.avgScore}`);
+                if (data.avgDnaFidelity) console.log(`    Avg DNA F:   ${data.avgDnaFidelity}`);
             });
 
         console.log(`\n${'='.repeat(60)}`);
@@ -156,6 +169,8 @@ class SP100MetaAnalyzer {
         console.log(`  Highest DeltaE:     ${stats.outliers.highestDeltaE.val.toFixed(2)} (${stats.outliers.highestDeltaE.file})`);
         console.log(`  Lowest Score:       ${stats.outliers.lowestScore.val.toFixed(1)} (${stats.outliers.lowestScore.file})`);
         console.log(`  Worst Integrity:    ${stats.outliers.worstIntegrity.val} (${stats.outliers.worstIntegrity.file})`);
+        console.log(`  Lowest DNA Fidelity: ${stats.outliers.lowestDnaFidelity.val} (${stats.outliers.lowestDnaFidelity.file})`);
+        console.log(`  Highest Sector Drift: ${stats.outliers.highestSectorDrift.val.toFixed(3)} (${stats.outliers.highestSectorDrift.file})`);
         console.log(`  Slowest Process:    ${stats.outliers.slowestProcess.val}ms (${stats.outliers.slowestProcess.file})`);
 
         console.log(`\n${'='.repeat(60)}`);
@@ -193,6 +208,13 @@ class SP100MetaAnalyzer {
         stats.global.avgRevelationScore += data.metrics.feature_preservation.revelationScore;
         stats.global.avgProcessingTime += data.timing.totalMs;
         stats.global.avgIntegrity += parseFloat(data.metrics.physical_feasibility.integrityScore);
+        const fidelity = data.dnaFidelity?.fidelity;
+        const drift = data.dnaFidelity?.sectorDrift;
+        if (fidelity != null) {
+            stats.global.avgDnaFidelity += fidelity;
+            stats.global.avgSectorDrift += drift || 0;
+            stats.global._dnaCount = (stats.global._dnaCount || 0) + 1;
+        }
     }
 
     static accumulateSource(stats, data, source) {
@@ -201,7 +223,10 @@ class SP100MetaAnalyzer {
                 count: 0,
                 avgDeltaE: 0,
                 avgScore: 0,
-                avgIntegrity: 0
+                avgIntegrity: 0,
+                avgDnaFidelity: 0,
+                avgSectorDrift: 0,
+                _dnaCount: 0
             };
         }
         const s = stats.bySource[source];
@@ -209,6 +234,12 @@ class SP100MetaAnalyzer {
         s.avgDeltaE += data.metrics.global_fidelity.avgDeltaE;
         s.avgScore += data.metrics.feature_preservation.revelationScore;
         s.avgIntegrity += parseFloat(data.metrics.physical_feasibility.integrityScore);
+        const fidelity = data.dnaFidelity?.fidelity;
+        if (fidelity != null) {
+            s.avgDnaFidelity += fidelity;
+            s.avgSectorDrift += data.dnaFidelity?.sectorDrift || 0;
+            s._dnaCount++;
+        }
     }
 
     static accumulatePreset(stats, data) {
@@ -218,7 +249,9 @@ class SP100MetaAnalyzer {
                 count: 0,
                 avgDeltaE: 0,
                 avgScore: 0,
-                breaches: 0
+                breaches: 0,
+                avgDnaFidelity: 0,
+                _dnaCount: 0
             };
         }
         const p = stats.byPreset[preset];
@@ -226,6 +259,11 @@ class SP100MetaAnalyzer {
         p.avgDeltaE += data.metrics.global_fidelity.avgDeltaE;
         p.avgScore += data.metrics.feature_preservation.revelationScore;
         p.breaches += data.metrics.physical_feasibility.densityFloorBreaches;
+        const fidelity = data.dnaFidelity?.fidelity;
+        if (fidelity != null) {
+            p.avgDnaFidelity += fidelity;
+            p._dnaCount++;
+        }
     }
 
     static accumulateColorCount(stats, data) {
@@ -250,6 +288,14 @@ class SP100MetaAnalyzer {
         }
         if (data.timing.totalMs > stats.outliers.slowestProcess.val) {
             stats.outliers.slowestProcess = { val: data.timing.totalMs, file: filename };
+        }
+        const fidelity = data.dnaFidelity?.fidelity;
+        const drift = data.dnaFidelity?.sectorDrift;
+        if (fidelity != null && fidelity < stats.outliers.lowestDnaFidelity.val) {
+            stats.outliers.lowestDnaFidelity = { val: fidelity, file: filename };
+        }
+        if (drift != null && drift > stats.outliers.highestSectorDrift.val) {
+            stats.outliers.highestSectorDrift = { val: drift, file: filename };
         }
     }
 
@@ -281,6 +327,12 @@ class SP100MetaAnalyzer {
         stats.global.avgRevelationScore = (stats.global.avgRevelationScore / stats.totalImages).toFixed(1);
         stats.global.avgProcessingTime = Math.round(stats.global.avgProcessingTime / stats.totalImages);
         stats.global.avgIntegrity = (stats.global.avgIntegrity / stats.totalImages).toFixed(1);
+        const dnaCount = stats.global._dnaCount || 0;
+        if (dnaCount > 0) {
+            stats.global.avgDnaFidelity = (stats.global.avgDnaFidelity / dnaCount).toFixed(1);
+            stats.global.avgSectorDrift = (stats.global.avgSectorDrift / dnaCount).toFixed(3);
+        }
+        delete stats.global._dnaCount;
 
         // Calculate Per-Source Averages
         for (const key in stats.bySource) {
@@ -288,6 +340,11 @@ class SP100MetaAnalyzer {
             s.avgDeltaE = (s.avgDeltaE / s.count).toFixed(2);
             s.avgScore = (s.avgScore / s.count).toFixed(1);
             s.avgIntegrity = (s.avgIntegrity / s.count).toFixed(1);
+            if (s._dnaCount > 0) {
+                s.avgDnaFidelity = (s.avgDnaFidelity / s._dnaCount).toFixed(1);
+                s.avgSectorDrift = (s.avgSectorDrift / s._dnaCount).toFixed(3);
+            }
+            delete s._dnaCount;
         }
 
         // Calculate Per-Preset Averages
@@ -296,6 +353,10 @@ class SP100MetaAnalyzer {
             p.avgDeltaE = (p.avgDeltaE / p.count).toFixed(2);
             p.avgScore = (p.avgScore / p.count).toFixed(1);
             p.avgBreaches = Math.round(p.breaches / p.count);
+            if (p._dnaCount > 0) {
+                p.avgDnaFidelity = (p.avgDnaFidelity / p._dnaCount).toFixed(1);
+            }
+            delete p._dnaCount;
         }
     }
 }

@@ -334,6 +334,114 @@ describe('ArchetypeMapper v2.2', () => {
             expect(result.id).toBe('neon_graphic');
             expect(result.breakdown.sectorAffinity).toBeGreaterThan(60); // Extreme chroma
         });
+
+        it('should match high-contrast poster DNA to Bold Graphic', () => {
+            // Synthetic Minkler political poster DNA:
+            // Near-max black, high contrast (σL=35), warm-ish but not extreme
+            const dna = {
+                version: '2.0',
+                global: {
+                    l: 69,
+                    c: 18,
+                    k: 99,
+                    l_std_dev: 35,
+                    hue_entropy: 0.65,
+                    temperature_bias: 0.50,
+                    primary_sector_weight: 0.38
+                },
+                dominant_sector: 'chartreuse',
+                sectors: {
+                    chartreuse: { weight: 0.38, lMean: 65, cMean: 22, cMax: 30 },
+                    orange: { weight: 0.25, lMean: 60, cMean: 20, cMax: 28 },
+                    yellow: { weight: 0.20, lMean: 70, cMean: 15, cMax: 25 },
+                    red: { weight: 0.10, lMean: 55, cMean: 18, cMax: 24 }
+                }
+            };
+
+            const result = mapper.getBestMatch(dna);
+            expect(result.id).toBe('bold_graphic');
+            expect(result.score).toBeGreaterThan(50);
+        });
+
+        it('should still match warm painting DNA to Warm Dramatic', () => {
+            // Warm painting: moderate contrast (σL=28, below gate), warm temp, low entropy
+            const dna = {
+                version: '2.0',
+                global: {
+                    l: 72,
+                    c: 22,
+                    k: 100,
+                    l_std_dev: 28,
+                    hue_entropy: 0.40,
+                    temperature_bias: 0.70,
+                    primary_sector_weight: 0.25
+                },
+                dominant_sector: 'orange',
+                sectors: {
+                    orange: { weight: 0.35, lMean: 65, cMean: 25, cMax: 28 },
+                    yellow: { weight: 0.30, lMean: 70, cMean: 20, cMax: 26 },
+                    chartreuse: { weight: 0.20, lMean: 68, cMean: 18, cMax: 22 }
+                }
+            };
+
+            const result = mapper.getBestMatch(dna);
+            expect(result.id).toBe('warm_dramatic');
+            expect(result.score).toBeGreaterThan(50);
+        });
+
+        it('should match dark warm Rembrandt portrait to Tenebrist Gold', () => {
+            // Classic dark master DNA: very low L, very warm, low entropy, yellow dominant
+            const dna = {
+                version: '2.0',
+                global: {
+                    l: 12,
+                    c: 8,
+                    k: 99,
+                    l_std_dev: 10,
+                    hue_entropy: 0.30,
+                    temperature_bias: 1.0,
+                    primary_sector_weight: 0.65
+                },
+                dominant_sector: 'yellow',
+                sectors: {
+                    yellow: { weight: 0.65, lMean: 25, cMean: 12, cMax: 20 },
+                    orange: { weight: 0.20, lMean: 20, cMean: 10, cMax: 18 },
+                    red: { weight: 0.08, lMean: 18, cMean: 8, cMax: 15 }
+                }
+            };
+
+            const result = mapper.getBestMatch(dna);
+            expect(result.id).toBe('tenebrist_gold');
+            expect(result.score).toBeGreaterThan(60);
+        });
+
+        it('should match warm high-entropy painterly scene to Golden Naturalist', () => {
+            // Multi-hue warm landscape/genre scene: moderate L, high entropy, spread sectors
+            const dna = {
+                version: '2.0',
+                global: {
+                    l: 65,
+                    c: 17,
+                    k: 90,
+                    l_std_dev: 20,
+                    hue_entropy: 0.65,
+                    temperature_bias: 0.55,
+                    primary_sector_weight: 0.35
+                },
+                dominant_sector: 'yellow',
+                sectors: {
+                    yellow: { weight: 0.25, lMean: 60, cMean: 20, cMax: 35 },
+                    orange: { weight: 0.20, lMean: 55, cMean: 18, cMax: 30 },
+                    chartreuse: { weight: 0.15, lMean: 65, cMean: 15, cMax: 28 },
+                    green: { weight: 0.12, lMean: 58, cMean: 14, cMax: 25 },
+                    cyan: { weight: 0.10, lMean: 62, cMean: 12, cMax: 22 }
+                }
+            };
+
+            const result = mapper.getBestMatch(dna);
+            expect(result.id).toBe('golden_naturalist');
+            expect(result.score).toBeGreaterThan(50);
+        });
     });
 
     describe('Score breakdown validation', () => {
