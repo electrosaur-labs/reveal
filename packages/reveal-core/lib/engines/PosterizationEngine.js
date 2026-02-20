@@ -2033,12 +2033,19 @@ class PosterizationEngine {
      * @param {Object} tuning - Tuning config (defaults to TUNING)
      * @returns {Array<{L: number, a: number, b: number}>} - Pruned palette
      */
-    static _prunePalette(paletteLab, threshold = null, highlightThreshold = null, targetCount = 0, tuning = null) {
+    static _prunePalette(paletteLab, threshold = null, highlightThreshold = null, targetCount = 0, tuning = null, distanceMetric = 'cie76') {
         const config = tuning || this.TUNING;
         const pruneThreshold = threshold !== null ? threshold : config.prune.threshold;
         const highlightProtect = highlightThreshold !== null ? highlightThreshold : config.prune.whitePoint;
         const shadowProtect = config.prune.shadowPoint;
         const hueLock = config.prune.hueLockAngle;
+
+        // Select distance function based on configured metric
+        // CIE94/CIE2000 handle dark colors perceptually — no extra weighting needed.
+        // CIE76 uses L-weighted variant for dark pairs (avgL < 40).
+        const distFn = distanceMetric === 'cie2000' ? LabDistance.cie2000
+            : distanceMetric === 'cie94' ? LabDistance.cie94
+            : null; // CIE76 uses inline logic below
 
         let pruned = [...paletteLab];
         let iteration = 0;
@@ -2056,9 +2063,14 @@ class PosterizationEngine {
                 const p1 = pruned[i];
                 const p2 = pruned[j];
 
-                // Calculate distance (with L-weighting for dark colors)
-                const avgL = (p1.L + p2.L) / 2;
-                const dist = avgL < 40 ? this._weightedLabDistance(p1, p2) : this._labDistance(p1, p2);
+                // Calculate distance using the configured metric
+                let dist;
+                if (distFn) {
+                    dist = distFn(p1, p2);
+                } else {
+                    const avgL = (p1.L + p2.L) / 2;
+                    dist = avgL < 40 ? this._weightedLabDistance(p1, p2) : this._labDistance(p1, p2);
+                }
 
                 if (dist < pruneThreshold) {
                     // Calculate chroma for both colors
@@ -3313,12 +3325,24 @@ class PosterizationEngine {
         // Balances screen printing practicality with color richness
         // ONLY prune if enabled AND we're over the target color count (don't reduce below user's request)
         if (enablePaletteReduction && curatedPaletteLab.length > targetColors) {
-            const prunedPaletteLab = this._prunePalette(curatedPaletteLab, paletteReduction, highlightThreshold, targetColors, options.tuning || null);
+            const prunedPaletteLab = this._prunePalette(curatedPaletteLab, paletteReduction, highlightThreshold, targetColors, options.tuning || null, distanceMetric);
             if (prunedPaletteLab.length < curatedPaletteLab.length) {
                 curatedPaletteLab = prunedPaletteLab;
             }
         } else if (!enablePaletteReduction) {
         } else {
+        }
+
+        // Unconditional similarity prune: use archetype's paletteReduction threshold
+        // (floor 2.0) regardless of palette count. Ensures no two colors survive
+        // within the archetype's merge distance even when AT or UNDER budget.
+        if (enablePaletteReduction) {
+            const dedupThreshold = Math.max(paletteReduction, 2.0);
+            const dedupResult = this._prunePalette(curatedPaletteLab, dedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
+            if (dedupResult.length < curatedPaletteLab.length) {
+                logger.log(`[Mk1.0] Similarity prune (ΔE<${dedupThreshold}): ${curatedPaletteLab.length} → ${dedupResult.length}`);
+                curatedPaletteLab = dedupResult;
+            }
         }
 
         // ARTIST-CENTRIC / HUE-AWARE MODEL: Check for hue gaps AFTER perceptual snap & pruning
@@ -3401,6 +3425,18 @@ class PosterizationEngine {
                     }
                 } else {
                 }
+            }
+        }
+
+        // Final safety-net dedup: catch any similar colors introduced by hue gap
+        // analysis (which runs AFTER the step 3a dedup).
+        // Uses archetype's paletteReduction threshold (floor 2.0).
+        {
+            const finalDedupThreshold = enablePaletteReduction ? Math.max(paletteReduction, 2.0) : 2.0;
+            const dedupFinal = this._prunePalette(curatedPaletteLab, finalDedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
+            if (dedupFinal.length < curatedPaletteLab.length) {
+                logger.log(`[Mk1.0] Final dedup: ${curatedPaletteLab.length} → ${dedupFinal.length} (removed ${curatedPaletteLab.length - dedupFinal.length} near-duplicates)`);
+                curatedPaletteLab = dedupFinal;
             }
         }
 
@@ -4086,9 +4122,22 @@ class PosterizationEngine {
 
         // Step 4: Palette reduction (if over budget after snap)
         if (enablePaletteReduction && snappedPaletteLab.length > medianCutTarget) {
-            const prunedPaletteLab = this._prunePalette(snappedPaletteLab, paletteReduction, highlightThreshold, medianCutTarget, options.tuning || null);
+            const prunedPaletteLab = this._prunePalette(snappedPaletteLab, paletteReduction, highlightThreshold, medianCutTarget, options.tuning || null, distanceMetric);
             if (prunedPaletteLab.length < snappedPaletteLab.length) {
                 snappedPaletteLab = prunedPaletteLab;
+            }
+        }
+
+        // Step 4a: Unconditional similarity prune — use archetype's paletteReduction
+        // threshold (floor 2.0) regardless of palette count. The budget prune above
+        // only runs when OVER target; this ensures no two colors survive within the
+        // archetype's merge distance even when AT or UNDER budget.
+        if (enablePaletteReduction) {
+            const dedupThreshold = Math.max(paletteReduction, 2.0);
+            const dedupResult = this._prunePalette(snappedPaletteLab, dedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
+            if (dedupResult.length < snappedPaletteLab.length) {
+                logger.log(`[Mk1.5] Similarity prune (ΔE<${dedupThreshold}): ${snappedPaletteLab.length} → ${dedupResult.length}`);
+                snappedPaletteLab = dedupResult;
             }
         }
 
@@ -4176,6 +4225,22 @@ class PosterizationEngine {
                 preservedColors.push({ L: 0, a: 0, b: 0 });
                 blackIndex = mergedPalette.length + preservedColors.length - 1;
                 actuallyPreservedBlack = true;
+            }
+        }
+
+        // Final safety-net dedup: catch any similar colors introduced by
+        // hue gap analysis or anchor injection (which run AFTER step 4a).
+        // Uses archetype's paletteReduction threshold (floor 2.0).
+        {
+            const finalDedupThreshold = enablePaletteReduction ? Math.max(paletteReduction, 2.0) : 2.0;
+            const dedupFinal = this._prunePalette(mergedPalette, finalDedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
+            if (dedupFinal.length < mergedPalette.length) {
+                logger.log(`[Mk1.5] Final dedup: ${mergedPalette.length} → ${dedupFinal.length} (removed ${mergedPalette.length - dedupFinal.length} near-duplicates)`);
+                // Recalculate preserved indices since palette shrunk
+                mergedPalette.length = 0;
+                mergedPalette.push(...dedupFinal);
+                if (actuallyPreservedWhite) whiteIndex = mergedPalette.length + (preservedColors.indexOf(preservedColors.find(c => c.L === 100)));
+                if (actuallyPreservedBlack) blackIndex = mergedPalette.length + (preservedColors.indexOf(preservedColors.find(c => c.L === 0)));
             }
         }
 

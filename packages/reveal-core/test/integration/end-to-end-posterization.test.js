@@ -514,12 +514,11 @@ describe('ProxyEngine consistency with direct PosterizationEngine', () => {
         );
         const paletteC = directResult.paletteLab;
 
-        // ProxyEngine should preserve ALL requested colors (proxy-safe overrides
-        // disable snap/prune/densityFloor that would otherwise collapse minority
-        // colors at proxy resolution, especially with CIE94/CIE2000 metrics).
-        // Direct posterize with archetype params may produce fewer.
-        expect(paletteB.length).toBeGreaterThanOrEqual(paletteC.length);
-        expect(paletteB.length).toBe(10);
+        // Preview = Production: ProxyEngine should match direct posterize output.
+        // ProxyEngine passes through the archetype's paletteReduction (ΔE-based,
+        // resolution-independent) so similar colors merge in both preview and production.
+        // Only resolution-dependent thresholds (snapThreshold, densityFloor) are zeroed.
+        expect(paletteB.length).toBe(paletteC.length);
     }, 30000);
 
     it('ProxyEngine with explicit bitDepth=16 should produce valid palette', async () => {
@@ -698,12 +697,13 @@ describe('Separation produces valid, complete masks', () => {
 import MechanicalKnobs from '../../lib/engines/MechanicalKnobs.js';
 
 describe('ProxyEngine proxy-safe palette preservation', () => {
-    it('should produce exactly targetColors colors for Warm Naturalist tc=10 (green regression)', async () => {
+    it('should produce reasonable palette for Warm Naturalist tc=10 (preview=production)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
             manualArchetypeId: 'warm_naturalist'
         });
-        // Warm Naturalist uses CIE94 + enablePaletteReduction=true + paletteReduction=6.
-        // Without proxy-safe overrides, this collapses 10 → 7 at 800px.
+        // Warm Naturalist uses CIE2000 + enablePaletteReduction=true + paletteReduction=6.
+        // ProxyEngine passes through archetype's paletteReduction so preview matches production.
+        // Similar colors (within ΔE 6) merge — final count may be less than 10.
         const engineConfig = {
             ...config,
             targetColors: 10,
@@ -716,10 +716,12 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
             jethroPixels, jethroWidth, jethroHeight, engineConfig
         );
 
-        expect(result.palette.length).toBe(10);
+        // Should produce a usable palette (at least 6 distinct colors)
+        expect(result.palette.length).toBeGreaterThanOrEqual(6);
+        expect(result.palette.length).toBeLessThanOrEqual(10);
     }, 30000);
 
-    it('should produce exactly targetColors for Subtle Naturalist tc=10 (CIE2000)', async () => {
+    it('should produce reasonable palette for Subtle Naturalist tc=10 (CIE2000)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
             manualArchetypeId: 'subtle_naturalist'
         });
@@ -735,10 +737,11 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
             jethroPixels, jethroWidth, jethroHeight, engineConfig
         );
 
-        expect(result.palette.length).toBe(10);
+        expect(result.palette.length).toBeGreaterThanOrEqual(6);
+        expect(result.palette.length).toBeLessThanOrEqual(10);
     }, 30000);
 
-    it('rePosterize should also preserve full palette (proxy-safe overrides apply)', async () => {
+    it('rePosterize should match initializeProxy palette behavior', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
             manualArchetypeId: 'warm_naturalist'
         });
@@ -768,7 +771,8 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
         // Swap back to Warm Naturalist
         const result = await proxyEngine.rePosterize(engineConfig);
 
-        expect(result.palette.length).toBe(10);
+        expect(result.palette.length).toBeGreaterThanOrEqual(6);
+        expect(result.palette.length).toBeLessThanOrEqual(10);
     }, 60000);
 
     it('ProxyEngine palette must contain GREEN for Jethro at tc=10 (preservedUnifyThreshold regression)', async () => {

@@ -281,6 +281,8 @@ class PaletteSurgeon {
         });
     }
 
+    isPickerOpen() { return this._pickerOpen; }
+
     // ─── Color Picker ────────────────────────────────────────
 
     async _openColorPicker(i) {

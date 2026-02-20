@@ -30,7 +30,7 @@
     "minColors": 4,
     "maxColors": 10,
     "ditherType": "blue-noise",
-    "distanceMetric": "cie94",
+    "distanceMetric": "cie2000",
     "lWeight": 0.6,
     "cWeight": 2.2,
     "blackBias": 4,

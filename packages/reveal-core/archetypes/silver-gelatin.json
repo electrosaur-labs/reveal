@@ -23,7 +23,7 @@
     "minColors": 8,
     "maxColors": 10,
     "ditherType": "atkinson",
-    "distanceMetric": "cie94",
+    "distanceMetric": "cie2000",
     "lWeight": 2,
     "cWeight": 0.5,
     "blackBias": 5,

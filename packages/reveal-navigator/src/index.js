@@ -359,11 +359,23 @@ function initPlugin() {
         // Listen for document changes (open, switch, close)
         setupDocumentChangeListener();
 
-        // Listen for manual dialog dismiss (X button / Escape)
+        // Listen for manual dialog dismiss (X button / Escape).
+        // UXP non-modal dialogs don't honor preventDefault() on cancel,
+        // so we catch the close event and re-show immediately if the
+        // Photoshop color picker is still open.
         const dialogEl = document.getElementById('navigatorDialog');
         if (dialogEl) {
-            dialogEl.addEventListener('close', () => _onDialogDismissed());
-            dialogEl.addEventListener('cancel', () => _onDialogDismissed());
+            dialogEl.addEventListener('close', () => {
+                if (surgeon && surgeon.isPickerOpen()) {
+                    logger.log('[Navigator] Dialog closed while picker open — re-showing');
+                    dialogEl.show({
+                        resize: "both",
+                        size: { width: 1100, height: 850, minWidth: 500, minHeight: 400, maxWidth: 3000, maxHeight: 3000 }
+                    });
+                    return;
+                }
+                _onDialogDismissed();
+            });
         }
 
         logger.log('[Navigator] Init complete');
@@ -579,13 +591,10 @@ function setStatus(text) {
     if (el) el.textContent = text;
 }
 
-function _showProgress(label, percent) {
+function _showProgress(label) {
     const overlay = document.getElementById('progress-overlay');
     const status = document.getElementById('splash-status');
-    if (overlay) {
-        overlay.style.display = 'flex';
-        overlay.classList.remove('fade-out');
-    }
+    if (overlay) overlay.setAttribute('style', 'display: flex');
     if (status) status.textContent = label;
 }
 
@@ -594,7 +603,7 @@ function _hideProgress() {
     if (!overlay) return;
     overlay.classList.add('fade-out');
     setTimeout(() => {
-        overlay.style.display = 'none';
+        overlay.setAttribute('style', 'display: none');
         overlay.classList.remove('fade-out');
         const status = document.getElementById('splash-status');
         if (status) status.textContent = '';

@@ -70,18 +70,16 @@ class ProxyEngine {
 
         this.proxyBuffer = proxyBuffer;
 
-        // Proxy-safe config: disable snap/prune/densityFloor to prevent palette
-        // collapse at proxy resolution. Even at 800px, CIE94/CIE2000 archetypes
-        // with enablePaletteReduction=true can merge minority colors (e.g. green
-        // on the Jethro image). Production uses the locked proxy palette (no
-        // re-posterization), so these overrides don't cause preview-vs-production
-        // divergence.
+        // Proxy-safe config: override only resolution-dependent thresholds.
+        // snapThreshold & densityFloor are calibrated for full-res pixel counts
+        // and must be zeroed at proxy resolution to prevent palette collapse.
+        // paletteReduction is ΔE-based (resolution-independent) — pass through
+        // the archetype's value so preview matches production.
         // format: 'lab' is CRITICAL — input is 16-bit Lab, not RGB.
         const proxyConfig = {
             ...initialConfig,
             format: 'lab',
             snapThreshold: 0,
-            enablePaletteReduction: false,
             densityFloor: 0,
             preservedUnifyThreshold: 0.5
         };
@@ -108,7 +106,7 @@ class ProxyEngine {
         console.log(`  hueLockAngle: ${proxyConfig.hueLockAngle}, shadowPoint: ${proxyConfig.shadowPoint}`);
         console.log(`  tuning: ${proxyConfig.tuning ? JSON.stringify(proxyConfig.tuning) : 'NONE (using flat params)'}`);
         console.log(`  archetype: ${proxyConfig.name || 'unknown'} (id=${proxyConfig.id || 'unknown'})`);
-        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, enablePaletteReduction=false, densityFloor=0, preservedUnifyThreshold=0.5`);
+        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, densityFloor=0, preservedUnifyThreshold=0.5 (paletteReduction from archetype)`);
         console.log(`═══ END ProxyEngine.initializeProxy PARAMS ═══\n`);
 
         const posterizeResult = await PosterizationEngine.posterize(
@@ -216,7 +214,6 @@ class ProxyEngine {
             ...config,
             format: 'lab',
             snapThreshold: 0,
-            enablePaletteReduction: false,
             densityFloor: 0,
             preservedUnifyThreshold: 0.5
         };
@@ -243,7 +240,7 @@ class ProxyEngine {
         console.log(`  hueLockAngle: ${proxyConfig.hueLockAngle}, shadowPoint: ${proxyConfig.shadowPoint}`);
         console.log(`  tuning: ${proxyConfig.tuning ? JSON.stringify(proxyConfig.tuning) : 'NONE (using flat params)'}`);
         console.log(`  archetype: ${proxyConfig.name || 'unknown'} (id=${proxyConfig.id || 'unknown'})`);
-        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, enablePaletteReduction=false, densityFloor=0, preservedUnifyThreshold=0.5`);
+        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, densityFloor=0, preservedUnifyThreshold=0.5 (paletteReduction from archetype)`);
         console.log(`═══ END ProxyEngine.rePosterize PARAMS ═══\n`);
 
         const posterizeResult = await PosterizationEngine.posterize(
@@ -407,7 +404,6 @@ class ProxyEngine {
             ...config,
             format: 'lab',
             snapThreshold: 0,
-            enablePaletteReduction: false,
             densityFloor: 0,
             preservedUnifyThreshold: 0.5
         };
@@ -443,7 +439,6 @@ class ProxyEngine {
             ...config,
             format: 'lab',
             snapThreshold: 0,
-            enablePaletteReduction: false,
             densityFloor: 0,
             preservedUnifyThreshold: 0.5
         };
@@ -489,7 +484,6 @@ class ProxyEngine {
             ...config,
             format: 'lab',
             snapThreshold: 0,
-            enablePaletteReduction: false,
             densityFloor: 0,
             preservedUnifyThreshold: 0.5
         };
