@@ -19,6 +19,7 @@ const PreviewEngine = require('./PreviewEngine');
 const BilateralFilter = require('../preprocessing/BilateralFilter');
 const MechanicalKnobs = require('./MechanicalKnobs');
 const DNAFidelity = require('../metrics/DNAFidelity');
+const RevelationError = require('../metrics/RevelationError');
 
 // Proxy-safe overrides for resolution-dependent thresholds.
 // snapThreshold & densityFloor are calibrated for full-res pixel counts
@@ -401,36 +402,14 @@ class ProxyEngine {
             { ditherType: 'none', distanceMetric: 'cie76' }
         );
 
-        // Compute mean CIE76 ΔE between original proxy and posterized assignment
-        const palette = result.paletteLab;
-        const buf = this.proxyBuffer;
-        const pixelCount = proxyW * proxyH;
-        const palL = new Float64Array(palette.length);
-        const palA = new Float64Array(palette.length);
-        const palB = new Float64Array(palette.length);
-        for (let j = 0; j < palette.length; j++) {
-            palL[j] = palette[j].L;
-            palA[j] = palette[j].a;
-            palB[j] = palette[j].b;
-        }
-
-        let sumDE = 0;
-        for (let i = 0; i < pixelCount; i++) {
-            const off = i * 3;
-            const L = (buf[off] / 32768) * 100;
-            const a = ((buf[off + 1] - 16384) / 16384) * 128;
-            const b = ((buf[off + 2] - 16384) / 16384) * 128;
-            const ci = colorIndices[i];
-            const dL = L - palL[ci];
-            const da = a - palA[ci];
-            const db = b - palB[ci];
-            sumDE += Math.sqrt(dL * dL + da * da + db * db);
-        }
+        const meanDeltaE = RevelationError.meanDeltaE16(
+            this.proxyBuffer, colorIndices, result.paletteLab, proxyW * proxyH
+        );
 
         return {
             labPalette: result.paletteLab,
             rgbPalette: result.palette,
-            meanDeltaE: sumDE / pixelCount
+            meanDeltaE
         };
     }
 

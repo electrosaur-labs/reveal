@@ -238,28 +238,13 @@ class SessionState extends EventEmitter {
         const mapper = new Reveal.ArchetypeMapper(archetypes);
         const allScores = mapper.getTopMatches(this.imageDNA, archetypes.length);
 
-        // Inject Chameleon — score derived from blend distance to nearest cluster.
-        // Close to a cluster centroid → high confidence → higher score.
-        // Linear decay: score = 75 - 10 * distance, clamped to [30, 85].
+        // Inject Chameleon entry at its scored position
         this._chameleonConfig = Reveal.generateConfigurationMk2(this.imageDNA);
-        const nearestDist = this._chameleonConfig.meta.blendInfo.neighbors[0].distance;
-        const chameleonScore = Math.max(30, Math.min(85, 75 - 10 * nearestDist));
-        const dynamicEntry = {
-            id: 'dynamic_interpolator',
-            score: chameleonScore,
-            _synthetic: { name: 'Chameleon', preferred_sectors: [] }
-        };
-
-        // Insert at correct position (allScores already sorted descending by getTopMatches).
-        // Avoids Array.sort() which can misbehave in JSC with NaN-adjacent comparisons.
-        let insertIdx = allScores.length;
-        for (let i = 0; i < allScores.length; i++) {
-            if (chameleonScore >= allScores[i].score) { insertIdx = i; break; }
-        }
-        allScores.splice(insertIdx, 0, dynamicEntry);
+        this._injectChameleon(allScores);
 
         const topMatch = allScores[0];
-        logger.log(`[SessionState] Pulse 1: Scored ${allScores.length} entries, Chameleon=${chameleonScore.toFixed(0)} (dist=${nearestDist.toFixed(2)}), top=${topMatch.id} (${topMatch.score.toFixed(0)})`);
+        const chameleonEntry = allScores.find(s => s.id === 'dynamic_interpolator');
+        logger.log(`[SessionState] Pulse 1: Scored ${allScores.length} entries, Chameleon=${chameleonEntry.score.toFixed(0)}, top=${topMatch.id} (${topMatch.score.toFixed(0)})`);
 
         // No carouselReady here — single emission after ALL ΔE computed (end of loadImage)
 
@@ -691,23 +676,7 @@ class SessionState extends EventEmitter {
         const mapper = new Reveal.ArchetypeMapper(archetypes);
         const scores = mapper.getTopMatches(this.imageDNA, archetypes.length);
 
-        // Inject Chameleon at its scored position
-        const config = this._chameleonConfig || Reveal.generateConfigurationMk2(this.imageDNA);
-        const nearestDist = config.meta.blendInfo.neighbors[0].distance;
-        const chameleonScore = Math.max(30, Math.min(85, 75 - 10 * nearestDist));
-        const entry = {
-            id: 'dynamic_interpolator',
-            score: chameleonScore,
-            _synthetic: { name: 'Chameleon', preferred_sectors: [] }
-        };
-        // Insert at correct position (scores already sorted descending)
-        let insertIdx = scores.length;
-        for (let i = 0; i < scores.length; i++) {
-            if (chameleonScore >= scores[i].score) { insertIdx = i; break; }
-        }
-        scores.splice(insertIdx, 0, entry);
-
-        return scores;
+        return this._injectChameleon(scores);
     }
 
     // ─── Highlight / Isolation ─────────────────────────────────
@@ -1138,35 +1107,9 @@ class SessionState extends EventEmitter {
         if (!proxy || !proxy.proxyBuffer || !proxy.separationState) return null;
 
         const { palette, colorIndices, width, height } = proxy.separationState;
-        const proxyBuf = proxy.proxyBuffer;  // Uint16Array, 16-bit Lab [L,a,b,...]
-        const pixelCount = width * height;
-
-        // Decode palette Lab values once (they're already perceptual floats)
-        const palL = new Float64Array(palette.length);
-        const palA = new Float64Array(palette.length);
-        const palB = new Float64Array(palette.length);
-        for (let i = 0; i < palette.length; i++) {
-            palL[i] = palette[i].L;
-            palA[i] = palette[i].a;
-            palB[i] = palette[i].b;
-        }
-
-        let sumDE = 0;
-        for (let i = 0; i < pixelCount; i++) {
-            const off = i * 3;
-            // Decode 16-bit Lab → perceptual
-            const L = (proxyBuf[off] / 32768) * 100;
-            const a = ((proxyBuf[off + 1] - 16384) / 16384) * 128;
-            const b = ((proxyBuf[off + 2] - 16384) / 16384) * 128;
-
-            const ci = colorIndices[i];
-            const dL = L - palL[ci];
-            const da = a - palA[ci];
-            const db = b - palB[ci];
-            sumDE += Math.sqrt(dL * dL + da * da + db * db);
-        }
-
-        return sumDE / pixelCount;
+        return Reveal.RevelationError.meanDeltaE16(
+            proxy.proxyBuffer, colorIndices, palette, width * height
+        );
     }
 
     /**
@@ -1367,6 +1310,34 @@ class SessionState extends EventEmitter {
             accuracyDeltaE,
             dnaFidelity
         });
+    }
+
+    /**
+     * Inject the Chameleon (dynamic_interpolator) entry into a sorted score array.
+     * Score is derived from blend distance to nearest Mk2 cluster centroid.
+     *
+     * @param {Array} scores - Descending-sorted archetype scores from ArchetypeMapper
+     * @returns {Array} Same array with Chameleon inserted at correct position
+     * @private
+     */
+    _injectChameleon(scores) {
+        const config = this._chameleonConfig || Reveal.generateConfigurationMk2(this.imageDNA);
+        const nearestDist = config.meta.blendInfo.neighbors[0].distance;
+        const chameleonScore = Math.max(30, Math.min(85, 75 - 10 * nearestDist));
+
+        const entry = {
+            id: 'dynamic_interpolator',
+            score: chameleonScore,
+            _synthetic: { name: 'Chameleon', preferred_sectors: [] }
+        };
+
+        // Insert at correct descending position (avoid Array.sort JSC issues)
+        let idx = scores.length;
+        for (let i = 0; i < scores.length; i++) {
+            if (chameleonScore >= scores[i].score) { idx = i; break; }
+        }
+        scores.splice(idx, 0, entry);
+        return scores;
     }
 
     /**

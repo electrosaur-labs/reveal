@@ -158,6 +158,53 @@ const RevelationError = {
                 chromaPixelRatio: parseFloat((chromaCount / Math.max(sampleCount, 1)).toFixed(3))
             }
         };
+    },
+    /**
+     * Compute unweighted mean CIE76 ΔE from 16-bit Lab pixels + palette indices.
+     * Simple arithmetic mean — no chroma weighting.
+     *
+     * Used by ProxyEngine (archetype quality ranking) and SessionState (accuracy monitor).
+     *
+     * @param {Uint16Array} labPixels   - 16-bit Lab interleaved (L,a,b per pixel, PS encoding 0-32768)
+     * @param {Uint8Array}  colorIndices - Palette index per pixel
+     * @param {Array<{L:number, a:number, b:number}>} labPalette - Palette in perceptual Lab
+     * @param {number} pixelCount
+     * @returns {number} Mean ΔE (0 = perfect, higher = more deviation)
+     */
+    meanDeltaE16(labPixels, colorIndices, labPalette, pixelCount) {
+        const paletteSize = labPalette.length;
+
+        // Pre-extract palette into flat arrays for hot loop
+        const palL = new Float64Array(paletteSize);
+        const palA = new Float64Array(paletteSize);
+        const palB = new Float64Array(paletteSize);
+        for (let i = 0; i < paletteSize; i++) {
+            palL[i] = labPalette[i].L;
+            palA[i] = labPalette[i].a;
+            palB[i] = labPalette[i].b;
+        }
+
+        // 16-bit PS encoding → perceptual units
+        const L_SCALE = 100 / 32768;
+        const AB_SCALE = 128 / 16384;
+
+        let sumDE = 0;
+        for (let i = 0; i < pixelCount; i++) {
+            const off = i * 3;
+            const L = labPixels[off] * L_SCALE;
+            const a = (labPixels[off + 1] - 16384) * AB_SCALE;
+            const b = (labPixels[off + 2] - 16384) * AB_SCALE;
+
+            const ci = colorIndices[i];
+            if (ci >= paletteSize) continue;
+
+            const dL = L - palL[ci];
+            const da = a - palA[ci];
+            const db = b - palB[ci];
+            sumDE += Math.sqrt(dL * dL + da * da + db * db);
+        }
+
+        return sumDE / pixelCount;
     }
 };
 
