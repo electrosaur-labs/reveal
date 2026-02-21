@@ -36,7 +36,7 @@ class ArchetypeCarousel {
     }
 
     _bindEvents() {
-        // Pulse 1: carouselReady fires right after DNA scoring — all card frames appear.
+        // carouselReady fires once — all archetypes scored and sorted by ΔE.
         this._session.on('carouselReady', (data) => this._rebuild(data.scores));
         this._session.on('archetypeChanged', (data) => {
             this._activeId = data.archetypeId;

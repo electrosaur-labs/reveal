@@ -246,7 +246,7 @@ class SessionState extends EventEmitter {
         const topMatch = allScores[0];
         logger.log(`[SessionState] Pulse 1: Scored ${allScores.length} entries, Chameleon=${chameleonScore.toFixed(0)} (dist=${nearestDist.toFixed(2)}), top=${topMatch.id} (${topMatch.score.toFixed(0)})`);
 
-        this.emit('carouselReady', { scores: allScores, topMatchId: topMatch.id });
+        // No carouselReady here — single emission after ALL ΔE computed (end of loadImage)
 
         // ── Phase 4: VISUAL — proxy posterization + knob init (~400ms) ──
         this.emit('progress', { phase: 'visual', label: 'Initializing navigator\u2026', percent: 65 });
@@ -305,31 +305,18 @@ class SessionState extends EventEmitter {
             dnaFidelity: initialFidelity
         });
 
-        // ── Pulse 3: Progressive palette previews (background) ──
-        setTimeout(() => this._generateRemainingPalettes(topMatch, allScores), 10);
+        // ── Pulse 3: Score ALL archetypes by ΔE before returning ──
+        // No background tasks. loadImage blocks until everything is sorted.
+        this.emit('progress', { phase: 'scoring', label: 'Scoring all archetypes\u2026', percent: 90 });
+        await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        return proxyResult;
-    }
-
-    /**
-     * Background task (Pulse 3): generate palette previews + ΔE quality scores
-     * for each archetype card. After all palettes are computed, re-sort the
-     * carousel by ΔE (ascending = best quality first) and re-emit carouselReady.
-     *
-     * @private
-     */
-    async _generateRemainingPalettes(topMatch, scores) {
-        const generation = ++this._paletteGeneration;
-
-        // Active archetype's ΔE is already known from proxy separation
         const activeDE = this.calculateCurrentAccuracy();
-        const activeMatch = scores.find(s => s.id === topMatch.id);
+        const activeMatch = allScores.find(s => s.id === topMatch.id);
         if (activeMatch) activeMatch.meanDeltaE = activeDE;
 
-        let computed = 1;  // active already done
-        for (const match of scores) {
+        let computed = 1;
+        for (const match of allScores) {
             if (match.id === topMatch.id) continue;
-            if (generation !== this._paletteGeneration) return;
 
             try {
                 const config = match.id === 'dynamic_interpolator'
@@ -338,33 +325,19 @@ class SessionState extends EventEmitter {
                         manualArchetypeId: match.id
                     });
                 const palette = await this.proxyEngine.getPaletteWithQuality(config);
-
-                if (generation !== this._paletteGeneration) return;
-
                 match.meanDeltaE = palette.meanDeltaE;
                 computed++;
-
-                this.emit('archetypePaletteReady', {
-                    archetypeId: match.id,
-                    rgbPalette: palette.rgbPalette
-                });
-
-                // Progressive re-sort every 5 archetypes (+ final).
-                // Entries with ΔE go first (ascending), without ΔE go after.
-                if (computed % 5 === 0) {
-                    this.emit('carouselReady', { scores: this._sortByDeltaE(scores), topMatchId: topMatch.id });
-                }
-
-                await new Promise(r => setTimeout(r, 0));
             } catch (err) {
                 logger.log(`[SessionState] Palette gen failed for ${match.id}: ${err.message}`);
             }
         }
 
-        if (generation !== this._paletteGeneration) return;
-        // Final re-sort with all ΔE values
-        this.emit('carouselReady', { scores: this._sortByDeltaE(scores), topMatchId: topMatch.id });
-        logger.log(`[SessionState] Pulse 3 complete: ${computed} archetypes scored by ΔE`);
+        // Single sorted emission — carousel builds once, fully sorted
+        const sorted = this._sortByDeltaE(allScores);
+        this.emit('carouselReady', { scores: sorted, topMatchId: topMatch.id });
+        logger.log(`[SessionState] All ${computed}/${allScores.length} archetypes scored by ΔE`);
+
+        return proxyResult;
     }
 
     /**
@@ -379,10 +352,13 @@ class SessionState extends EventEmitter {
         for (const s of scores) {
             const de = s.meanDeltaE;
             if (de == null || de !== de) { withoutDE.push(s); continue; }
-            // Insert ascending
+            // Round to 1 decimal so sort matches the displayed card value
+            const rounded = Math.round(de * 10) / 10;
+            // Insert ascending by rounded value
             let idx = withDE.length;
             for (let i = 0; i < withDE.length; i++) {
-                if (de <= withDE[i].meanDeltaE) { idx = i; break; }
+                const ri = Math.round(withDE[i].meanDeltaE * 10) / 10;
+                if (rounded < ri) { idx = i; break; }
             }
             withDE.splice(idx, 0, s);
         }
