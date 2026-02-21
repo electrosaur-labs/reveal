@@ -20,6 +20,18 @@ const BilateralFilter = require('../preprocessing/BilateralFilter');
 const MechanicalKnobs = require('./MechanicalKnobs');
 const DNAFidelity = require('../metrics/DNAFidelity');
 
+// Proxy-safe overrides for resolution-dependent thresholds.
+// snapThreshold & densityFloor are calibrated for full-res pixel counts
+// and must be zeroed at proxy resolution to prevent palette collapse.
+// paletteReduction is ΔE-based (resolution-independent) — passed through
+// from the archetype config so preview matches production.
+const PROXY_SAFE_OVERRIDES = Object.freeze({
+    format: 'lab',
+    snapThreshold: 0,
+    densityFloor: 0,
+    preservedUnifyThreshold: 0.5
+});
+
 class ProxyEngine {
     static PROXY_SIZE = 800; // Fixed resolution for long edge
 
@@ -70,44 +82,7 @@ class ProxyEngine {
 
         this.proxyBuffer = proxyBuffer;
 
-        // Proxy-safe config: override only resolution-dependent thresholds.
-        // snapThreshold & densityFloor are calibrated for full-res pixel counts
-        // and must be zeroed at proxy resolution to prevent palette collapse.
-        // paletteReduction is ΔE-based (resolution-independent) — pass through
-        // the archetype's value so preview matches production.
-        // format: 'lab' is CRITICAL — input is 16-bit Lab, not RGB.
-        const proxyConfig = {
-            ...initialConfig,
-            format: 'lab',
-            snapThreshold: 0,
-            densityFloor: 0,
-            preservedUnifyThreshold: 0.5
-        };
-
-        // ═══ DIAGNOSTIC: Full posterize config dump ═══
-        console.log(`\n═══ [ProxyEngine.initializeProxy] POSTERIZE PARAMS ═══`);
-        console.log(`  Image: ${proxyW}×${proxyH} (from ${width}×${height}), format=${proxyConfig.format}, bitDepth=${proxyConfig.bitDepth}`);
-        console.log(`  targetColors: ${proxyConfig.targetColors}`);
-        console.log(`  engineType: ${proxyConfig.engineType}`);
-        console.log(`  centroidStrategy: ${proxyConfig.centroidStrategy}`);
-        console.log(`  distanceMetric: ${proxyConfig.distanceMetric}`);
-        console.log(`  enableHueGapAnalysis: ${proxyConfig.enableHueGapAnalysis}`);
-        console.log(`  enablePaletteReduction: ${proxyConfig.enablePaletteReduction}`);
-        console.log(`  paletteReduction: ${proxyConfig.paletteReduction}`);
-        console.log(`  densityFloor: ${proxyConfig.densityFloor}`);
-        console.log(`  snapThreshold: ${proxyConfig.snapThreshold}`);
-        console.log(`  preservedUnifyThreshold: ${proxyConfig.preservedUnifyThreshold}`);
-        console.log(`  preserveWhite: ${proxyConfig.preserveWhite}, preserveBlack: ${proxyConfig.preserveBlack}`);
-        console.log(`  substrateMode: ${proxyConfig.substrateMode}, substrateTolerance: ${proxyConfig.substrateTolerance}`);
-        console.log(`  vibrancyMode: ${proxyConfig.vibrancyMode}, vibrancyBoost: ${proxyConfig.vibrancyBoost}`);
-        console.log(`  highlightThreshold: ${proxyConfig.highlightThreshold}, highlightBoost: ${proxyConfig.highlightBoost}`);
-        console.log(`  lWeight: ${proxyConfig.lWeight}, cWeight: ${proxyConfig.cWeight}, blackBias: ${proxyConfig.blackBias}`);
-        console.log(`  isolationThreshold: ${proxyConfig.isolationThreshold}`);
-        console.log(`  hueLockAngle: ${proxyConfig.hueLockAngle}, shadowPoint: ${proxyConfig.shadowPoint}`);
-        console.log(`  tuning: ${proxyConfig.tuning ? JSON.stringify(proxyConfig.tuning) : 'NONE (using flat params)'}`);
-        console.log(`  archetype: ${proxyConfig.name || 'unknown'} (id=${proxyConfig.id || 'unknown'})`);
-        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, densityFloor=0, preservedUnifyThreshold=0.5 (paletteReduction from archetype)`);
-        console.log(`═══ END ProxyEngine.initializeProxy PARAMS ═══\n`);
+        const proxyConfig = { ...initialConfig, ...PROXY_SAFE_OVERRIDES };
 
         const posterizeResult = await PosterizationEngine.posterize(
             proxyBuffer,
@@ -116,17 +91,6 @@ class ProxyEngine {
             proxyConfig.targetColors,
             proxyConfig
         );
-
-        // ═══ DIAGNOSTIC: Posterize result ═══
-        if (posterizeResult.paletteLab) {
-            console.log(`\n═══ [ProxyEngine.initializeProxy] POSTERIZE RESULT: ${posterizeResult.paletteLab.length} colors ═══`);
-            posterizeResult.paletteLab.forEach((lab, i) => {
-                const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
-                const H = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
-                console.log(`  [${i}] L=${lab.L.toFixed(1)} a=${lab.a.toFixed(1)} b=${lab.b.toFixed(1)} C=${C.toFixed(1)} H=${H.toFixed(0)}°`);
-            });
-            console.log(`═══ END ProxyEngine.initializeProxy RESULT ═══\n`);
-        }
 
         // 3. Run separation - get color indices
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -209,39 +173,7 @@ class ProxyEngine {
         const proxyW = this.separationState.width;
         const proxyH = this.separationState.height;
 
-        // Proxy-safe overrides (same as initializeProxy — prevent palette collapse)
-        const proxyConfig = {
-            ...config,
-            format: 'lab',
-            snapThreshold: 0,
-            densityFloor: 0,
-            preservedUnifyThreshold: 0.5
-        };
-
-        // ═══ DIAGNOSTIC: Full posterize config dump ═══
-        console.log(`\n═══ [ProxyEngine.rePosterize] POSTERIZE PARAMS ═══`);
-        console.log(`  Image: ${proxyW}×${proxyH}, format=${proxyConfig.format}, bitDepth=${proxyConfig.bitDepth}`);
-        console.log(`  targetColors: ${proxyConfig.targetColors}`);
-        console.log(`  engineType: ${proxyConfig.engineType}`);
-        console.log(`  centroidStrategy: ${proxyConfig.centroidStrategy}`);
-        console.log(`  distanceMetric: ${proxyConfig.distanceMetric}`);
-        console.log(`  enableHueGapAnalysis: ${proxyConfig.enableHueGapAnalysis}`);
-        console.log(`  enablePaletteReduction: ${proxyConfig.enablePaletteReduction}`);
-        console.log(`  paletteReduction: ${proxyConfig.paletteReduction}`);
-        console.log(`  densityFloor: ${proxyConfig.densityFloor}`);
-        console.log(`  snapThreshold: ${proxyConfig.snapThreshold}`);
-        console.log(`  preservedUnifyThreshold: ${proxyConfig.preservedUnifyThreshold}`);
-        console.log(`  preserveWhite: ${proxyConfig.preserveWhite}, preserveBlack: ${proxyConfig.preserveBlack}`);
-        console.log(`  substrateMode: ${proxyConfig.substrateMode}, substrateTolerance: ${proxyConfig.substrateTolerance}`);
-        console.log(`  vibrancyMode: ${proxyConfig.vibrancyMode}, vibrancyBoost: ${proxyConfig.vibrancyBoost}`);
-        console.log(`  highlightThreshold: ${proxyConfig.highlightThreshold}, highlightBoost: ${proxyConfig.highlightBoost}`);
-        console.log(`  lWeight: ${proxyConfig.lWeight}, cWeight: ${proxyConfig.cWeight}, blackBias: ${proxyConfig.blackBias}`);
-        console.log(`  isolationThreshold: ${proxyConfig.isolationThreshold}`);
-        console.log(`  hueLockAngle: ${proxyConfig.hueLockAngle}, shadowPoint: ${proxyConfig.shadowPoint}`);
-        console.log(`  tuning: ${proxyConfig.tuning ? JSON.stringify(proxyConfig.tuning) : 'NONE (using flat params)'}`);
-        console.log(`  archetype: ${proxyConfig.name || 'unknown'} (id=${proxyConfig.id || 'unknown'})`);
-        console.log(`  PROXY-SAFE OVERRIDES: snapThreshold=0, densityFloor=0, preservedUnifyThreshold=0.5 (paletteReduction from archetype)`);
-        console.log(`═══ END ProxyEngine.rePosterize PARAMS ═══\n`);
+        const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
         const posterizeResult = await PosterizationEngine.posterize(
             this.proxyBuffer,
@@ -250,17 +182,6 @@ class ProxyEngine {
             proxyConfig.targetColors,
             proxyConfig
         );
-
-        // ═══ DIAGNOSTIC: Posterize result ═══
-        if (posterizeResult.paletteLab) {
-            console.log(`\n═══ [ProxyEngine.rePosterize] POSTERIZE RESULT: ${posterizeResult.paletteLab.length} colors ═══`);
-            posterizeResult.paletteLab.forEach((lab, i) => {
-                const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
-                const H = (Math.atan2(lab.b, lab.a) * 180 / Math.PI + 360) % 360;
-                console.log(`  [${i}] L=${lab.L.toFixed(1)} a=${lab.a.toFixed(1)} b=${lab.b.toFixed(1)} C=${C.toFixed(1)} H=${H.toFixed(0)}°`);
-            });
-            console.log(`═══ END ProxyEngine.rePosterize RESULT ═══\n`);
-        }
 
         // 2. Separation
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -399,14 +320,7 @@ class ProxyEngine {
         const proxyW = this.separationState.width;
         const proxyH = this.separationState.height;
 
-        // Proxy-safe overrides (same as initializeProxy/rePosterize)
-        const proxyConfig = {
-            ...config,
-            format: 'lab',
-            snapThreshold: 0,
-            densityFloor: 0,
-            preservedUnifyThreshold: 0.5
-        };
+        const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
         const result = await PosterizationEngine.posterize(
             this.proxyBuffer,
@@ -435,13 +349,7 @@ class ProxyEngine {
         const proxyW = this.separationState.width;
         const proxyH = this.separationState.height;
 
-        const proxyConfig = {
-            ...config,
-            format: 'lab',
-            snapThreshold: 0,
-            densityFloor: 0,
-            preservedUnifyThreshold: 0.5
-        };
+        const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
         const result = await PosterizationEngine.posterize(
             this.proxyBuffer, proxyW, proxyH,
@@ -480,13 +388,7 @@ class ProxyEngine {
         const proxyW = this.separationState.width;
         const proxyH = this.separationState.height;
 
-        const proxyConfig = {
-            ...config,
-            format: 'lab',
-            snapThreshold: 0,
-            densityFloor: 0,
-            preservedUnifyThreshold: 0.5
-        };
+        const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
         const result = await PosterizationEngine.posterize(
             this.proxyBuffer, proxyW, proxyH,

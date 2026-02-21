@@ -1,10 +1,10 @@
 /**
  * ArchetypeCarousel - Horizontal card strip for archetype navigation
  *
- * Tiered preview strategy:
- *   Tier 1: All cards show name + score + hue indicator
- *   Tier 2: Active card shows real palette swatches + stats from proxy
- *   Tier 3: Hover highlight only (no auto-swap)
+ * All cards show name + ΔE score + hue indicators.
+ * Active card shows real palette swatches from proxy separation.
+ * Cards are built once from a single carouselReady event after all
+ * archetypes are scored and sorted by ΔE.
  *
  * Vanilla+ pattern: subscribes to SessionState events.
  */
@@ -29,7 +29,6 @@ class ArchetypeCarousel {
         this._session = sessionState;
         this._cards = [];           // Ranked archetype data
         this._activeId = null;      // Currently active archetype
-        this._hoverTimer = null;    // 400ms ghost preview timer
         this._hoveredId = null;
 
         this._bindEvents();
@@ -50,9 +49,6 @@ class ArchetypeCarousel {
         });
         // Rebuild swatches AFTER posterization completes (not before)
         this._session.on('previewUpdated', (data) => this._refreshActiveSwatches(data));
-
-        // Progressive palette previews — fill in real swatches on non-active cards
-        this._session.on('archetypePaletteReady', (data) => this._addPaletteToCard(data));
 
         // Dirty indicator — orange dot when knobs OR palette surgery is customized
         this._session.on('knobsCustomizedChanged', () => {
@@ -235,34 +231,6 @@ class ArchetypeCarousel {
                 }
             }
         });
-    }
-
-    /**
-     * Add real palette swatches to a single non-active card.
-     * Called incrementally as archetypePaletteReady events arrive.
-     * Replaces hue indicator with actual posterization palette colors.
-     *
-     * @param {{archetypeId: string, rgbPalette: Array}} data
-     */
-    _addPaletteToCard(data) {
-        const card = this._container.querySelector(
-            `[data-archetype-id="${data.archetypeId}"]`
-        );
-        if (!card || card.classList.contains('active')) return;
-
-        // Replace hue indicator with real palette swatches
-        const hueRow = card.querySelector('.card-hue');
-        if (hueRow) hueRow.remove();
-
-        let swatchRow = card.querySelector('.card-swatches');
-        if (!swatchRow) {
-            swatchRow = document.createElement('div');
-            swatchRow.className = 'card-swatches';
-            card.appendChild(swatchRow);
-        }
-        swatchRow.innerHTML = data.rgbPalette.map(c =>
-            `<span class="card-swatch" style="background:rgb(${c.r},${c.g},${c.b})"></span>`
-        ).join('');
     }
 
     /**

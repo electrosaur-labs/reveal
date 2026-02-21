@@ -121,15 +121,14 @@ class SessionState extends EventEmitter {
         // Auto-saved on swap-out, auto-restored on swap-in (seamless round-trip).
         this._archetypeStateCache = new Map();
 
-        // Progressive palette generation counter (incremented to cancel in-flight loops)
-        this._paletteGeneration = 0;
-
         // Debounce timer
         this._debounceTimer = null;
 
-        // Concurrency guard: prevents overlapping triggerProxyUpdate calls
+        // Concurrency guards
         this._updateInFlight = false;
         this._updateQueued = false;
+        this._loadInFlight = false;
+        this._swapInFlight = false;
     }
 
     /**
@@ -145,7 +144,6 @@ class SessionState extends EventEmitter {
         this.mergeHistory.clear();
         this.deletedColors.clear();
         this._archetypeStateCache.clear();
-        this._paletteGeneration = 0;
         this.proxyEngine = null;
         this.currentConfig = null;
         this.previewBuffer = null;
@@ -157,6 +155,8 @@ class SessionState extends EventEmitter {
         this._archetypeDefaults = null;
         this._updateInFlight = false;
         this._updateQueued = false;
+        this._loadInFlight = false;
+        this._swapInFlight = false;
         this.state.activeArchetypeId = null;
         this.state.isArchetypeDirty = false;
         this.state.isProcessing = false;
@@ -172,15 +172,15 @@ class SessionState extends EventEmitter {
     // ─── Lifecycle ───────────────────────────────────────────
 
     /**
-     * Load a new image into the session using progressive pulse architecture.
+     * Load a new image into the session.
      *
-     * Pulse 1 — Structural Lock (~51ms): DNA + score all archetypes → carouselReady
-     * Pulse 2 — Best-Fit Preview (~400ms): Top-1 proxy → previewUpdated
-     * Pulse 3 — Progressive Palettes (background): Generate palette per card
+     * Three sequential phases (all awaited — no background tasks):
+     *   Phase 1 — DNA + archetype scoring (~51ms)
+     *   Phase 2 — Proxy posterization of top match (~400ms) → previewUpdated
+     *   Phase 3 — ΔE scoring of all archetypes (~18s) → carouselReady
      *
-     * Pulse 1 emits carouselReady BEFORE the heavy proxy init so the browser
-     * can paint 17 card frames while the CPU is busy posterizing the active
-     * archetype. Cards appear ~550ms into ingest; preview ~400ms later.
+     * loadImage blocks until all phases complete. The caller should keep the
+     * splash screen visible until the returned promise resolves.
      *
      * IMPORTANT: We do NOT copy labPixels — UXP's Uint16Array copy produces
      * stale all-white buffers. Instead, we use the original reference for the
@@ -196,6 +196,21 @@ class SessionState extends EventEmitter {
      * @returns {Promise<Object>} Initial proxy result
      */
     async loadImage(labPixels, width, height, originalWidth, originalHeight) {
+        if (this._loadInFlight) {
+            logger.log('[SessionState] loadImage rejected — already in flight');
+            return null;
+        }
+        this._loadInFlight = true;
+
+        try {
+        return await this._loadImageImpl(labPixels, width, height, originalWidth, originalHeight);
+        } finally {
+            this._loadInFlight = false;
+        }
+    }
+
+    /** @private */
+    async _loadImageImpl(labPixels, width, height, originalWidth, originalHeight) {
         this.imageWidth = width;
         this.imageHeight = height;
         this.originalWidth = originalWidth || width;
@@ -572,89 +587,95 @@ class SessionState extends EventEmitter {
         if (!this.proxyEngine || !this.proxyEngine.proxyBuffer) {
             throw new Error('Proxy not initialized — call loadImage() first');
         }
+        if (this._swapInFlight) {
+            logger.log(`[SessionState] swapArchetype(${archetypeId}) rejected — swap already in flight`);
+            return null;
+        }
+        this._swapInFlight = true;
 
-        // Cancel any in-flight progressive palette generation
-        this._paletteGeneration++;
+        try {
+            // 1. Snapshot outgoing archetype state (always — no gate)
+            this._snapshotArchetypeState(this.state.activeArchetypeId);
 
-        // 1. Snapshot outgoing archetype state (always — no gate)
-        this._snapshotArchetypeState(this.state.activeArchetypeId);
+            // 2. Generate fresh config (clean slate).
+            // Chameleon uses Mk2 interpolation from DNA.
+            if (archetypeId === 'dynamic_interpolator') {
+                this.currentConfig = Reveal.generateConfigurationMk2(this.imageDNA);
+            } else {
+                this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
+                    manualArchetypeId: archetypeId
+                });
+            }
+            this._applyConfigToState(this.currentConfig);
+            if (!this.currentConfig.engineType) {
+                this.currentConfig.engineType = this.state.engineType;
+            }
 
-        // 2. Generate fresh config (clean slate).
-        // Chameleon uses Mk2 interpolation from DNA.
-        if (archetypeId === 'dynamic_interpolator') {
-            this.currentConfig = Reveal.generateConfigurationMk2(this.imageDNA);
-        } else {
-            this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
-                manualArchetypeId: archetypeId
+            this.state.activeArchetypeId = archetypeId;
+            this.state.isArchetypeDirty = false;
+
+            // 3. Clear palette surgery (clean slate before re-posterize)
+            this.paletteOverrides.clear();
+            this.mergeHistory.clear();
+            this.deletedColors.clear();
+
+            // Reset decision support state
+            this.state.highlightColorIndex = -1;
+            this.emit('highlightChanged', { colorIndex: -1 });
+            this.state.isKnobsCustomized = false;
+
+            logger.log(`[SessionState] Archetype swap: ${archetypeId}`);
+
+            this.emit('archetypeChanged', { archetypeId, config: this.currentConfig });
+
+            // 4. Re-posterize with fresh archetype config (deterministic palette)
+            const result = await this.proxyEngine.rePosterize(this.currentConfig);
+            logger.log(`[SessionState] Swap result: ${result.palette.length} colors, ${result.elapsedMs.toFixed(0)}ms`);
+
+            // 5. Auto-restore cached state if returning to a previously visited archetype
+            const restored = this._restoreArchetypeState(archetypeId);
+
+            // Emit configChanged so sliders sync (must happen after restore so values are current)
+            this.emit('configChanged', this.currentConfig);
+            this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
+            this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+
+            if (restored) {
+                logger.log(`[SessionState] Auto-restored cached state for ${archetypeId}`);
+            }
+
+            // 6. Apply knobs + palette overrides via proxy update
+            const updateParams = {
+                minVolume: this.state.minVolume,
+                speckleRescue: this.state.speckleRescue,
+                shadowClamp: this.state.shadowClamp
+            };
+            if (this.paletteOverrides.size > 0) {
+                updateParams.paletteOverride = this._buildOverriddenPalette();
+            }
+
+            const knobResult = await this.proxyEngine.updateProxy(updateParams);
+
+            this.previewBuffer = knobResult.previewBuffer;
+            this.state.proxyBufferReady = true;
+            this.state.isProcessing = false;
+
+            const swapAccuracy = this.calculateCurrentAccuracy();
+            const swapFidelity = this.calculateDNAFidelity();
+            this.emit('previewUpdated', {
+                previewBuffer: knobResult.previewBuffer,
+                palette: knobResult.palette,
+                activeColorCount: this._countActiveColors(),
+                elapsedMs: result.elapsedMs + knobResult.elapsedMs,
+                dimensions: result.dimensions,
+                accuracyDeltaE: swapAccuracy,
+                dnaFidelity: swapFidelity
             });
+
+            return result;
+        } finally {
+            this._swapInFlight = false;
         }
-        this._applyConfigToState(this.currentConfig);
-        if (!this.currentConfig.engineType) {
-            this.currentConfig.engineType = this.state.engineType;
-        }
-
-        this.state.activeArchetypeId = archetypeId;
-        this.state.isArchetypeDirty = false;
-
-        // 3. Clear palette surgery (clean slate before re-posterize)
-        this.paletteOverrides.clear();
-        this.mergeHistory.clear();
-        this.deletedColors.clear();
-
-        // Reset decision support state
-        this.state.highlightColorIndex = -1;
-        this.emit('highlightChanged', { colorIndex: -1 });
-        this.state.isKnobsCustomized = false;
-
-        logger.log(`[SessionState] Archetype swap: ${archetypeId}`);
-
-        this.emit('archetypeChanged', { archetypeId, config: this.currentConfig });
-
-        // 4. Re-posterize with fresh archetype config (deterministic palette)
-        const result = await this.proxyEngine.rePosterize(this.currentConfig);
-        logger.log(`[SessionState] Swap result: ${result.palette.length} colors, ${result.elapsedMs.toFixed(0)}ms`);
-
-        // 5. Auto-restore cached state if returning to a previously visited archetype
-        const restored = this._restoreArchetypeState(archetypeId);
-
-        // Emit configChanged so sliders sync (must happen after restore so values are current)
-        this.emit('configChanged', this.currentConfig);
-        this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
-        this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
-
-        if (restored) {
-            logger.log(`[SessionState] Auto-restored cached state for ${archetypeId}`);
-        }
-
-        // 6. Apply knobs + palette overrides via proxy update
-        const updateParams = {
-            minVolume: this.state.minVolume,
-            speckleRescue: this.state.speckleRescue,
-            shadowClamp: this.state.shadowClamp
-        };
-        if (this.paletteOverrides.size > 0) {
-            updateParams.paletteOverride = this._buildOverriddenPalette();
-        }
-
-        const knobResult = await this.proxyEngine.updateProxy(updateParams);
-
-        this.previewBuffer = knobResult.previewBuffer;
-        this.state.proxyBufferReady = true;
-        this.state.isProcessing = false;
-
-        const swapAccuracy = this.calculateCurrentAccuracy();
-        const swapFidelity = this.calculateDNAFidelity();
-        this.emit('previewUpdated', {
-            previewBuffer: knobResult.previewBuffer,
-            palette: knobResult.palette,
-            activeColorCount: this._countActiveColors(),
-            elapsedMs: result.elapsedMs + knobResult.elapsedMs,
-            dimensions: result.dimensions,
-            accuracyDeltaE: swapAccuracy,
-            dnaFidelity: swapFidelity
-        });
-
-        return result;
     }
 
     /**
@@ -1429,16 +1450,6 @@ class SessionState extends EventEmitter {
         for (const [idx, color] of this.paletteOverrides) {
             if (idx < result.length) {
                 result[idx] = { ...color };
-            }
-        }
-
-        // DIAGNOSTIC: detect all-same palette
-        if (result.length > 1) {
-            const first = result[0];
-            const allSame = result.every(c => c.L === first.L && c.a === first.a && c.b === first.b);
-            if (allSame) {
-                logger.log(`[SessionState._buildOverriddenPalette] WARNING: ALL ${result.length} colors identical! L=${first.L.toFixed(1)} a=${first.a.toFixed(1)} b=${first.b.toFixed(1)}`);
-                logger.log(`[SessionState._buildOverriddenPalette] baseline[0]=(${basePalette[0].L.toFixed(1)},${basePalette[0].a.toFixed(1)},${basePalette[0].b.toFixed(1)}) baseline[1]=(${basePalette[1].L.toFixed(1)},${basePalette[1].a.toFixed(1)},${basePalette[1].b.toFixed(1)})`);
             }
         }
 

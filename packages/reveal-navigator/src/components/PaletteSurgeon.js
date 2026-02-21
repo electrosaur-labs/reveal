@@ -230,7 +230,7 @@ class PaletteSurgeon {
             this._header.textContent = `Deleted — click \u21BA or Alt+click to restore`;
             this._session.setHighlight(i);
             this._updateSelectionCSS();
-            this.rebuild();
+            this._rebuild();
             return;
         }
 
