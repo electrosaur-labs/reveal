@@ -125,7 +125,9 @@ class ArchetypeCarousel {
             `<div class="card-hue">${hueIndicator}</div>`;
 
         // Click → swap archetype
-        card.addEventListener('click', () => {
+        // Use pointerup instead of click: UXP scrollable containers consume
+        // the first click for focus, requiring a double-click to activate.
+        card.addEventListener('pointerup', (e) => {
             if (match.id !== this._activeId) {
                 this._session.swapArchetype(match.id);
             }

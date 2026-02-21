@@ -52,12 +52,14 @@ class PhotoshopAPI {
             localStorage.setItem('reveal_checkpoint', 'getDocumentPixels_got_doc');
         }
 
-        // Extract bit depth from document
+        // Extract bit depth from document (for output decisions only)
         const bitDepthStr = String(doc.bitsPerChannel).toLowerCase();
         const docBitDepth = bitDepthStr.includes('16') || doc.bitsPerChannel === 16 ? 16 : 8;
 
-        // Request matching bit depth for accurate Lab value extraction
-        const componentSize = docBitDepth;
+        // Always request native 16-bit Lab from Photoshop — even for 8-bit docs,
+        // PS upsamples internally with full precision. Eliminates manual lab8to16()
+        // and matches reveal-navigator's approach (confirmed working 2026-02-16).
+        const componentSize = 16;
 
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem('reveal_checkpoint', 'getDocumentPixels_bitdepth_checked');
@@ -88,7 +90,7 @@ class PhotoshopAPI {
                         width: scaledWidth,
                         height: scaledHeight
                     },
-                    componentSize: componentSize,  // Always 8 for now (UXP limitation)
+                    componentSize: componentSize,  // Always 16 — native 16-bit Lab reads (confirmed working 2026-02-16)
                     targetComponentCount: 3,       // 3 channels: L, a, b (Lab has NO alpha)
                     colorSpace: "Lab"              // THE CRITICAL PARAMETER: Request raw Lab channels (no conversion)
                 });
@@ -194,22 +196,13 @@ class PhotoshopAPI {
             localStorage.setItem('reveal_checkpoint', 'getDocumentPixels_success');
         }
 
-        // ALWAYS return 16-bit Lab data for engine processing
-        // Engines only accept 16-bit internally; callers handle conversions
-        // Track original bit depth for output decisions (downgrade 8-bit source → 8-bit output)
-        let pixels16;
-        if (componentSize === 8) {
-            pixels16 = this.lab8to16(rgbaData);
-        } else {
-            pixels16 = rgbaData;  // Already 16-bit
-        }
-
+        // Data is already native 16-bit Lab from Photoshop (no manual conversion needed)
         return {
-            pixels: pixels16,           // Lab values - ALWAYS 16-bit encoding (0-32768)
+            pixels: rgbaData,           // Lab values - native 16-bit encoding (0-32768)
             width: actualWidth,
             height: actualHeight,
             format: 'lab',
-            bitDepth: componentSize,    // ORIGINAL bit depth (8 or 16) - for output decisions
+            bitDepth: docBitDepth,      // ORIGINAL doc bit depth (8 or 16) - for output decisions
             originalWidth: doc.width,
             originalHeight: doc.height,
             scale: Math.min(actualWidth / doc.width, actualHeight / doc.height)
@@ -300,10 +293,8 @@ class PhotoshopAPI {
         const cropWidth = Math.min(width, doc.width - cropX);
         const cropHeight = Math.min(height, doc.height - cropY);
 
-        // Get bit depth
-        const bitDepthStr = String(doc.bitsPerChannel).toLowerCase();
-        const docBitDepth = bitDepthStr.includes('16') || doc.bitsPerChannel === 16 ? 16 : 8;
-        const componentSize = docBitDepth;
+        // Always request native 16-bit Lab (PS upsamples 8-bit docs internally)
+        const componentSize = 16;
 
         // Fetch pixels for specific region
         let pixelData;
@@ -339,27 +330,19 @@ class PhotoshopAPI {
             throw new Error("Could not extract pixel data from high-res crop");
         }
 
-        // Convert to Uint16Array if needed
-        if (componentSize === 16 && !(rgbaData instanceof Uint16Array)) {
+        // Convert to Uint16Array if needed (native 16-bit)
+        if (!(rgbaData instanceof Uint16Array)) {
             if (rgbaData instanceof Uint8Array || rgbaData instanceof Uint8ClampedArray) {
                 rgbaData = new Uint16Array(rgbaData.buffer, rgbaData.byteOffset, rgbaData.byteLength / 2);
             }
         }
 
-        // Convert 8-bit to 16-bit if needed (always return 16-bit for engine)
-        let pixels16;
-        if (componentSize === 8) {
-            pixels16 = this.lab8to16(rgbaData);
-        } else {
-            pixels16 = rgbaData;
-        }
-
         return {
-            pixels: pixels16,
+            pixels: rgbaData,
             width: cropWidth,
             height: cropHeight,
             format: 'lab',
-            bitDepth: componentSize,
+            bitDepth: 16,
             cropX: cropX,
             cropY: cropY
         };

@@ -2,7 +2,7 @@
 /**
  * Generate the silkscreen splash animated GIF.
  *
- * Scene: Looking down at a coarse silkscreen mesh (yellow, tilted 17°).
+ * Scene: Looking down at a coarse silkscreen mesh (green, tilted 17°).
  * RE/VE/AL in bold multicolor ink sits on top of mesh, with a dark outline
  * for contrast. A yellow squeegee blade wipes from top to bottom,
  * uncovering the text+mesh composite.
@@ -24,21 +24,21 @@ const MESH_LINE_W = 4.0;    // extra-thick thread width
 // 16 colors as packed 0xRRGGBB integers (omggif format)
 const PALETTE = [
     0x1e1e1e,   // 0: dark background
-    0x453a18,   // 1: dark mesh shadow
-    0x8a7a28,   // 2: medium mesh
-    0xd0b030,   // 3: bright mesh line
-    0x181818,   // 4: squeegee black
+    0x1a4a18,   // 1: dark mesh shadow (green)
+    0x2a8a28,   // 2: medium mesh (green)
+    0x38d030,   // 3: bright mesh line (green)
+    0xd0c020,   // 4: squeegee yellow
     0xe05040,   // 5: red (RE)
     0x4090e0,   // 6: blue (VE)
     0x40b868,   // 7: green (AL)
     0xffffff,   // 8: white (unused, pad)
-    0x604818,   // 9: darker mesh
-    0xb09828,   // 10: mid-bright mesh
+    0x183a14,   // 9: darker mesh (green)
+    0x2cb028,   // 10: mid-bright mesh (green)
     0x282828,   // 11: slightly lighter bg
     0xb04030,   // 12: dark red
     0x3070b0,   // 13: dark blue
     0x309050,   // 14: dark green
-    0x303030,   // 15: squeegee edge (dark gray)
+    0x988818,   // 15: squeegee edge (dark yellow)
 ];
 
 // ─── Bitmap font: 7x10 glyphs for R, E, V, A, L ───

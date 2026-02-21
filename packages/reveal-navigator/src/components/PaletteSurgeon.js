@@ -4,7 +4,8 @@
  * Interactions:
  *   click          → select/isolate that color (or deselect if same)
  *   shift+click    → merge selected into clicked swatch
- *   double-click   → open Photoshop color picker to override color
+ *   ctrl+click     → open Photoshop color picker to override color
+ *   double-click   → open Photoshop color picker (same, but unreliable in UXP)
  *   revert button  → undo override for that swatch
  *   Escape         → deselect
  *
@@ -165,8 +166,22 @@ class PaletteSurgeon {
             swatch.appendChild(label);
             swatch.appendChild(revertBtn);
 
+            // ── Ctrl+click → color picker (pointerdown fires before OS/PS intercept) ──
+            swatch.addEventListener('pointerdown', (e) => {
+                if (e.ctrlKey && !this._pickerOpen) {
+                    const idx = parseInt(e.currentTarget.dataset.index);
+                    if (!this._session.deletedColors.has(idx)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        swatch._ctrlHandled = true;
+                        this._openColorPicker(idx);
+                    }
+                }
+            });
+
             // ── Click handler — reads index from DOM ──
             swatch.onclick = (e) => {
+                if (swatch._ctrlHandled) { swatch._ctrlHandled = false; return; }
                 const idx = parseInt(e.currentTarget.dataset.index);
                 this._onSwatchClick(idx, e.shiftKey, e.altKey);
             };
@@ -259,7 +274,7 @@ class PaletteSurgeon {
             this._selectedIndex = i;
             this._state = 'SELECTED';
             this._session.setHighlight(i);
-            this._header.textContent = 'Shift+click merge \u2022 Alt+click delete \u2022 Double-click edit';
+            this._header.textContent = 'Shift+click merge \u2022 Alt+click delete \u2022 Ctrl+click edit';
         }
 
         this._updateSelectionCSS();
