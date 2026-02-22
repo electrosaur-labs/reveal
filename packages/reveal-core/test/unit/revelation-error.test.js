@@ -159,6 +159,90 @@ describe('RevelationError', () => {
         });
     });
 
+    describe('meanDeltaE16 (unweighted)', () => {
+        it('should return 0 when pixels exactly match palette', () => {
+            const L = Math.round((50 / 100) * 32768);
+            const a = 16384, b = 16384;
+            const labPixels = new Uint16Array([L, a, b, L, a, b]);
+            const colorIndices = new Uint8Array([0, 0]);
+            const labPalette = [{ L: 50, a: 0, b: 0 }];
+
+            const result = RevelationError.meanDeltaE16(labPixels, colorIndices, labPalette, 2);
+            expect(result).toBeLessThan(0.5);
+        });
+
+        it('should return non-zero when pixels differ from palette', () => {
+            const labPixels = new Uint16Array([
+                Math.round((60 / 100) * 32768),
+                Math.round((50 / 128) * 16384 + 16384),
+                Math.round((30 / 128) * 16384 + 16384)
+            ]);
+            const colorIndices = new Uint8Array([0]);
+            const labPalette = [{ L: 30, a: -20, b: -40 }];
+
+            const result = RevelationError.meanDeltaE16(labPixels, colorIndices, labPalette, 1);
+            expect(result).toBeGreaterThan(5);
+        });
+
+        it('should skip out-of-range indices without crashing', () => {
+            const L = Math.round((50 / 100) * 32768);
+            const labPixels = new Uint16Array([L, 16384, 16384, L, 16384, 16384]);
+            const colorIndices = new Uint8Array([0, 5]); // index 5 > palette size
+            const labPalette = [{ L: 50, a: 0, b: 0 }];
+
+            const result = RevelationError.meanDeltaE16(labPixels, colorIndices, labPalette, 2);
+            expect(result).toBeDefined();
+            expect(result).toBeGreaterThanOrEqual(0);
+        });
+
+        it('should be unweighted (no chroma bias)', () => {
+            // Two pixels: one chromatic, one neutral — both with same ΔE to palette.
+            // Unweighted mean should treat them equally (unlike E_rev).
+            const chromaPixel = [
+                Math.round((50 / 100) * 32768),
+                Math.round((60 / 128) * 16384 + 16384),  // a = +60 (high chroma)
+                16384                                       // b = 0
+            ];
+            const neutralPixel = [
+                Math.round((50 / 100) * 32768),
+                16384,                                       // a = 0
+                16384                                        // b = 0
+            ];
+            const labPixels = new Uint16Array([...chromaPixel, ...neutralPixel]);
+            const colorIndices = new Uint8Array([0, 1]);
+            // Palette entries shifted by same amount from each pixel
+            const labPalette = [
+                { L: 50, a: 70, b: 0 },   // 10 ΔE from chromaPixel (a diff = 10)
+                { L: 50, a: 10, b: 0 }    // 10 ΔE from neutralPixel (a diff = 10)
+            ];
+
+            const result = RevelationError.meanDeltaE16(labPixels, colorIndices, labPalette, 2);
+            // Both pixels contribute ~10 ΔE, mean should be ~10
+            expect(result).toBeGreaterThan(8);
+            expect(result).toBeLessThan(12);
+        });
+
+        it('should agree with fromIndices on overall magnitude', () => {
+            // Same input to both — meanDeltaE16 should be in the same ballpark as E_rev
+            const L = Math.round((60 / 100) * 32768);
+            const a = Math.round((40 / 128) * 16384 + 16384);
+            const b = Math.round((-10 / 128) * 16384 + 16384);
+            const labPixels = new Uint16Array([L, a, b, L, a, b, L, a, b, L, a, b]);
+            const colorIndices = new Uint8Array([0, 0, 0, 0]);
+            const labPalette = [{ L: 40, a: 10, b: 20 }];
+
+            const unweighted = RevelationError.meanDeltaE16(labPixels, colorIndices, labPalette, 4);
+            const weighted = RevelationError.fromIndices(labPixels, colorIndices, labPalette, 4);
+
+            // Both should report significant error
+            expect(unweighted).toBeGreaterThan(5);
+            expect(weighted.eRev).toBeGreaterThan(5);
+            // Should be same order of magnitude (within 3x)
+            expect(unweighted / weighted.eRev).toBeGreaterThan(0.3);
+            expect(unweighted / weighted.eRev).toBeLessThan(3);
+        });
+    });
+
     describe('cross-validation: fromBuffers vs fromIndices', () => {
         it('should produce similar E_rev for equivalent inputs', () => {
             // Create a simple 2x2 image with known colors
