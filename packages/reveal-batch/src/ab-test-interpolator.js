@@ -142,7 +142,7 @@ function runConfigComparison() {
     const engine = new InterpolatorEngine(model);
 
     // Load ParameterGenerator for current system
-    const ParameterGenerator = require('@reveal/core/lib/analysis/ParameterGenerator');
+    const ParameterGenerator = Reveal.ParameterGenerator;
 
     console.log(`Images: ${harvest.images.length}`);
     console.log(`Clusters: ${model.clusters.length}, Blend neighbors: ${model.blendNeighbors}\n`);
@@ -372,11 +372,11 @@ async function runPipelineTest(sampleSize, opts = {}) {
     const Reveal = require('@reveal/core');
     const { readPsd } = require('@reveal/psd-reader');
     const MetricsCalculator = require('./MetricsCalculator');
-    const ParameterGenerator = require('@reveal/core/lib/analysis/ParameterGenerator');
-    const BilateralFilter = require('../../reveal-core/lib/preprocessing/BilateralFilter');
-    const MedianFilter = require('../../reveal-core/lib/preprocessing/MedianFilter');
-    const MechanicalKnobs = require('../../reveal-core/lib/engines/MechanicalKnobs');
-    const ColorSpace = require('../../reveal-core/lib/engines/ColorSpace');
+    const ParameterGenerator = Reveal.ParameterGenerator;
+    const BilateralFilter = Reveal.BilateralFilter;
+    const MedianFilter = Reveal.MedianFilter;
+    const MechanicalKnobs = Reveal.MechanicalKnobs;
+    const ColorSpace = Reveal.ColorSpace;
 
     // Load data
     const harvest = JSON.parse(fs.readFileSync(HARVEST_PATH, 'utf8'));

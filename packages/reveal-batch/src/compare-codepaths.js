@@ -21,8 +21,8 @@ const Reveal = require('@reveal/core');
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 const SeparationEngine = Reveal.engines.SeparationEngine;
 const ProxyEngine = Reveal.engines.ProxyEngine;
-const BilateralFilter = require('../../reveal-core/lib/preprocessing/BilateralFilter');
-const LabDistance = require('../../reveal-core/lib/color/LabDistance');
+const BilateralFilter = Reveal.BilateralFilter;
+const LabDistance = Reveal.LabDistance;
 
 // ─── Helpers ──────────────────────────────────────────────
 

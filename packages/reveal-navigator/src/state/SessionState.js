@@ -1232,6 +1232,15 @@ class SessionState extends EventEmitter {
 
     // ─── State Access ────────────────────────────────────────
 
+    /**
+     * Get current separation state (palette, indices, dimensions).
+     * Returns null if no proxy is initialized.
+     */
+    getSeparationState() {
+        if (!this.proxyEngine || !this.proxyEngine.separationState) return null;
+        return this.proxyEngine.separationState;
+    }
+
     /** Returns a frozen copy of the reactive state. */
     getState() {
         return Object.freeze({ ...this.state });

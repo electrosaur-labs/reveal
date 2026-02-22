@@ -175,9 +175,9 @@ class ArchetypeCarousel {
      * active card swatches match what PaletteSurgeon displays.
      */
     _getActiveRgbPalette() {
-        const proxy = this._session.proxyEngine;
-        if (!proxy || !proxy.separationState) return null;
-        const { rgbPalette, colorIndices } = proxy.separationState;
+        const sep = this._session.getSeparationState();
+        if (!sep) return null;
+        const { rgbPalette, colorIndices } = sep;
         if (!rgbPalette || !colorIndices) return null;
 
         const counts = new Uint32Array(rgbPalette.length);

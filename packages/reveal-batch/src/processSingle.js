@@ -14,7 +14,7 @@ const path = require('path');
 const chalk = require('chalk');
 const Reveal = require('@reveal/core');
 const PSDWriter = require('@reveal/psd-writer');
-const DynamicConfigurator = require('@reveal/core/lib/analysis/ParameterGenerator');
+const ParameterGenerator = Reveal.ParameterGenerator;
 
 // ============================================================================
 // PPM Parser (16-bit RGB format)
@@ -186,44 +186,18 @@ async function processSingleImage(inputFile, outputDir) {
         console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
 
         // 4. Generate dynamic configuration
-        const config = DynamicConfigurator.generate(dna);
+        const config = ParameterGenerator.generate(dna);
         console.log(chalk.green(`  ✓ Configuration: "${config.name}"`));
         console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
         // 5. Posterize
         console.log(`  Posterizing...`);
-        const params = {
-            targetColors: config.targetColors,
-            blackBias: config.blackBias,
-            ditherType: config.ditherType,
-            saturationBoost: config.saturationBoost,
-            rangeClamp: config.rangeClamp,
-            engineType: 'reveal',
-            centroidStrategy: 'SALIENCY',
-            lWeight: 1.1,
-            cWeight: 2.0,
-            substrateMode: 'auto',
-            substrateTolerance: 2,
-            vibrancyMode: 'aggressive',
-            vibrancyBoost: 1.6,
-            highlightThreshold: 85,
-            highlightBoost: 1,
-            enablePaletteReduction: true,
-            paletteReduction: 10,
-            hueLockAngle: 20,
-            shadowPoint: 15,
-            colorMode: 'color',
-            preserveWhite: true,
-            preserveBlack: true,
-            ignoreTransparent: true,
-            enableHueGapAnalysis: true,
-            maskProfile: 'Gray Gamma 2.2'
-        };
+        const params = ParameterGenerator.toEngineOptions(config);
 
         const posterizeResult = await Reveal.posterizeImage(
             labPixels,
             width, height,
-            params.targetColors,
+            params.targetColorsSlider,
             params
         );
 

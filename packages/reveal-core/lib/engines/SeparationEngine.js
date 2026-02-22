@@ -36,6 +36,12 @@ const {
     LAB16_AB_NEUTRAL,
     DEFAULT_CIE94_PARAMS_16
 } = require("../color/LabDistance");
+const {
+    LAB16_L_MAX,
+    AB_SCALE,
+    perceptualToEngine16,
+    engine16ToPerceptual
+} = require("../color/LabEncoding");
 
 class SeparationEngine {
     /**
@@ -142,10 +148,11 @@ class SeparationEngine {
         const palB = new Float32Array(paletteSize);
 
         for (let j = 0; j < paletteSize; j++) {
-            // Perceptual → 16-bit integer conversion
-            palL16[j] = Math.round((labPalette[j].L / 100) * 32768);
-            palA16[j] = Math.round((labPalette[j].a / 128) * 16384 + 16384);
-            palB16[j] = Math.round((labPalette[j].b / 128) * 16384 + 16384);
+            // Perceptual → 16-bit integer conversion (via centralized LabEncoding)
+            const e16 = perceptualToEngine16(labPalette[j].L, labPalette[j].a, labPalette[j].b);
+            palL16[j] = e16.L16;
+            palA16[j] = e16.a16;
+            palB16[j] = e16.b16;
             // Keep perceptual for CIE2000
             palL[j] = labPalette[j].L;
             palA[j] = labPalette[j].a;
@@ -189,10 +196,10 @@ class SeparationEngine {
                 // Spatial Locality: Check last winner first
                 let minDistanceSq;
                 if (distanceConfig.isCIE2000) {
-                    // CIE2000 requires perceptual space - convert just for this metric
-                    const L = (pL / 32768) * 100;
-                    const a = ((pA - 16384) / 16384) * 128;
-                    const b = ((pB - 16384) / 16384) * 128;
+                    // CIE2000 requires perceptual space — inline conversion using named constants
+                    const L = (pL / LAB16_L_MAX) * 100;
+                    const a = (pA - LAB16_AB_NEUTRAL) / AB_SCALE;
+                    const b = (pB - LAB16_AB_NEUTRAL) / AB_SCALE;
                     minDistanceSq = cie2000SquaredInline(
                         L, a, b,
                         palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex]
@@ -220,9 +227,9 @@ class SeparationEngine {
                     for (let c = 0; c < paletteSize; c++) {
                         let distSq;
                         if (distanceConfig.isCIE2000) {
-                            const L = (pL / 32768) * 100;
-                            const a = ((pA - 16384) / 16384) * 128;
-                            const b = ((pB - 16384) / 16384) * 128;
+                            const L = (pL / LAB16_L_MAX) * 100;
+                            const a = (pA - LAB16_AB_NEUTRAL) / AB_SCALE;
+                            const b = (pB - LAB16_AB_NEUTRAL) / AB_SCALE;
                             distSq = cie2000SquaredInline(
                                 L, a, b,
                                 palL[c], palA[c], palB[c]
@@ -327,12 +334,10 @@ class SeparationEngine {
         for (let i = 0; i < pixelCount; i++) {
             const pIdx = i * 3;
 
-            // 1. MAP 16-BIT LAB TO PERCEPTUAL LAB
-            // L: 0-32768 -> 0-100
-            // a/b: 0-32768 (neutral=16384) -> -128 to +127
-            const L = (rawBytes[pIdx] / 32768) * 100;
-            const a = (rawBytes[pIdx + 1] - 16384) * (128 / 16384);
-            const b = (rawBytes[pIdx + 2] - 16384) * (128 / 16384);
+            // 1. MAP 16-BIT LAB TO PERCEPTUAL LAB (via LabEncoding constants)
+            const L = (rawBytes[pIdx] / LAB16_L_MAX) * 100;
+            const a = (rawBytes[pIdx + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
+            const b = (rawBytes[pIdx + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
 
             // OPTIMIZATION 3a: Check exact match cache first
             const key = `${L.toFixed(1)},${a.toFixed(1)},${b.toFixed(1)}`;

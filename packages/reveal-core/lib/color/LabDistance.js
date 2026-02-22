@@ -473,19 +473,13 @@ function normalizeDistanceConfig(options = {}) {
 // Native 16-bit Integer Distance Functions
 // ============================================================================
 
-/**
- * 16-bit Lab encoding constants
- * L: 0-32768 (32768 = 100%)
- * a, b: 0-32768 (16384 = neutral/0)
- */
-const LAB16_L_MAX = 32768;
-const LAB16_AB_NEUTRAL = 16384;
-
-// Scale factors for converting thresholds
-// Perceptual L (0-100) to 16-bit: multiply by 327.68
-// Perceptual a/b (-128 to +127) to 16-bit offset: multiply by 128
-const L_SCALE = LAB16_L_MAX / 100;       // 327.68
-const AB_SCALE = LAB16_AB_NEUTRAL / 128; // 128
+// Import 16-bit encoding constants from centralized LabEncoding module
+const {
+    LAB16_L_MAX,
+    LAB16_AB_NEUTRAL,
+    L_SCALE,
+    AB_SCALE
+} = require('./LabEncoding');
 
 /**
  * CIE76 squared distance in native 16-bit integer space

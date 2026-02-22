@@ -23,7 +23,7 @@
 const ArchetypeLoader = require('./ArchetypeLoader');
 const BilateralFilter = require('../preprocessing/BilateralFilter');
 
-class DynamicConfigurator {
+class ParameterGenerator {
 
     /**
      * Generate configuration from DNA analysis using data-driven archetypes
@@ -488,6 +488,97 @@ class DynamicConfigurator {
         }
     }
 
+    /**
+     * Convert a ParameterGenerator config to PosterizationEngine options.
+     *
+     * Eliminates the manual 20-30 line params object construction that every
+     * batch script was doing. Maps config field names to engine field names
+     * (e.g. targetColors → targetColorsSlider) and uses vibrancyBoost directly
+     * (not the legacy saturationBoost alias).
+     *
+     * @param {Object} config - Output from ParameterGenerator.generate()
+     * @param {Object} [overrides={}] - Caller-specific overrides (e.g. { bitDepth: 16, format: 'lab' })
+     * @returns {Object} Engine-ready options for posterizeImage() / separateImage()
+     */
+    static toEngineOptions(config, overrides = {}) {
+        return {
+            // Core
+            targetColorsSlider: config.targetColors,
+            format: 'lab',
+            engineType: config.engineType || 'reveal',
+            centroidStrategy: config.centroidStrategy || 'SALIENCY',
+
+            // Distance metric
+            distanceMetric: config.distanceMetric || 'cie76',
+            ditherType: config.ditherType || 'blue-noise',
+
+            // Saliency weights
+            lWeight: config.lWeight,
+            cWeight: config.cWeight,
+            bWeight: config.bWeight,
+            blackBias: config.blackBias,
+
+            // Vibrancy — use canonical name directly, NOT saturationBoost
+            vibrancyMode: config.vibrancyMode,
+            vibrancyBoost: config.vibrancyBoost,
+            vibrancyThreshold: config.vibrancyThreshold,
+
+            // Highlights
+            highlightThreshold: config.highlightThreshold,
+            highlightBoost: config.highlightBoost,
+
+            // Palette reduction
+            enablePaletteReduction: config.enablePaletteReduction,
+            paletteReduction: config.paletteReduction,
+
+            // Substrate
+            substrateMode: config.substrateMode,
+            substrateTolerance: config.substrateTolerance,
+
+            // Hue analysis
+            enableHueGapAnalysis: config.enableHueGapAnalysis,
+            hueLockAngle: config.hueLockAngle,
+
+            // Shadow/highlight
+            shadowPoint: config.shadowPoint,
+
+            // Color mode
+            colorMode: config.colorMode || 'color',
+
+            // Preservation
+            preserveWhite: config.preserveWhite,
+            preserveBlack: config.preserveBlack,
+            ignoreTransparent: config.ignoreTransparent,
+
+            // Mask
+            maskProfile: config.maskProfile,
+
+            // Mechanical knobs (post-separation)
+            shadowClamp: config.shadowClamp,
+            chromaGate: config.chromaGate,
+            detailRescue: config.detailRescue,
+            speckleRescue: config.speckleRescue,
+            medianPass: config.medianPass,
+            minVolume: config.minVolume,
+
+            // Shadow chroma gate
+            shadowChromaGateL: config.shadowChromaGateL,
+
+            // Neutral clamping
+            neutralCentroidClampThreshold: config.neutralCentroidClampThreshold,
+            neutralSovereigntyThreshold: config.neutralSovereigntyThreshold,
+
+            // K-means refinement
+            refinementPasses: config.refinementPasses,
+
+            // Screen mesh
+            meshSize: config.meshSize,
+
+            // Caller-specific overrides (bitDepth, format, etc.)
+            ...overrides
+        };
+    }
+
     static getArchetype(dna) {
         console.warn('⚠️ getArchetype() is deprecated. Use ArchetypeLoader.matchArchetype() instead.');
         const archetype = ArchetypeLoader.matchArchetype(dna);
@@ -507,4 +598,4 @@ class DynamicConfigurator {
     }
 }
 
-module.exports = DynamicConfigurator;
+module.exports = ParameterGenerator;

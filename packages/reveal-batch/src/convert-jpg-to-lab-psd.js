@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { PSDWriter } = require('@reveal/psd-writer');
-const ColorSpace = require('@reveal/core/lib/engines/ColorSpace');
+const ColorSpace = require('@reveal/core').ColorSpace;
 
 const INPUT_DIR = path.join(__dirname, '../data/SP100/input/minkler/jpg');
 const OUTPUT_8BIT = path.join(__dirname, '../data/SP100/output/minkler/psd/8bit');

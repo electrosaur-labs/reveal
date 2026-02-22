@@ -68,10 +68,10 @@ class PaletteSurgeon {
     // ─── Rebuild ─────────────────────────────────────────────
 
     _rebuild() {
-        const proxy = this._session.proxyEngine;
-        if (!proxy || !proxy.separationState) return;
+        const sep = this._session.getSeparationState();
+        if (!sep) return;
 
-        const { rgbPalette, colorIndices, width, height } = proxy.separationState;
+        const { rgbPalette, colorIndices, width, height } = sep;
         if (!rgbPalette || !colorIndices) return;
 
         logger.log(`[Surgeon] _rebuild: ${rgbPalette.length} palette entries, ${colorIndices.length} pixels`);
@@ -301,10 +301,10 @@ class PaletteSurgeon {
     // ─── Color Picker ────────────────────────────────────────
 
     async _openColorPicker(i) {
-        const proxy = this._session.proxyEngine;
-        if (!proxy || !proxy.separationState) return;
+        const sep = this._session.getSeparationState();
+        if (!sep) return;
 
-        const rgb = proxy.separationState.rgbPalette[i];
+        const rgb = sep.rgbPalette[i];
         if (!rgb) return;
 
         this._pickerOpen = true;

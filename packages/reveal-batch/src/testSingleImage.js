@@ -5,8 +5,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const PosterizationEngine = require('@reveal/core/lib/engines/PosterizationEngine');
-const ParameterGenerator = require('@reveal/core/lib/analysis/ParameterGenerator');
+const Reveal = require('@reveal/core');
+const PosterizationEngine = Reveal.engines.PosterizationEngine;
+const ParameterGenerator = Reveal.ParameterGenerator;
 const PSDWriter = require('@reveal/psd-writer');
 
 const IMAGE_NAME = 'shopping_bags';

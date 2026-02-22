@@ -189,10 +189,10 @@ class RadarHUD {
      * responds in real time to mechanical knob changes.
      */
     _drawEffectiveOverlay(buf) {
-        const proxy = this._session.proxyEngine;
-        if (!proxy || !proxy.separationState) return;
+        const sep = this._session.getSeparationState();
+        if (!sep) return;
 
-        const { palette, colorIndices } = proxy.separationState;
+        const { palette, colorIndices } = sep;
         if (!palette || !colorIndices || palette.length === 0) return;
 
         const totalPixels = colorIndices.length;

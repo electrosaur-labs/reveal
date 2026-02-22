@@ -130,11 +130,11 @@ class Loupe {
         if (!this._active) return;
 
         const imgRect = this._previewImg.getBoundingClientRect();
-        const proxy = this._session.proxyEngine;
-        if (!proxy || !proxy.separationState) return;
+        const sep = this._session.getSeparationState();
+        if (!sep) return;
 
-        const proxyW = proxy.separationState.width;
-        const proxyH = proxy.separationState.height;
+        const proxyW = sep.width;
+        const proxyH = sep.height;
 
         // Account for object-fit:contain letterboxing/pillarboxing
         const imgAspect = proxyW / proxyH;
@@ -288,10 +288,10 @@ class Loupe {
         // We need colorIndices to know which palette color each pixel maps to.
         // The RGBA buffer only has rendered colors — we can't recover the index.
         // Instead, compare each pixel to the highlight palette color's RGB.
-        const proxy = this._session.proxyEngine;
-        if (!proxy || !proxy.separationState) return;
+        const sep = this._session.getSeparationState();
+        if (!sep) return;
 
-        const palette = proxy.separationState.rgbPalette;
+        const palette = sep.rgbPalette;
         if (!palette || highlightIdx >= palette.length) return;
 
         const targetColor = typeof palette[highlightIdx] === 'string'

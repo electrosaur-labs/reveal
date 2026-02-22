@@ -11,7 +11,7 @@
 import { describe, test, expect } from 'vitest';
 
 const PosterizationEngine = require('../../lib/engines/PosterizationEngine');
-const DynamicConfigurator = require('../../lib/analysis/ParameterGenerator');
+const ParameterGenerator = require('../../lib/analysis/ParameterGenerator');
 const ArchetypeLoader = require('../../lib/analysis/ArchetypeLoader');
 
 /**
@@ -235,7 +235,7 @@ describe('ParameterGenerator: refinementPasses flow-through', () => {
             sectors: {}
         };
 
-        const config = DynamicConfigurator.generate(dna, {
+        const config = ParameterGenerator.generate(dna, {
             manualArchetypeId: 'subtle_naturalist'
         });
 
@@ -251,7 +251,7 @@ describe('ParameterGenerator: refinementPasses flow-through', () => {
             sectors: {}
         };
 
-        const config = DynamicConfigurator.generate(dna, {
+        const config = ParameterGenerator.generate(dna, {
             manualArchetypeId: 'pure_graphic'
         });
 
@@ -267,7 +267,7 @@ describe('ParameterGenerator: refinementPasses flow-through', () => {
             sectors: {}
         };
 
-        const config = DynamicConfigurator.generate(dna, {
+        const config = ParameterGenerator.generate(dna, {
             manualArchetypeId: 'silver_gelatin'
         });
 
@@ -286,7 +286,7 @@ describe('ParameterGenerator: refinementPasses flow-through', () => {
         };
 
         // standard_balanced has refinementPasses: 1
-        const config = DynamicConfigurator.generate(dna, {
+        const config = ParameterGenerator.generate(dna, {
             manualArchetypeId: 'standard_balanced'
         });
 
@@ -299,13 +299,13 @@ describe('ParameterGenerator._computeAdaptiveColorCount', () => {
 
     test('should return null when DNA lacks sectors', () => {
         const dna = { global: { l: 50, c: 20, l_std_dev: 20, hue_entropy: 0.5 } };
-        const result = DynamicConfigurator._computeAdaptiveColorCount(dna, {});
+        const result = ParameterGenerator._computeAdaptiveColorCount(dna, {});
         expect(result).toBeNull();
     });
 
     test('should return null when DNA lacks global', () => {
         const dna = { sectors: { red: { weight: 0.5 } } };
-        const result = DynamicConfigurator._computeAdaptiveColorCount(dna, {});
+        const result = ParameterGenerator._computeAdaptiveColorCount(dna, {});
         expect(result).toBeNull();
     });
 
@@ -320,7 +320,7 @@ describe('ParameterGenerator._computeAdaptiveColorCount', () => {
             }
         };
 
-        const result = DynamicConfigurator._computeAdaptiveColorCount(dna, {});
+        const result = ParameterGenerator._computeAdaptiveColorCount(dna, {});
 
         // 3 occupied sectors + neutral mass bonus (1 - 0.47 = 0.53 > 0.40 → +3)
         // + entropy <0.7 so no entropy bonus, l_std_dev<22 so no tonal bonus
@@ -335,7 +335,7 @@ describe('ParameterGenerator._computeAdaptiveColorCount', () => {
             global: { l_std_dev: 10, hue_entropy: 0.1 },
             sectors: { red: { weight: 0.8 } }
         };
-        const resultLow = DynamicConfigurator._computeAdaptiveColorCount(dnaLow, {});
+        const resultLow = ParameterGenerator._computeAdaptiveColorCount(dnaLow, {});
         expect(resultLow).toBe(4); // Floor (fallback minColors=4)
 
         // Rainbow image: many sectors, high entropy, wide tonal range
@@ -356,7 +356,7 @@ describe('ParameterGenerator._computeAdaptiveColorCount', () => {
                 azure:      { weight: 0.04 }
             }
         };
-        const resultHigh = DynamicConfigurator._computeAdaptiveColorCount(dnaHigh, {});
+        const resultHigh = ParameterGenerator._computeAdaptiveColorCount(dnaHigh, {});
         expect(resultHigh).toBe(12); // Ceiling (fallback maxColors=12)
     });
 
@@ -370,7 +370,7 @@ describe('ParameterGenerator._computeAdaptiveColorCount', () => {
             }
         };
 
-        const result = DynamicConfigurator._computeAdaptiveColorCount(dna, {});
+        const result = ParameterGenerator._computeAdaptiveColorCount(dna, {});
 
         // 1 sector + neutral mass >0.1 (+1) + >0.25 (+1) + >0.40 (+1) = 4
         // Clamped to [4, 12] (fallback bounds) = 4

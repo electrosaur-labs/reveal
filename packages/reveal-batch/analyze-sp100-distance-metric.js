@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const psdReader = require('@reveal/psd-reader');
-const ParameterGenerator = require('@reveal/core/lib/analysis/ParameterGenerator');
+const ParameterGenerator = require('@reveal/core').ParameterGenerator;
 
 const SP100_INPUT_8BIT = path.join(__dirname, 'data/SP100/input');
 

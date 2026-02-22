@@ -16,23 +16,14 @@ const Reveal = require('@reveal/core');
 const { PSDWriter } = require('@reveal/psd-writer');
 const { parsePPM } = require('./ppmParser');
 const MetricsCalculator = require('./MetricsCalculator');
-const DynamicConfigurator = require('./DynamicConfigurator');
-const LabConverter = require('@reveal/core/lib/utils/LabConverter');
+const ParameterGenerator = Reveal.ParameterGenerator;
+const LabConverter = Reveal.LabConverter;
 const chalk = require('chalk');
+const { rgbToHex } = require('./batch-utils');
 
 // Load presets dynamically from reveal-core/presets directory
 const { loadPresets } = require('@reveal/core/src/presetLoader');
 const PRESETS = loadPresets();
-
-/**
- * Convert RGB to hex string
- */
-function rgbToHex(r, g, b) {
-    return '#' + [r, g, b].map(x => {
-        const hex = Math.round(x).toString(16);
-        return hex.length === 1 ? '0' + hex : hex;
-    }).join('');
-}
 
 /**
  * Calculate image DNA statistics from Lab pixel data
@@ -93,43 +84,18 @@ async function processImage(inputPath, intermediatePsdDir, outputDir) {
         // 3. Calculate image DNA (L, C, K, minL, maxL)
         console.log(`  Calculating image DNA...`);
         const dna = calculateImageDNA(labPixels, width, height);
-        dna.filename = basename;  // Add filename for debugging in DynamicConfigurator
+        dna.filename = basename;  // Add filename for debugging in ParameterGenerator
 
         console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, maxC=${dna.maxC}, range=[${dna.minL}, ${dna.maxL}]`);
 
-        // 4. Generate bespoke configuration using DynamicConfigurator
-        const config = DynamicConfigurator.generate(dna);
+        // 4. Generate bespoke configuration using ParameterGenerator
+        const config = ParameterGenerator.generate(dna);
 
         console.log(chalk.green(`  ✓ Configuration: "${config.name}"`));
         console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
-        // Convert config to params format expected by posterization engine
-        const params = {
-            targetColorsSlider: config.targetColors,
-            blackBias: config.blackBias,
-            ditherType: config.ditherType,
-            // Add other necessary parameters with defaults
-            engineType: 'reveal',
-            centroidStrategy: 'SALIENCY',
-            lWeight: 1.0,
-            cWeight: 1.0,
-            substrateMode: 'auto',
-            substrateTolerance: 2.0,
-            vibrancyMode: 'moderate',
-            vibrancyBoost: config.saturationBoost,
-            highlightThreshold: 85,
-            highlightBoost: 1.0,
-            enablePaletteReduction: true,
-            paletteReduction: 10.0,
-            hueLockAngle: 20,
-            shadowPoint: 15,
-            colorMode: 'color',
-            preserveWhite: true,
-            preserveBlack: true,
-            ignoreTransparent: true,
-            enableHueGapAnalysis: true,
-            maskProfile: 'Gray Gamma 2.2'
-        };
+        // Bridge config to engine options
+        const params = ParameterGenerator.toEngineOptions(config);
 
         // 5. Posterize with detected preset
         console.log(`  Posterizing to ${params.targetColorsSlider} colors...`);

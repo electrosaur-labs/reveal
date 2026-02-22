@@ -13,140 +13,17 @@ const path = require('path');
 const Reveal = require('@reveal/core');
 const { PSDWriter } = require('@reveal/psd-writer');
 const { readPsd } = require('@reveal/psd-reader');
-const DynamicConfigurator = require('./DynamicConfigurator');
+const ParameterGenerator = Reveal.ParameterGenerator;
 const MetricsCalculator = require('./MetricsCalculator');
 const { DNAFidelity, DNAGenerator } = Reveal;
 const chalk = require('chalk');
-const sharp = require('sharp');
-
-// === ENCODING CONVERSION FUNCTIONS ===
-
-/**
- * Convert 8-bit Lab encoding to engine 16-bit Lab encoding
- */
-function convert8bitTo16bitLab(lab8bit, pixelCount) {
-    const lab16bit = new Uint16Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        const L_8 = lab8bit[i * 3];
-        const a_8 = lab8bit[i * 3 + 1];
-        const b_8 = lab8bit[i * 3 + 2];
-
-        lab16bit[i * 3] = Math.round(L_8 * 32768 / 255);
-        lab16bit[i * 3 + 1] = (a_8 - 128) * 128 + 16384;
-        lab16bit[i * 3 + 2] = (b_8 - 128) * 128 + 16384;
-    }
-
-    return lab16bit;
-}
-
-/**
- * Convert PSD 16-bit Lab encoding to engine 16-bit Lab encoding
- */
-function convertPsd16bitToEngineLab(labPsd16, pixelCount) {
-    const labEngine = new Uint16Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        labEngine[i * 3] = labPsd16[i * 3] >> 1;
-        labEngine[i * 3 + 1] = labPsd16[i * 3 + 1] >> 1;
-        labEngine[i * 3 + 2] = labPsd16[i * 3 + 2] >> 1;
-    }
-
-    return labEngine;
-}
-
-/**
- * Convert 16-bit Lab encoding to 8-bit Lab encoding
- */
-function convert16bitTo8bitLab(lab16bit, pixelCount) {
-    const lab8bit = new Uint8Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        lab8bit[i * 3] = Math.round(lab16bit[i * 3] / 257);
-        lab8bit[i * 3 + 1] = Math.round(lab16bit[i * 3 + 1] / 257);
-        lab8bit[i * 3 + 2] = Math.round(lab16bit[i * 3 + 2] / 257);
-    }
-
-    return lab8bit;
-}
-
-/**
- * Convert 8-bit Lab to RGB for thumbnail generation
- */
-function lab8bitToRgb(lab8bit, pixelCount) {
-    const rgb = new Uint8Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        const L = (lab8bit[i * 3] / 255) * 100;
-        const a = lab8bit[i * 3 + 1] - 128;
-        const b = lab8bit[i * 3 + 2] - 128;
-
-        const fy = (L + 16) / 116;
-        const fx = a / 500 + fy;
-        const fz = fy - b / 200;
-
-        const xr = fx > 0.206893 ? fx * fx * fx : (fx - 16/116) / 7.787;
-        const yr = fy > 0.206893 ? fy * fy * fy : (fy - 16/116) / 7.787;
-        const zr = fz > 0.206893 ? fz * fz * fz : (fz - 16/116) / 7.787;
-
-        const X = xr * 96.422;
-        const Y = yr * 100.0;
-        const Z = zr * 82.521;
-
-        let R =  3.1338561 * X - 1.6168667 * Y - 0.4906146 * Z;
-        let G = -0.9787684 * X + 1.9161415 * Y + 0.0334540 * Z;
-        let B =  0.0719453 * X - 0.2289914 * Y + 1.4052427 * Z;
-
-        R = R / 100;
-        G = G / 100;
-        B = B / 100;
-
-        R = R > 0.0031308 ? 1.055 * Math.pow(R, 1/2.4) - 0.055 : 12.92 * R;
-        G = G > 0.0031308 ? 1.055 * Math.pow(G, 1/2.4) - 0.055 : 12.92 * G;
-        B = B > 0.0031308 ? 1.055 * Math.pow(B, 1/2.4) - 0.055 : 12.92 * B;
-
-        rgb[i * 3] = Math.max(0, Math.min(255, Math.round(R * 255)));
-        rgb[i * 3 + 1] = Math.max(0, Math.min(255, Math.round(G * 255)));
-        rgb[i * 3 + 2] = Math.max(0, Math.min(255, Math.round(B * 255)));
-    }
-
-    return rgb;
-}
-
-/**
- * Generate JPEG thumbnail from 8-bit Lab data
- */
-async function generateThumbnail(lab8bit, width, height, maxSize = 256) {
-    const pixelCount = width * height;
-    const rgb = lab8bitToRgb(lab8bit, pixelCount);
-
-    const scale = Math.min(maxSize / width, maxSize / height);
-    const thumbWidth = Math.round(width * scale);
-    const thumbHeight = Math.round(height * scale);
-
-    const jpegBuffer = await sharp(Buffer.from(rgb), {
-        raw: { width, height, channels: 3 }
-    })
-    .resize(thumbWidth, thumbHeight)
-    .jpeg({ quality: 80 })
-    .toBuffer();
-
-    return {
-        jpegData: jpegBuffer,
-        width: thumbWidth,
-        height: thumbHeight
-    };
-}
-
-/**
- * Convert RGB to hex string
- */
-function rgbToHex(r, g, b) {
-    return '#' + [r, g, b].map(x => {
-        const hex = Math.round(x).toString(16);
-        return hex.length === 1 ? '0' + hex : hex;
-    }).join('');
-}
+const {
+    convert8bitTo16bitLab,
+    convertPsd16bitToEngineLab,
+    convertPsd16bitTo8bitLab,
+    rgbToHex,
+    generateThumbnail
+} = require('./batch-utils');
 
 /**
  * Calculate full DNA v2.0 from 8-bit Lab data using DNAGenerator.
@@ -193,7 +70,7 @@ async function processImage(inputPath, outputDir) {
         } else {
             console.log(`  Converting PSD 16-bit to engine 16-bit encoding...`);
             lab16bit = convertPsd16bitToEngineLab(labData, pixelCount);
-            lab8bit = convert16bitTo8bitLab(labData, pixelCount);
+            lab8bit = convertPsd16bitTo8bitLab(labData, pixelCount);
         }
 
         // 3. Calculate full DNA v2.0 (with sectors for adaptive color count)
@@ -207,19 +84,12 @@ async function processImage(inputPath, outputDir) {
         }
 
         // 4. Generate configuration
-        const config = DynamicConfigurator.generate(dna);
+        const config = ParameterGenerator.generate(dna);
         console.log(chalk.green(`  ✓ Archetype: ${config.meta?.archetype || 'unknown'}`));
         console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
-        // 5. Prepare params — use archetype config directly, add batch-specific overrides
-        const params = {
-            ...config,
-            targetColorsSlider: config.targetColors,
-            format: 'lab',
-            bitDepth: depth,
-            engineType: 'reveal',
-            centroidStrategy: 'SALIENCY'
-        };
+        // 5. Prepare params — bridge config to engine options
+        const params = ParameterGenerator.toEngineOptions(config, { bitDepth: depth });
 
         // 6. Posterize
         console.log(`  Posterizing to ${params.targetColorsSlider} colors...`);
@@ -246,7 +116,7 @@ async function processImage(inputPath, outputDir) {
         let colorIndices = separateResult.colorIndices;
 
         // 7.5. Palette pruning — remove ghost plates + enforce screen cap
-        const SeparationEngine = require('@reveal/core/lib/engines/SeparationEngine');
+        const SeparationEngine = Reveal.engines.SeparationEngine;
         const targetColors = params.targetColorsSlider || params.targetColors || 8;
         const minVolume = (params.minVolume !== undefined && params.minVolume > 0) ? params.minVolume : 0;
         const needsPrune = minVolume > 0 || finalPaletteLab.length > targetColors;
@@ -264,7 +134,7 @@ async function processImage(inputPath, outputDir) {
             if (pruneResult.mergedCount > 0) {
                 console.log(chalk.yellow(`  Pruned: ${finalPaletteLab.length} → ${pruneResult.prunedPalette.length} colors (minVolume=${minVolume}%, cap=${targetColors})`));
                 finalPaletteLab = pruneResult.prunedPalette;
-                const ColorSpace = require('@reveal/core/lib/engines/ColorSpace');
+                const ColorSpace = Reveal.ColorSpace;
                 finalPaletteRgb = finalPaletteLab.map(lab => ColorSpace.labToRgb(lab));
                 colorIndices = pruneResult.remappedIndices;
             }
@@ -272,7 +142,7 @@ async function processImage(inputPath, outputDir) {
 
         // 8. Generate masks + apply mechanical knobs
         console.log(`  Generating masks...`);
-        const MechanicalKnobs = require('@reveal/core/lib/engines/MechanicalKnobs');
+        const MechanicalKnobs = Reveal.MechanicalKnobs;
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, finalPaletteLab.length, pixelCount);
 
         if (params.speckleRescue !== undefined && params.speckleRescue > 0) {

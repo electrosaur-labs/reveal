@@ -20,80 +20,15 @@ const path = require('path');
 const Reveal = require('@reveal/core');
 const { PSDWriter } = require('@reveal/psd-writer');
 const { readPsd } = require('@reveal/psd-reader');
-const DynamicConfigurator = require('./DynamicConfigurator');
+const ParameterGenerator = Reveal.ParameterGenerator;
 const MetricsCalculator = require('./MetricsCalculator');
 const chalk = require('chalk');
-
-/**
- * Convert 8-bit Lab encoding to engine 16-bit Lab encoding
- *
- * 8-bit PSD:    L: 0-255, a/b: 0-255 (128=neutral)
- * Engine 16-bit: L: 0-32768, a/b: 0-32768 (16384=neutral)
- */
-function convert8bitTo16bitLab(lab8bit, pixelCount) {
-    const lab16bit = new Uint16Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        const L_8 = lab8bit[i * 3];
-        const a_8 = lab8bit[i * 3 + 1];
-        const b_8 = lab8bit[i * 3 + 2];
-
-        // L: 0-255 → 0-32768
-        lab16bit[i * 3] = Math.round(L_8 * 32768 / 255);
-
-        // a: 0-255 (128=neutral) → 0-32768 (16384=neutral)
-        lab16bit[i * 3 + 1] = (a_8 - 128) * 128 + 16384;
-
-        // b: same as a
-        lab16bit[i * 3 + 2] = (b_8 - 128) * 128 + 16384;
-    }
-
-    return lab16bit;
-}
-
-/**
- * Convert PSD 16-bit Lab encoding to engine 16-bit Lab encoding
- *
- * PSD 16-bit:    L: 0-65535, a/b: 0-65535 (32768=neutral)
- * Engine 16-bit: L: 0-32768, a/b: 0-32768 (16384=neutral)
- */
-function convertPsd16bitToEngineLab(labPsd16, pixelCount) {
-    const labEngine = new Uint16Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        // Divide by 2: 0-65535 → 0-32767, neutral 32768→16384
-        labEngine[i * 3] = labPsd16[i * 3] >> 1;
-        labEngine[i * 3 + 1] = labPsd16[i * 3 + 1] >> 1;
-        labEngine[i * 3 + 2] = labPsd16[i * 3 + 2] >> 1;
-    }
-
-    return labEngine;
-}
-
-/**
- * Convert 16-bit Lab encoding to 8-bit Lab encoding (for DNA calculation)
- */
-function convert16bitTo8bitLab(lab16bit, pixelCount) {
-    const lab8bit = new Uint8Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        lab8bit[i * 3] = Math.round(lab16bit[i * 3] / 257);
-        lab8bit[i * 3 + 1] = Math.round(lab16bit[i * 3 + 1] / 257);
-        lab8bit[i * 3 + 2] = Math.round(lab16bit[i * 3 + 2] / 257);
-    }
-
-    return lab8bit;
-}
-
-/**
- * Convert RGB to hex string
- */
-function rgbToHex(r, g, b) {
-    return '#' + [r, g, b].map(x => {
-        const hex = Math.round(x).toString(16);
-        return hex.length === 1 ? '0' + hex : hex;
-    }).join('');
-}
+const {
+    convert8bitTo16bitLab,
+    convertPsd16bitToEngineLab,
+    convertPsd16bitTo8bitLab,
+    rgbToHex
+} = require('./batch-utils');
 
 /**
  * Reconstruct processedLab from colorIndices and palette
@@ -327,7 +262,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     } else {
         console.log(`  Converting 16-bit Lab to engine encoding...`);
         lab16bit = convertPsd16bitToEngineLab(labData, pixelCount);
-        lab8bit = convert16bitTo8bitLab(labData, pixelCount);
+        lab8bit = convertPsd16bitTo8bitLab(labData, pixelCount);
     }
 
     // 3. Calculate image DNA
@@ -339,7 +274,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, StdDev=${dna.l_std_dev}, maxC=${dna.maxC}`);
 
     // 4. Generate configuration
-    const config = DynamicConfigurator.generate(dna, {
+    const config = ParameterGenerator.generate(dna, {
         imageData: null,
         width,
         height,
@@ -350,7 +285,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
     // 4a. Bilateral prefilter (edge-preserving noise reduction)
-    const BilateralFilter = require('../../reveal-core/lib/preprocessing/BilateralFilter');
+    const BilateralFilter = Reveal.BilateralFilter;
     const is16Bit = depth === 16;
     const entropyScore = BilateralFilter.calculateEntropyScoreLab(lab16bit, width, height);
     const preprocessDecision = BilateralFilter.shouldPreprocess(dna, entropyScore, is16Bit);
@@ -368,46 +303,17 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     }
 
     // 4b. Pre-posterization median filter (salt & pepper noise removal)
-    const MedianFilter = require('../../reveal-core/lib/preprocessing/MedianFilter');
+    const MedianFilter = Reveal.MedianFilter;
     if (MedianFilter.shouldApply(dna, config)) {
         console.log(chalk.yellow(`  🧂 Median filter: removing sensor salt before posterization`));
         lab16bit = MedianFilter.apply3x3(lab16bit, width, height);
     }
 
-    // 5. Prepare params
-    const params = {
+    // 5. Prepare params via centralized config bridge
+    const params = ParameterGenerator.toEngineOptions(config, {
         targetColorsSlider: 8, // OVERRIDE: Force 8 colors for all images
-        // targetColorsSlider: config.targetColors,
-        blackBias: config.blackBias,
-        ditherType: config.ditherType,
-        format: 'lab',
-        bitDepth: 8,
-        engineType: 'reveal',
-        centroidStrategy: 'SALIENCY',
-        lWeight: config.lWeight,
-        cWeight: config.cWeight,
-        substrateMode: config.substrateMode,
-        substrateTolerance: config.substrateTolerance,
-        vibrancyMode: config.vibrancyMode,
-        vibrancyBoost: config.saturationBoost,
-        highlightThreshold: config.highlightThreshold,
-        highlightBoost: config.highlightBoost,
-        enablePaletteReduction: config.enablePaletteReduction,
-        paletteReduction: config.paletteReduction,
-        hueLockAngle: config.hueLockAngle,
-        shadowPoint: config.shadowPoint,
-        colorMode: 'color',
-        preserveWhite: true,
-        preserveBlack: true,
-        ignoreTransparent: true,
-        enableHueGapAnalysis: config.enableHueGapAnalysis,
-        // Conditional overrides from archetype
-        shadowClamp: config.shadowClamp,
-        chromaGate: config.chromaGate,
-        detailRescue: config.detailRescue,
-        speckleRescue: config.speckleRescue,
-        medianPass: config.medianPass
-    };
+        bitDepth: 8
+    });
 
     // 6. Posterize
     console.log(`  Posterizing to ${params.targetColorsSlider} colors...`);
@@ -456,7 +362,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
             colorIndices = pruneResult.remappedIndices;
 
             // Build pruned RGB palette by filtering original palette using strong indices
-            const ColorSpace = require('../../reveal-core/lib/engines/ColorSpace');
+            const ColorSpace = Reveal.ColorSpace;
             finalPaletteRgb = finalPaletteLab.map(lab => ColorSpace.labToRgb(lab));
 
             console.log(chalk.green(`  ✅ Pruned: ${posterizeResult.paletteLab.length} → ${finalPaletteLab.length} colors`));
@@ -465,7 +371,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 
     // 8. Build masks and apply knobs (MechanicalKnobs — same algorithms as Navigator/ProductionWorker)
     console.log(`  Creating layer masks...`);
-    const MechanicalKnobs = require('../../reveal-core/lib/engines/MechanicalKnobs');
+    const MechanicalKnobs = Reveal.MechanicalKnobs;
     const masks = MechanicalKnobs.rebuildMasks(colorIndices, finalPaletteLab.length, pixelCount);
 
     if (config.speckleRescue !== undefined && config.speckleRescue > 0) {

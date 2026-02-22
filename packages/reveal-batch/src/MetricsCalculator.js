@@ -320,7 +320,7 @@ class MetricsCalculator {
      * @returns {{ eRev: number, chromaStats: { cMax: number, avgChroma: number, chromaPixelRatio: number } }}
      */
     static calculateRevelationErrorScore(originalLab, processedLab, width, height, options = {}) {
-        const RevelationError = require('@reveal/core/lib/metrics/RevelationError');
+        const RevelationError = require('@reveal/core').RevelationError;
         return RevelationError.fromBuffers(originalLab, processedLab, width, height, options);
     }
 }

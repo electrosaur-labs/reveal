@@ -7,18 +7,16 @@
 const { core } = require("photoshop");
 
 const Reveal = require("@reveal/core");
-const ParameterGenerator = require("@reveal/core/lib/analysis/ParameterGenerator");
+const ParameterGenerator = Reveal.ParameterGenerator;
 const ArchetypeMapper = Reveal.ArchetypeMapper;
 const SeparationEngine = Reveal.engines.SeparationEngine;
+const RevelationError = Reveal.RevelationError;
 const logger = Reveal.logger;
 
 const pluginState = require('./PluginState');
 const { applyAnalyzedSettings, ARCHETYPES } = require('./FormHelpers');
 const { resolveDistanceMetric } = require('./ColorUtils');
 const PhotoshopAPI = require("./api/PhotoshopAPI");
-const DNAGenerator = require("./DNAGenerator");
-
-const RevelationError = require("@reveal/core/lib/metrics/RevelationError");
 
 /**
  * Compute E_rev score. Delegates to @reveal/core RevelationError.fromBuffers().
@@ -59,7 +57,7 @@ async function runArchetypeTrial(lab16, lab8, width, height, dna, archetypeId, s
             substrateMode: 'auto',
             substrateTolerance: 2.0,
             vibrancyMode: trialConfig.vibrancyMode,
-            vibrancyBoost: trialConfig.vibrancyBoost || trialConfig.saturationBoost,
+            vibrancyBoost: trialConfig.vibrancyBoost,
             highlightThreshold: trialConfig.highlightThreshold || 85,
             highlightBoost: trialConfig.highlightBoost || 1.0,
             enablePaletteReduction: true,
@@ -143,7 +141,7 @@ async function handleAnalyzeImage() {
         }, { commandName: "Analyze Document DNA" });
 
         const startTime = Date.now();
-        const dna = DNAGenerator.generate(result.pixels, result.width, result.height, 40);
+        const dna = new Reveal.DNAGenerator().generate(result.pixels, result.width, result.height, { bitDepth: 16 });
         const dnaTime = Date.now() - startTime;
 
         const config = ParameterGenerator.generate(dna, {

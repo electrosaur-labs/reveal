@@ -18,6 +18,7 @@ const DocumentValidator = require('./lib/validation/DocumentValidator');
 const DNAValidator = require('./lib/validation/DNAValidator');
 const ImageHeuristicAnalyzer = require('./lib/analysis/ImageHeuristicAnalyzer');
 const LabDistance = require('./lib/color/LabDistance');
+const LabEncoding = require('./lib/color/LabEncoding');
 const BilateralFilter = require('./lib/preprocessing/BilateralFilter');
 const ParameterGenerator = require('./lib/analysis/ParameterGenerator');
 const DNAGenerator = require('./lib/analysis/DNAGenerator');
@@ -459,6 +460,9 @@ module.exports.engines = {
     // Lab color distance calculations (v2.1)
     LabDistance: LabDistance,
 
+    // Centralized Lab encoding conversions (v2.5)
+    LabEncoding: LabEncoding,
+
     // Preprocessing (v2.0)
     BilateralFilter: BilateralFilter,
     ParameterGenerator: ParameterGenerator,
@@ -484,6 +488,9 @@ module.exports.engines = {
 // Export LabDistance at top level for convenient access
 module.exports.LabDistance = LabDistance;
 
+// Export LabEncoding at top level for centralized Lab encoding conversions
+module.exports.LabEncoding = LabEncoding;
+
 // Export BilateralFilter at top level for convenient access
 module.exports.BilateralFilter = BilateralFilter;
 
@@ -499,8 +506,17 @@ module.exports.DNAValidator = DNAValidator;
 // Export ProxyEngine at top level for event-driven UI (Sovereign Foundation)
 module.exports.ProxyEngine = ProxyEngine;
 
-// Export PeakFinder at top level for convenient access (Reveal Mk 1.5)
-module.exports.PeakFinder = PeakFinder;
+// Export CropEngine at top level for viewport/crop operations
+module.exports.CropEngine = require('./lib/engines/CropEngine');
+
+// Export LabConverter at top level for RGB↔Lab I/O boundary conversions
+module.exports.LabConverter = require('./lib/utils/LabConverter');
+
+// Export MedianFilter at top level for salt-and-pepper noise removal
+module.exports.MedianFilter = require('./lib/preprocessing/MedianFilter');
+
+// Export ColorSpace at top level for Lab↔RGB conversions
+module.exports.ColorSpace = require('./lib/engines/ColorSpace');
 
 // Export MechanicalKnobs at top level for shared knob processing
 module.exports.MechanicalKnobs = MechanicalKnobs;

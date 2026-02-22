@@ -4,11 +4,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const PosterizationEngine = require('@reveal/core/lib/engines/PosterizationEngine');
-const PSDReader = require('@reveal/core/lib/formats/psd/PSDReader');
-const PSDWriter = require('@reveal/core/lib/formats/psd/PSDWriter');
-const ParameterGenerator = require('@reveal/core/lib/analysis/ParameterGenerator');
-const LabConverter = require('@reveal/core/lib/utils/LabConverter');
+const Reveal = require('@reveal/core');
+const PosterizationEngine = Reveal.engines.PosterizationEngine;
+const { readPsd } = require('@reveal/psd-reader');
+const { PSDWriter } = require('@reveal/psd-writer');
+const ParameterGenerator = Reveal.ParameterGenerator;
+const LabConverter = Reveal.LabConverter;
 
 const INPUT_FILE = 'crepe_paper.psd';
 const INPUT_DIR = path.join(__dirname, '../data/CQ100_v4/input/psd');
@@ -24,15 +25,14 @@ async function testSingleFile() {
     // 1. Read input PSD
     console.log('📖 Reading input PSD...');
     const inputBuffer = fs.readFileSync(inputPath);
-    const reader = new PSDReader(inputBuffer);
-    const psdData = reader.parse();
+    const psdData = readPsd(inputBuffer);
 
     console.log(`   Width: ${psdData.width}, Height: ${psdData.height}`);
-    console.log(`   Color Mode: ${psdData.colorMode}, Bits: ${psdData.bitsPerChannel}`);
+    console.log(`   Color Mode: ${psdData.colorMode}, Bits: ${psdData.depth}`);
 
     // 2. Get Lab pixels
     console.log('\n🎨 Extracting Lab pixels...');
-    const labPixels = reader.getLabPixels();
+    const labPixels = psdData.data;
     console.log(`   Got ${labPixels.length} bytes (${labPixels.length / 3} pixels)`);
 
     // 3. Generate DNA

@@ -210,7 +210,7 @@ async function calculateDNA(filePath) {
 /**
  * Classify image into SP-50 archetype based on DNA
  *
- * MUST MATCH: DynamicConfigurator.getArchetype() in reveal-core v1.7
+ * MUST MATCH: ParameterGenerator.getArchetype() in reveal-core v1.7
  * This is a diagnostic mirror - keeps dataset analysis in sync with processing logic.
  */
 function classify(dna) {

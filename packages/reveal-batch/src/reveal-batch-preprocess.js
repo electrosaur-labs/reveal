@@ -9,7 +9,7 @@
  * ===================================
  *
  * Level 1 - DNA (Archetype Detection):
- *   Handled by DynamicConfigurator. Detects image type:
+ *   Handled by ParameterGenerator. Detects image type:
  *   Photographic, Vector/Flat, Vintage/Muted, Noir/Mono, Neon/Vibrant
  *
  * Level 2 - Entropy (Bilateral Filter):
@@ -33,11 +33,17 @@ const path = require('path');
 const Reveal = require('@reveal/core');
 const { PSDWriter } = require('@reveal/psd-writer');
 const { readPsd } = require('@reveal/psd-reader');
-const DynamicConfigurator = require('./DynamicConfigurator');
+const ParameterGenerator = Reveal.ParameterGenerator;
 const MetricsCalculator = require('./MetricsCalculator');
-const BilateralFilter = require('@reveal/core/lib/preprocessing/BilateralFilter');
+const BilateralFilter = Reveal.BilateralFilter;
 const chalk = require('chalk');
-const sharp = require('sharp');  // Only used for thumbnail generation
+const {
+    convert8bitTo16bitLab,
+    convertPsd16bitToEngineLab,
+    convertEngine16bitTo8bitLab,
+    rgbToHex,
+    generateThumbnail
+} = require('./batch-utils');
 
 // === PREPROCESSING: BILATERAL FILTER ===
 
@@ -160,7 +166,7 @@ function calculateEntropyScore(imageData) {
  *
  * PERCEPTUAL RESCUE SYSTEM - Level 2 (Entropy-based filtering)
  *
- * Level 1: DNA → Archetype detection (handled by DynamicConfigurator)
+ * Level 1: DNA → Archetype detection (handled by ParameterGenerator)
  * Level 2: Entropy > 25 → Bilateral Filter (this function)
  * Level 3: CIE2000 Override → For complex images failing at CIE94 (handled by engine)
  *
@@ -264,6 +270,8 @@ function shouldPreprocess(dna, entropyScore) {
 }
 
 // === COLOR SPACE CONVERSIONS ===
+// Standard Lab encoding conversions are imported from batch-utils.
+// The following RGBA conversions are unique to preprocessing (bilateral filter operates in RGBA).
 
 /**
  * Convert 8-bit Lab to RGBA for preprocessing
@@ -359,137 +367,6 @@ function rgbaToLab8bit(rgba, width, height) {
     }
 
     return lab8bit;
-}
-
-/**
- * Convert 8-bit Lab encoding to engine 16-bit Lab encoding
- */
-function convert8bitTo16bitLab(lab8bit, pixelCount) {
-    const lab16bit = new Uint16Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        const L_8 = lab8bit[i * 3];
-        const a_8 = lab8bit[i * 3 + 1];
-        const b_8 = lab8bit[i * 3 + 2];
-
-        lab16bit[i * 3] = Math.round(L_8 * 32768 / 255);
-        lab16bit[i * 3 + 1] = (a_8 - 128) * 128 + 16384;
-        lab16bit[i * 3 + 2] = (b_8 - 128) * 128 + 16384;
-    }
-
-    return lab16bit;
-}
-
-/**
- * Convert PSD 16-bit Lab encoding to engine 16-bit Lab encoding
- */
-function convertPsd16bitToEngineLab(labPsd16, pixelCount) {
-    const labEngine = new Uint16Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        labEngine[i * 3] = labPsd16[i * 3] >> 1;
-        labEngine[i * 3 + 1] = labPsd16[i * 3 + 1] >> 1;
-        labEngine[i * 3 + 2] = labPsd16[i * 3 + 2] >> 1;
-    }
-
-    return labEngine;
-}
-
-/**
- * Convert Photoshop 16-bit Lab encoding (0-32768) to 8-bit Lab encoding (0-255)
- * Note: Previously used /257 for ICC encoding (0-65535), now uses /128.5 for Photoshop encoding
- */
-function convert16bitTo8bitLab(lab16bit, pixelCount) {
-    const lab8bit = new Uint8Array(pixelCount * 3);
-    const scale = 255 / 32768;  // Photoshop encoding (was 255/65535 = 1/257 for ICC)
-
-    for (let i = 0; i < pixelCount; i++) {
-        // L channel: 0-32768 → 0-255
-        lab8bit[i * 3] = Math.round(Math.min(255, lab16bit[i * 3] * scale));
-        // a/b channels: 0-32768 (neutral=16384) → 0-255 (neutral=128)
-        lab8bit[i * 3 + 1] = Math.round(Math.min(255, lab16bit[i * 3 + 1] * scale));
-        lab8bit[i * 3 + 2] = Math.round(Math.min(255, lab16bit[i * 3 + 2] * scale));
-    }
-
-    return lab8bit;
-}
-
-/**
- * Convert 8-bit Lab to RGB for thumbnail generation
- */
-function lab8bitToRgb(lab8bit, pixelCount) {
-    const rgb = new Uint8Array(pixelCount * 3);
-
-    for (let i = 0; i < pixelCount; i++) {
-        const L = (lab8bit[i * 3] / 255) * 100;
-        const a = lab8bit[i * 3 + 1] - 128;
-        const b = lab8bit[i * 3 + 2] - 128;
-
-        const fy = (L + 16) / 116;
-        const fx = a / 500 + fy;
-        const fz = fy - b / 200;
-
-        const xr = fx > 0.206893 ? fx * fx * fx : (fx - 16/116) / 7.787;
-        const yr = fy > 0.206893 ? fy * fy * fy : (fy - 16/116) / 7.787;
-        const zr = fz > 0.206893 ? fz * fz * fz : (fz - 16/116) / 7.787;
-
-        const X = xr * 96.422;
-        const Y = yr * 100.0;
-        const Z = zr * 82.521;
-
-        let R =  3.1338561 * X - 1.6168667 * Y - 0.4906146 * Z;
-        let G = -0.9787684 * X + 1.9161415 * Y + 0.0334540 * Z;
-        let B =  0.0719453 * X - 0.2289914 * Y + 1.4052427 * Z;
-
-        R = R / 100;
-        G = G / 100;
-        B = B / 100;
-
-        R = R > 0.0031308 ? 1.055 * Math.pow(Math.max(0, R), 1/2.4) - 0.055 : 12.92 * R;
-        G = G > 0.0031308 ? 1.055 * Math.pow(Math.max(0, G), 1/2.4) - 0.055 : 12.92 * G;
-        B = B > 0.0031308 ? 1.055 * Math.pow(Math.max(0, B), 1/2.4) - 0.055 : 12.92 * B;
-
-        rgb[i * 3] = Math.max(0, Math.min(255, Math.round(R * 255)));
-        rgb[i * 3 + 1] = Math.max(0, Math.min(255, Math.round(G * 255)));
-        rgb[i * 3 + 2] = Math.max(0, Math.min(255, Math.round(B * 255)));
-    }
-
-    return rgb;
-}
-
-/**
- * Generate JPEG thumbnail from 8-bit Lab data
- */
-async function generateThumbnail(lab8bit, width, height, maxSize = 256) {
-    const pixelCount = width * height;
-    const rgb = lab8bitToRgb(lab8bit, pixelCount);
-
-    const scale = Math.min(maxSize / width, maxSize / height);
-    const thumbWidth = Math.round(width * scale);
-    const thumbHeight = Math.round(height * scale);
-
-    const jpegBuffer = await sharp(Buffer.from(rgb), {
-        raw: { width, height, channels: 3 }
-    })
-    .resize(thumbWidth, thumbHeight)
-    .jpeg({ quality: 80 })
-    .toBuffer();
-
-    return {
-        jpegData: jpegBuffer,
-        width: thumbWidth,
-        height: thumbHeight
-    };
-}
-
-/**
- * Convert RGB to hex string
- */
-function rgbToHex(r, g, b) {
-    return '#' + [r, g, b].map(x => {
-        const hex = Math.round(x).toString(16);
-        return hex.length === 1 ? '0' + hex : hex;
-    }).join('');
 }
 
 /**
@@ -607,11 +484,8 @@ async function processImage(inputPath, outputDir) {
             // Create mutable copy and normalize from ICC Lab (0-65535) to Photoshop Lab (0-32768)
             // ICC 16-bit Lab: L=0-65535, a/b=0-65535 (neutral=32768)
             // Photoshop 16-bit Lab: L=0-32768, a/b=0-32768 (neutral=16384)
-            lab16bit = new Uint16Array(pixelCount * 3);
             const rawData = new Uint16Array(labData.buffer, labData.byteOffset, pixelCount * 3);
-            for (let i = 0; i < rawData.length; i++) {
-                lab16bit[i] = Math.round(rawData[i] / 2);
-            }
+            lab16bit = convertPsd16bitToEngineLab(rawData, pixelCount);
             console.log(`  Normalized ICC Lab (0-65535) → Photoshop Lab (0-32768)`);
         } else {
             // Convert 8-bit to 16-bit Lab (8-bit encoding is same in ICC and Photoshop)
@@ -625,7 +499,7 @@ async function processImage(inputPath, outputDir) {
         dna.filename = basename;
 
         // 4. Generate config to get archetype
-        const config = DynamicConfigurator.generate(dna);
+        const config = ParameterGenerator.generate(dna);
         dna.archetype = config.meta?.archetype || 'unknown';
 
         console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, StdDev=${dna.l_std_dev}, maxC=${dna.maxC}`);
@@ -670,33 +544,7 @@ async function processImage(inputPath, outputDir) {
         // 8. Continue with standard posterization pipeline
         console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
 
-        const params = {
-            targetColorsSlider: config.targetColors,
-            blackBias: config.blackBias,
-            ditherType: config.ditherType,
-            format: 'lab',
-            bitDepth: depth,
-            engineType: 'reveal',
-            centroidStrategy: 'SALIENCY',
-            lWeight: 1.0,
-            cWeight: 1.0,
-            substrateMode: 'auto',
-            substrateTolerance: 2.0,
-            vibrancyMode: 'moderate',
-            vibrancyBoost: config.saturationBoost,
-            highlightThreshold: 85,
-            highlightBoost: 1.0,
-            enablePaletteReduction: true,
-            paletteReduction: 10.0,
-            hueLockAngle: 20,
-            shadowPoint: 15,
-            colorMode: 'color',
-            preserveWhite: true,
-            preserveBlack: true,
-            ignoreTransparent: true,
-            enableHueGapAnalysis: true,
-            maskProfile: 'Gray Gamma 2.2'
-        };
+        const params = ParameterGenerator.toEngineOptions(config, { bitDepth: depth });
 
         // 9. Posterize
         console.log(`  Posterizing to ${params.targetColorsSlider} colors...`);
@@ -744,7 +592,7 @@ async function processImage(inputPath, outputDir) {
 
         // Convert 16-bit Lab to 8-bit for output (PSD writing, metrics, thumbnail)
         // Note: All processing was done in 16-bit; 8-bit is only for legacy output formats
-        const lab8bit = convert16bitTo8bitLab(lab16bit, pixelCount);
+        const lab8bit = convertEngine16bitTo8bitLab(lab16bit, pixelCount);
 
         // 13. Calculate metrics
         console.log(`  Computing validation metrics...`);

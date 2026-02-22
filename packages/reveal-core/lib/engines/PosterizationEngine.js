@@ -4,12 +4,15 @@
  * Reduces images to limited color palettes (3-9 colors) using median cut algorithm.
  * Optimized for screen printing workflow - creates distinct, well-separated colors.
  *
- * Phase 2.5: Posterization Engine & Preview UI
- *
- * MODULAR ARCHITECTURE (v2.0):
- * - ColorSpace.js: Lab/RGB conversions and distance calculations
- * - HueAnalysis.js: Hue sector analysis and gap detection
+ * MODULAR ARCHITECTURE (v3.0):
+ * - LabMedianCut.js: Lab-space median cut quantization
+ * - PaletteOps.js: Palette snap, prune, density floor, refinement
+ * - HueGapRecovery.js: Hue sector analysis and gap recovery
+ * - RgbMedianCut.js: Classic RGB median cut engine
+ * - PixelAssignment.js: Stride-based pixel assignment
  * - CentroidStrategies.js: Centroid selection strategies
+ * - ColorSpace.js: Lab/RGB conversions (legacy, unused by engine)
+ * - HueAnalysis.js: Hue analysis (legacy, unused by engine)
  */
 
 const logger = require("../utils/logger");
@@ -20,6 +23,13 @@ const HueAnalysis = require('./HueAnalysis');
 const { CentroidStrategies } = require('./CentroidStrategies');
 const PeakFinder = require('../analysis/PeakFinder');
 const LabDistance = require('../color/LabDistance');
+
+// Import extracted modules
+const LabMedianCut = require('./LabMedianCut');
+const PaletteOps = require('./PaletteOps');
+const HueGapRecovery = require('./HueGapRecovery');
+const RgbMedianCut = require('./RgbMedianCut');
+const PixelAssignment = require('./PixelAssignment');
 
 class PosterizationEngine {
     /**
@@ -59,25 +69,19 @@ class PosterizationEngine {
         }
     };
 
+    // ========================================================================
+    // Utility: Bit Depth Normalization
+    // ========================================================================
+
     /**
      * Normalize bitDepth from various input formats to a number
-     *
-     * Handles:
-     * - Number: 8, 16 → returns as-is
-     * - String: "bitDepth16", "bitDepth8" → extracts number
-     * - String: "16", "8" → parses to number
-     * - Undefined/null → defaults to 8
-     *
      * @private
-     * @param {number|string|undefined} input - Raw bitDepth value
-     * @returns {number} - Normalized bit depth (8 or 16)
      */
     static _normalizeBitDepth(input) {
         if (typeof input === 'number') {
             return input;
         }
         if (typeof input === 'string') {
-            // Handle "bitDepth16" or "bitDepth8" format from Photoshop
             const match = input.match(/(\d+)/);
             if (match) {
                 return parseInt(match[1], 10);
@@ -85,6 +89,10 @@ class PosterizationEngine {
         }
         return 8; // Default
     }
+
+    // ========================================================================
+    // Public API: Engine Dispatcher
+    // ========================================================================
 
     /**
      * Factory method: Posterize image using specified engine
@@ -245,856 +253,27 @@ class PosterizationEngine {
         }
     }
 
-    /**
-     * Classic RGB Median Cut (internal method)
-     *
-     * @param {Uint8ClampedArray} pixels - RGBA pixel data (width * height * 4)
-     * @param {number} width - Image width in pixels
-     * @param {number} height - Image height in pixels
-     * @param {number} colorCount - Target number of colors (3-9)
-     * @param {string} colorDistance - Distance metric ('cielab' or 'euclidean')
-     * @returns {Object} - {pixels: Uint8ClampedArray, palette: Array<{r,g,b,count}>}
-     */
-    static _posterizeClassicRgb(pixels, width, height, colorCount, colorDistance = 'cielab') {
-
-        // Validate inputs
-        if (colorCount < 2 || colorCount > 16) {
-            throw new Error(`Color count must be between 2 and 16 (got ${colorCount})`);
-        }
-
-        if (pixels.length !== width * height * 4) {
-            throw new Error(`Pixel data length mismatch: expected ${width * height * 4}, got ${pixels.length}`);
-        }
-
-        // Extract unique colors and build color list
-        const colorList = this._extractColors(pixels, width, height);
-
-        // If image already has fewer colors than requested, return as-is
-        if (colorList.length <= colorCount) {
-            const palette = this._buildPalette(colorList);
-            return { pixels: new Uint8ClampedArray(pixels), palette };
-        }
-
-        // Apply median cut algorithm to reduce colors
-        const palette = this._medianCut(colorList, colorCount);
-
-        // Map each pixel to nearest palette color
-        const posterized = this._mapToPalette(pixels, width, height, palette, colorDistance);
-
-        return { pixels: posterized, palette };
-    }
-
-    /**
-     * Analyze image and determine optimal palette size for screen printing
-     *
-     * Analyzes color complexity by clustering unique colors and mapping
-     * cluster count to appropriate palette size (3-10 colors).
-     *
-     * @param {Uint8ClampedArray} pixels - RGBA pixel data (width * height * 4)
-     * @param {number} width - Image width in pixels
-     * @param {number} height - Image height in pixels
-     * @returns {number} - Recommended palette size (3-10)
-     */
-    static analyzeOptimalColorCount(pixels, width, height) {
-
-        // Extract unique colors
-        const colors = this._extractColors(pixels, width, height);
-
-        // If very few colors, use them directly
-        if (colors.length <= 3) {
-            return 3;
-        }
-
-        // Cluster colors by MIN_DISTANCE to find distinct color regions
-        const MIN_DISTANCE = 10; // CIE76 ΔE distance
-        const colorList = colors.map(c => ({ r: c.r, g: c.g, b: c.b }));
-        const clusters = this._getDistinctColors(colorList, MIN_DISTANCE);
-        const clusterCount = clusters.length;
-
-
-        // Map cluster count to palette size (tuned for screen printing workflow)
-        let recommendedSize;
-        if (clusterCount <= 3) {
-            recommendedSize = 3;
-        } else if (clusterCount <= 5) {
-            recommendedSize = 4;
-        } else if (clusterCount <= 8) {
-            recommendedSize = 5;
-        } else if (clusterCount <= 12) {
-            recommendedSize = 6;
-        } else if (clusterCount <= 18) {
-            recommendedSize = 7;
-        } else if (clusterCount <= 25) {
-            recommendedSize = 8;
-        } else if (clusterCount <= 35) {
-            recommendedSize = 9;
-        } else {
-            recommendedSize = 10; // Cap at screen printing maximum
-        }
-
-        return recommendedSize;
-    }
-
-    /**
-     * Extract all colors from pixel data
-     *
-     * @private
-     * @param {Uint8ClampedArray} pixels - RGBA pixel data
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @returns {Array<{r,g,b,count}>} - Array of unique colors with occurrence count
-     */
-    static _extractColors(pixels, width, height) {
-        const colorMap = new Map();
-
-        for (let i = 0; i < pixels.length; i += 4) {
-            const r = pixels[i];
-            const g = pixels[i + 1];
-            const b = pixels[i + 2];
-            const a = pixels[i + 3];
-
-            // Skip fully transparent pixels
-            if (a === 0) continue;
-
-            const key = (r << 16) | (g << 8) | b;
-
-            if (colorMap.has(key)) {
-                colorMap.get(key).count++;
-            } else {
-                colorMap.set(key, { r, g, b, count: 1 });
-            }
-        }
-
-        return Array.from(colorMap.values());
-    }
-
-    /**
-     * Median cut color quantization algorithm
-     *
-     * Recursively splits color space into buckets, then averages each bucket.
-     * Creates visually distinct colors ideal for screen printing.
-     *
-     * @private
-     * @param {Array<{r,g,b,count}>} colors - List of unique colors
-     * @param {number} targetCount - Target number of colors
-     * @returns {Array<{r,g,b}>} - Palette of quantized colors
-     */
-    static _medianCut(colors, targetCount) {
-        const MIN_DISTANCE = 12; // Minimum CIE76 ΔE distance between palette colors
-        let buckets = [colors];
-        let attempts = 0;
-        const MAX_ATTEMPTS = 10;
-
-        // Iteratively split and check distinctiveness until we get targetCount distinct colors
-        while (attempts < MAX_ATTEMPTS) {
-            attempts++;
-
-            // Split buckets to target count (or higher to account for merging)
-            // More aggressive splitting: add full attempt count to find all available colors
-            const splitTarget = targetCount + attempts;
-            buckets = this._splitToTarget(buckets, splitTarget);
-
-            // Average each bucket to get candidate palette
-            const candidatePalette = buckets.map(bucket => this._averageBucket(bucket));
-
-            // Check if colors are distinct enough
-            const distinctColors = this._getDistinctColors(candidatePalette, MIN_DISTANCE);
-
-            if (distinctColors.length >= targetCount) {
-                // Success! We have enough distinct colors
-                // Return exactly targetCount colors (keep the most important ones)
-                return distinctColors.slice(0, targetCount);
-            }
-
-        }
-
-        // If we couldn't reach target after MAX_ATTEMPTS, return what we have
-        const finalPalette = buckets.map(bucket => this._averageBucket(bucket));
-        const distinctColors = this._getDistinctColors(finalPalette, MIN_DISTANCE);
-        return distinctColors;
-    }
-
-    /**
-     * Split buckets until reaching target count
-     *
-     * HUE-SECTOR ANCHOR PROTECTION: Inflates priority for buckets containing
-     * green signals (sectors 3=Y-Green, 4=Green) to rescue minority colors
-     * before they get averaged into larger volume-dominant buckets.
-     *
-     * Patent Claim: "Chromatic Priority Override" for minority color rescue
-     *
-     * @private
-     * @param {Array<Array>} buckets - Current buckets
-     * @param {number} targetCount - Target number of buckets
-     * @returns {Array<Array>} - Split buckets
-     */
-    static _splitToTarget(buckets, targetCount) {
-        const workingBuckets = [...buckets];
-
-        // Protected hue sectors: Y-Green (3) and Green (4) = 90-150°
-        const PROTECTED_SECTORS = [3, 4];
-        const HUE_PRIORITY_MULTIPLIER = 10.0;
-
-        while (workingBuckets.length < targetCount) {
-            // Find bucket with highest priority (range × hue multiplier)
-            let maxPriority = 0;
-            let maxBucketIndex = 0;
-            let maxChannel = 'r';
-
-            workingBuckets.forEach((bucket, index) => {
-                const ranges = this._getColorRanges(bucket);
-                const widestChannel = ranges.widest.channel;
-                const widestRange = ranges.widest.range;
-
-                // Base priority is the widest range
-                let priority = widestRange;
-
-                // HUE-SECTOR ANCHOR PROTECTION: Check for protected hue sectors
-                // If bucket contains green signal, inflate priority to force split
-                for (const sector of PROTECTED_SECTORS) {
-                    if (this._checkBucketForHueSector(bucket, sector, 2)) {
-                        priority *= HUE_PRIORITY_MULTIPLIER;
-                        break; // Only multiply once
-                    }
-                }
-
-                if (priority > maxPriority) {
-                    maxPriority = priority;
-                    maxBucketIndex = index;
-                    maxChannel = widestChannel;
-                }
-            });
-
-            // If no bucket has range > 0, we can't split further
-            if (maxPriority === 0) {
-                break;
-            }
-
-            // Split the bucket with highest priority
-            const bucketToSplit = workingBuckets[maxBucketIndex];
-            const [bucket1, bucket2] = this._splitBucket(bucketToSplit, maxChannel);
-
-            // Replace original bucket with two new buckets
-            workingBuckets.splice(maxBucketIndex, 1, bucket1, bucket2);
-        }
-
-        return workingBuckets;
-    }
-
-    /**
-     * Get distinct colors by removing colors that are too similar
-     *
-     * Uses greedy approach: keep first color, remove all similar colors, repeat.
-     * Colors sorted by luminance so darker colors are preferred.
-     *
-     * @private
-     * @param {Array<{r,g,b}>} palette - Candidate palette
-     * @param {number} minDistance - Minimum distance between colors
-     * @returns {Array<{r,g,b}>} - Distinct colors only
-     */
-    static _getDistinctColors(palette, minDistance) {
-        // Sort by luminance (darker to lighter)
-        const sorted = [...palette].sort((a, b) => {
-            const lumA = 0.299 * a.r + 0.587 * a.g + 0.114 * a.b;
-            const lumB = 0.299 * b.r + 0.587 * b.g + 0.114 * b.b;
-            return lumA - lumB;
-        });
-
-        const distinct = [];
-        const used = new Set();
-
-        for (let i = 0; i < sorted.length; i++) {
-            if (used.has(i)) continue;
-
-            const color = sorted[i];
-            distinct.push(color);
-
-            // Mark similar colors as used
-            for (let j = i + 1; j < sorted.length; j++) {
-                if (used.has(j)) continue;
-
-                const other = sorted[j];
-                const distance = this._colorDistance(color, other);
-
-                if (distance < minDistance) {
-                    used.add(j);
-                }
-            }
-        }
-
-        return distinct;
-    }
-
-    /**
-     * REVELATION HEURISTIC: Density Floor
-     * Prunes palette colors with < 0.5% coverage and reassigns pixels.
-     * This treats targetColorCount as a HINT rather than a mandate.
-     *
-     * @private
-     * @param {Uint8Array} assignments - Pixel-to-palette index mappings
-     * @param {Array<{L, a, b}>} palette - Lab palette
-     * @param {number} threshold - Minimum coverage threshold (default: 0.005 = 0.5%)
-     * @param {Set<number>} protectedIndices - Indices that should never be removed (preserved colors, substrate)
-     * @returns {Object} - {palette, assignments, actualCount}
-     */
-    static _applyDensityFloor(assignments, palette, threshold = 0.005, protectedIndices = new Set()) {
-        // Input validation
-        if (!assignments || !palette || palette.length === 0) {
-            return { palette, assignments, actualCount: palette.length };
-        }
-
-        const totalPixels = assignments.length;
-        const counts = new Array(palette.length).fill(0);
-
-        // Count pixel occupancy for each palette color (skip transparent pixels = 255)
-        for (let i = 0; i < totalPixels; i++) {
-            const idx = assignments[i];
-
-            // Skip transparent pixels (special value 255)
-            if (idx === 255) {
-                continue;
-            }
-
-            // Validate index bounds
-            if (idx < 0 || idx >= palette.length) {
-                continue;
-            }
-
-            counts[idx]++;
-        }
-
-        // Find indices of colors that meet the threshold (or are protected with actual pixels)
-        const viableIndices = [];
-        counts.forEach((count, i) => {
-            const coverage = count / totalPixels;
-
-            // Protected indices (preserved colors, substrate) are kept ONLY if they have pixels
-            if (protectedIndices.has(i)) {
-                if (count > 0) {
-                    // Protected color with actual pixel assignments - keep it
-                    viableIndices.push(i);
-                } else {
-                    // Protected color with 0% coverage - remove it (creates empty mask)
-                }
-                return;
-            }
-
-            // Non-protected colors must meet threshold
-            if (coverage >= threshold) {
-                viableIndices.push(i);
-            } else {
-            }
-        });
-
-        // If all colors are viable, return original data
-        if (viableIndices.length === palette.length) {
-            return { palette, assignments, actualCount: palette.length };
-        }
-
-        // Edge case: All colors pruned (shouldn't happen in practice)
-        if (viableIndices.length === 0) {
-            return { palette, assignments, actualCount: palette.length };
-        }
-
-        // Create the new, pruned palette
-        const cleanPalette = viableIndices.map(idx => palette[idx]);
-        const remappedAssignments = new Uint8Array(totalPixels);
-
-        // Re-allocate pixels (preserve transparent pixels)
-        for (let i = 0; i < totalPixels; i++) {
-            const oldIdx = assignments[i];
-
-            // Preserve transparent pixels (special value 255)
-            if (oldIdx === 255) {
-                remappedAssignments[i] = 255;
-                continue;
-            }
-
-            // Validate index bounds
-            if (oldIdx < 0 || oldIdx >= palette.length) {
-                // Fallback: assign to first color in clean palette
-                remappedAssignments[i] = 0;
-                continue;
-            }
-
-            const newIdxInClean = viableIndices.indexOf(oldIdx);
-
-            if (newIdxInClean !== -1) {
-                // Pixel belongs to a survivor
-                remappedAssignments[i] = newIdxInClean;
-            } else {
-                // Pixel belongs to a pruned color; find the nearest SURVIVING color
-                const targetColor = palette[oldIdx];
-                if (targetColor && cleanPalette.length > 0) {
-                    remappedAssignments[i] = this._findNearestInPalette(targetColor, cleanPalette);
-                } else {
-                    // Fallback: assign to first color
-                    remappedAssignments[i] = 0;
-                }
-            }
-        }
-
-        return {
-            palette: cleanPalette,
-            assignments: remappedAssignments,
-            actualCount: cleanPalette.length
-        };
-    }
-
-    /**
-     * Helper to find the nearest color in a specific subset of the palette
-     *
-     * @private
-     * @param {{L, a, b}} targetLab - Target Lab color
-     * @param {Array<{L, a, b}>} subPalette - Subset of palette to search
-     * @returns {number} - Index of nearest color in subPalette
-     */
-    static _findNearestInPalette(targetLab, subPalette) {
-        // Input validation
-        if (!targetLab || !subPalette || subPalette.length === 0) {
-            return 0;  // Fallback to first color
-        }
-
-        let minDistance = Infinity;
-        let closestIdx = 0;
-
-        for (let i = 0; i < subPalette.length; i++) {
-            const p = subPalette[i];
-            if (!p) continue;  // Skip invalid entries
-
-            // Standard Euclidean distance in Lab space
-            const d = Math.sqrt(
-                Math.pow(targetLab.L - p.L, 2) +
-                Math.pow(targetLab.a - p.a, 2) +
-                Math.pow(targetLab.b - p.b, 2)
-            );
-            if (d < minDistance) {
-                minDistance = d;
-                closestIdx = i;
-            }
-        }
-        return closestIdx;
-    }
-
-
-    /**
-     * Convert RGB to CIELAB color space (D65 illuminant, 2° observer)
-     *
-     * CIELAB is perceptually uniform - equal distances in LAB space correspond
-     * to equal perceived color differences. Much better than RGB Euclidean distance.
-     *
-     * @private
-     * @param {number} r - Red (0-255)
-     * @param {number} g - Green (0-255)
-     * @param {number} b - Blue (0-255)
-     * @returns {{L: number, a: number, b: number}} - LAB values (L: 0-100, a: -128 to 127, b: -128 to 127)
-     */
-    static _rgbToLab(r, g, b) {
-        // Step 1: RGB [0-255] → RGB [0-1]
-        let R = r / 255;
-        let G = g / 255;
-        let B = b / 255;
-
-        // Step 2: Apply gamma correction (sRGB → linear RGB)
-        R = (R > 0.04045) ? Math.pow((R + 0.055) / 1.055, 2.4) : R / 12.92;
-        G = (G > 0.04045) ? Math.pow((G + 0.055) / 1.055, 2.4) : G / 12.92;
-        B = (B > 0.04045) ? Math.pow((B + 0.055) / 1.055, 2.4) : B / 12.92;
-
-        // Step 3: Linear RGB → XYZ (D65 illuminant matrix)
-        let X = R * 0.4124564 + G * 0.3575761 + B * 0.1804375;
-        let Y = R * 0.2126729 + G * 0.7151522 + B * 0.0721750;
-        let Z = R * 0.0193339 + G * 0.1191920 + B * 0.9503041;
-
-        // Step 4: Normalize to D65 white point
-        X = X / 0.95047;
-        Y = Y / 1.00000;
-        Z = Z / 1.08883;
-
-        // Step 5: XYZ → LAB
-        const epsilon = 0.008856;
-        const kappa = 903.3;
-
-        const fx = (X > epsilon) ? Math.pow(X, 1/3) : (kappa * X + 16) / 116;
-        const fy = (Y > epsilon) ? Math.pow(Y, 1/3) : (kappa * Y + 16) / 116;
-        const fz = (Z > epsilon) ? Math.pow(Z, 1/3) : (kappa * Z + 16) / 116;
-
-        const L = 116 * fy - 16;
-        const a = 500 * (fx - fy);
-        const b_lab = 200 * (fy - fz);
-
-        return { L, a, b: b_lab };
-    }
-
-    /**
-     * Calculate perceptual distance between two colors using CIE76 (CIELAB ΔE)
-     *
-     * More perceptually accurate than RGB Euclidean distance. Better handles
-     * dark/light colors and matches human vision sensitivity.
-     *
-     * Scale: 0-2 = imperceptible, 5-10 = noticeable, 10+ = clearly different
-     *
-     * @private
-     * @param {{r,g,b}} color1 - First color
-     * @param {{r,g,b}} color2 - Second color
-     * @returns {number} - Delta E (ΔE) distance
-     */
-    static _colorDistance(color1, color2) {
-        const lab1 = this._rgbToLab(color1.r, color1.g, color1.b);
-        const lab2 = this._rgbToLab(color2.r, color2.g, color2.b);
-
-        const dL = lab1.L - lab2.L;
-        const da = lab1.a - lab2.a;
-        const db = lab1.b - lab2.b;
-
-        return Math.sqrt(dL * dL + da * da + db * db);
-    }
-
-    /**
-     * Get color ranges (min/max) for each channel in a bucket
-     *
-     * @private
-     * @param {Array<{r,g,b,count}>} bucket - Colors in bucket
-     * @returns {Object} - {r: {min, max, range}, g: {...}, b: {...}, widest: {channel, range}}
-     */
-    /**
-     * Get perceptual color ranges in Lab space (ARCHITECT'S IMPROVEMENT)
-     * @private
-     * @param {Array<{r,g,b,count}>} bucket - Colors to analyze
-     * @returns {Object} - Lab ranges with widest channel
-     */
-    static _getColorRanges(bucket) {
-        // Convert all colors to Lab first
-        const labColors = bucket.map(color => ({
-            ...this._rgbToLab(color.r, color.g, color.b),
-            count: color.count
-        }));
-
-        let lMin = 100, lMax = 0;
-        let aMin = 128, aMax = -128;
-        let bMin = 128, bMax = -128;
-
-        labColors.forEach(lab => {
-            lMin = Math.min(lMin, lab.L);
-            lMax = Math.max(lMax, lab.L);
-            aMin = Math.min(aMin, lab.a);
-            aMax = Math.max(aMax, lab.a);
-            bMin = Math.min(bMin, lab.b);
-            bMax = Math.max(bMax, lab.b);
-        });
-
-        const lRange = lMax - lMin;
-        const aRange = aMax - aMin;
-        const bRange = bMax - bMin;
-
-        // Find widest range (use Lab channel names)
-        let widest = { channel: 'L', range: lRange };
-        if (aRange > widest.range) widest = { channel: 'a', range: aRange };
-        if (bRange > widest.range) widest = { channel: 'b', range: bRange };
-
-        return {
-            L: { min: lMin, max: lMax, range: lRange },
-            a: { min: aMin, max: aMax, range: aRange },
-            b: { min: bMin, max: bMax, range: bRange },
-            widest,
-            labColors // Return Lab colors for splitting
-        };
-    }
-
-    /**
-     * Split a bucket into two at the median of the specified Lab channel
-     * (ARCHITECT'S IMPROVEMENT)
-     *
-     * @private
-     * @param {Array<{r,g,b,count}>} bucket - Colors to split (RGB format)
-     * @param {string} channel - Lab channel to split on ('L', 'a', or 'b')
-     * @returns {Array<Array>} - [bucket1, bucket2] in RGB format
-     */
-    static _splitBucket(bucket, channel) {
-        // Convert to Lab for sorting
-        const labBucket = bucket.map(color => {
-            const lab = this._rgbToLab(color.r, color.g, color.b);
-            return {
-                rgb: { r: color.r, g: color.g, b: color.b },
-                count: color.count,
-                lab: { L: lab.L, a: lab.a, b: lab.b }
-            };
-        });
-
-        // Sort by Lab channel value
-        const sorted = labBucket.sort((a, b) => a.lab[channel] - b.lab[channel]);
-
-        // Split at median (weighted by pixel count)
-        const totalPixels = sorted.reduce((sum, color) => sum + color.count, 0);
-        let pixelSum = 0;
-        let medianIndex = 0;
-
-        for (let i = 0; i < sorted.length; i++) {
-            pixelSum += sorted[i].count;
-            if (pixelSum >= totalPixels / 2) {
-                medianIndex = i;
-                break;
-            }
-        }
-
-        // Ensure we don't create empty buckets
-        if (medianIndex === 0) medianIndex = 1;
-        if (medianIndex === sorted.length) medianIndex = sorted.length - 1;
-
-        // Return in original RGB format (strip Lab values)
-        return [
-            sorted.slice(0, medianIndex).map(c => ({ r: c.rgb.r, g: c.rgb.g, b: c.rgb.b, count: c.count })),
-            sorted.slice(medianIndex).map(c => ({ r: c.rgb.r, g: c.rgb.g, b: c.rgb.b, count: c.count }))
-        ];
-    }
-
-    /**
-     * HUE-SECTOR ANCHOR PROTECTION: Check if bucket contains a specific hue sector
-     *
-     * This helper allows the engine to "see" chromatic signals (like green foliage)
-     * before they get averaged into larger, volume-dominant buckets.
-     *
-     * Patent Claim: "Chromatic Priority Override" for minority color rescue
-     *
-     * @private
-     * @param {Array<{r,g,b,count}>} bucket - Colors to check (RGB format)
-     * @param {number} targetSector - Hue sector (0-11, where 4=Green 120-150°)
-     * @param {number} [chromaThreshold=2] - Minimum chroma to count as signal
-     * @returns {boolean} - True if bucket contains the target hue sector
-     */
-    static _checkBucketForHueSector(bucket, targetSector, chromaThreshold = 2) {
-        // Sample up to 200 colors for efficiency
-        const sampleSize = Math.min(bucket.length, 200);
-        const step = Math.max(1, Math.floor(bucket.length / sampleSize));
-
-        for (let i = 0; i < bucket.length; i += step) {
-            const color = bucket[i];
-            const lab = this._rgbToLab(color.r, color.g, color.b);
-
-            // Calculate chroma (distance from neutral axis)
-            const chroma = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
-
-            // Skip near-neutral colors
-            if (chroma < chromaThreshold) continue;
-
-            // Calculate hue angle in degrees (0-360)
-            const hue = Math.atan2(lab.b, lab.a) * 180 / Math.PI;
-            const normHue = hue < 0 ? hue + 360 : hue;
-
-            // Determine sector (12 sectors, 30° each)
-            const sector = Math.floor(normHue / 30) % 12;
-
-            if (sector === targetSector) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Average all colors in a bucket to produce one representative color
-     *
-     * ARCHITECT'S IMPROVEMENT: Average in Lab space with vibrancy boost
-     * - Converts RGB to Lab for perceptual averaging
-     * - Applies chroma-based weighting: saturated colors count 2-3x more
-     * - Converts back to RGB
-     *
-     * @private
-     * @param {Array<{r,g,b,count}>} bucket - Colors to average
-     * @returns {{r,g,b}} - Average color
-     */
-    static _averageBucket(bucket) {
-        let totalWeight = 0;
-        let sumL = 0, sumA = 0, sumB = 0;
-
-        bucket.forEach(color => {
-            const lab = this._rgbToLab(color.r, color.g, color.b);
-
-            // Calculate chroma (saturation)
-            const chroma = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
-
-            // VIBRANCY BOOST: Saturated colors count for 2x or 3x weight
-            // weight = pixel_count × (1 + chroma/50)
-            // Example: Gray (C=0) → 1.0x, Saturated (C=50) → 2.0x
-            const weight = color.count * (1 + (chroma / 50));
-
-            sumL += lab.L * weight;
-            sumA += lab.a * weight;
-            sumB += lab.b * weight;
-            totalWeight += weight;
-        });
-
-        // Average in Lab space
-        const avgLab = {
-            L: sumL / totalWeight,
-            a: sumA / totalWeight,
-            b: sumB / totalWeight
-        };
-
-        // Convert back to RGB
-        return this.labToRgb(avgLab);
-    }
-
-    /**
-     * Map each pixel to nearest color in palette
-     *
-     * @private
-     * @param {Uint8ClampedArray} pixels - Original RGBA pixel data
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @param {Array<{r,g,b}>} palette - Target color palette
-     * @returns {Uint8ClampedArray} - Posterized RGBA pixel data
-     */
-    static _mapToPalette(pixels, width, height, palette, colorDistance = 'cielab') {
-        const result = new Uint8ClampedArray(pixels.length);
-
-        // Pre-convert palette to LAB if using CIELAB distance
-        const paletteLAB = colorDistance === 'cielab'
-            ? palette.map(c => this._rgbToLab(c.r, c.g, c.b))
-            : null;
-
-        for (let i = 0; i < pixels.length; i += 4) {
-            const r = pixels[i];
-            const g = pixels[i + 1];
-            const b = pixels[i + 2];
-            const a = pixels[i + 3];
-
-            // Preserve fully transparent pixels
-            if (a === 0) {
-                result[i] = 0;
-                result[i + 1] = 0;
-                result[i + 2] = 0;
-                result[i + 3] = 0;
-                continue;
-            }
-
-            // Find nearest palette color using selected distance method
-            let minDistance = Infinity;
-            let nearestColor = palette[0];
-
-            if (colorDistance === 'cielab') {
-                // CIELAB (CIE76) distance - perceptually uniform
-                const pixelLAB = this._rgbToLab(r, g, b);
-
-                palette.forEach((paletteColor, index) => {
-                    const colorLAB = paletteLAB[index];
-                    const dL = pixelLAB.L - colorLAB.L;
-                    const da = pixelLAB.a - colorLAB.a;
-                    const db = pixelLAB.b - colorLAB.b;
-                    const distance = Math.sqrt(dL * dL + da * da + db * db);
-
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        nearestColor = paletteColor;
-                    }
-                });
-            } else {
-                // RGB Euclidean distance - fast but less accurate
-                palette.forEach(paletteColor => {
-                    const dr = r - paletteColor.r;
-                    const dg = g - paletteColor.g;
-                    const db = b - paletteColor.b;
-                    const distance = dr * dr + dg * dg + db * db;
-
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        nearestColor = paletteColor;
-                    }
-                });
-            }
-
-            // Write nearest color
-            result[i] = nearestColor.r;
-            result[i + 1] = nearestColor.g;
-            result[i + 2] = nearestColor.b;
-            result[i + 3] = a;
-        }
-
-        return result;
-    }
-
-    /**
-     * Build palette array from color list (for when no quantization needed)
-     *
-     * @private
-     * @param {Array<{r,g,b,count}>} colors - Color list
-     * @returns {Array<{r,g,b}>} - Palette (without count)
-     */
-    static _buildPalette(colors) {
-        return colors.map(c => ({ r: c.r, g: c.g, b: c.b }));
-    }
-
-    /**
-     * Convert palette to hex color strings for display
-     *
-     * @param {Array<{r,g,b}>} palette - Color palette
-     * @returns {Array<string>} - Array of hex color strings (e.g., ["#FF0000", "#00FF00"])
-     */
-    static paletteToHex(palette) {
-        return palette.map(color => {
-            const r = color.r.toString(16).padStart(2, '0');
-            const g = color.g.toString(16).padStart(2, '0');
-            const b = color.b.toString(16).padStart(2, '0');
-            return `#${r}${g}${b}`.toUpperCase();
-        });
-    }
-
-    /**
-     * Calculate perceptual distance (CIE76 ΔE) between two hex colors
-     *
-     * Used for real-time validation in the palette editor. Returns ΔE distance
-     * where values < 12 indicate colors that are too perceptually similar.
-     *
-     * @param {string} hex1 - First color (e.g., "#FF0000")
-     * @param {string} hex2 - Second color (e.g., "#FE0000")
-     * @returns {number} - CIE76 ΔE distance (0 = identical, >12 = distinct)
-     */
-    static calculateHexDistance(hex1, hex2) {
-        // Parse hex colors to RGB
-        const rgb1 = {
-            r: parseInt(hex1.slice(1, 3), 16),
-            g: parseInt(hex1.slice(3, 5), 16),
-            b: parseInt(hex1.slice(5, 7), 16)
-        };
-        const rgb2 = {
-            r: parseInt(hex2.slice(1, 3), 16),
-            g: parseInt(hex2.slice(3, 5), 16),
-            b: parseInt(hex2.slice(5, 7), 16)
-        };
-
-        // Use existing color distance calculation
-        return this._colorDistance(rgb1, rgb2);
-    }
-
     // ========================================================================
-    // Lab-Space Posterization + Perceptual Snap (Editorial Engine)
+    // Color Conversion (kept inline — has gamut mapping logic)
     // ========================================================================
 
     /**
      * Convert sRGB color to CIELAB color space
-     *
-     * Pipeline: sRGB → Linear RGB → XYZ → CIELAB
-     * Uses D65 illuminant and sRGB color space matrices
-     *
-     * @param {Object} rgb - {r: 0-255, g: 0-255, b: 0-255}
-     * @returns {Object} lab - {L: 0-100, a: -128 to 127, b: -128 to 127}
+     * Pipeline: sRGB → Linear RGB → XYZ → CIELAB (D65 illuminant)
      */
     static rgbToLab(rgb) {
-        // Step 1: sRGB to Linear RGB (inverse gamma correction)
         const r = this._gammaToLinear(rgb.r / 255);
         const g = this._gammaToLinear(rgb.g / 255);
         const b = this._gammaToLinear(rgb.b / 255);
 
-        // Step 2: Linear RGB to XYZ (using sRGB matrix)
         let x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
         let y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
         let z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
 
-        // Step 3: Normalize by D65 illuminant
         x = x / 0.95047;
         y = y / 1.00000;
         z = z / 1.08883;
 
-        // Step 4: XYZ to Lab (CIE 1976)
         x = this._xyzToLabHelper(x);
         y = this._xyzToLabHelper(y);
         z = this._xyzToLabHelper(z);
@@ -1107,24 +286,16 @@ class PosterizationEngine {
     }
 
     /**
-     * Convert CIELAB color to sRGB color space
-     *
+     * Convert CIELAB color to sRGB color space with gamut mapping
      * Pipeline: CIELAB → XYZ → Linear RGB → sRGB
-     * Uses D65 illuminant and sRGB color space matrices
-     *
-     * @param {Object} lab - {L: 0-100, a: -128 to 127, b: -128 to 127}
-     * @returns {Object} rgb - {r: 0-255, g: 0-255, b: 0-255}
      */
     static labToRgb(lab) {
-        // GAMUT MAPPING: If Lab color is out of sRGB gamut, reduce chroma while preserving hue
-        // This prevents yellow → orange shifts caused by hard clipping
         const MAX_ITERATIONS = 20;
         let currentLab = { L: lab.L, a: lab.a, b: lab.b };
         let iteration = 0;
         let inGamut = false;
 
         while (!inGamut && iteration < MAX_ITERATIONS) {
-            // Step 1: Lab to XYZ
             let y = (currentLab.L + 16) / 116;
             let x = currentLab.a / 500 + y;
             let z = y - currentLab.b / 200;
@@ -1133,20 +304,16 @@ class PosterizationEngine {
             y = this._labToXyzHelper(y) * 1.00000;
             z = this._labToXyzHelper(z) * 1.08883;
 
-            // Step 2: XYZ to Linear RGB
             let r = x *  3.2404542 + y * -1.5371385 + z * -0.4985314;
             let g = x * -0.9692660 + y *  1.8760108 + z *  0.0415560;
             let b = x *  0.0556434 + y * -0.2040259 + z *  1.0572252;
 
-            // Step 3: Linear RGB to sRGB (gamma correction)
             r = this._linearToGamma(r);
             g = this._linearToGamma(g);
             b = this._linearToGamma(b);
 
-            // Check if in gamut (all channels 0-1 range)
             if (r >= 0 && r <= 1 && g >= 0 && g <= 1 && b >= 0 && b <= 1) {
                 inGamut = true;
-                // Step 4: Scale to 0-255
                 return {
                     r: Math.round(r * 255),
                     g: Math.round(g * 255),
@@ -1154,13 +321,12 @@ class PosterizationEngine {
                 };
             }
 
-            // Out of gamut: Reduce chroma by 5% while preserving hue
             currentLab.a *= 0.95;
             currentLab.b *= 0.95;
             iteration++;
         }
 
-        // Fallback: If still out of gamut after iterations, clamp
+        // Fallback: clamp
         let y = (currentLab.L + 16) / 116;
         let x = currentLab.a / 500 + y;
         let z = y - currentLab.b / 200;
@@ -1177,7 +343,6 @@ class PosterizationEngine {
         g = this._linearToGamma(g);
         b = this._linearToGamma(b);
 
-        // Clamp and scale to 0-255
         r = Math.max(0, Math.min(255, Math.round(r * 255)));
         g = Math.max(0, Math.min(255, Math.round(g * 255)));
         b = Math.max(0, Math.min(255, Math.round(b * 255)));
@@ -1185,65 +350,7 @@ class PosterizationEngine {
         return { r, g, b };
     }
 
-    /**
-     * Auto-detect substrate color from image corners (preview resolution)
-     *
-     * Samples 10×10 pixel blocks from each of the 4 corners (400 pixels total)
-     * to establish substrate baseline. Corners typically contain background/substrate.
-     *
-     * This runs on preview resolution (800×800) for performance, with the detected
-     * substrate color then applied to both preview and full-resolution processing.
-     *
-     * @param {Uint8Array} labBytes - Raw Lab bytes (0-255 encoding from UXP)
-     * @param {number} width - Preview width (typically 800px)
-     * @param {number} height - Preview height
-     * @returns {{L: number, a: number, b: number}} Lab color in perceptual ranges
-     *          (L: 0-100, a: -128 to +127, b: -128 to +127)
-     */
-    static autoDetectSubstrate(labBytes, width, height, bitDepth = 16) {
-        const SAMPLE_SIZE = 10; // 10×10 blocks per corner
-        let sumL = 0, sumA = 0, sumB = 0, count = 0;
-
-        // Engine ONLY accepts 16-bit Lab input (callers convert 8-bit → 16-bit before calling)
-        // bitDepth parameter is kept for logging but data is always 16-bit
-        const maxValue = 32768;
-        const neutralAB = 16384;
-        const abScale = 128 / 16384;
-
-        // Helper: Sample single pixel and accumulate
-        const sample = (x, y) => {
-            const i = (y * width + x) * 3;
-            // Convert 16-bit Lab to perceptual ranges
-            sumL += (labBytes[i] / maxValue) * 100;
-            sumA += (labBytes[i + 1] - neutralAB) * abScale;
-            sumB += (labBytes[i + 2] - neutralAB) * abScale;
-            count++;
-        };
-
-        // Sample all 4 corners (10×10 each = 400 pixels total)
-        for (let y = 0; y < SAMPLE_SIZE; y++) {
-            for (let x = 0; x < SAMPLE_SIZE; x++) {
-                sample(x, y);                              // Top-left
-                sample(width - 1 - x, y);                  // Top-right
-                sample(x, height - 1 - y);                 // Bottom-left
-                sample(width - 1 - x, height - 1 - y);     // Bottom-right
-            }
-        }
-
-        const detectedSubstrate = {
-            L: sumL / count,
-            a: sumA / count,
-            b: sumB / count
-        };
-
-
-        return detectedSubstrate;
-    }
-
-    /**
-     * sRGB gamma correction (inverse): sRGB → Linear RGB
-     * @private
-     */
+    /** @private sRGB gamma correction (inverse): sRGB → Linear RGB */
     static _gammaToLinear(channel) {
         if (channel <= 0.04045) {
             return channel / 12.92;
@@ -1252,10 +359,7 @@ class PosterizationEngine {
         }
     }
 
-    /**
-     * sRGB gamma correction (forward): Linear RGB → sRGB
-     * @private
-     */
+    /** @private sRGB gamma correction (forward): Linear RGB → sRGB */
     static _linearToGamma(channel) {
         if (channel <= 0.0031308) {
             return channel * 12.92;
@@ -1264,10 +368,7 @@ class PosterizationEngine {
         }
     }
 
-    /**
-     * XYZ to Lab helper function (CIE standard function)
-     * @private
-     */
+    /** @private XYZ to Lab helper function (CIE standard function) */
     static _xyzToLabHelper(t) {
         const delta = 6 / 29;
         if (t > delta * delta * delta) {
@@ -1277,10 +378,7 @@ class PosterizationEngine {
         }
     }
 
-    /**
-     * Lab to XYZ helper function (CIE standard function inverse)
-     * @private
-     */
+    /** @private Lab to XYZ helper function (CIE standard function inverse) */
     static _labToXyzHelper(t) {
         const delta = 6 / 29;
         if (t > delta) {
@@ -1290,1613 +388,317 @@ class PosterizationEngine {
         }
     }
 
+    // ========================================================================
+    // Public API: Substrate Detection (kept inline — small, standalone)
+    // ========================================================================
+
     /**
-     * Calculate CIELAB ΔE SQUARED distance with L-channel emphasis (CIE76 modified)
-     *
-     * Over-weights the L (Lightness) channel to emphasize tonal contrast,
-     * which creates the "bones" of the image in screen printing separations.
-     * Shadows and highlights define subject structure.
-     *
-     * Performance: Returns SQUARED distance (no sqrt) - sufficient for comparisons.
-     * When comparing distances, sqrt is unnecessary since sqrt(a) < sqrt(b) ⟺ a < b.
-     *
-     * Formula: ΔE² = 1.5*dL² + da² + db²
-     * Standard CIE76: ΔE = sqrt(dL² + da² + db²)
-     *
-     * @param {Object} lab1 - {L, a, b}
-     * @param {Object} lab2 - {L, a, b}
-     * @returns {number} distanceSquared - Perceptual distance squared (L-weighted)
+     * Auto-detect substrate color from image corners (preview resolution)
      */
+    static autoDetectSubstrate(labBytes, width, height, bitDepth = 16) {
+        const SAMPLE_SIZE = 10;
+        let sumL = 0, sumA = 0, sumB = 0, count = 0;
+
+        const maxValue = 32768;
+        const neutralAB = 16384;
+        const abScale = 128 / 16384;
+
+        const sample = (x, y) => {
+            const i = (y * width + x) * 3;
+            sumL += (labBytes[i] / maxValue) * 100;
+            sumA += (labBytes[i + 1] - neutralAB) * abScale;
+            sumB += (labBytes[i + 2] - neutralAB) * abScale;
+            count++;
+        };
+
+        for (let y = 0; y < SAMPLE_SIZE; y++) {
+            for (let x = 0; x < SAMPLE_SIZE; x++) {
+                sample(x, y);
+                sample(width - 1 - x, y);
+                sample(x, height - 1 - y);
+                sample(width - 1 - x, height - 1 - y);
+            }
+        }
+
+        const detectedSubstrate = {
+            L: sumL / count,
+            a: sumA / count,
+            b: sumB / count
+        };
+
+        return detectedSubstrate;
+    }
+
+    // ========================================================================
+    // Public API: Palette Utilities (kept inline — small helpers)
+    // ========================================================================
+
+    /**
+     * Convert palette to hex color strings for display
+     */
+    static paletteToHex(palette) {
+        return palette.map(color => {
+            const r = color.r.toString(16).padStart(2, '0');
+            const g = color.g.toString(16).padStart(2, '0');
+            const b = color.b.toString(16).padStart(2, '0');
+            return `#${r}${g}${b}`.toUpperCase();
+        });
+    }
+
+    /**
+     * Calculate perceptual distance (CIE76 ΔE) between two hex colors
+     */
+    static calculateHexDistance(hex1, hex2) {
+        const rgb1 = {
+            r: parseInt(hex1.slice(1, 3), 16),
+            g: parseInt(hex1.slice(3, 5), 16),
+            b: parseInt(hex1.slice(5, 7), 16)
+        };
+        const rgb2 = {
+            r: parseInt(hex2.slice(1, 3), 16),
+            g: parseInt(hex2.slice(3, 5), 16),
+            b: parseInt(hex2.slice(5, 7), 16)
+        };
+
+        return RgbMedianCut._colorDistance(rgb1, rgb2);
+    }
+
+    // ========================================================================
+    // Public API: Backward-Compatible Delegates
+    // ========================================================================
+
+    /** Delegate to PaletteOps */
     static calculateCIELABDistance(lab1, lab2, isGrayscale = false) {
-        const deltaL = lab1.L - lab2.L;
-        const deltaA = lab1.a - lab2.a;
-        const deltaB = lab1.b - lab2.b;
-
-        // Luma-aware weighting per Architect guidance:
-        // Grayscale: L_WEIGHT = 3.0 (human vision extremely sensitive to luma steps)
-        // Color: L_WEIGHT = 1.5 (balanced tonal structure)
-        const L_WEIGHT = isGrayscale ? 3.0 : 1.5;
-
-        // Return squared distance (no sqrt) - faster and sufficient for comparisons
-        return L_WEIGHT * deltaL * deltaL + deltaA * deltaA + deltaB * deltaB;
+        return PaletteOps.calculateCIELABDistance(lab1, lab2, isGrayscale);
     }
 
-    /**
-     * Apply perceptual snap threshold to collapse similar colors
-     *
-     * Philosophy: "The engine actively curates by removing subtle noise
-     * and highlighting core structures (Fidelity to Feature)"
-     *
-     * @param {Array} palette - Array of Lab colors: [{L, a, b}, ...]
-     * @param {number} threshold - ΔE threshold (default 8.0) - regular distance, will be squared for comparison
-     * @param {boolean} isGrayscale - Grayscale mode flag
-     * @param {number} vibrancyMultiplier - Vibrancy boost multiplier (deprecated, kept for compatibility)
-     * @param {Function} strategy - Centroid strategy function
-     * @param {Object} tuning - Tuning parameters for centroid calculation
-     * @returns {Array} snappedPalette - Curated palette with similar colors merged
-     */
+    /** Delegate to PaletteOps */
     static applyPerceptualSnap(palette, threshold = 8.0, isGrayscale = false, vibrancyMultiplier = 2.0, strategy = null, tuning = null) {
-        if (palette.length <= 1) {
-            return palette;
-        }
-
-        const snapped = [];
-        const merged = new Set();
-        let totalMerged = 0;
-
-        // Square the threshold for comparison with squared distances
-        const thresholdSquared = threshold * threshold;
-
-        for (let i = 0; i < palette.length; i++) {
-            if (merged.has(i)) continue;
-
-            // Start a new feature group with this color
-            const featureGroup = [palette[i]];
-            const featureIndices = [i];
-
-            // Find all colors within snap threshold (using luma-aware distance)
-            for (let j = i + 1; j < palette.length; j++) {
-                if (merged.has(j)) continue;
-
-                const deltaESquared = this.calculateCIELABDistance(palette[i], palette[j], isGrayscale);
-
-                if (deltaESquared < thresholdSquared) {
-                    featureGroup.push(palette[j]);
-                    featureIndices.push(j);
-                    merged.add(j);
-                    totalMerged++;
-                }
-            }
-
-            // Merge feature group into single representative color (centroid)
-            const representative = this._calculateLabCentroid(featureGroup, isGrayscale, strategy, tuning);
-            snapped.push(representative);
-
-            if (featureGroup.length > 1) {
-            }
-        }
-
-        if (totalMerged > 0) {
-        } else {
-        }
-
-        return snapped;
+        return PaletteOps.applyPerceptualSnap(palette, threshold, isGrayscale, vibrancyMultiplier, strategy, tuning);
     }
 
-    /**
-     * Calculate representative color for a group of colors in Lab space
-     *
-     * Grayscale mode: Average L (neutral gray)
-     * Color mode: Pick MOST SATURATED color (highest chroma)
-     *
-     * @private
-     */
-    /**
-     * STRATEGY-AWARE CENTROID CALCULATION
-     *
-     * Uses injected strategy to determine representative color for a bucket.
-     * Falls back to VOLUMETRIC if no strategy provided (backward compatibility).
-     *
-     * @private
-     * @param {Array} colors - Bucket colors
-     * @param {boolean} grayscaleOnly - L-channel only mode
-     * @param {Function} strategy - Centroid strategy function
-     * @param {Object} tuning - Tuning parameters
-     * @returns {{L: number, a: number, b: number}} - Representative color
-     */
-    static _calculateLabCentroid(colors, grayscaleOnly = false, strategy = null, tuning = null) {
-        // Safety check: empty colors array
-        if (!colors || colors.length === 0) {
-            return { L: 50, a: 0, b: 0 }; // Neutral gray fallback
-        }
-
-        // Use injected strategy or fallback to VOLUMETRIC
-        const centroidStrategy = strategy || CentroidStrategies.VOLUMETRIC;
-        const weights = tuning ? tuning.centroid : this.TUNING.centroid;
-
-        // Safety check: ensure strategy is a function
-        if (typeof centroidStrategy !== 'function') {
-            logger.warn(`⚠️ Invalid centroid strategy (not a function), falling back to VOLUMETRIC`);
-            return CentroidStrategies.VOLUMETRIC(colors, weights);
-        }
-
-        if (grayscaleOnly) {
-            // Grayscale mode: Use strategy but force a=b=0
-            const result = centroidStrategy(colors, weights);
-            return { L: result.L, a: 0, b: 0 };
-        } else {
-            // Color mode: Use strategy as-is
-            return centroidStrategy(colors, weights);
-        }
-    }
-
-    /**
-     * HUE-AWARE PRIORITY MULTIPLIER: Maps Lab a/b coordinates to one of 12 hue sectors (30° each)
-     *
-     * Part of the Architect's "Hue Hunger" logic - enables priority multiplier to identify
-     * which hue sectors exist in the image and which are covered by the current palette.
-     *
-     * Sector mapping (30° each):
-     *  0: Red (0-30°)       6: Blue (180-210°)
-     *  1: Orange (30-60°)   7: B-Purple (210-240°)
-     *  2: Yellow (60-90°)   8: Purple (240-270°)
-     *  3: Y-Green (90-120°) 9: Magenta (270-300°)
-     *  4: Green (120-150°)  10: Pink (300-330°)
-     *  5: Cyan (150-180°)   11: R-Pink (330-360°)
-     *
-     * @private
-     * @param {number} a - Lab a* channel (-128 to +127)
-     * @param {number} b - Lab b* channel (-128 to +127)
-     * @returns {number} Sector index 0-11, or -1 if grayscale
-     */
-    static _getHueSector(a, b) {
-        const CHROMA_THRESHOLD = 5; // Match existing analysis threshold
-        const chroma = Math.sqrt(a * a + b * b);
-
-        if (chroma <= CHROMA_THRESHOLD) {
-            return -1; // Grayscale, no hue
-        }
-
-        let angle = Math.atan2(b, a) * (180 / Math.PI); // Radians to degrees
-        if (angle < 0) angle += 360; // Normalize to 0-360°
-        return Math.min(Math.floor(angle / 30), 11); // Divide into 12 sectors
-    }
-
-    /**
-     * HUE-AWARE PRIORITY MULTIPLIER: Calculate metadata for median cut box
-     *
-     * Computes mean Lab values, hue sector, and variance for a box.
-     * Used by priority calculator to determine split priority.
-     *
-     * Variance calculation:
-     * - Grayscale mode: Only L variance (ignores chroma)
-     * - Color mode: Sum of L, a, b variances (full perceptual variance)
-     *
-     * @private
-     * @param {Object} box - Box containing colors array: [{ L, a, b, count }, ...]
-     * @param {boolean} grayscaleOnly - If true, ignore chroma channels
-     * @returns {Object} { meanL, meanA, meanB, sector, variance }
-     */
-    static _calculateBoxMetadata(box, grayscaleOnly = false, vibrancyMode = 'aggressive', vibrancyMultiplier = 2.0, highlightThreshold = 92, highlightBoost = 3.0, tuning = null) {
-        const { colors } = box;
-
-        if (colors.length === 0) {
-            return { meanL: 0, meanA: 0, meanB: 0, sector: -1, variance: 0 };
-        }
-
-        // Use centralized tuning or fallback to defaults
-        const config = tuning || this.TUNING;
-
-        // Calculate means
-        const meanL = colors.reduce((sum, c) => sum + c.L, 0) / colors.length;
-        const meanA = colors.reduce((sum, c) => sum + c.a, 0) / colors.length;
-        const meanB = colors.reduce((sum, c) => sum + c.b, 0) / colors.length;
-
-        // Calculate variance (sum of squared deviations)
-        let varL = 0, varA = 0, varB = 0;
-        let chromaSum = 0;
-        for (const c of colors) {
-            varL += (c.L - meanL) ** 2;
-            if (!grayscaleOnly) {
-                varA += (c.a - meanA) ** 2;
-                varB += (c.b - meanB) ** 2;
-                // Calculate average chroma for vibrancy boost
-                const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
-                chromaSum += chroma;
-            }
-        }
-
-        // SALIENCY & HUE PRESERVATION MODEL
-        // Multi-priority split logic: Both highlights AND vibrant accents get protection
-
-        const avgChroma = grayscaleOnly ? 0 : chromaSum / colors.length;
-
-        // FIXED VIBRANCY BOOST: Uses centralized tuning (default: 1.6×)
-        // Weights chroma-rich pixels (greens, skin tones) without over-emphasizing
-        const vibrancyBoost = avgChroma > 10 ? config.split.vibrancyBoost : 1.0;
-
-        // BALANCED HIGHLIGHT PROTECTION: Uses centralized tuning (default: 2.2×)
-        // Protects facial highlights without overwhelming vibrant features
-        const highlightBoostValue = meanL > config.prune.whitePoint ? config.split.highlightBoost : 1.0;
-
-        // CRITICAL: Use Math.max() so either feature can win independently
-        // This prevents the highlight budget from consuming the vibrant accent slots
-        const finalBoost = Math.max(vibrancyBoost, highlightBoostValue);
-
-        // Log when highlight boost is active
-        if (highlightBoostValue > 1.0 && highlightBoostValue >= vibrancyBoost) {
-        }
-
-        const baseVariance = grayscaleOnly ? varL : (varL + varA + varB);
-        const variance = baseVariance * finalBoost;
-
-        const sector = grayscaleOnly ? -1 : this._getHueSector(meanA, meanB);
-
-        return { meanL, meanA, meanB, sector, variance };
-    }
-
-    /**
-     * GREEN PEEK: Check if a box contains any colors in specific hue sectors
-     *
-     * This is critical for detecting "hidden" green signals that get averaged
-     * into blue-gray boxes. The box's MEAN might be neutral, but individual
-     * colors could still be green foliage that needs isolation.
-     *
-     * Patent Claim: "Chromatic Inflation Factor" for hidden hue signals
-     *
-     * @private
-     * @param {Array} colors - Box colors: [{L, a, b, count}, ...]
-     * @param {Array<number>} targetSectors - Hue sectors to detect (e.g., [3, 4] for green)
-     * @param {number} chromaThreshold - Minimum chroma to consider (default 2.0)
-     * @returns {boolean} True if box contains any colors in target sectors
-     */
-    static _boxContainsHueSector(colors, targetSectors, chromaThreshold = 2.0) {
-        // Sample up to 100 colors for efficiency
-        const sampleSize = Math.min(colors.length, 100);
-        const step = Math.max(1, Math.floor(colors.length / sampleSize));
-
-        let greenCandidates = 0;
-        let lowChromaSkips = 0;
-
-        for (let i = 0; i < colors.length; i += step) {
-            const c = colors[i];
-            const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
-
-            // Skip near-neutral colors
-            if (chroma < chromaThreshold) {
-                lowChromaSkips++;
-                continue;
-            }
-
-            // Calculate hue angle in degrees (0-360)
-            const hue = Math.atan2(c.b, c.a) * 180 / Math.PI;
-            const normHue = hue < 0 ? hue + 360 : hue;
-
-            // Determine sector (12 sectors, 30° each)
-            const sector = Math.floor(normHue / 30) % 12;
-
-            // For green detection, also check for negative a* (the green axis)
-            // Green colors have a < 0 in perceptual Lab space
-            if (targetSectors.includes(sector)) {
-                greenCandidates++;
-                return true;
-            }
-
-            // ADDITIONAL CHECK: Any color with negative a* and positive b* is green-ish
-            // This catches greens that might be classified in adjacent sectors
-            if (c.a < -3 && c.b > 0 && chroma > 3) {
-                return true;
-            }
-        }
-
-        // Log diagnostic info if no green found
-        if (lowChromaSkips > sampleSize * 0.8) {
-        }
-
-        return false;
-    }
-
-    /**
-     * HUE-AWARE PRIORITY MULTIPLIER: Calculate split priority using Hue Hunger
-     *
-     * ARCHITECT'S "SECRET SAUCE": Priority = Variance × (1 + HueHunger)
-     *
-     * This transforms median cut from statistical dominance to perceptual importance.
-     * Boxes in uncovered hue sectors with significant source energy get 5× priority boost,
-     * forcing the algorithm to naturally discover vibrant accents instead of just
-     * splitting neutral backgrounds.
-     *
-     * Example:
-     * - Image: 90% gray, 10% vibrant red
-     * - Without priority: Gray box has 900 variance, red box has 100 variance → gray splits first
-     * - With priority: Red sector uncovered + >5% energy → red gets 100 × 5.0 = 500 priority
-     * - Result: Red box splits first, gets 1-2 palette slots (desired behavior)
-     *
-     * @private
-     * @param {Object} box - Box to evaluate
-     * @param {Float32Array} sectorEnergy - Source energy per sector (0-100%), or null if disabled
-     * @param {Set<number>} coveredSectors - Sectors already in palette
-     * @param {boolean} grayscaleOnly - If true, ignore hue priority
-     * @param {number} hueMultiplier - Multiplier for uncovered sectors (default 5.0)
-     * @returns {number} Priority value (higher = split sooner)
-     */
-    static _calculateSplitPriority(box, sectorEnergy, coveredSectors, grayscaleOnly, hueMultiplier = 5.0, vibrancyMode = 'aggressive', vibrancyMultiplier = 2.0, highlightThreshold = 92, highlightBoost = 3.0, tuning = null) {
-        const metadata = this._calculateBoxMetadata(box, grayscaleOnly, vibrancyMode, vibrancyMultiplier, highlightThreshold, highlightBoost, tuning);
-
-        // Base priority: perceptual variance
-        let basePriority = metadata.variance;
-
-        // Early exit for grayscale or no hue priority
-        if (grayscaleOnly || !sectorEnergy) {
-            return basePriority;
-        }
-
-        // Apply Hue-Aware multiplier
-        let multiplier = 1.0;
-        const boxSector = metadata.sector;
-        const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
-                           'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
-
-        // GREEN PEEK: Check if this box CONTAINS green signals even if the mean isn't green
-        // This is critical because green foliage often gets mixed into blue-gray boxes
-        // Patent Claim: "Chromatic Inflation Factor" for hidden hue signals
-        const is16Bit = tuning && tuning.centroid && tuning.centroid.bitDepth === 16;
-        const isArchiveMode = vibrancyMode === 'exponential' || is16Bit;
-        const GREEN_PEEK_THRESHOLD = is16Bit ? 0.5 : 2.0;  // Very low chroma threshold for 16-bit
-        const GREEN_PEEK_MULTIPLIER = 8.0;
-
-        // Log Green Peek status for debugging
-        const greenSector3Covered = coveredSectors.has(3);
-        const greenSector4Covered = coveredSectors.has(4);
-        const greenEnergy = Math.max(sectorEnergy[3] || 0, sectorEnergy[4] || 0);
-
-        if (isArchiveMode) {
-            if (!greenSector3Covered && !greenSector4Covered) {
-                // Check if box contains ANY green signals (sectors 3 or 4)
-                const hasGreenSignal = this._boxContainsHueSector(box.colors, [3, 4], GREEN_PEEK_THRESHOLD);
-
-                if (hasGreenSignal && greenEnergy > 0.1) {
-                    multiplier = GREEN_PEEK_MULTIPLIER;
-                    return basePriority * multiplier;  // Early return with boost
-                } else if (hasGreenSignal) {
-                }
-            } else {
-            }
-        }
-
-        if (boxSector >= 0) {
-            const sourceEnergy = sectorEnergy[boxSector];
-
-            // RED RESCUE: JPEG artifacts compress reds into "muddy pink" volumes
-            // that mathematically out-vote the true reds. We use aggressive settings
-            // for Red sector (0) to force isolation before averaging kills it.
-            // Patent Claim: "Chromatic Inflation Factor" for artifact-compressed primaries
-            const isRedSector = boxSector === 0;
-            const RED_RESCUE_THRESHOLD = 2.0;      // Lower threshold for reds (2% vs 5%)
-            const RED_RESCUE_MULTIPLIER = 10.0;    // Minimum boost for reds (10×)
-            const isGreenSector = boxSector === 3 || boxSector === 4; // Y-Green or Green
-            const GREEN_RESCUE_THRESHOLD = is16Bit ? 0.5 : 1.5;    // Even lower for 16-bit archives
-            const GREEN_RESCUE_MULTIPLIER = 10.0;  // Match Red Rescue strength
-
-            // Determine thresholds and multipliers based on rescue type
-            let significanceThreshold = 5.0;
-            let sectorMultiplier = hueMultiplier;
-
-            if (isRedSector) {
-                significanceThreshold = RED_RESCUE_THRESHOLD;
-                sectorMultiplier = Math.max(RED_RESCUE_MULTIPLIER, hueMultiplier);
-            } else if (isArchiveMode && isGreenSector) {
-                significanceThreshold = GREEN_RESCUE_THRESHOLD;
-                sectorMultiplier = Math.max(GREEN_RESCUE_MULTIPLIER, hueMultiplier);
-            }
-
-            // CRITICAL: If sector has significant energy but isn't covered yet
-            if (sourceEnergy > significanceThreshold && !coveredSectors.has(boxSector)) {
-                multiplier = sectorMultiplier;
-
-                if (isRedSector) {
-                } else if (isArchiveMode && isGreenSector) {
-                } else {
-                }
-            }
-        }
-
-        return basePriority * multiplier;
-    }
-
-    /**
-     * ARTIST-CENTRIC / HUE-AWARE MODEL: Analyze image hue distribution
-     *
-     * Divides color wheel into 12 sectors (30° each) and counts pixels in each.
-     * Only counts pixels with chroma > 10 (excludes near-grays).
-     *
-     * @private
-     * @param {Float32Array} labPixels - Flat array: [L, a, b, L, a, b, ...]
-     * @param {number} [chromaThreshold=5] - Minimum chroma to count (lower for muted images)
-     * @returns {Array<number>} - 12 element array with pixel counts per sector
-     */
-    static _analyzeImageHueSectors(labPixels, chromaThreshold = 5) {
-        // MUTED IMAGE RESCUE: For archives with lowChromaDensity > 0.6, use threshold 1.0
-        // to detect desaturated greens (chroma 2-4) that would otherwise be ignored
-        const CHROMA_THRESHOLD = chromaThreshold;
-        const hueCounts = new Array(12).fill(0);
-        let chromaSum = 0;
-        let chromaCount = 0;
-
-        for (let i = 0; i < labPixels.length; i += 3) {
-            const a = labPixels[i + 1];
-            const b = labPixels[i + 2];
-            const chroma = Math.sqrt(a * a + b * b);
-
-            if (chroma > CHROMA_THRESHOLD) {
-                chromaSum += chroma;
-                chromaCount++;
-
-                // Calculate hue angle: atan2(b, a) gives -180 to +180
-                const hue = Math.atan2(b, a) * 180 / Math.PI;
-                const hueNorm = hue < 0 ? hue + 360 : hue; // Normalize to 0-360
-                const sectorIdx = Math.floor(hueNorm / 30); // 12 sectors of 30° each
-                hueCounts[Math.min(sectorIdx, 11)]++; // Clamp to 0-11
-            }
-        }
-
-        const avgChroma = chromaCount > 0 ? chromaSum / chromaCount : 0;
-
-        // Normalize by chromatic pixel count, not total pixels.
-        // Substrate (paper white) and achromatic pixels carry no hue information —
-        // including them in the denominator suppresses minority hue sectors.
-        const denominator = chromaCount > 0 ? chromaCount : 1;
-        const huePercentages = hueCounts.map(count => (count / denominator) * 100);
-
-        return huePercentages;
-    }
-
-    /**
-     * ARTIST-CENTRIC / HUE-AWARE MODEL: Analyze palette hue coverage
-     *
-     * Checks which of the 12 hue sectors are represented in the palette.
-     *
-     * @private
-     * @param {Array} palette - Array of Lab colors: [{L, a, b}, ...]
-     * @param {number} [chromaThreshold=5] - Minimum chroma to count (lower for muted images)
-     * @returns {Set<number>} - Set of sector indices (0-11) covered by palette
-     */
-    static _analyzePaletteHueCoverage(palette, chromaThreshold = 5) {
-        const CHROMA_THRESHOLD = chromaThreshold; // Match image analysis threshold
-        const coveredSectors = new Set();
-        const colorCountsBySector = new Array(12).fill(0); // Count colors per sector
-        const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
-                            'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
-
-        for (const color of palette) {
-            const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
-
-            if (chroma > CHROMA_THRESHOLD) {
-                const hue = Math.atan2(color.b, color.a) * 180 / Math.PI;
-                const hueNorm = hue < 0 ? hue + 360 : hue;
-                const sectorIdx = Math.floor(hueNorm / 30);
-                const clampedIdx = Math.min(sectorIdx, 11);
-                coveredSectors.add(clampedIdx);
-                colorCountsBySector[clampedIdx]++;
-            }
-        }
-
-        return { coveredSectors, colorCountsBySector };
-    }
-
-    /**
-     * ARTIST-CENTRIC / HUE-AWARE MODEL: Identify hue gaps
-     *
-     * Finds hue sectors with significant image presence (>5%) but no palette representation.
-     *
-     * @private
-     * @param {Array<number>} imageHues - Percentage of pixels in each sector
-     * @param {Set<number>} paletteCoverage - Set of sectors covered by palette
-     * @returns {Array<number>} - Array of gap sector indices
-     */
-    static _identifyHueGaps(imageHues, paletteCoverage, paletteColorCountsBySector = null) {
-        const GAP_THRESHOLD = 1.0; // Sector must have >1% of chromatic pixels to be considered significant
-        const HEAVY_SECTOR_THRESHOLD = 40.0; // If sector has >40% of chromatic pixels, needs multiple palette colors
-        const gaps = [];
-        const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
-                            'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
-
-        for (let i = 0; i < imageHues.length; i++) {
-            // Check for complete gaps (sector present but not covered)
-            if (imageHues[i] > GAP_THRESHOLD && !paletteCoverage.has(i)) {
-                gaps.push(i);
-            }
-            // Check for heavy sectors that need multiple colors
-            // If sector has >20% of image, it needs multiple shades even if one color exists
-            else if (imageHues[i] > HEAVY_SECTOR_THRESHOLD && paletteCoverage.has(i)) {
-                // Count how many palette colors are in this sector
-                const colorsInSector = paletteColorCountsBySector ? paletteColorCountsBySector[i] : 1;
-                if (colorsInSector < 2) {
-                    gaps.push(i); // Add as gap to force second color
-                }
-            }
-        }
-
-        if (gaps.length > 0) {
-            gaps.forEach(idx => {
-                if (paletteCoverage.has(idx)) {
-                    // Density gap
-                } else {
-                    // Complete gap
-                }
-            });
-        } else {
-        }
-
-        return gaps;
-    }
-
-    /**
-     * Calculate perceptual distance (ΔE) between two Lab colors
-     * @private
-     * @param {{L: number, a: number, b: number}} lab1 - First Lab color
-     * @param {{L: number, a: number, b: number}} lab2 - Second Lab color
-     * @returns {number} - Perceptual distance (ΔE)
-     */
-    static _labDistance(lab1, lab2) {
-        const dL = lab1.L - lab2.L;
-        const da = lab1.a - lab2.a;
-        const db = lab1.b - lab2.b;
-        return Math.sqrt((dL * dL) + (da * da) + (db * db));
-    }
-
-    /**
-     * PERCEPTUAL L-SCALING: Weighted Lab distance for shadow preservation
-     *
-     * The human eye is much more sensitive to lightness changes in dark areas
-     * than in light areas. This prevents dark greens and shadows from being
-     * washed out into a single flat black/dark-grey layer.
-     *
-     * @private
-     * @param {{L: number, a: number, b: number}} lab1 - First Lab color
-     * @param {{L: number, a: number, b: number}} lab2 - Second Lab color
-     * @returns {number} - Weighted perceptual distance
-     */
-    static _weightedLabDistance(lab1, lab2) {
-        const dL = lab1.L - lab2.L;
-        const da = lab1.a - lab2.a;
-        const db = lab1.b - lab2.b;
-
-        // Increase the weight of L for darker colors to preserve shadow detail
-        // When L < 40 (dark shadows), double the lightness weight
-        // This makes the engine treat "dark green" and "black" as more distinct
-        const avgL = (lab1.L + lab2.L) / 2;
-        const lWeight = avgL < 40 ? 2.0 : 1.0;
-
-        return Math.sqrt((dL * lWeight) ** 2 + da ** 2 + db ** 2);
-    }
-
-    /**
-     * SOURCE-PIXEL SNAPPING: Snap mathematical Lab average to nearest actual source pixel
-     *
-     * THE "MUDDY" FIX: Prevents washed-out desaturated mid-tones from dominating
-     * by ensuring all palette colors are REAL pixels from the source image.
-     *
-     * When a bucket is too large/diverse, averaging creates muddy colors.
-     * This finds the actual pixel closest to the average, prioritizing chroma.
-     *
-     * @private
-     * @param {{L: number, a: number, b: number}} targetLab - Mathematical average color
-     * @param {Array<{L: number, a: number, b: number}>} bucket - Array of source pixels
-     * @returns {{L: number, a: number, b: number}} - Nearest actual source pixel
-     */
-    static _snapToSource(targetLab, bucket) {
-        if (!bucket || bucket.length === 0) {
-            return targetLab;
-        }
-
-        let minDistanceSq = Infinity;
-        let bestPixel = targetLab;
-
-        // Search the bucket for the pixel that most closely matches the average
-        // Use perceptual L-scaling to preserve shadow detail
-        for (const pixel of bucket) {
-            const dL = targetLab.L - pixel.L;
-            const da = targetLab.a - pixel.a;
-            const db = targetLab.b - pixel.b;
-
-            // Apply L-scaling for dark colors (preserves shadow texture)
-            const avgL = (targetLab.L + pixel.L) / 2;
-            const lWeight = avgL < 40 ? 2.0 : 1.0;
-            const distSq = (dL * lWeight) ** 2 + (da * da) + (db * db);
-
-            // If this pixel is closer to the target, use it
-            // (Chroma prioritization happens implicitly because high-chroma pixels
-            // cluster away from neutral grays, so they're naturally "closer" in Lab space
-            // when the target average is also chromatic)
-            if (distSq < minDistanceSq) {
-                minDistanceSq = distSq;
-                bestPixel = { L: pixel.L, a: pixel.a, b: pixel.b };
-            }
-        }
-
-        return bestPixel;
-    }
-
-    /**
-     * Merge two Lab colors by keeping the one with higher saliency
-     *
-     * SALIENCY-BASED MERGE: When merging similar colors,
-     * keep the one with the highest Saliency (L + Chroma weighted combination)
-     * to maintain visual impact for both highlights and vibrant features.
-     *
-     * @private
-     * @param {{L: number, a: number, b: number}} c1 - First color
-     * @param {{L: number, a: number, b: number}} c2 - Second color
-     * @returns {{L: number, a: number, b: number}} - Color with higher saliency
-     */
-    static _mergeLabColors(c1, c2) {
-        // Calculate saliency scores for both colors
-        const chroma1 = Math.sqrt(c1.a * c1.a + c1.b * c1.b);
-        const chroma2 = Math.sqrt(c2.a * c2.a + c2.b * c2.b);
-
-        // Saliency: (L × 1.5) + (Chroma × 2.5)
-        // Favors both bright highlights and vibrant features
-        const s1 = (c1.L * 1.5) + (chroma1 * 2.5);
-        const s2 = (c2.L * 1.5) + (chroma2 * 2.5);
-
-        // Keep the one with higher saliency
-        return s1 > s2 ? c1 : c2;
-    }
-
-    /**
-     * K-MEANS REFINEMENT — 1-pass centroid correction after median cut.
-     *
-     * Median cut splits along axis-aligned boundaries that can bisect natural
-     * clusters (e.g. splitting yellow into bright/dark instead of yellow vs green).
-     * One pass of k-means reassignment snaps centroids to actual cluster centers.
-     *
-     * Uses simple weighted mean (NOT SALIENCY) to avoid pulling centroids
-     * toward outliers. Only affects median-cut colors — forced peaks and
-     * preserved white/black are added later and are not touched.
-     *
-     * @private
-     * @param {Float32Array|Uint16Array} labPixels - Lab pixel data (L,a,b triples)
-     * @param {Array<{L,a,b}>} palette - Initial palette from median cut
-     * @returns {Array<{L,a,b}>} Refined palette (new array, metadata preserved)
-     */
-    static _refineKMeans(labPixels, palette) {
-        const GRID_STRIDE = 4; // Sample every 4th pixel for performance
-        const pixelCount = labPixels.length / 3;
-
-        if (!palette || palette.length <= 1 || pixelCount === 0) return palette;
-
-        const numColors = palette.length;
-        const currentPalette = palette.map(c => ({ L: c.L, a: c.a, b: c.b }));
-
-        // Step 1: Reassign each sampled pixel to nearest centroid (CIE76 squared)
-        const sumL = new Float64Array(numColors);
-        const sumA = new Float64Array(numColors);
-        const sumB = new Float64Array(numColors);
-        const counts = new Uint32Array(numColors);
-
-        for (let i = 0; i < pixelCount; i += GRID_STRIDE) {
-            const idx = i * 3;
-            const L = labPixels[idx];
-            const a = labPixels[idx + 1];
-            const b = labPixels[idx + 2];
-
-            let bestIdx = 0;
-            let bestDist = Infinity;
-
-            for (let c = 0; c < numColors; c++) {
-                const p = currentPalette[c];
-                const dL = L - p.L;
-                const da = a - p.a;
-                const db = b - p.b;
-                const dist = dL * dL + da * da + db * db;
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    bestIdx = c;
-                }
-            }
-
-            sumL[bestIdx] += L;
-            sumA[bestIdx] += a;
-            sumB[bestIdx] += b;
-            counts[bestIdx]++;
-        }
-
-        // Step 2: Recompute centroids using simple weighted mean
-        for (let c = 0; c < numColors; c++) {
-            if (counts[c] === 0) continue; // Keep previous centroid for empty clusters
-            currentPalette[c] = {
-                L: sumL[c] / counts[c],
-                a: sumA[c] / counts[c],
-                b: sumB[c] / counts[c]
-            };
-        }
-
-        // Preserve metadata for downstream hue gap analysis
-        if (palette._allColors) currentPalette._allColors = palette._allColors;
-        if (palette._labPixels) currentPalette._labPixels = palette._labPixels;
-
-        return currentPalette;
-    }
-
-    /**
-     * TUNING-AWARE PALETTE PRUNING
-     *
-     * Merges colors using centralized tuning parameters.
-     * Applies hue lock, highlight protection, and saliency-based selection.
-     *
-     * @private
-     * @param {Array<{L: number, a: number, b: number}>} paletteLab - Lab palette
-     * @param {number} threshold - Minimum ΔE distance (defaults to TUNING.prune.threshold)
-     * @param {number} highlightThreshold - L-value protection floor (defaults to TUNING.prune.whitePoint)
-     * @param {number} targetCount - Stop when reaching this count
-     * @param {Object} tuning - Tuning config (defaults to TUNING)
-     * @returns {Array<{L: number, a: number, b: number}>} - Pruned palette
-     */
-    static _prunePalette(paletteLab, threshold = null, highlightThreshold = null, targetCount = 0, tuning = null, distanceMetric = 'cie76') {
-        const config = tuning || this.TUNING;
-        const pruneThreshold = threshold !== null ? threshold : config.prune.threshold;
-        const highlightProtect = highlightThreshold !== null ? highlightThreshold : config.prune.whitePoint;
-        const shadowProtect = config.prune.shadowPoint;
-        const hueLock = config.prune.hueLockAngle;
-
-        // Select distance function based on configured metric
-        // CIE94/CIE2000 handle dark colors perceptually — no extra weighting needed.
-        // CIE76 uses L-weighted variant for dark pairs (avgL < 40).
-        const distFn = distanceMetric === 'cie2000' ? LabDistance.cie2000
-            : distanceMetric === 'cie94' ? LabDistance.cie94
-            : null; // CIE76 uses inline logic below
-
-        let pruned = [...paletteLab];
-        let iteration = 0;
-
-
-        // HUE LOCK PROTECTION + SALIENCY-BASED PRUNING
-        // Iterate through pairs, merging only when protection rules allow
-        for (let i = 0; i < pruned.length; i++) {
-            for (let j = i + 1; j < pruned.length; j++) {
-                // STOP if we've reached target count
-                if (targetCount > 0 && pruned.length <= targetCount) {
-                    return pruned;
-                }
-
-                const p1 = pruned[i];
-                const p2 = pruned[j];
-
-                // Calculate distance using the configured metric
-                let dist;
-                if (distFn) {
-                    dist = distFn(p1, p2);
-                } else {
-                    const avgL = (p1.L + p2.L) / 2;
-                    dist = avgL < 40 ? this._weightedLabDistance(p1, p2) : this._labDistance(p1, p2);
-                }
-
-                if (dist < pruneThreshold) {
-                    // Calculate chroma for both colors
-                    const chroma1 = Math.sqrt(p1.a * p1.a + p1.b * p1.b);
-                    const chroma2 = Math.sqrt(p2.a * p2.a + p2.b * p2.b);
-
-                    // HUE LOCK: Calculate the angle difference in degrees
-                    if (chroma1 > 5 && chroma2 > 5) { // Only for chromatic colors
-                        const h1 = Math.atan2(p1.b, p1.a) * (180 / Math.PI);
-                        const h2 = Math.atan2(p2.b, p2.a) * (180 / Math.PI);
-                        let hueDiff = Math.abs(h1 - h2);
-                        if (hueDiff > 180) hueDiff = 360 - hueDiff;
-
-                        // PROTECTION: Use centralized hue lock threshold
-                        if (hueDiff > hueLock) {
-                            continue;
-                        }
-                    }
-
-                    // HIGHLIGHT PROTECTION: Prevent merging bright highlights with darker colors
-                    if ((p1.L > highlightProtect && p2.L <= highlightProtect) || (p1.L <= highlightProtect && p2.L > highlightProtect)) {
-                        continue;
-                    }
-
-                    // MERGE: Keep the one with higher Saliency score
-                    const s1 = (p1.L * 1.5) + (chroma1 * 2.5);
-                    const s2 = (p2.L * 1.5) + (chroma2 * 2.5);
-
-                    pruned[i] = s1 > s2 ? p1 : p2;
-                    pruned.splice(j, 1);
-                    j--; // Adjust index after removal
-                    iteration++;
-
-                }
-            }
-        }
-
-
-        return pruned;
-    }
-
-    /**
-     * SALIENCY-BASED MERGE (Alias for _mergeLabColors)
-     *
-     * Keeps the color with higher saliency score when merging.
-     * Used by pruning logic.
-     *
-     * @private
-     * @param {{L: number, a: number, b: number}} c1 - First color
-     * @param {{L: number, a: number, b: number}} c2 - Second color
-     * @returns {{L: number, a: number, b: number}} - Color with higher saliency
-     */
-    static _mergeBySaliency(c1, c2) {
-        return this._mergeLabColors(c1, c2);
-    }
-
-    /**
-     * GET SALIENCY WINNER
-     *
-     * Picks the "punchiest" color between two merging candidates.
-     * Uses balanced formula: (L × 1.2) + (chroma × 2.0)
-     *
-     * This is an alternative to _mergeLabColors with a more conservative
-     * balance between lightness and chroma for pruning operations.
-     *
-     * @private
-     * @param {{L: number, a: number, b: number}} c1 - First color
-     * @param {{L: number, a: number, b: number}} c2 - Second color
-     * @returns {{L: number, a: number, b: number}} - Color with higher saliency
-     */
-    static _getSaliencyWinner(c1, c2) {
-        const s1 = (c1.L * 1.2) + (Math.sqrt(c1.a ** 2 + c1.b ** 2) * 2.0);
-        const s2 = (c2.L * 1.2) + (Math.sqrt(c2.a ** 2 + c2.b ** 2) * 2.0);
-        return s1 > s2 ? c1 : c2;
-    }
-
-    /**
-     * ARCHITECT'S IMPROVED HUE GAP REFINEMENT
-     *
-     * Scans the actual image for high-chroma colors in missing hue sectors
-     * that are perceptually distinct from the current palette.
-     *
-     * This approach is superior to sampling from median cut's deduplicated colors
-     * because it directly analyzes the image for vibrant, distinct hues.
-     *
-     * @private
-     * @param {Float32Array} labPixels - Raw Lab pixel data
-     * @param {Array} currentPalette - Current palette [{L, a, b}, ...]
-     * @param {Array<number>} gaps - Missing hue sector indices
-     * @param {Object} options - Tuning parameters
-     * @param {number} options.chromaThreshold - Minimum chroma (default: 12)
-     * @param {number} options.distinctnessThreshold - Minimum ΔE from palette (default: 15)
-     * @returns {Array} - Distinct high-chroma colors for missing sectors
-     */
-    static _findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
-        // Configurable thresholds (lowered from 15/20 to 12/15 for better detection)
-        const CHROMA_THRESHOLD = options.chromaThreshold ?? 12;
-        const DISTINCTNESS_THRESHOLD = options.distinctnessThreshold ?? 15;
-
-        // VIABILITY THRESHOLD: 0.25% minimum coverage
-        // Don't add a diversity color if it only exists as speckles/noise.
-        // A hue that covers <0.25% of the image is not worth burning a screen for.
-        const MIN_HUE_COVERAGE = options.minHueCoverage ?? PosterizationEngine.MIN_HUE_COVERAGE;
-        const totalPixels = labPixels.length / 3;
-
-        const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
-                            'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
-
-        const binSamples = new Array(12).fill(null);
-
-        // Count chromatic pixels for viability normalization.
-        // Substrate (paper white) and achromatic pixels carry no hue —
-        // including them inflates the denominator and suppresses minority hues.
-        let chromaticPixelCount = 0;
-        for (let i = 0; i < labPixels.length; i += 3) {
-            const a = labPixels[i + 1];
-            const b = labPixels[i + 2];
-            if (Math.sqrt(a * a + b * b) > CHROMA_THRESHOLD) chromaticPixelCount++;
-        }
-        const viabilityDenominator = chromaticPixelCount > 0 ? chromaticPixelCount : totalPixels;
-
-        // Diagnostic counters per sector
-        const diagnostics = gaps.map(gapIdx => ({
-            sector: sectorNames[gapIdx],
-            totalScanned: 0,
-            highChroma: 0,
-            failedDistinctness: 0,
-            candidates: []
-        }));
-        const diagMap = new Map(gaps.map((gapIdx, i) => [gapIdx, diagnostics[i]]));
-
-
-        // Scan image for high-chroma colors in missing sectors
-        for (let i = 0; i < labPixels.length; i += 3) {
-            const L = labPixels[i];
-            const a = labPixels[i + 1];
-            const b = labPixels[i + 2];
-            const chroma = Math.sqrt(a * a + b * b);
-
-            const hue = (Math.atan2(b, a) * 180 / Math.PI + 360) % 360;
-            const binIdx = Math.floor(hue / 30);
-
-            // Only consider missing sectors
-            if (!gaps.includes(binIdx)) continue;
-
-            const diag = diagMap.get(binIdx);
-            diag.totalScanned++;
-
-            if (chroma < CHROMA_THRESHOLD) continue; // Ignore neutral/muddy colors
-
-            diag.highChroma++;
-
-            // If this bin already has a sample, only replace if this one is more saturated
-            if (binSamples[binIdx] && binSamples[binIdx].chroma >= chroma) continue;
-
-            // Check if this color is distinct from current palette
-            let minDistanceFromPalette = Infinity;
-            for (const p of currentPalette) {
-                const dist = this._labDistance({L, a, b}, p);
-                minDistanceFromPalette = Math.min(minDistanceFromPalette, dist);
-            }
-
-            const isDistinct = minDistanceFromPalette > DISTINCTNESS_THRESHOLD;
-
-            // Store candidate for diagnostics (top 3 per sector)
-            if (diag.candidates.length < 3) {
-                diag.candidates.push({
-                    L: L.toFixed(1),
-                    a: a.toFixed(1),
-                    b: b.toFixed(1),
-                    chroma: chroma.toFixed(1),
-                    minΔE: minDistanceFromPalette.toFixed(1),
-                    passed: isDistinct
-                });
-            }
-
-            if (isDistinct) {
-                binSamples[binIdx] = {L, a, b, chroma};
-            } else {
-                diag.failedDistinctness++;
-            }
-        }
-
-        // Output diagnostic information for each missing sector
-        for (const diag of diagnostics) {
-            const found = binSamples[sectorNames.indexOf(diag.sector)] !== null;
-            if (diag.candidates.length > 0) {
-                for (const c of diag.candidates) {
-                    const status = c.passed ? '✓' : '✗';
-                }
-            }
-        }
-
-        // Return only the vibrant, distinct missing hues (sorted by chroma)
-        // VIABILITY CHECK: Only include if the sector has sufficient coverage
-        const forcedColors = [];
-        let skippedForViability = 0;
-
-        for (const gapIdx of gaps) {
-            if (binSamples[gapIdx] === null) continue;
-
-            const sample = binSamples[gapIdx];
-            const diag = diagMap.get(gapIdx);
-
-            // Calculate coverage relative to chromatic pixels (not total).
-            // Substrate and achromatic pixels don't carry hue information.
-            const coverage = diag.totalScanned / viabilityDenominator;
-
-            if (coverage < MIN_HUE_COVERAGE) {
-                // This "gap" is just noise - not enough pixels to warrant a screen
-                skippedForViability++;
-                continue;
-            }
-
-            forcedColors.push({L: sample.L, a: sample.a, b: sample.b});
-        }
-
-        // Sort by chroma (most saturated first)
-        forcedColors.sort((a, b) => {
-            const chromaA = Math.sqrt(a.a * a.a + a.b * a.b);
-            const chromaB = Math.sqrt(b.a * b.a + b.b * b.b);
-            return chromaB - chromaA;
-        });
-
-        if (forcedColors.length === 0 && skippedForViability > 0) {
-        } else if (forcedColors.length === 0) {
-        }
-
-        return forcedColors;
-    }
-
-    /**
-     * DEPRECATED: Old hue gap filling (kept for reference)
-     * @deprecated Use _findTrueMissingHues instead
-     */
-    static _forceIncludeHueGaps(colors, gaps, imageHues = null) {
-        const CHROMA_THRESHOLD = 5; // Match image analysis threshold
-        const HEAVY_SECTOR_THRESHOLD = 20.0; // If sector >20%, add TWO colors (light + dark)
-        const forcedColors = [];
-        const sectorNames = ['Red', 'Orange', 'Yellow', 'Y-Green', 'Green', 'Cyan',
-                            'Blue', 'B-Purple', 'Purple', 'Magenta', 'Pink', 'R-Pink'];
-
-        for (const sectorIdx of gaps) {
-            // Find all colors in this sector
-            const sectorColors = colors.filter(color => {
-                const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
-                if (chroma <= CHROMA_THRESHOLD) return false;
-
-                const hue = Math.atan2(color.b, color.a) * 180 / Math.PI;
-                const hueNorm = hue < 0 ? hue + 360 : hue;
-                const colorSector = Math.floor(hueNorm / 30);
-                return Math.min(colorSector, 11) === sectorIdx;
-            });
-
-            if (sectorColors.length > 0) {
-                const isHeavySector = imageHues && imageHues[sectorIdx] > HEAVY_SECTOR_THRESHOLD;
-
-                if (isHeavySector && sectorColors.length > 1) {
-                    // Heavy sector: Add TWO colors (light shade + dark shade)
-                    // Sort by lightness
-                    sectorColors.sort((a, b) => b.L - a.L);
-
-                    // Pick lightest high-chroma color
-                    const lightColors = sectorColors.slice(0, Math.ceil(sectorColors.length * 0.3));
-                    let maxChromaLight = -1;
-                    let bestLight = lightColors[0];
-                    for (const color of lightColors) {
-                        const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
-                        if (chroma > maxChromaLight) {
-                            maxChromaLight = chroma;
-                            bestLight = color;
-                        }
-                    }
-
-                    // Pick darkest high-chroma color
-                    const darkColors = sectorColors.slice(Math.floor(sectorColors.length * 0.7));
-                    let maxChromaDark = -1;
-                    let bestDark = darkColors[0];
-                    for (const color of darkColors) {
-                        const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
-                        if (chroma > maxChromaDark) {
-                            maxChromaDark = chroma;
-                            bestDark = color;
-                        }
-                    }
-
-                    forcedColors.push({ L: bestLight.L, a: bestLight.a, b: bestLight.b });
-                    forcedColors.push({ L: bestDark.L, a: bestDark.a, b: bestDark.b });
-
-                } else {
-                    // Normal sector: Add ONE color
-                    // STRATEGY: Pick color closest to sector CENTER with high chroma
-                    // This ensures perceptual distinctness from adjacent sectors
-
-                    const sectorCenterAngle = (sectorIdx * 30) + 15; // e.g., Purple sector 8 → 255°
-                    let bestScore = -1;
-                    let best = sectorColors[0];
-
-                    for (const color of sectorColors) {
-                        const chroma = Math.sqrt(color.a * color.a + color.b * color.b);
-                        const hue = Math.atan2(color.b, color.a) * 180 / Math.PI;
-                        const hueNorm = hue < 0 ? hue + 360 : hue;
-
-                        // Angular distance from sector center (normalize to 0-15°)
-                        let angleDist = Math.abs(hueNorm - sectorCenterAngle);
-                        if (angleDist > 180) angleDist = 360 - angleDist; // Handle wraparound
-
-                        // Score = chroma * (1 - distance_from_center)
-                        // Favors high chroma colors near sector center
-                        const centerBonus = 1.0 - (angleDist / 15.0);
-                        const score = chroma * centerBonus;
-
-                        if (score > bestScore) {
-                            bestScore = score;
-                            best = color;
-                        }
-                    }
-
-                    const bestChroma = Math.sqrt(best.a * best.a + best.b * best.b);
-                    const bestHue = Math.atan2(best.b, best.a) * 180 / Math.PI;
-                    const bestHueNorm = bestHue < 0 ? bestHue + 360 : bestHue;
-
-                    forcedColors.push({ L: best.L, a: best.a, b: best.b });
-                }
-            }
-        }
-
-        return forcedColors;
-    }
-
-    /**
-     * Median cut quantization in CIELAB space with substrate-aware culling
-     *
-     * Finds perceptual boundaries by splitting in Lab space rather than RGB.
-     * This aligns quantization with perceptual uniformity.
-     *
-     * If substrateLab is provided, pixels within SUBSTRATE_TOLERANCE distance of the
-     * substrate color are excluded from quantization (substrate culling), preventing
-     * the background from stealing palette slots.
-     *
-     * @param {Float32Array} labPixels - Flat array: [L, a, b, L, a, b, ...]
-     * @param {number} targetColors - Desired color count
-     * @param {boolean} grayscaleOnly - If true, ignore a/b channels and quantize L only
-     * @param {number|null} width - Image width (unused, kept for compatibility)
-     * @param {number|null} height - Image height (unused, kept for compatibility)
-     * @param {{L: number, a: number, b: number}|null} substrateLab - Substrate color to cull
-     * @param {number} substrateTolerance - ΔE threshold for substrate culling (default: 3.5)
-     * @returns {Array} palette - Array of Lab colors: [{L, a, b}, ...]
-     */
+    /** Delegate to LabMedianCut */
     static medianCutInLabSpace(labPixels, targetColors, grayscaleOnly = false, width = null, height = null, substrateLab = null, substrateTolerance = 3.5, vibrancyMode = 'aggressive', vibrancyBoost = 2.0, highlightThreshold = 92, highlightBoost = 3.0, strategy = null, tuning = null) {
-        // DEBUG: Log tuning object to verify bitDepth is received
-        const tunedBitDepth = tuning && tuning.centroid && tuning.centroid.bitDepth;
+        return LabMedianCut.medianCutInLabSpace(labPixels, targetColors, grayscaleOnly, width, height, substrateLab, substrateTolerance, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, strategy, tuning);
+    }
 
-        // ARTIST-CENTRIC MODEL: Grid Sampling Optimization
-        // Instead of scanning all 640,000 pixels, use stride 4 (every 4th pixel)
-        // This reduces computation by 90% with negligible quality impact
-        const GRID_STRIDE = 4;
-        const totalPixels = labPixels.length / 3;
+    /** Delegate to RgbMedianCut */
+    static analyzeOptimalColorCount(pixels, width, height) {
+        return RgbMedianCut.analyzeOptimalColorCount(pixels, width, height);
+    }
 
-        // Convert flat array to color array with deduplication
-        // Deduplication is critical: without it, large regions of identical colors
-        // create zero-variance boxes that can't be split
-        let colors = [];
+    /** Delegate to PixelAssignment */
+    static reassignWithStride(labPixels, paletteLab, width, height, stride = 1, bitDepth = 16, options = {}) {
+        return PixelAssignment.reassignWithStride(labPixels, paletteLab, width, height, stride, bitDepth, options);
+    }
 
-        if (grayscaleOnly) {
-            // Grayscale mode: Deduplicate by L value only
-            // Many pixels share the same L value (e.g., 200k white pixels all L=100)
-            const lMap = new Map();
-
-            // Grid sampling: Only process every GRID_STRIDE-th pixel
-            for (let i = 0; i < labPixels.length; i += 3 * GRID_STRIDE) {
-                const L = labPixels[i];
-                const key = L.toFixed(2); // Round to 2 decimals to handle float precision
-
-                if (lMap.has(key)) {
-                    lMap.get(key).count++;
-                } else {
-                    lMap.set(key, { L, a: 0, b: 0, count: 1 });
-                }
-            }
-
-            colors = Array.from(lMap.values());
-
-            // CRITICAL FIX: Sort colors array to ensure deterministic ordering
-            // Sort by L value for grayscale mode
-            colors.sort((a, b) => a.L - b.L);
-
-            const sampledPixels = Math.floor(totalPixels / GRID_STRIDE);
-        } else {
-            // Color mode: Deduplicate by full Lab triplet
-            // Identical colors (same L, a, b) must be deduplicated to avoid zero variance
-            const labMap = new Map();
-
-            // SUBSTRATE CULLING: Use provided tolerance from options
-            // User can adjust via UI slider (typical: 3.0-4.0 for clean backgrounds)
-            let culledCount = 0;
-
-            // Grid sampling: Only process every GRID_STRIDE-th pixel
-            for (let i = 0; i < labPixels.length; i += 3 * GRID_STRIDE) {
-                const L = labPixels[i];
-                const a = labPixels[i + 1];
-                const b = labPixels[i + 2];
-
-                // SUBSTRATE CULLING: Skip pixels within tolerance of substrate
-                if (substrateLab) {
-                    const dL = L - substrateLab.L;
-                    const da = a - substrateLab.a;
-                    const db = b - substrateLab.b;
-                    const distSq = (dL * dL) + (da * da) + (db * db);
-
-                    if (distSq < substrateTolerance * substrateTolerance) {
-                        culledCount++;
-                        continue; // Skip this pixel - it's substrate
-                    }
-                }
-
-                // Create unique key from Lab values (rounded to 2 decimals for float precision)
-                const key = `${L.toFixed(2)},${a.toFixed(2)},${b.toFixed(2)}`;
-
-                if (labMap.has(key)) {
-                    labMap.get(key).count++;
-                } else {
-                    labMap.set(key, { L, a, b, count: 1 });
-                }
-            }
-
-            colors = Array.from(labMap.values());
-
-            // CRITICAL FIX: Sort colors array to ensure deterministic ordering
-            // Map iteration order is insertion-order, which can vary between environments
-            // Sort by L, then a, then b to guarantee identical behavior in UI and batch
-            colors.sort((a, b) => {
-                if (a.L !== b.L) return a.L - b.L;
-                if (a.a !== b.a) return a.a - b.a;
-                return a.b - b.b;
-            });
-
-            const sampledPixels = Math.floor(totalPixels / GRID_STRIDE);
-
-            if (substrateLab && culledCount > 0) {
-                const percent = ((culledCount / sampledPixels) * 100).toFixed(1);
-            }
-
-        }
-
-        // DEBUG: Check Lab value ranges (avoid stack overflow with large arrays)
-        if (colors.length > 0) {
-            let minL = colors[0].L, maxL = colors[0].L;
-            let minA = colors[0].a, maxA = colors[0].a;
-            let minB = colors[0].b, maxB = colors[0].b;
-
-            for (let i = 1; i < colors.length; i++) {
-                if (colors[i].L < minL) minL = colors[i].L;
-                if (colors[i].L > maxL) maxL = colors[i].L;
-                if (colors[i].a < minA) minA = colors[i].a;
-                if (colors[i].a > maxA) maxA = colors[i].a;
-                if (colors[i].b < minB) minB = colors[i].b;
-                if (colors[i].b > maxB) maxB = colors[i].b;
-            }
-
-
-            // Check for zero variance (all pixels identical)
-            const rangeL = maxL - minL;
-            const rangeA = maxA - minA;
-            const rangeB = maxB - minB;
-
-            if (rangeL < 0.01 && rangeA < 0.01 && rangeB < 0.01) {
-                logger.warn(`⚠️ WARNING: All pixels are essentially identical!`);
-                logger.warn(`   This will result in only 1 color in the palette.`);
-                logger.warn(`   Check if your document has actual color variation.`);
-            } else if (rangeL < 1.0 && rangeA < 1.0 && rangeB < 1.0) {
-                logger.warn(`⚠️ WARNING: Very low color variance detected!`);
-                logger.warn(`   This may result in fewer colors than requested.`);
-            }
-        }
-
-        // HUE-AWARE PRIORITY: Analyze source image hue distribution
-        // This powers the "hunger" multiplier that forces hue diversity
-        // MUTED IMAGE RESCUE: For exponential vibrancy (muted archives) OR 16-bit sources,
-        // use lower chroma threshold to detect desaturated greens (chroma 2-4) that would
-        // otherwise be classified as neutral. 16-bit data is SIGNAL, not noise.
-        const is16Bit = tuning && tuning.centroid && tuning.centroid.bitDepth === 16;
-        const hueChromaThreshold = (vibrancyMode === 'exponential' || is16Bit) ? 1.0 : 5.0;
-        const sectorEnergy = grayscaleOnly ? null : this._analyzeImageHueSectors(labPixels, hueChromaThreshold);
-        const coveredSectors = new Set();
-
-        // Start with single box containing all colors
-        const boxes = [{ colors, depth: 0, grayscaleOnly }];
-
-
-        // Split until we have targetColors boxes
-        let splitIteration = 0;
-        while (boxes.length < targetColors) {
-            splitIteration++;
-
-            // HUE-AWARE PRIORITY: Sort by priority (variance × hue hunger × vibrancy) instead of just population
-            boxes.sort((a, b) => {
-                const priorityB = this._calculateSplitPriority(b, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                const priorityA = this._calculateSplitPriority(a, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                return priorityB - priorityA;
-            });
-
-            const topBoxPriority = this._calculateSplitPriority(boxes[0], sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-
-            // If largest box has only 1 color, can't split further
-            if (boxes[0].colors.length === 1) {
-                break;
-            }
-
-            // Split the largest box
-            const box = boxes.shift();
-            const [box1, box2] = this._splitBoxLab(box, grayscaleOnly, tuning);
-
-            if (box1 && box2) {
-                boxes.push(box1, box2);
-
-                // HUE-AWARE PRIORITY: Track which hue sectors are now covered
-                if (!grayscaleOnly && sectorEnergy) {
-                    const meta1 = this._calculateBoxMetadata(box1, grayscaleOnly, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                    const meta2 = this._calculateBoxMetadata(box2, grayscaleOnly, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                    if (meta1.sector >= 0) coveredSectors.add(meta1.sector);
-                    if (meta2.sector >= 0) coveredSectors.add(meta2.sector);
-                }
-
-            } else {
-                // Split failed, put box back
-                boxes.push(box);
-                break;
-            }
-        }
-
-
-        // GREEN-PRIORITY CENTROID: Check if we need to rescue green signals
-        // If a box has significant green content, extract green-only centroid
-        // This prevents green from being averaged into orange/yellow
-        // Note: is16Bit already declared earlier in this function
-        const greenEnergy = sectorEnergy ? (sectorEnergy[3] + sectorEnergy[4]) : 0;  // Y-Green + Green
-        const GREEN_RESCUE_THRESHOLD = 1.5;  // Activate if green > 1.5% of image
-        const shouldRescueGreen = !grayscaleOnly && greenEnergy > GREEN_RESCUE_THRESHOLD && is16Bit;
-
-        if (shouldRescueGreen) {
-        }
-
-        // PRE-SCAN: Find the box with most green content for forced rescue
-        let bestGreenBoxIdx = -1;
-        let bestGreenCount = 0;
-        let bestGreenRatio = 0;
-
-        if (shouldRescueGreen) {
-            boxes.forEach((box, idx) => {
-                const greenColors = box.colors.filter(c => {
-                    const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
-                    if (chroma < 0.5) return false;
-                    const hue = Math.atan2(c.b, c.a) * (180 / Math.PI);
-                    const normalizedHue = hue < 0 ? hue + 360 : hue;
-                    const sector = Math.floor(normalizedHue / 30);
-                    return sector === 3 || sector === 4;  // Y-Green or Green
-                });
-                const greenRatio = box.colors.length > 0 ? greenColors.length / box.colors.length : 0;
-
-                if (greenColors.length > bestGreenCount) {
-                    bestGreenCount = greenColors.length;
-                    bestGreenRatio = greenRatio;
-                    bestGreenBoxIdx = idx;
-                }
-            });
-
-            if (bestGreenBoxIdx >= 0) {
-            }
-        }
-
-        // 🔧 PEAK ELIGIBILITY FLOOR (V1 LEGACY MODE)
-        // Filter out boxes that are too small (< isolationThreshold % of total pixels)
-        // This prevents 16-bit sensor noise and tiny clusters from becoming "identity peaks"
-        // isolationThreshold: 25.0 = 1.0% minimum cluster size
-        const isolationThreshold = tuning?.prune?.isolationThreshold || 0.0;
-        if (isolationThreshold > 0) {
-            const minPixels = totalPixels * (isolationThreshold / 2500);  // 25.0 → 1.0% of image
-            const originalBoxCount = boxes.length;
-            const filteredBoxes = boxes.filter(box => box.colors.length >= minPixels);
-
-            // SAFETY: Only apply filter if we have at least targetColors boxes remaining
-            // If isolation threshold is too aggressive, keep all boxes to avoid empty palette
-            if (filteredBoxes.length >= targetColors) {
-                boxes = filteredBoxes;
-                const filtered = originalBoxCount - boxes.length;
-            } else {
-            }
-        }
-
-        // Calculate representative color for each box (centroid in Lab space)
-        // Use injected strategy or fallback to VOLUMETRIC
-        const palette = boxes.map((box, idx) => {
-            // GREEN-PRIORITY CENTROID: Force green centroid for the box with most green content
-            // Threshold lowered: ANY green content qualifies if this is the best green box
-            if (shouldRescueGreen && idx === bestGreenBoxIdx && bestGreenCount > 5) {
-                const greenColors = box.colors.filter(c => {
-                    const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
-                    if (chroma < 0.5) return false;
-                    const hue = Math.atan2(c.b, c.a) * (180 / Math.PI);
-                    const normalizedHue = hue < 0 ? hue + 360 : hue;
-                    const sector = Math.floor(normalizedHue / 30);
-                    return sector === 3 || sector === 4;
-                });
-
-                if (greenColors.length > 0) {
-                    return this._calculateLabCentroid(greenColors, grayscaleOnly, strategy, tuning);
-                }
-            }
-
-            // Normal centroid calculation
-            return this._calculateLabCentroid(box.colors, grayscaleOnly, strategy, tuning);
+    /**
+     * LEGACY: Backward compatibility wrapper
+     * @deprecated Use posterize() with engineType='reveal' instead
+     */
+    static posterizeWithLabMedianCut(pixels, width, height, targetColors, snapThreshold = 8.0, options = {}) {
+        logger.warn('⚠️ posterizeWithLabMedianCut() is deprecated. Use posterize({engineType: "reveal"}) instead.');
+        return this.posterize(pixels, width, height, targetColors, {
+            ...options,
+            engineType: 'reveal',
+            snapThreshold
         });
-
-        // Store colors array in palette for later hue gap analysis
-        // This allows us to force-include gap colors AFTER perceptual snap
-        palette._allColors = colors;
-        palette._labPixels = labPixels;
-
-        return palette;
     }
 
-    /**
-     * Split a box in Lab space by finding channel with highest variance
-     * @private
-     */
-    static _splitBoxLab(box, grayscaleOnly = false, tuning = null) {
-        const { colors } = box;
+    // ========================================================================
+    // Internal Delegates (used by engine methods)
+    // ========================================================================
 
-        if (colors.length < 2) {
-            return [null, null];
-        }
-
-        // Extract weights from tuning (default: lWeight=1.0, cWeight=1.0)
-        // V1 LEGACY: cWeight=2.5 makes chroma the "absolute king" of splits
-        const lWeight = tuning?.centroid?.lWeight ?? 1.0;
-        const cWeight = tuning?.centroid?.cWeight ?? 1.0;
-
-        if (grayscaleOnly) {
-            // Grayscale mode: Only split on L channel
-            const avgL = colors.reduce((sum, c) => sum + c.L, 0) / colors.length;
-            const varL = colors.reduce((sum, c) => sum + (c.L - avgL) ** 2, 0);
-
-            // If variance is 0, all colors are identical - can't split
-            if (varL === 0) {
-                return [null, null];
-            }
-
-            // Sort by L channel
-            colors.sort((a, b) => a.L - b.L);
-
-            // Split at median
-            const median = Math.floor(colors.length / 2);
-            const colors1 = colors.slice(0, median);
-            const colors2 = colors.slice(median);
-
-            return [
-                { colors: colors1, depth: box.depth + 1, grayscaleOnly },
-                { colors: colors2, depth: box.depth + 1, grayscaleOnly }
-            ];
-        } else {
-            // Color mode: Calculate WEIGHTED variance in each Lab channel
-            // V1 LEGACY: cWeight amplifies chroma (a, b) importance vs lightness
-            const avgL = colors.reduce((sum, c) => sum + c.L, 0) / colors.length;
-            const avgA = colors.reduce((sum, c) => sum + c.a, 0) / colors.length;
-            const avgB = colors.reduce((sum, c) => sum + c.b, 0) / colors.length;
-
-            // Apply weights to variance - cWeight makes chroma dominate.
-            // bWeight (optional) further boosts b-axis splits — in warm images,
-            // b separates yellow from orange more effectively than a or L.
-            const bWeight = tuning?.centroid?.bWeight ?? 1.0;
-            const varL = colors.reduce((sum, c) => sum + (c.L - avgL) ** 2, 0) * lWeight;
-            const varA = colors.reduce((sum, c) => sum + (c.a - avgA) ** 2, 0) * cWeight;
-            const varB = colors.reduce((sum, c) => sum + (c.b - avgB) ** 2, 0) * cWeight * bWeight;
-
-            // Choose channel with highest WEIGHTED variance
-            let splitChannel = 'L';
-            let maxVar = varL;
-            if (varA > maxVar) {
-                splitChannel = 'a';
-                maxVar = varA;
-            }
-            if (varB > maxVar) {
-                splitChannel = 'b';
-                maxVar = varB;
-            }
-
-            // If variance is 0 in all channels, all colors are identical - can't split
-            if (maxVar === 0) {
-                return [null, null];
-            }
-
-            // Sort by split channel
-            colors.sort((a, b) => a[splitChannel] - b[splitChannel]);
-
-            // Split at median
-            const median = Math.floor(colors.length / 2);
-            const colors1 = colors.slice(0, median);
-            const colors2 = colors.slice(median);
-
-            return [
-                { colors: colors1, depth: box.depth + 1 },
-                { colors: colors2, depth: box.depth + 1 }
-            ];
-        }
+    /** @private Delegate to PaletteOps */
+    static _labDistance(lab1, lab2) {
+        return PaletteOps._labDistance(lab1, lab2);
     }
 
-    /**
-     * Analyze color space to detect grayscale images
-     * @private
-     * @param {Float32Array} labPixels - Lab pixel data (3 floats per pixel: L, a, b)
-     * @returns {Object} { chromaRange } - Maximum chroma range (a or b)
-     */
-    static _analyzeColorSpace(labPixels) {
-        let minA = Infinity, maxA = -Infinity;
-        let minB = Infinity, maxB = -Infinity;
-
-        for (let i = 0; i < labPixels.length; i += 3) {
-            const a = labPixels[i + 1];
-            const b = labPixels[i + 2];
-
-            minA = Math.min(minA, a);
-            maxA = Math.max(maxA, a);
-            minB = Math.min(minB, b);
-            maxB = Math.max(maxB, b);
-        }
-
-        const rangeA = maxA - minA;
-        const rangeB = maxB - minB;
-        const chromaRange = Math.max(rangeA, rangeB);
-
-        return { chromaRange, rangeA, rangeB };
+    /** @private Delegate to PaletteOps */
+    static _weightedLabDistance(lab1, lab2) {
+        return PaletteOps._weightedLabDistance(lab1, lab2);
     }
 
-    /**
-     * Get adaptive snap threshold based on target colors and color space
-     * @private
-     * @param {number} baseThreshold - Base threshold from user (default 8.0)
-     * @param {number} targetColors - Target number of colors
-     * @param {boolean} isGrayscale - Whether image is grayscale
-     * @param {number} lRange - L channel range (maxL - minL), used to calculate minimum spacing
-     * @param {Object} colorSpaceExtent - For color mode: {lRange, aRange, bRange}
-     * @returns {number} Adaptive threshold
-     */
+    /** @private Delegate to PaletteOps */
+    static _findNearestInPalette(targetLab, subPalette) {
+        return PaletteOps._findNearestInPalette(targetLab, subPalette);
+    }
+
+    /** @private Delegate to PaletteOps */
+    static _applyDensityFloor(assignments, palette, threshold = 0.005, protectedIndices = new Set()) {
+        return PaletteOps._applyDensityFloor(assignments, palette, threshold, protectedIndices);
+    }
+
+    /** @private Delegate to PaletteOps */
+    static _prunePalette(paletteLab, threshold = null, highlightThreshold = null, targetCount = 0, tuning = null, distanceMetric = 'cie76') {
+        return PaletteOps._prunePalette(paletteLab, threshold, highlightThreshold, targetCount, tuning, distanceMetric);
+    }
+
+    /** @private Delegate to PaletteOps */
+    static _refineKMeans(labPixels, palette) {
+        return PaletteOps._refineKMeans(labPixels, palette);
+    }
+
+    /** @private Delegate to PaletteOps */
     static _getAdaptiveSnapThreshold(baseThreshold, targetColors, isGrayscale, lRange = 0, colorSpaceExtent = null) {
-        // Grayscale images: Calculate threshold based on target color spacing
-        // to avoid collapsing explicitly requested colors
-        if (isGrayscale && lRange > 0) {
-            // Target L spacing for requested color count
-            const targetSpacing = lRange / Math.max(1, targetColors - 1);
-
-            // Snap threshold must be LESS than half the target spacing
-            // to avoid merging adjacent bands
-            // With L_WEIGHT=3.0: deltaE = 1.73 * deltaL
-            // So: threshold = 0.4 * targetSpacing * 1.73
-            const threshold = 0.4 * targetSpacing * Math.sqrt(3.0);
-
-            return threshold;
-        } else if (isGrayscale) {
-            // Fallback for grayscale without L range info
-            return 2.0; // Per Architect: preserve all grayscale bands
-        }
-
-        // Color mode: Calculate threshold based on Lab space extent
-        if (colorSpaceExtent) {
-            // Estimate typical color spacing in 3D Lab space
-            // Use diagonal of color space bounding box divided by target colors
-            const labDiagonal = Math.sqrt(
-                colorSpaceExtent.lRange * colorSpaceExtent.lRange * 1.5 + // L_WEIGHT=1.5 for color
-                colorSpaceExtent.aRange * colorSpaceExtent.aRange +
-                colorSpaceExtent.bRange * colorSpaceExtent.bRange
-            );
-
-            // Target spacing in 3D Lab space
-            const targetSpacing = labDiagonal / Math.max(1, targetColors - 1);
-
-            // Snap threshold: 40% of target spacing to avoid collapsing adjacent colors
-            // BUT: Never exceed the user-specified base threshold (e.g., 8.0 ΔE)
-            const adaptiveThreshold = 0.4 * targetSpacing;
-            const threshold = Math.min(baseThreshold, adaptiveThreshold);
-
-            return threshold;
-        }
-
-        // Fallback: Old adaptive thresholding based on target color count
-        if (targetColors >= 9) {
-            // High color count: User wants fidelity, reduce snap
-            return Math.min(baseThreshold, 4.0);
-        } else if (targetColors >= 6) {
-            // Medium color count: Balanced approach
-            return Math.min(baseThreshold, 6.0);
-        } else {
-            // Low color count: Aggressive reduction
-            return baseThreshold; // Use default 8.0
-        }
+        return PaletteOps._getAdaptiveSnapThreshold(baseThreshold, targetColors, isGrayscale, lRange, colorSpaceExtent);
     }
 
+    /** @private Delegate to LabMedianCut */
+    static _analyzeColorSpace(labPixels) {
+        return LabMedianCut._analyzeColorSpace(labPixels);
+    }
+
+    /** @private Delegate to HueGapRecovery */
+    static _analyzeImageHueSectors(labPixels, chromaThreshold = 5) {
+        return HueGapRecovery._analyzeImageHueSectors(labPixels, chromaThreshold);
+    }
+
+    /** @private Delegate to HueGapRecovery */
+    static _analyzePaletteHueCoverage(palette, chromaThreshold = 5) {
+        return HueGapRecovery._analyzePaletteHueCoverage(palette, chromaThreshold);
+    }
+
+    /** @private Delegate to HueGapRecovery */
+    static _identifyHueGaps(imageHues, paletteCoverage, paletteColorCountsBySector = null) {
+        return HueGapRecovery._identifyHueGaps(imageHues, paletteCoverage, paletteColorCountsBySector);
+    }
+
+    /** @private Delegate to HueGapRecovery */
+    static _findTrueMissingHues(labPixels, currentPalette, gaps, options = {}) {
+        return HueGapRecovery._findTrueMissingHues(labPixels, currentPalette, gaps, options);
+    }
+
+    /** @private Delegate to HueGapRecovery */
+    static _forceIncludeHueGaps(colors, gaps, imageHues = null) {
+        return HueGapRecovery._forceIncludeHueGaps(colors, gaps, imageHues);
+    }
+
+    /** @private Delegate to HueGapRecovery */
+    static _getHueSector(a, b) {
+        return HueGapRecovery._getHueSector(a, b);
+    }
+
+    /** @private Delegate to PaletteOps */
+    static _calculateLabCentroid(colors, grayscaleOnly = false, strategy = null, tuning = null) {
+        return PaletteOps._calculateLabCentroid(colors, grayscaleOnly, strategy, tuning);
+    }
+
+    /** @private Delegate to PaletteOps */
+    static _mergeLabColors(c1, c2) {
+        return PaletteOps._mergeLabColors(c1, c2);
+    }
+
+    /** @private Delegate to PaletteOps */
+    static _mergeBySaliency(c1, c2) {
+        return PaletteOps._mergeBySaliency(c1, c2);
+    }
+
+    /** @private Delegate to PaletteOps */
+    static _getSaliencyWinner(c1, c2) {
+        return PaletteOps._getSaliencyWinner(c1, c2);
+    }
+
+    /** @private Delegate to PaletteOps */
+    static _snapToSource(targetLab, bucket) {
+        return PaletteOps._snapToSource(targetLab, bucket);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _posterizeClassicRgb(pixels, width, height, colorCount, colorDistance = 'cielab') {
+        return RgbMedianCut._posterizeClassicRgb(pixels, width, height, colorCount, colorDistance);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _extractColors(pixels, width, height) {
+        return RgbMedianCut._extractColors(pixels, width, height);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _medianCut(colors, targetCount) {
+        return RgbMedianCut._medianCut(colors, targetCount);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _splitToTarget(buckets, targetCount) {
+        return RgbMedianCut._splitToTarget(buckets, targetCount);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _getDistinctColors(palette, minDistance) {
+        return RgbMedianCut._getDistinctColors(palette, minDistance);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _rgbToLab(r, g, b) {
+        return RgbMedianCut._rgbToLab(r, g, b);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _colorDistance(color1, color2) {
+        return RgbMedianCut._colorDistance(color1, color2);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _getColorRanges(bucket) {
+        return RgbMedianCut._getColorRanges(bucket);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _splitBucket(bucket, channel) {
+        return RgbMedianCut._splitBucket(bucket, channel);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _checkBucketForHueSector(bucket, targetSector, chromaThreshold = 2) {
+        return RgbMedianCut._checkBucketForHueSector(bucket, targetSector, chromaThreshold);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _averageBucket(bucket) {
+        return RgbMedianCut._averageBucket(bucket);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _mapToPalette(pixels, width, height, palette, colorDistance = 'cielab') {
+        return RgbMedianCut._mapToPalette(pixels, width, height, palette, colorDistance);
+    }
+
+    /** @private Delegate to RgbMedianCut */
+    static _buildPalette(colors) {
+        return RgbMedianCut._buildPalette(colors);
+    }
+
+    /** @private Delegate to LabMedianCut */
+    static _splitBoxLab(box, grayscaleOnly = false, tuning = null) {
+        return LabMedianCut._splitBoxLab(box, grayscaleOnly, tuning);
+    }
+
+    /** @private Delegate to LabMedianCut */
+    static _calculateBoxMetadata(box, grayscaleOnly = false, vibrancyMode = 'aggressive', vibrancyMultiplier = 2.0, highlightThreshold = 92, highlightBoost = 3.0, tuning = null) {
+        return LabMedianCut._calculateBoxMetadata(box, grayscaleOnly, vibrancyMode, vibrancyMultiplier, highlightThreshold, highlightBoost, tuning);
+    }
+
+    /** @private Delegate to LabMedianCut */
+    static _calculateSplitPriority(box, sectorEnergy, coveredSectors, grayscaleOnly, hueMultiplier = 5.0, vibrancyMode = 'aggressive', vibrancyMultiplier = 2.0, highlightThreshold = 92, highlightBoost = 3.0, tuning = null) {
+        return LabMedianCut._calculateSplitPriority(box, sectorEnergy, coveredSectors, grayscaleOnly, hueMultiplier, vibrancyMode, vibrancyMultiplier, highlightThreshold, highlightBoost, tuning);
+    }
+
+    /** @private Delegate to LabMedianCut */
+    static _boxContainsHueSector(colors, targetSectors, chromaThreshold = 2.0) {
+        return LabMedianCut._boxContainsHueSector(colors, targetSectors, chromaThreshold);
+    }
+
+    // ========================================================================
+    // Engine: Reveal Mk 1.0
+    // ========================================================================
+
     /**
-     * Reveal Engine: Lab-space median cut with hue-aware gap analysis (internal method)
-     *
-     * Two-stage architecture:
-     * Stage 1: Feature Detection (CIELAB finds boundaries)
-     * Stage 2: Palette Assignment (artist declares colors - future enhancement)
-     *
-     * Philosophy: "CIELAB finds boundaries, snap curates, artist declares colors"
-     *
-     * @param {Uint8ClampedArray} pixels - RGBA or Lab pixel data
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @param {number} targetColors - Desired color count
-     * @param {Object} options - Engine options
-     * @param {number} [options.snapThreshold=8.0] - Perceptual snap threshold
-     * @param {boolean} [options.enableHueGapAnalysis=true] - Force-include missing hues
-     * @param {string} [options.format='lab'] - Input format ('lab' or 'rgb')
-     * @param {boolean} [options.grayscaleOnly=false] - L-channel only mode
-     * @param {boolean} [options.preserveWhite=true] - Force white into palette
-     * @param {boolean} [options.preserveBlack=true] - Force black into palette
-     * @returns {Object} {palette, paletteLab, assignments, labPixels, metadata}
+     * Reveal Engine: Lab-space median cut with hue-aware gap analysis
+     * @private
      */
     static _posterizeRevealMk1_0(pixels, width, height, targetColors, options = {}) {
         // 🔧 LEGACY V1 MODE: CIE76 = "Dumb" Euclidean math, no smart features
-        // When distanceMetric is cie76, force legacy v1 behavior:
-        // - No perceptual snap (threshold = 0.0)
-        // - No palette reduction merging
-        // - No preserved color unification (threshold = 0.5)
-        // - No density floor removal (threshold = 0.0)
         const distanceMetric = options.distanceMetric || 'cie76';
         const isLegacyV1Mode = distanceMetric === 'cie76';
 
@@ -2907,17 +709,13 @@ class PosterizationEngine {
         let densityFloor = options.densityFloor !== undefined ? options.densityFloor : 0.005;
 
         if (isLegacyV1Mode) {
-            snapThreshold = 0.0;              // Kill perceptual snap
-            enablePaletteReduction = false;   // Kill palette reduction
-            preservedUnifyThreshold = 0.5;    // Kill white/black unification
-            densityFloor = 0.0;               // Kill density floor removal
-
-            // Update options object so these values are used throughout the function
+            snapThreshold = 0.0;
+            enablePaletteReduction = false;
+            preservedUnifyThreshold = 0.5;
+            densityFloor = 0.0;
             options.preservedUnifyThreshold = preservedUnifyThreshold;
             options.densityFloor = densityFloor;
-
         }
-
 
         const enableHueGapAnalysis = options.enableHueGapAnalysis !== undefined ? options.enableHueGapAnalysis : false;
         const grayscaleOnly = options.grayscaleOnly !== undefined ? options.grayscaleOnly : false;
@@ -2928,59 +726,31 @@ class PosterizationEngine {
         const highlightThreshold = options.highlightThreshold !== undefined ? options.highlightThreshold : 92;
         const highlightBoost = options.highlightBoost !== undefined ? options.highlightBoost : 3.0;
 
-        if (grayscaleOnly) {
-        } else {
-        }
-
         const preserveList = [];
         if (preserveWhite) preserveList.push('white');
         if (preserveBlack) preserveList.push('black');
-        if (preserveList.length > 0) {
-        }
 
         const startTime = performance.now();
 
         const isLabInput = options.format === 'lab';
 
-        // IMPORTANT: Track source bit depth at function level for use in thresholds throughout.
-        // 16-bit data is signal, not noise - use tighter thresholds to preserve subtle differences.
-        const sourceBitDepth = options.bitDepth || 16;  // Default to 16 (engine expects 16-bit)
+        const sourceBitDepth = options.bitDepth || 16;
         const isEightBitSource = sourceBitDepth <= 8;
 
-        // Step 1: Convert all pixels to Lab space (or use directly if Lab input)
-        // Also track transparent pixels (alpha < threshold)
+        // Step 1: Convert all pixels to Lab space
         let labPixels;
-        let transparentPixels = new Set(); // Pixel indices that are transparent
+        let transparentPixels = new Set();
 
         if (isLabInput) {
-            // Pixels MUST be in 16-bit Lab format (callers convert 8-bit → 16-bit before calling)
-            // 16-bit: L, a, b encoded as 0-32768 (neutral a/b = 16384)
-            // Lab format has NO alpha channel - all pixels are opaque (3 channels: L, a, b)
-            //
-            // IMPORTANT: bitDepth tracks the ORIGINAL source bit depth (for decisions like
-            // shadow/highlight gates), but the actual pixel data is ALWAYS 16-bit encoding.
-
             labPixels = new Float32Array(pixels.length);
 
-            // 8-BIT PARITY FIX: Compensate for quantization error in 8-bit sources
-            // Even though data is now 16-bit, if the SOURCE was 8-bit it has coarser steps,
-            // causing shadow pixels that should be L=5.8 to round up to L=6.3.
-            // Use wider thresholds for 8-bit sources to catch this quantization noise.
             const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
             const highlightThreshold = isEightBitSource ? 97.5 : 98.0;
 
-            if (isEightBitSource) {
-            } else {
-            }
-
-            // 16-bit Lab constants (engine ONLY accepts 16-bit)
-            // L: 0-32768 → 0-100
-            // a/b: 0-32768 (neutral=16384) → -128 to +127
             const maxValue = 32768;
             const neutralAB = 16384;
-            const abScale = 128 / 16384;  // Scale 16-bit a/b to -128..+127
+            const abScale = 128 / 16384;
 
-            // Track min/max for diagnostics (BEFORE and AFTER conversion)
             let minLRaw = Infinity, maxLRaw = -Infinity;
             let minARaw = Infinity, maxARaw = -Infinity;
             let minBRaw = Infinity, maxBRaw = -Infinity;
@@ -2989,7 +759,6 @@ class PosterizationEngine {
             let minB = Infinity, maxB = -Infinity;
 
             for (let i = 0; i < pixels.length; i += 3) {
-                // Track ORIGINAL raw values (16-bit encoding)
                 minLRaw = Math.min(minLRaw, pixels[i]);
                 maxLRaw = Math.max(maxLRaw, pixels[i]);
                 minARaw = Math.min(minARaw, pixels[i + 1]);
@@ -2997,33 +766,21 @@ class PosterizationEngine {
                 minBRaw = Math.min(minBRaw, pixels[i + 2]);
                 maxBRaw = Math.max(maxBRaw, pixels[i + 2]);
 
-                // Convert 16-bit Lab to perceptual Lab ranges
-                // L: 0-100, a: -128 to +127, b: -128 to +127
                 labPixels[i] = (pixels[i] / maxValue) * 100;
                 labPixels[i + 1] = (pixels[i + 1] - neutralAB) * abScale;
                 labPixels[i + 2] = (pixels[i + 2] - neutralAB) * abScale;
 
-                // THE SHADOW GATE (Final Calibration)
-                // L < threshold is effectively black on a t-shirt.
-                // We force these to True Black (0,0,0) to prevent the engine
-                // from wasting a screen on "Dark Noise" (e.g., L=4.81).
-                // 8-bit sources use L<7.5 to catch quantization-rounded shadow "scum".
                 if (labPixels[i] < shadowThreshold) {
                     labPixels[i] = 0;
                     labPixels[i + 1] = 0;
                     labPixels[i + 2] = 0;
                 }
-                // THE HIGHLIGHT GATE (Kill Scum Dots)
-                // L > threshold is effectively paper/white.
-                // We force these to Pure White (100,0,0) so they become "Transparent/Background".
-                // 8-bit sources use L>97.5 to catch quantization-rounded highlight "scum".
                 else if (labPixels[i] > highlightThreshold) {
                     labPixels[i] = 100;
                     labPixels[i + 1] = 0;
                     labPixels[i + 2] = 0;
                 }
 
-                // Track converted ranges
                 minL = Math.min(minL, labPixels[i]);
                 maxL = Math.max(maxL, labPixels[i]);
                 minA = Math.min(minA, labPixels[i + 1]);
@@ -3033,12 +790,9 @@ class PosterizationEngine {
             }
 
         } else {
-            // Legacy path: Convert RGB to Lab, checking alpha channel
-            const ALPHA_THRESHOLD = 10; // Pixels with alpha < 10 are considered transparent
+            const ALPHA_THRESHOLD = 10;
             labPixels = new Float32Array((pixels.length / 4) * 3);
 
-            // 8-BIT PARITY FIX: Same thresholds apply to RGB sources
-            // (RGB sources are typically always 8-bit anyway)
             const sourceBitDepth = options.bitDepth || 8;
             const isEightBitSource = sourceBitDepth <= 8;
             const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
@@ -3047,10 +801,8 @@ class PosterizationEngine {
             for (let i = 0, j = 0; i < pixels.length; i += 4, j += 3) {
                 const alpha = pixels[i + 3];
 
-                // Track transparent pixels
                 if (alpha < ALPHA_THRESHOLD) {
-                    transparentPixels.add(j / 3); // Store pixel index (not byte index)
-                    // Still convert to Lab for consistency, but will exclude from quantization
+                    transparentPixels.add(j / 3);
                 }
 
                 const rgb = { r: pixels[i], g: pixels[i + 1], b: pixels[i + 2] };
@@ -3059,48 +811,29 @@ class PosterizationEngine {
                 labPixels[j + 1] = lab.a;
                 labPixels[j + 2] = lab.b;
 
-                // THE SHADOW GATE (Final Calibration)
-                // L < threshold is effectively black on a t-shirt.
-                // We force these to True Black (0,0,0) to prevent the engine
-                // from wasting a screen on "Dark Noise" (e.g., L=4.81).
-                // 8-bit sources use L<7.5 to catch quantization-rounded shadow "scum".
                 if (labPixels[j] < shadowThreshold) {
                     labPixels[j] = 0;
                     labPixels[j + 1] = 0;
                     labPixels[j + 2] = 0;
                 }
-                // THE HIGHLIGHT GATE (Kill Scum Dots)
-                // L > threshold is effectively paper/white.
-                // We force these to Pure White (100,0,0) so they become "Transparent/Background".
-                // 8-bit sources use L>97.5 to catch quantization-rounded highlight "scum".
                 else if (labPixels[j] > highlightThreshold) {
                     labPixels[j] = 100;
                     labPixels[j + 1] = 0;
                     labPixels[j + 2] = 0;
                 }
             }
-
-            if (transparentPixels.size > 0) {
-                const percent = ((transparentPixels.size / (pixels.length / 4)) * 100).toFixed(1);
-            }
-
         }
 
-        // Step 1.5: Separate preserved colors (white, black) from quantization
-        let preservedPixelMap = new Map(); // colorName → pixel indices (using Set for O(1) lookup)
+        // Step 1.5: Separate preserved colors
+        let preservedPixelMap = new Map();
         let nonPreservedIndices = [];
         let actualTargetColors = targetColors;
 
         if (preserveWhite || preserveBlack || transparentPixels.size > 0) {
-            // Thresholds for detecting preserved colors
             const WHITE_L_MIN = 95;
-            const BLACK_L_MAX = 10;  // Increased from 5 to catch more near-black pixels
-            // 16-BIT PRECISION FIX: 16-bit data is signal, not noise.
-            // Use very small threshold for 16-bit to preserve subtle chroma in whites/blacks.
-            // Note: Using 0.01 instead of 0 because the < comparison needs a positive value.
+            const BLACK_L_MAX = 10;
             const AB_THRESHOLD = isEightBitSource ? 5 : 0.01;
 
-            // Sample some "black" pixels to see their actual L values (diagnostic)
             let blackLSamples = [];
 
             for (let i = 0; i < labPixels.length; i += 3) {
@@ -3109,14 +842,12 @@ class PosterizationEngine {
                 const b = labPixels[i + 2];
                 const pixelIndex = i / 3;
 
-                // Skip transparent pixels entirely
                 if (transparentPixels.has(pixelIndex)) {
                     continue;
                 }
 
                 let isPreserved = false;
 
-                // Check if pixel is white
                 if (preserveWhite && L > WHITE_L_MIN && Math.abs(a) < AB_THRESHOLD && Math.abs(b) < AB_THRESHOLD) {
                     if (!preservedPixelMap.has('white')) {
                         preservedPixelMap.set('white', new Set());
@@ -3124,7 +855,6 @@ class PosterizationEngine {
                     preservedPixelMap.get('white').add(pixelIndex);
                     isPreserved = true;
                 }
-                // Check if pixel is black
                 else if (preserveBlack && L < BLACK_L_MAX && Math.abs(a) < AB_THRESHOLD && Math.abs(b) < AB_THRESHOLD) {
                     if (!preservedPixelMap.has('black')) {
                         preservedPixelMap.set('black', new Set());
@@ -3132,13 +862,11 @@ class PosterizationEngine {
                     preservedPixelMap.get('black').add(pixelIndex);
                     isPreserved = true;
 
-                    // Sample L values for diagnostic
                     if (blackLSamples.length < 10) {
                         blackLSamples.push(L.toFixed(2));
                     }
                 }
 
-                // Diagnostic: Sample near-black pixels that AREN'T being preserved
                 if (preserveBlack && !isPreserved && L < BLACK_L_MAX + 5 && blackLSamples.length < 20) {
                     blackLSamples.push(`${L.toFixed(2)}(near)`);
                 }
@@ -3148,33 +876,20 @@ class PosterizationEngine {
                 }
             }
 
-            // Log black detection diagnostics
-            if (preserveBlack && blackLSamples.length > 0) {
-            }
-
-            // Log preserved colors
             const totalPixels = labPixels.length / 3;
-
-            // Log transparent pixels if present
-            if (transparentPixels.size > 0) {
-                const percent = ((transparentPixels.size / totalPixels) * 100).toFixed(1);
-            }
 
             preservedPixelMap.forEach((indices, colorName) => {
                 const percent = ((indices.size / totalPixels) * 100).toFixed(1);
             });
 
-            // Reserve palette slots for preserved colors (based on checkboxes, not detected pixels)
             let numPreserved = 0;
             if (preserveWhite) numPreserved++;
             if (preserveBlack) numPreserved++;
 
             if (numPreserved > 0) {
                 actualTargetColors = targetColors - numPreserved;
-            } else if (transparentPixels.size > 0) {
             }
         } else {
-            // No preservation: all non-transparent pixels participate in quantization
             for (let i = 0; i < labPixels.length / 3; i++) {
                 if (!transparentPixels.has(i)) {
                     nonPreservedIndices.push(i);
@@ -3182,7 +897,7 @@ class PosterizationEngine {
             }
         }
 
-        // Extract non-preserved pixels for quantization
+        // Extract non-preserved pixels
         let nonPreservedLabPixels = labPixels;
         if (nonPreservedIndices.length < labPixels.length / 3) {
             nonPreservedLabPixels = new Float32Array(nonPreservedIndices.length * 3);
@@ -3194,47 +909,29 @@ class PosterizationEngine {
             }
         }
 
-        // Step 1.5: Substrate Detection (if Lab input, run on original pixels)
-        // ENABLED BY DEFAULT: Only disable if explicitly set to 'none'
+        // Step 1.5: Substrate Detection
         let substrateLab = null;
         const substrateDisabled = options.substrateMode === 'none';
 
         if (isLabInput && !substrateDisabled) {
-            // Auto-detect by default, or when explicitly set to 'auto'
             if (!options.substrateMode || options.substrateMode === 'auto') {
                 substrateLab = this.autoDetectSubstrate(pixels, width, height, options.bitDepth || 8);
             } else if (options.substrateMode === 'white') {
-                // Force white paper substrate
                 substrateLab = { L: 100, a: 0, b: 0 };
             } else if (options.substrateMode === 'black') {
-                // Force black substrate (shirt, canvas, etc.)
                 substrateLab = { L: 0, a: 0, b: 0 };
             } else if (options.substrateLab) {
-                // Use provided substrate color (custom Lab values)
                 substrateLab = options.substrateLab;
             }
-        } else if (isLabInput && substrateDisabled) {
         }
 
-        // SUBSTRATE COMPENSATION: If substrate will be added, increase target by 1
-        // This ensures perceptual snapping doesn't reduce the final ink count
-        // Example: User requests 10 inks
-        //   - Generate 11 colors (to account for substrate)
-        //   - Perceptual snap might reduce to 10
-        //   - Add substrate → 11 total (10 inks + 1 substrate) ✓
         let medianCutTarget = actualTargetColors;
         if (substrateLab) {
             medianCutTarget = actualTargetColors + 1;
         }
 
-        // Step 2: Run median cut in Lab space with substrate culling
-        if (grayscaleOnly) {
-        } else {
-            if (substrateLab) {
-            } else {
-            }
-        }
-        let initialPaletteLab = this.medianCutInLabSpace(
+        // Step 2: Run median cut in Lab space
+        let initialPaletteLab = LabMedianCut.medianCutInLabSpace(
             nonPreservedLabPixels,
             medianCutTarget,
             grayscaleOnly,
@@ -3250,25 +947,22 @@ class PosterizationEngine {
             options.tuning || null
         );
 
-        // Step 2.5: K-means refinement — snap centroids to actual cluster centers
+        // Step 2.5: K-means refinement
         const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : 1;
         if (!grayscaleOnly && initialPaletteLab.length > 1 && refinementPasses > 0) {
             for (let pass = 0; pass < refinementPasses; pass++) {
-                initialPaletteLab = this._refineKMeans(nonPreservedLabPixels, initialPaletteLab);
+                initialPaletteLab = PaletteOps._refineKMeans(nonPreservedLabPixels, initialPaletteLab);
             }
         }
 
-        // Step 3: Detect grayscale and apply adaptive perceptual snap
-        // "Luma-Aware" Perceptual Snapping per Architect guidance
-        const colorSpaceAnalysis = this._analyzeColorSpace(labPixels);
+        // Step 3: Adaptive perceptual snap
+        const colorSpaceAnalysis = LabMedianCut._analyzeColorSpace(labPixels);
         const isGrayscale = grayscaleOnly || colorSpaceAnalysis.chromaRange < 10;
 
-        // Calculate Lab ranges for adaptive threshold calculation
         let lRange = 0;
         let colorSpaceExtent = null;
 
         if (isGrayscale) {
-            // Grayscale mode: Only need L range
             let minL = Infinity, maxL = -Infinity;
             for (let i = 0; i < labPixels.length; i += 3) {
                 minL = Math.min(minL, labPixels[i]);
@@ -3276,7 +970,6 @@ class PosterizationEngine {
             }
             lRange = maxL - minL;
         } else {
-            // Color mode: Need full Lab space extent
             let minL = Infinity, maxL = -Infinity;
             let minA = Infinity, maxA = -Infinity;
             let minB = Infinity, maxB = -Infinity;
@@ -3295,10 +988,9 @@ class PosterizationEngine {
                 aRange: maxA - minA,
                 bRange: maxB - minB
             };
-
         }
 
-        const adaptiveThreshold = this._getAdaptiveSnapThreshold(
+        const adaptiveThreshold = PaletteOps._getAdaptiveSnapThreshold(
             snapThreshold,
             targetColors,
             isGrayscale,
@@ -3306,12 +998,7 @@ class PosterizationEngine {
             colorSpaceExtent
         );
 
-        if (grayscaleOnly) {
-        } else if (isGrayscale) {
-        } else {
-        }
-
-        let curatedPaletteLab = this.applyPerceptualSnap(
+        let curatedPaletteLab = PaletteOps.applyPerceptualSnap(
             initialPaletteLab,
             adaptiveThreshold,
             isGrayscale,
@@ -3320,136 +1007,86 @@ class PosterizationEngine {
             options.tuning || null
         );
 
-        // ARCHITECT'S PALETTE REDUCTION: Prune colors that are too similar
-        // User-configurable threshold (6.0-15.0 ΔE, default: 10.0)
-        // Balances screen printing practicality with color richness
-        // ONLY prune if enabled AND we're over the target color count (don't reduce below user's request)
+        // Palette reduction
         if (enablePaletteReduction && curatedPaletteLab.length > targetColors) {
-            const prunedPaletteLab = this._prunePalette(curatedPaletteLab, paletteReduction, highlightThreshold, targetColors, options.tuning || null, distanceMetric);
+            const prunedPaletteLab = PaletteOps._prunePalette(curatedPaletteLab, paletteReduction, highlightThreshold, targetColors, options.tuning || null, distanceMetric);
             if (prunedPaletteLab.length < curatedPaletteLab.length) {
                 curatedPaletteLab = prunedPaletteLab;
             }
-        } else if (!enablePaletteReduction) {
-        } else {
         }
 
-        // Unconditional similarity prune: use archetype's paletteReduction threshold
-        // (floor 2.0) regardless of palette count. Ensures no two colors survive
-        // within the archetype's merge distance even when AT or UNDER budget.
+        // Unconditional similarity prune
         if (enablePaletteReduction) {
             const dedupThreshold = Math.max(paletteReduction, 2.0);
-            const dedupResult = this._prunePalette(curatedPaletteLab, dedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
+            const dedupResult = PaletteOps._prunePalette(curatedPaletteLab, dedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
             if (dedupResult.length < curatedPaletteLab.length) {
                 logger.log(`[Mk1.0] Similarity prune (ΔE<${dedupThreshold}): ${curatedPaletteLab.length} → ${dedupResult.length}`);
                 curatedPaletteLab = dedupResult;
             }
         }
 
-        // ARTIST-CENTRIC / HUE-AWARE MODEL: Check for hue gaps AFTER perceptual snap & pruning
-        // This prevents forced colors from being merged away by the snap/prune process
-        // CONDITIONAL: Only run if enableHueGapAnalysis is true (Reveal Mode)
+        // Hue gap analysis (AFTER snap & pruning)
         if (enableHueGapAnalysis && !grayscaleOnly) {
             if (!initialPaletteLab._allColors || !initialPaletteLab._labPixels) {
                 logger.warn(`⚠️ [Hue-Aware Model] Cannot analyze hue gaps - palette data not preserved`);
-                logger.warn(`   _allColors exists: ${!!initialPaletteLab._allColors}`);
-                logger.warn(`   _labPixels exists: ${!!initialPaletteLab._labPixels}`);
             } else {
-
-                // Step 1: Analyze image hue distribution (12 sectors)
-                // MUTED IMAGE RESCUE: Use lower chroma threshold for exponential vibrancy mode
                 const hueChromaThreshold = vibrancyMode === 'exponential' ? 1.0 : 5.0;
-                const imageHues = this._analyzeImageHueSectors(initialPaletteLab._labPixels, hueChromaThreshold);
-
-                // Step 2: Check which sectors the curated palette covers
-                const { coveredSectors, colorCountsBySector } = this._analyzePaletteHueCoverage(curatedPaletteLab, hueChromaThreshold);
-
-                // Step 3: Identify gaps (sectors with >2% image but 0 palette, OR >20% but only 1 color)
-                const gaps = this._identifyHueGaps(imageHues, coveredSectors, colorCountsBySector);
-
-                // Sort gaps by priority (image percentage, descending)
+                const imageHues = HueGapRecovery._analyzeImageHueSectors(initialPaletteLab._labPixels, hueChromaThreshold);
+                const { coveredSectors, colorCountsBySector } = HueGapRecovery._analyzePaletteHueCoverage(curatedPaletteLab, hueChromaThreshold);
+                const gaps = HueGapRecovery._identifyHueGaps(imageHues, coveredSectors, colorCountsBySector);
                 gaps.sort((a, b) => imageHues[b] - imageHues[a]);
 
-                // Step 4: Force-include colors for significant gaps
-                // When hue gap analysis is enabled, ALLOW EXCEEDING target count for hue diversity
                 if (gaps.length > 0) {
-                    // Calculate available slots (target - current - preserved)
                     const numPreservedSlots = (preserveWhite ? 1 : 0) + (preserveBlack ? 1 : 0);
                     const availableSlots = actualTargetColors - curatedPaletteLab.length - numPreservedSlots;
 
-                    // Determine how many gaps to fill
                     let gapsToFill;
                     if (availableSlots <= 0) {
-                        // No slots available, but hue gap analysis is ENABLED
-                        // Force-include gaps anyway (will exceed target count)
-                        gapsToFill = gaps; // Include ALL gaps (up to reasonable limit)
+                        gapsToFill = gaps;
                         if (gapsToFill.length > 3) {
-                            gapsToFill = gaps.slice(0, 3); // Reasonable limit: max 3 extra colors
+                            gapsToFill = gaps.slice(0, 3);
                         }
                     } else {
-                        // Limit gaps to available slots
                         gapsToFill = gaps.slice(0, availableSlots);
-                        const skippedGaps = gaps.length - gapsToFill.length;
-
-                        if (skippedGaps > 0) {
-                        } else {
-                        }
                     }
 
-                    // Use Architect's improved algorithm: scan actual image for distinct high-chroma colors
-                    const candidateColors = this._findTrueMissingHues(labPixels, curatedPaletteLab, gapsToFill);
+                    const candidateColors = HueGapRecovery._findTrueMissingHues(labPixels, curatedPaletteLab, gapsToFill);
 
-                    // CRITICAL FILTER: Verify each candidate is ≥15 ΔE from ALL existing palette colors
-                    // This prevents adding near-duplicates that passed the threshold during scanning
                     const MIN_GAP_DISTANCE = 15.0;
                     const forcedColors = candidateColors.filter(candidate => {
                         const minDistanceFromPalette = Math.min(
-                            ...curatedPaletteLab.map(p => this._labDistance(candidate, p))
+                            ...curatedPaletteLab.map(p => PaletteOps._labDistance(candidate, p))
                         );
-
                         if (minDistanceFromPalette < MIN_GAP_DISTANCE) {
-                            const chroma = Math.sqrt(candidate.a * candidate.a + candidate.b * candidate.b);
                             return false;
                         }
                         return true;
                     });
 
-                    if (forcedColors.length === 0) {
-                    } else {
-                        // Tag injected colors so minVolume won't prune them
+                    if (forcedColors.length > 0) {
                         forcedColors.forEach(c => { c._minVolumeExempt = true; });
-                        // Add forced colors to curated palette (AFTER snap, so they won't be merged)
                         curatedPaletteLab = curatedPaletteLab.concat(forcedColors);
-
-                        // Re-check coverage
-                        const { coveredSectors: newCoverage } = this._analyzePaletteHueCoverage(curatedPaletteLab);
+                        const { coveredSectors: newCoverage } = HueGapRecovery._analyzePaletteHueCoverage(curatedPaletteLab);
                     }
-                } else {
                 }
             }
         }
 
-        // Final safety-net dedup: catch any similar colors introduced by hue gap
-        // analysis (which runs AFTER the step 3a dedup).
-        // Uses archetype's paletteReduction threshold (floor 2.0).
+        // Final safety-net dedup
         {
             const finalDedupThreshold = enablePaletteReduction ? Math.max(paletteReduction, 2.0) : 2.0;
-            const dedupFinal = this._prunePalette(curatedPaletteLab, finalDedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
+            const dedupFinal = PaletteOps._prunePalette(curatedPaletteLab, finalDedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
             if (dedupFinal.length < curatedPaletteLab.length) {
                 logger.log(`[Mk1.0] Final dedup: ${curatedPaletteLab.length} → ${dedupFinal.length} (removed ${curatedPaletteLab.length - dedupFinal.length} near-duplicates)`);
                 curatedPaletteLab = dedupFinal;
             }
         }
 
-        // Step 3.5: Add preserved colors to palette (with Minimum Viability Threshold)
-        // SPECKLE FILTER: Only add white/black if they represent significant coverage.
-        // A 0.04% coverage layer is "dust" - it will wash out on a 230 mesh screen.
-        // For a 1MP image, 0.1% = 1000 pixels. Anything less is invisible/unprintable.
+        // Step 3.5: Add preserved colors
         const MIN_PRESERVED_COVERAGE = PosterizationEngine.MIN_PRESERVED_COVERAGE;
         const totalPixels = labPixels.length / 3;
 
         const preservedColors = [];
-
-        // Track which preserved colors actually made it (for later use)
         let actuallyPreservedWhite = false;
         let actuallyPreservedBlack = false;
 
@@ -3459,23 +1096,18 @@ class PosterizationEngine {
 
             if (coverage >= MIN_PRESERVED_COVERAGE) {
                 const absoluteWhite = { L: 100, a: 0, b: 0 };
-                // Read preservedUnifyThreshold from options (default: 12.0, Jethro: 0.5)
                 const UNIFY_THRESHOLD = options.preservedUnifyThreshold !== undefined
                     ? options.preservedUnifyThreshold
                     : PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
 
-                // Check if palette already has a highlight color close to white
                 const existingMatch = curatedPaletteLab.find(color =>
-                    PosterizationEngine._labDistance(color, absoluteWhite) < UNIFY_THRESHOLD
+                    PaletteOps._labDistance(color, absoluteWhite) < UNIFY_THRESHOLD
                 );
 
-                if (existingMatch) {
-                    const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteWhite);
-                } else {
+                if (!existingMatch) {
                     preservedColors.push(absoluteWhite);
                     actuallyPreservedWhite = true;
                 }
-            } else {
             }
         }
         if (preserveBlack) {
@@ -3484,42 +1116,30 @@ class PosterizationEngine {
 
             if (coverage >= MIN_PRESERVED_COVERAGE) {
                 const absoluteBlack = { L: 0, a: 0, b: 0 };
-                // Read preservedUnifyThreshold from options (default: 12.0, Jethro: 0.5)
                 const UNIFY_THRESHOLD = options.preservedUnifyThreshold !== undefined
                     ? options.preservedUnifyThreshold
                     : PosterizationEngine.PRESERVED_UNIFY_THRESHOLD;
 
-                // Check if palette already has a deep shadow color close to black
                 const existingMatch = curatedPaletteLab.find(color =>
-                    PosterizationEngine._labDistance(color, absoluteBlack) < UNIFY_THRESHOLD
+                    PaletteOps._labDistance(color, absoluteBlack) < UNIFY_THRESHOLD
                 );
 
-                if (existingMatch) {
-                    const deltaE = PosterizationEngine._labDistance(existingMatch, absoluteBlack);
-                } else {
+                if (!existingMatch) {
                     preservedColors.push(absoluteBlack);
                     actuallyPreservedBlack = true;
                 }
-            } else {
             }
         }
 
-        // Step 3.6: Add substrate color to palette (if detected)
-        // Substrate is added as a technical color for accurate pixel mapping
-        // It represents the paper/medium itself, not an ink layer
+        // Step 3.6: Add substrate color
         const substrateColors = [];
         if (substrateLab) {
-            // Check if substrate is similar to any preserved color
-            // If so, skip adding substrate to avoid duplicates (e.g., white substrate + preserveWhite)
-            // SHADOW GATE FOR SUBSTRATE: If substrate is too dark (L < 6), skip it.
-            // Dark substrates are effectively black and we already have preserved black.
             if (substrateLab.L < 6.0) {
-            }
-            // HIGHLIGHT GATE FOR SUBSTRATE: If substrate is too bright (L > 98), skip it.
-            // Bright substrates are effectively white/paper and we already have preserved white.
-            else if (substrateLab.L > 98.0) {
+                // Dark substrate — skip
+            } else if (substrateLab.L > 98.0) {
+                // Bright substrate — skip
             } else {
-                const DUPLICATE_THRESHOLD = 3.0; // ΔE threshold for considering colors identical
+                const DUPLICATE_THRESHOLD = 3.0;
                 let isDuplicate = false;
 
                 for (const preserved of preservedColors) {
@@ -3540,74 +1160,45 @@ class PosterizationEngine {
             }
         }
 
-        // Final palette: quantized colors + preserved colors + substrate
+        // Final palette assembly
         let finalPaletteLab = [...curatedPaletteLab, ...preservedColors, ...substrateColors];
-
-        // Step 4: Convert palette back to RGB
         let paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
 
-        // Step 5: Assign each pixel to nearest palette color (HARD SNAP - Zero Dither)
-        // Every pixel belongs 100% to one feature color - no error diffusion, no dithering.
-        // This ensures razor-sharp boundaries required for high-end spot color separations.
-        // Lab = 3 channels (L,a,b), RGB = 4 channels (RGBA)
-        // CRITICAL: Use Uint16Array to support palettes with >255 colors (quantized + preserved + substrate)
+        // Step 5: Pixel assignment
         let assignments = new Uint16Array(pixels.length / (isLabInput ? 3 : 4));
 
-        // Calculate palette indices for preserved colors (based on actual inclusion, not checkbox state)
-        // Use actuallyPreservedWhite/Black which account for the viability threshold
         let preservedColorIndex = curatedPaletteLab.length;
         const whiteIndex = actuallyPreservedWhite ? preservedColorIndex++ : -1;
         const blackIndex = actuallyPreservedBlack ? preservedColorIndex++ : -1;
 
-        // PERFORMANCE OPTIMIZATION: Preview mode uses stride sampling
-        // This reduces distance calculations (4× stride = 1/16 pixels computed)
-        // For 800×600 preview: 480k → 30k distance calculations (at stride=4)
-        // User-selectable: Standard=4 (fast), Fine=2 (slow), Finest=1 (slower)
         const isPreview = options.isPreview === true;
         const useStride = isPreview && options.optimizePreview !== false;
         const ASSIGNMENT_STRIDE = useStride ? (options.previewStride || 4) : 1;
 
-        if (useStride) {
-            const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
-        } else {
-        }
-
-        // STRIDE-AWARE 2D ASSIGNMENT (Optimized for UXP performance)
-        // PRE-FETCH sets outside the loop to avoid "Property Bleed"
         const whiteSet = preservedPixelMap.get('white');
         const blackSet = preservedPixelMap.get('black');
         const paletteLength = finalPaletteLab.length;
 
-        // 16-BIT INTEGER PRECISION FIX:
-        // Pre-convert palette to 16-bit integer space ONCE to avoid floating-point
-        // precision loss during comparison. This preserves subtle color differences
-        // (especially chromatic zero-crossings where a*/b* values are near neutral).
-        //
-        // Engine 16-bit encoding: L: 0-32768, a/b: 0-32768 (16384=neutral)
-        // Perceptual Lab: L: 0-100, a/b: -128 to +127
         const palette16 = finalPaletteLab.map(p => ({
             L: (p.L / 100) * 32768,
-            a: (p.a + 128) * 128,  // Map -128..+127 to 0..32768
+            a: (p.a + 128) * 128,
             b: (p.b + 128) * 128
         }));
 
-        // Use raw 16-bit pixels if available (Lab input), otherwise fall back to labPixels
         const useInteger16 = isLabInput && pixels;
 
         for (let y = 0; y < height; y += ASSIGNMENT_STRIDE) {
-            const rowOffset = y * width; // Pre-calculate row start
+            const rowOffset = y * width;
 
             for (let x = 0; x < width; x += ASSIGNMENT_STRIDE) {
                 const anchorI = rowOffset + x;
                 let anchorAssignment = 0;
 
-                // --- STEP A: CALCULATE ANCHOR COLOR ---
                 if (transparentPixels.has(anchorI)) {
-                    anchorAssignment = 255; // Special value for transparent
+                    anchorAssignment = 255;
                 } else {
                     let isPreserved = false;
 
-                    // Direct Set check (avoid Map lookup inside loop)
                     if (actuallyPreservedWhite && whiteSet && whiteSet.has(anchorI)) {
                         anchorAssignment = whiteIndex;
                         isPreserved = true;
@@ -3621,7 +1212,6 @@ class PosterizationEngine {
                         let minDistance = Infinity;
 
                         if (useInteger16) {
-                            // INTEGER 16-BIT DISTANCE (preserves full precision)
                             const rawL = pixels[idx];
                             const rawA = pixels[idx + 1];
                             const rawB = pixels[idx + 2];
@@ -3632,7 +1222,6 @@ class PosterizationEngine {
                                 const dA = rawA - target16.a;
                                 const dB = rawB - target16.b;
 
-                                // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
                                 const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
 
                                 if (dist < minDistance) {
@@ -3641,7 +1230,6 @@ class PosterizationEngine {
                                 }
                             }
                         } else {
-                            // FLOAT DISTANCE (fallback for non-Lab inputs)
                             const pL = labPixels[idx];
                             const pA = labPixels[idx + 1];
                             const pB = labPixels[idx + 2];
@@ -3652,7 +1240,6 @@ class PosterizationEngine {
                                 const dA = pA - target.a;
                                 const dB = pB - target.b;
 
-                                // Squared Euclidean distance (L weighted 1.5× for perceptual accuracy)
                                 const dist = grayscaleOnly ? (dL * dL) : (1.5 * dL * dL + dA * dA + dB * dB);
 
                                 if (dist < minDistance) {
@@ -3664,8 +1251,6 @@ class PosterizationEngine {
                     }
                 }
 
-                // --- STEP B: STAMP THE BLOCK ---
-                // Stamp blocks row-by-row to maintain memory locality
                 for (let bY = 0; bY < ASSIGNMENT_STRIDE && (y + bY) < height; bY++) {
                     const fillRow = (y + bY) * width;
                     for (let bX = 0; bX < ASSIGNMENT_STRIDE && (x + bX) < width; bX++) {
@@ -3678,22 +1263,16 @@ class PosterizationEngine {
         const endTime = performance.now();
         const duration = ((endTime - startTime) / 1000).toFixed(3);
 
-        if (finalPaletteLab.length < targetColors) {
-        }
-
-        // Apply density floor to remove ghost colors (<0.5% coverage by default)
-        // IMPORTANT: Never remove preserved colors (white/black) or substrate
-        // Use actuallyPreserved flags - if a color was skipped by viability threshold, don't protect it
-        // Read densityFloor from options (default: 0.005 = 0.5%, Jethro: 0.0 = disabled)
+        // Apply density floor
         const densityFloorThreshold = options.densityFloor !== undefined ? options.densityFloor : 0.005;
 
         if (densityFloorThreshold > 0) {
             const protectedIndices = new Set();
             if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
             if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
-            if (substrateLab) protectedIndices.add(finalPaletteLab.length - 1);  // Substrate is always last
+            if (substrateLab) protectedIndices.add(finalPaletteLab.length - 1);
 
-            const densityResult = this._applyDensityFloor(
+            const densityResult = PaletteOps._applyDensityFloor(
                 assignments,
                 finalPaletteLab,
                 densityFloorThreshold,
@@ -3701,28 +1280,21 @@ class PosterizationEngine {
             );
 
             if (densityResult.actualCount < finalPaletteLab.length) {
-                const removed = finalPaletteLab.length - densityResult.actualCount;
-
-                // Use the cleaned palette and remapped assignments
                 finalPaletteLab = densityResult.palette;
                 assignments = densityResult.assignments;
-
-                // CRITICAL: Regenerate RGB palette to match filtered Lab palette
                 paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
             }
-        } else {
         }
 
-        // Track substrate index for UI filtering and layer identification
         const substrateIndex = substrateLab ? (curatedPaletteLab.length + preservedColors.length) : null;
 
         return {
-            palette: paletteRgb,           // RGB version for UI display
-            paletteLab: finalPaletteLab,   // Lab version for layer creation (NO CONVERSION NEEDED)
+            palette: paletteRgb,
+            paletteLab: finalPaletteLab,
             assignments,
-            labPixels,  // Lab pixel data for preview rendering
-            substrateLab,  // Substrate anchor color (for UI display and full-res separation)
-            substrateIndex,  // Index of substrate in palette (null if no substrate)
+            labPixels,
+            substrateLab,
+            substrateIndex,
             metadata: {
                 targetColors,
                 finalColors: finalPaletteLab.length,
@@ -3730,40 +1302,19 @@ class PosterizationEngine {
                 duration: parseFloat(duration)
             }
         };
-
     }
 
+    // ========================================================================
+    // Engine: Reveal Mk 1.5
+    // ========================================================================
+
     /**
-     * Reveal Mk 1.5 Engine: Deterministic Auto-Quantizer
-     *
-     * Pre-scans for "Identity Peaks" (high chroma + low volume + distinct from neighbors)
-     * and automatically reserves palette slots for them before median cut runs.
-     *
-     * PURPOSE: Solves the "low-volume important color" problem without user input.
-     * Auto-detects colors like Monroe blue (0.1% coverage) that would be lost in
-     * probabilistic median cut.
-     *
-     * ALGORITHM:
-     * 1. Convert to perceptual Lab space
-     * 2. [NEW] Scan for identity peaks (C>30, vol<5%, ΔE>15)
-     * 3. [NEW] Reserve N slots for detected peaks
-     * 4. Run median cut on remaining budget
-     * 5. Apply perceptual snap + palette reduction
-     * 6. [NEW] Inject peaks into final palette
-     * 7. [NEW] Protect peaks from density floor
-     * 8. Standard pixel assignment
-     *
-     * @param {Uint16Array} pixels - 16-bit Lab pixel data (MUST be Lab format)
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @param {number} targetColors - Total palette size
-     * @param {Object} options - Engine options
-     * @returns {Object} Standard posterization result with auto-anchor metadata
+     * Reveal Mk 1.5 Engine: Deterministic Auto-Quantizer with Identity Peaks
+     * @private
      */
     static _posterizeRevealMk1_5(pixels, width, height, targetColors, options = {}) {
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_entry');
 
-        // CIE76 LEGACY V1 MODE DETECTION (same as _posterizeReveal)
         const distanceMetric = options.distanceMetric || 'cie76';
         const isLegacyV1Mode = distanceMetric === 'cie76';
 
@@ -3778,18 +1329,15 @@ class PosterizationEngine {
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_thresholds_set');
 
         if (isLegacyV1Mode) {
-            snapThreshold = 0.0;              // Kill perceptual snap
-            enablePaletteReduction = false;   // Kill palette reduction
-            preservedUnifyThreshold = 0.5;    // Kill white/black unification
-            densityFloor = 0.0;               // Kill density floor removal
-
-            // Update options object so these values are used throughout the function
+            snapThreshold = 0.0;
+            enablePaletteReduction = false;
+            preservedUnifyThreshold = 0.5;
+            densityFloor = 0.0;
             options.snapThreshold = snapThreshold;
             options.enablePaletteReduction = enablePaletteReduction;
             options.paletteReduction = paletteReduction;
             options.preservedUnifyThreshold = preservedUnifyThreshold;
             options.densityFloor = densityFloor;
-
         }
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_legacy_mode_done');
@@ -3804,38 +1352,27 @@ class PosterizationEngine {
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_options_parsed');
 
-
         const preserveList = [];
         if (preserveWhite) preserveList.push('white');
         if (preserveBlack) preserveList.push('black');
-        if (preserveList.length > 0) {
-        }
 
         const startTime = performance.now();
-
 
         const isLabInput = options.format === 'lab';
         if (!isLabInput) {
             throw new Error('[Reveal Mk 1.5] Requires Lab input format (RGB not supported)');
         }
 
-
         const sourceBitDepth = options.bitDepth || 16;
         const isEightBitSource = sourceBitDepth <= 8;
 
-
-        // Step 1: Convert to perceptual Lab space (reuse _posterizeReveal logic)
-
+        // Step 1: Convert to perceptual Lab space
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_float32array');
         const labPixels = new Float32Array(pixels.length);
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_float32array_allocated');
 
         const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
         const highlightThresholdGate = isEightBitSource ? 97.5 : 98.0;
-
-        if (isEightBitSource) {
-        } else {
-        }
 
         const maxValue = 32768;
         const neutralAB = 16384;
@@ -3861,8 +1398,7 @@ class PosterizationEngine {
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_pixel_loop_done');
 
-        // ========== [NEW] Hard Chromance Gate: Achromatic Purge ==========
-        // Delete color data from low-chroma pixels (halftone noise suppression)
+        // Hard Chromance Gate
         const chromaGateThreshold = options.chromaGateThreshold !== undefined ? options.chromaGateThreshold : 0;
 
         if (chromaGateThreshold > 0) {
@@ -3873,26 +1409,15 @@ class PosterizationEngine {
                 const b = labPixels[i + 2];
                 const chroma = Math.sqrt(a * a + b * b);
 
-                // If chroma below threshold, physically delete color data (pure gray)
                 if (chroma < chromaGateThreshold) {
-                    labPixels[i + 1] = 0;  // a* = 0
-                    labPixels[i + 2] = 0;  // b* = 0
+                    labPixels[i + 1] = 0;
+                    labPixels[i + 2] = 0;
                     purgedCount++;
                 }
             }
-
-            const purgedPercent = (purgedCount / (labPixels.length / 3)) * 100;
         }
-        // =================================================================
 
-        // ========== Shadow Chroma Gate ==========
-        // Dark pixels with low chroma are visually indistinguishable from black/gray.
-        // In screen printing, they belong on the black plate — not consuming a palette
-        // slot for "brown" or "dark navy." Force them achromatic so the median cut
-        // merges them with the black cluster instead of creating a separate dark bucket.
-        //
-        // shadowChromaGateL: pixels below this L get tested (default 0 = off)
-        // Chroma threshold is fixed at 20 — anything below is perceptually neutral.
+        // Shadow Chroma Gate
         const shadowChromaGateL = options.shadowChromaGateL !== undefined ? options.shadowChromaGateL : 0;
 
         if (shadowChromaGateL > 0) {
@@ -3910,25 +1435,19 @@ class PosterizationEngine {
                 }
             }
         }
-        // =========================================
 
-        // ========== [NEW] Mk 1.5: Auto-detect OR use pre-defined anchors ==========
-        // Extract PeakFinder parameters from options (set by archetype)
+        // Identity Peak detection
         const peakFinderMaxPeaks = options.peakFinderMaxPeaks !== undefined ? options.peakFinderMaxPeaks : 1;
         const peakFinderPreferredSectors = options.peakFinderPreferredSectors || null;
-        const peakFinderBlacklistedSectors = options.peakFinderBlacklistedSectors || [3, 4]; // Default: blacklist green
+        const peakFinderBlacklistedSectors = options.peakFinderBlacklistedSectors || [3, 4];
 
-        // Check if archetype provides pre-defined forced centroids
         let forcedCentroids = [];
         let usedPredefinedAnchors = false;
-        let detectedPeaks = []; // Initialize outside to avoid scoping issues
+        let detectedPeaks = [];
 
-        // Support both forcedCentroids (camelCase) and forced_centroids (snake_case)
         const forcedCentroidsInput = options.forcedCentroids || options.forced_centroids;
 
-
         if (forcedCentroidsInput && Array.isArray(forcedCentroidsInput) && forcedCentroidsInput.length > 0) {
-            // Use pre-defined anchors from archetype (Golden Master mode)
             try {
                 forcedCentroids = forcedCentroidsInput.map(anchor => {
                     const centroid = {
@@ -3944,7 +1463,6 @@ class PosterizationEngine {
             }
         }
 
-        // Fall back to auto-detection if no valid pre-defined anchors
         if (!usedPredefinedAnchors) {
             const peakFinder = new PeakFinder({
                 chromaThreshold: 30,
@@ -3954,11 +1472,8 @@ class PosterizationEngine {
                 blacklistedSectors: peakFinderBlacklistedSectors
             });
 
-
-            // Pass bitDepth for adaptive thresholds (8.0 for 16-bit, 15.0 for 8-bit)
             detectedPeaks = peakFinder.findIdentityPeaks(labPixels, { bitDepth: sourceBitDepth });
 
-            // Convert peaks to forcedCentroids format
             forcedCentroids = detectedPeaks.map(peak => ({
                 L: peak.L,
                 a: peak.a,
@@ -3967,11 +1482,10 @@ class PosterizationEngine {
 
             logger.log(`[Mk1.5] PeakFinder: ${detectedPeaks.length} peaks at ${width}x${height} (bitDepth=${sourceBitDepth}): ${detectedPeaks.map(p => `L=${p.L.toFixed(1)} a=${p.a.toFixed(1)} b=${p.b.toFixed(1)} C=${(Math.sqrt(p.a*p.a+p.b*p.b)).toFixed(1)}`).join(', ') || 'none'}`);
         }
-        // =============================================================
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_peak_detection_done');
 
-        // Step 1.5: Handle preserved colors (white/black)
+        // Preserved colors (white/black)
         let preservedPixelMap = new Map();
         let nonPreservedIndices = [];
 
@@ -4013,7 +1527,7 @@ class PosterizationEngine {
             const percent = ((indices.size / totalPixels) * 100).toFixed(1);
         });
 
-        // ========== [NEW] Slot reservation logic ==========
+        // Slot reservation
         let numPreserved = 0;
         if (preserveWhite) numPreserved++;
         if (preserveBlack) numPreserved++;
@@ -4022,10 +1536,8 @@ class PosterizationEngine {
         const medianCutTarget = Math.max(1, targetColors - numForced - numPreserved);
 
         logger.log(`[Mk1.5] Slot budget: targetColors=${targetColors}, numForced=${numForced}, numPreserved=${numPreserved} → medianCutTarget=${medianCutTarget}`);
-        // ==================================================
 
-
-        // Extract non-preserved pixels for quantization
+        // Extract non-preserved pixels
         let nonPreservedLabPixels = labPixels;
         if (nonPreservedIndices.length < labPixels.length / 3) {
             nonPreservedLabPixels = new Float32Array(nonPreservedIndices.length * 3);
@@ -4039,14 +1551,14 @@ class PosterizationEngine {
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_median_cut');
 
-        // Step 2: Run median cut with reduced target
-        let initialPaletteLab = this.medianCutInLabSpace(
+        // Step 2: Median cut with reduced target
+        let initialPaletteLab = LabMedianCut.medianCutInLabSpace(
             nonPreservedLabPixels,
             medianCutTarget,
             grayscaleOnly,
             width,
             height,
-            null, // No substrate for Mk 1.5
+            null,
             3.5,
             vibrancyMode,
             vibrancyBoost,
@@ -4059,16 +1571,16 @@ class PosterizationEngine {
 
         logger.log(`[Mk1.5] Median cut produced ${initialPaletteLab.length} colors: ${initialPaletteLab.map(c => `L=${c.L.toFixed(1)} a=${c.a.toFixed(1)} b=${c.b.toFixed(1)}`).join(' | ')}`);
 
-        // Step 2.5: K-means refinement — snap centroids to actual cluster centers
+        // K-means refinement
         const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : 1;
         if (!grayscaleOnly && initialPaletteLab.length > 1 && refinementPasses > 0) {
             for (let pass = 0; pass < refinementPasses; pass++) {
-                initialPaletteLab = this._refineKMeans(nonPreservedLabPixels, initialPaletteLab);
+                initialPaletteLab = PaletteOps._refineKMeans(nonPreservedLabPixels, initialPaletteLab);
             }
         }
 
-        // Step 3: Apply perceptual snap
-        const colorSpaceAnalysis = this._analyzeColorSpace(labPixels);
+        // Step 3: Perceptual snap
+        const colorSpaceAnalysis = LabMedianCut._analyzeColorSpace(labPixels);
         const isGrayscale = grayscaleOnly || colorSpaceAnalysis.chromaRange < 10;
 
         let lRange = 0;
@@ -4102,7 +1614,7 @@ class PosterizationEngine {
             };
         }
 
-        const adaptiveThreshold = this._getAdaptiveSnapThreshold(
+        const adaptiveThreshold = PaletteOps._getAdaptiveSnapThreshold(
             snapThreshold,
             targetColors,
             isGrayscale,
@@ -4110,8 +1622,7 @@ class PosterizationEngine {
             colorSpaceExtent
         );
 
-
-        let snappedPaletteLab = this.applyPerceptualSnap(
+        let snappedPaletteLab = PaletteOps.applyPerceptualSnap(
             initialPaletteLab,
             adaptiveThreshold,
             isGrayscale,
@@ -4120,57 +1631,48 @@ class PosterizationEngine {
             options.tuning || null
         );
 
-        // Step 4: Palette reduction (if over budget after snap)
+        // Step 4: Palette reduction
         if (enablePaletteReduction && snappedPaletteLab.length > medianCutTarget) {
-            const prunedPaletteLab = this._prunePalette(snappedPaletteLab, paletteReduction, highlightThreshold, medianCutTarget, options.tuning || null, distanceMetric);
+            const prunedPaletteLab = PaletteOps._prunePalette(snappedPaletteLab, paletteReduction, highlightThreshold, medianCutTarget, options.tuning || null, distanceMetric);
             if (prunedPaletteLab.length < snappedPaletteLab.length) {
                 snappedPaletteLab = prunedPaletteLab;
             }
         }
 
-        // Step 4a: Unconditional similarity prune — use archetype's paletteReduction
-        // threshold (floor 2.0) regardless of palette count. The budget prune above
-        // only runs when OVER target; this ensures no two colors survive within the
-        // archetype's merge distance even when AT or UNDER budget.
+        // Step 4a: Unconditional similarity prune
         if (enablePaletteReduction) {
             const dedupThreshold = Math.max(paletteReduction, 2.0);
-            const dedupResult = this._prunePalette(snappedPaletteLab, dedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
+            const dedupResult = PaletteOps._prunePalette(snappedPaletteLab, dedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
             if (dedupResult.length < snappedPaletteLab.length) {
                 logger.log(`[Mk1.5] Similarity prune (ΔE<${dedupThreshold}): ${snappedPaletteLab.length} → ${dedupResult.length}`);
                 snappedPaletteLab = dedupResult;
             }
         }
 
-        // Step 4.5: Hue gap analysis — detect missing minority hues and inject
-        // Runs AFTER snap/prune so injected colors won't be merged away.
-        // Uses the same algorithm as Mk 1.0 (scan original pixels for distinct
-        // high-chroma candidates in missing sectors).
+        // Step 4.5: Hue gap analysis
         const enableHueGapAnalysis = options.enableHueGapAnalysis !== undefined
             ? options.enableHueGapAnalysis : false;
 
         if (enableHueGapAnalysis && !grayscaleOnly && initialPaletteLab._labPixels) {
             const hueChromaThreshold = vibrancyMode === 'exponential' ? 1.0 : 5.0;
-            const imageHues = this._analyzeImageHueSectors(initialPaletteLab._labPixels, hueChromaThreshold);
-            const { coveredSectors, colorCountsBySector } = this._analyzePaletteHueCoverage(snappedPaletteLab, hueChromaThreshold);
-            const gaps = this._identifyHueGaps(imageHues, coveredSectors, colorCountsBySector);
+            const imageHues = HueGapRecovery._analyzeImageHueSectors(initialPaletteLab._labPixels, hueChromaThreshold);
+            const { coveredSectors, colorCountsBySector } = HueGapRecovery._analyzePaletteHueCoverage(snappedPaletteLab, hueChromaThreshold);
+            const gaps = HueGapRecovery._identifyHueGaps(imageHues, coveredSectors, colorCountsBySector);
             gaps.sort((a, b) => imageHues[b] - imageHues[a]);
 
             if (gaps.length > 0) {
-                // Allow exceeding target count for hue diversity (max 3 extra)
                 const gapsToFill = gaps.length > 3 ? gaps.slice(0, 3) : gaps;
-                const candidateColors = this._findTrueMissingHues(labPixels, snappedPaletteLab, gapsToFill);
+                const candidateColors = HueGapRecovery._findTrueMissingHues(labPixels, snappedPaletteLab, gapsToFill);
 
                 const MIN_GAP_DISTANCE = 15.0;
                 const forcedColors = candidateColors.filter(candidate => {
                     const minDist = Math.min(
-                        ...snappedPaletteLab.map(p => this._labDistance(candidate, p))
+                        ...snappedPaletteLab.map(p => PaletteOps._labDistance(candidate, p))
                     );
                     return minDist >= MIN_GAP_DISTANCE;
                 });
 
                 if (forcedColors.length > 0) {
-                    // Tag injected colors so minVolume won't prune them —
-                    // the whole point of hue gap analysis is to preserve minority hues.
                     forcedColors.forEach(c => { c._minVolumeExempt = true; });
                     snappedPaletteLab = snappedPaletteLab.concat(forcedColors);
                     logger.log(`[Mk1.5] Hue gap rescue: injected ${forcedColors.length} colors for sectors [${gapsToFill.join(', ')}]`);
@@ -4180,7 +1682,7 @@ class PosterizationEngine {
             }
         }
 
-        // ========== [NEW] Anchor injection (after perceptual snap) ==========
+        // Anchor injection (after perceptual snap)
         const mergedPalette = [...snappedPaletteLab];
         let addedCount = 0;
         let skippedCount = 0;
@@ -4188,22 +1690,19 @@ class PosterizationEngine {
 
         for (const forced of forcedCentroids) {
             const isDuplicate = mergedPalette.some(color =>
-                this._labDistance(color, forced) < anchorDuplicateThreshold
+                PaletteOps._labDistance(color, forced) < anchorDuplicateThreshold
             );
 
             if (isDuplicate) {
                 skippedCount++;
             } else {
-                // Tag forced centroids (identity peaks) as exempt from minVolume —
-                // they were explicitly added to capture important color signals.
                 forced._minVolumeExempt = true;
                 mergedPalette.push(forced);
                 addedCount++;
             }
         }
-        // ====================================================================
 
-        // Step 5: Add preserved colors (white/black)
+        // Step 5: Add preserved colors
         const preservedColors = [];
         let actuallyPreservedWhite = false;
         let actuallyPreservedBlack = false;
@@ -4228,15 +1727,12 @@ class PosterizationEngine {
             }
         }
 
-        // Final safety-net dedup: catch any similar colors introduced by
-        // hue gap analysis or anchor injection (which run AFTER step 4a).
-        // Uses archetype's paletteReduction threshold (floor 2.0).
+        // Final safety-net dedup
         {
             const finalDedupThreshold = enablePaletteReduction ? Math.max(paletteReduction, 2.0) : 2.0;
-            const dedupFinal = this._prunePalette(mergedPalette, finalDedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
+            const dedupFinal = PaletteOps._prunePalette(mergedPalette, finalDedupThreshold, highlightThreshold, 0, options.tuning || null, distanceMetric);
             if (dedupFinal.length < mergedPalette.length) {
                 logger.log(`[Mk1.5] Final dedup: ${mergedPalette.length} → ${dedupFinal.length} (removed ${mergedPalette.length - dedupFinal.length} near-duplicates)`);
-                // Recalculate preserved indices since palette shrunk
                 mergedPalette.length = 0;
                 mergedPalette.push(...dedupFinal);
                 if (actuallyPreservedWhite) whiteIndex = mergedPalette.length + (preservedColors.indexOf(preservedColors.find(c => c.L === 100)));
@@ -4246,25 +1742,16 @@ class PosterizationEngine {
 
         const finalPaletteLab = [...mergedPalette, ...preservedColors];
 
-        // Step 6: Pixel assignment (with preview stride support)
+        // Step 6: Pixel assignment
         const paletteRgb = finalPaletteLab.map(lab => this.labToRgb(lab));
         const assignments = new Uint8Array(width * height);
 
-        // PERFORMANCE OPTIMIZATION: Preview mode uses stride sampling
-        // This reduces distance calculations (4× stride = 1/16 pixels computed)
-        // User-selectable: Standard=4 (fast), Fine=2 (slow), Finest=1 (slower)
         const isPreview = options.isPreview === true;
         const useStride = isPreview && options.optimizePreview !== false;
         const ASSIGNMENT_STRIDE = useStride ? (options.previewStride || 4) : 1;
 
-        if (useStride) {
-            const labels = { 4: 'Standard', 2: 'Fine', 1: 'Finest' };
-        } else {
-        }
-
         const paletteLength = finalPaletteLab.length;
 
-        // Extract distance options for accurate assignment
         const assignDistanceMetric = options.distanceMetric || 'squared';
         const lWeight = options.lWeight !== undefined ? options.lWeight : 1.0;
         const cWeight = options.cWeight !== undefined ? options.cWeight : 1.0;
@@ -4301,7 +1788,6 @@ class PosterizationEngine {
                                     const dL = pL - target.L;
                                     dist = dL * dL;
                                 } else {
-                                    // Use proper distance metric from options
                                     if (assignDistanceMetric === 'cie76') {
                                         dist = LabDistance.cie76SquaredInline(pL, pA, pB, target.L, target.a, target.b);
                                     } else if (assignDistanceMetric === 'cie94') {
@@ -4310,7 +1796,6 @@ class PosterizationEngine {
                                     } else if (assignDistanceMetric === 'cie2000') {
                                         dist = LabDistance.cie2000SquaredInline(pL, pA, pB, target.L, target.a, target.b);
                                     } else {
-                                        // Squared Euclidean with weights
                                         const dL = pL - target.L;
                                         const dA = pA - target.a;
                                         const dB = pB - target.b;
@@ -4340,19 +1825,16 @@ class PosterizationEngine {
         const endTime = performance.now();
         const duration = ((endTime - startTime) / 1000).toFixed(3);
 
-        // Apply density floor to remove ghost colors (<0.5% coverage by default)
-        // Read densityFloor from options (default: 0.005 = 0.5%, Legacy V1: 0.0 = disabled)
+        // Apply density floor
         let finalPaletteLabFiltered = finalPaletteLab;
         let assignmentsFiltered = assignments;
 
         if (densityFloor > 0) {
-            // Only protect preserved colors (white/black) from density floor
-            // Auto-anchors are NOT protected - they must meet the coverage threshold
             const protectedIndices = new Set();
             if (actuallyPreservedWhite) protectedIndices.add(whiteIndex);
             if (actuallyPreservedBlack) protectedIndices.add(blackIndex);
 
-            const densityResult = this._applyDensityFloor(
+            const densityResult = PaletteOps._applyDensityFloor(
                 assignments,
                 finalPaletteLab,
                 densityFloor,
@@ -4360,12 +1842,9 @@ class PosterizationEngine {
             );
 
             if (densityResult.actualCount < finalPaletteLab.length) {
-                const removed = finalPaletteLab.length - densityResult.actualCount;
-
                 finalPaletteLabFiltered = densityResult.palette;
                 assignmentsFiltered = densityResult.assignments;
             }
-        } else {
         }
 
         const paletteRgbFiltered = finalPaletteLabFiltered.map(lab => this.labToRgb(lab));
@@ -4396,19 +1875,15 @@ class PosterizationEngine {
         };
     }
 
+    // ========================================================================
+    // Engine Wrappers: Balanced, Classic, Stencil
+    // ========================================================================
+
     /**
-     * Balanced Engine: Lab Median Cut without hue gap analysis (internal method)
-     * Faster than Reveal, better quality than Classic
-     *
-     * @param {Uint8ClampedArray} pixels - Pixel data
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @param {number} targetColors - Target palette size
-     * @param {Object} options - Engine options
-     * @returns {Object} - {palette, paletteLab, assignments, labPixels, metadata}
+     * Balanced Engine: Lab Median Cut without hue gap analysis
+     * @private
      */
     static _posterizeBalanced(pixels, width, height, targetColors, options = {}) {
-        // Same as _posterizeReveal but with enableHueGapAnalysis forced to false
         return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
             ...options,
             enableHueGapAnalysis: false
@@ -4416,29 +1891,18 @@ class PosterizationEngine {
     }
 
     /**
-     * Classic Engine: RGB Median Cut (internal method)
-     * Fastest, good for quick previews
-     *
-     * @param {Uint8ClampedArray} pixels - Pixel data
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @param {number} targetColors - Target palette size
-     * @param {Object} options - Engine options
-     * @returns {Object} - {palette, paletteLab, assignments, labPixels, metadata}
+     * Classic Engine: RGB Median Cut
+     * @private
      */
     static _posterizeClassic(pixels, width, height, targetColors, options = {}) {
         const isLabInput = options.format === 'lab';
         const preserveWhite = options.preserveWhite !== undefined ? options.preserveWhite : true;
         const preserveBlack = options.preserveBlack !== undefined ? options.preserveBlack : true;
 
-        // Convert Lab to RGB if needed
-        // NOTE: Classic engine uses RGB median cut internally, but Lab→RGB conversion
-        // is done here for legacy compatibility. Engine still expects 16-bit Lab input.
         let rgbPixels;
         if (isLabInput) {
             rgbPixels = new Uint8ClampedArray((pixels.length / 3) * 4);
 
-            // Engine ONLY accepts 16-bit Lab input
             const maxValue = 32768;
             const neutralAB = 16384;
             const abScale = 128 / 16384;
@@ -4451,19 +1915,15 @@ class PosterizationEngine {
                 rgbPixels[j] = rgb.r;
                 rgbPixels[j + 1] = rgb.g;
                 rgbPixels[j + 2] = rgb.b;
-                rgbPixels[j + 3] = 255; // Opaque
+                rgbPixels[j + 3] = 255;
             }
         } else {
             rgbPixels = pixels;
         }
 
-        // Call original RGB median cut
-        const result = this._posterizeClassicRgb(rgbPixels, width, height, targetColors, 'cielab');
-
-        // Convert result to Lab palette
+        const result = RgbMedianCut._posterizeClassicRgb(rgbPixels, width, height, targetColors, 'cielab');
         const paletteLab = result.palette.map(rgb => this.rgbToLab(rgb));
 
-        // Generate assignments (map each pixel to nearest palette color)
         const numPixels = width * height;
         const assignments = new Uint8Array(numPixels);
 
@@ -4473,7 +1933,6 @@ class PosterizationEngine {
             const g = rgbPixels[pixelIndex + 1];
             const b = rgbPixels[pixelIndex + 2];
 
-            // Find nearest palette color using RGB Euclidean distance
             let minDist = Infinity;
             let closestIndex = 0;
 
@@ -4496,32 +1955,23 @@ class PosterizationEngine {
             assignments[i] = closestIndex;
         }
 
-        // Apply density floor to remove ghost colors (<0.5% coverage)
-        // IMPORTANT: Never remove preserved colors (white/black)
         const protectedIndices = new Set();
-        // Note: Classic engine doesn't track white/black indices separately like Reveal does,
-        // so we rely on preserveWhite/preserveBlack flags for intent but don't protect specific indices
-        // in the palette. This is acceptable since Classic uses RGB median cut which doesn't
-        // guarantee white/black are in specific positions.
 
-        const densityResult = this._applyDensityFloor(
+        const densityResult = PaletteOps._applyDensityFloor(
             assignments,
             paletteLab,
-            0.005,  // 0.5% threshold
+            0.005,
             protectedIndices
         );
 
         if (densityResult.actualCount < paletteLab.length) {
-            const removed = paletteLab.length - densityResult.actualCount;
-
-            // Use the cleaned palette and remapped assignments
             const cleanPaletteRgb = densityResult.palette.map(lab => this.labToRgb(lab));
 
             return {
                 palette: cleanPaletteRgb,
                 paletteLab: densityResult.palette,
                 assignments: densityResult.assignments,
-                labPixels: null, // Classic doesn't preserve Lab pixels
+                labPixels: null,
                 metadata: {
                     engine: 'classic',
                     targetColors,
@@ -4534,7 +1984,7 @@ class PosterizationEngine {
             palette: result.palette,
             paletteLab,
             assignments,
-            labPixels: null, // Classic doesn't preserve Lab pixels
+            labPixels: null,
             metadata: {
                 engine: 'classic',
                 targetColors,
@@ -4544,146 +1994,15 @@ class PosterizationEngine {
     }
 
     /**
-     * Stencil Engine: Luminance-only quantization (internal method)
-     * Monochrome separations (L-channel only, a=b=0)
-     *
-     * @param {Uint8ClampedArray} pixels - Pixel data
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @param {number} targetColors - Target palette size
-     * @param {Object} options - Engine options
-     * @returns {Object} - {palette, paletteLab, assignments, labPixels, metadata}
+     * Stencil Engine: Luminance-only quantization
+     * @private
      */
     static _posterizeStencil(pixels, width, height, targetColors, options = {}) {
-
         return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
             ...options,
             grayscaleOnly: true,
             enableHueGapAnalysis: false
         });
-    }
-
-    /**
-     * LEGACY: Backward compatibility wrapper for posterizeWithLabMedianCut
-     * @deprecated Use posterize() with engineType='reveal' instead
-     *
-     * @param {Uint8ClampedArray} pixels - Pixel data
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @param {number} targetColors - Target palette size
-     * @param {number} snapThreshold - Perceptual snap threshold
-     * @param {Object} options - Engine options
-     * @returns {Object} - {palette, paletteLab, assignments, labPixels, metadata}
-     */
-    static posterizeWithLabMedianCut(pixels, width, height, targetColors, snapThreshold = 8.0, options = {}) {
-        logger.warn('⚠️ posterizeWithLabMedianCut() is deprecated. Use posterize({engineType: "reveal"}) instead.');
-        return this.posterize(pixels, width, height, targetColors, {
-            ...options,
-            engineType: 'reveal',
-            snapThreshold
-        });
-    }
-
-    /**
-     * Re-assign pixels to palette with a new stride (for preview quality changes).
-     *
-     * This is a lightweight method that only re-runs the pixel assignment loop
-     * without regenerating the palette. Use this when changing preview quality
-     * (Standard/Fine/Finest) after initial posterization.
-     *
-     * @param {Uint8ClampedArray|Uint16Array} labPixels - Lab pixel data (3 values per pixel: L, a, b)
-     * @param {Array<{L: number, a: number, b: number}>} paletteLab - Palette colors in Lab (perceptual ranges)
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @param {number} stride - Assignment stride (4=Standard, 2=Fine, 1=Finest)
-     * @param {number} bitDepth - Original source bit depth (for logging only; data is always 16-bit)
-     * @param {Object} options - Distance metric and weight options
-     * @param {string} options.distanceMetric - Distance metric (cie76, cie94, cie2000, or squared)
-     * @param {number} options.lWeight - Lightness weight for distance calculation
-     * @param {number} options.cWeight - Chroma weight for distance calculation
-     * @returns {Uint16Array} - Pixel-to-palette assignments
-     */
-    static reassignWithStride(labPixels, paletteLab, width, height, stride = 1, bitDepth = 16, options = {}) {
-        const assignments = new Uint16Array(width * height);
-        const paletteLen = paletteLab.length;
-
-        // Extract distance options with defaults
-        const distanceMetric = options.distanceMetric || 'squared';
-        const lWeight = options.lWeight !== undefined ? options.lWeight : 1.0;
-        const cWeight = options.cWeight !== undefined ? options.cWeight : 1.0;
-
-        // 16-BIT INTEGER PRECISION FIX:
-        // Pre-convert palette to 16-bit integer space ONCE to preserve precision.
-        // Engine 16-bit encoding: L: 0-32768, a/b: 0-32768 (16384=neutral)
-        // Perceptual Lab: L: 0-100, a/b: -128 to +127
-        const palette16 = paletteLab.map(p => ({
-            L: (p.L / 100) * 32768,
-            a: (p.a + 128) * 128,  // Map -128..+127 to 0..32768
-            b: (p.b + 128) * 128
-        }));
-
-        // Also keep Float32 Lab values for proper distance calculations
-        const paletteFloat = paletteLab.map(p => ({
-            L: p.L,
-            a: p.a,
-            b: p.b
-        }));
-
-        for (let y = 0; y < height; y += stride) {
-            const rowOffset = y * width;
-
-            for (let x = 0; x < width; x += stride) {
-                const anchorI = rowOffset + x;
-                const idx = anchorI * 3;
-
-                // Read raw 16-bit values and convert to Float32 Lab for accurate distance
-                const rawL = labPixels[idx];
-                const rawA = labPixels[idx + 1];
-                const rawB = labPixels[idx + 2];
-
-                // Convert to perceptual Lab (Float32)
-                const pixelLab = {
-                    L: (rawL / 32768) * 100,
-                    a: (rawA / 128) - 128,
-                    b: (rawB / 128) - 128
-                };
-
-                // Find nearest palette color using proper distance metric and weights
-                let minDist = Infinity, anchorAssignment = 0;
-                for (let j = 0; j < paletteLen; j++) {
-                    const target = paletteFloat[j];
-
-                    let dist;
-                    if (distanceMetric === 'cie76') {
-                        dist = LabDistance.cie76SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b);
-                    } else if (distanceMetric === 'cie94') {
-                        const C1 = Math.sqrt(pixelLab.a * pixelLab.a + pixelLab.b * pixelLab.b);
-                        dist = LabDistance.cie94SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b, C1);
-                    } else if (distanceMetric === 'cie2000') {
-                        dist = LabDistance.cie2000SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b);
-                    } else {
-                        // Squared Euclidean with weights (default)
-                        const dL = pixelLab.L - target.L;
-                        const dA = pixelLab.a - target.a;
-                        const dB = pixelLab.b - target.b;
-                        const chromaDist = Math.sqrt(dA * dA + dB * dB);
-                        dist = (lWeight * dL * dL) + (cWeight * chromaDist * chromaDist);
-                    }
-
-                    if (dist < minDist) { minDist = dist; anchorAssignment = j; }
-                }
-
-                // Stamp the stride×stride block
-                for (let bY = 0; bY < stride && (y + bY) < height; bY++) {
-                    const fillRow = (y + bY) * width;
-                    for (let bX = 0; bX < stride && (x + bX) < width; bX++) {
-                        assignments[fillRow + (x + bX)] = anchorAssignment;
-                    }
-                }
-            }
-        }
-
-        return assignments;
     }
 }
 

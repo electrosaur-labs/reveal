@@ -6,7 +6,7 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 const Reveal = require('@reveal/core');
-const LabConverter = require('@reveal/core/lib/utils/LabConverter');
+const LabConverter = Reveal.LabConverter;
 
 class ImageProcessor {
   constructor(inputPath, options = {}) {

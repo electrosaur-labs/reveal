@@ -11,14 +11,12 @@ const { core, action, imaging, app } = require("photoshop");
 // Import @reveal/core engines
 const Reveal = require("@reveal/core");
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
-const BilateralFilter = require("@reveal/core/lib/preprocessing/BilateralFilter");
+const BilateralFilter = Reveal.BilateralFilter;
+const CropEngine = Reveal.CropEngine;
 const logger = Reveal.logger;
 
 // Photoshop-specific API (stays in reveal-adobe)
 const PhotoshopAPI = require("./api/PhotoshopAPI");
-
-// 1:1 Viewport components for mechanical knobs
-const CropEngine = require('../../reveal-core/lib/engines/CropEngine');
 const ViewportManager = require('./ViewportManager');
 
 // Extracted modules
