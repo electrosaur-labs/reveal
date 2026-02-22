@@ -238,6 +238,16 @@ function initPlugin() {
             _showProgress(data.label, data.percent);
         });
 
+        // Reveal preview + carousel as soon as top-match posterization is ready
+        sessionState.on('carouselReady', () => {
+            _hideProgress();
+            // Show busy state on carousel while background scoring runs
+            const carouselEl = document.getElementById('carousel');
+            if (carouselEl) {
+                carouselEl.setAttribute('style', 'opacity:0.5; pointer-events:none; cursor:wait;');
+            }
+        });
+
         // Background scoring progress — visible after splash hides
         sessionState.on('archetypeScored', (data) => {
             const bar = document.getElementById('scoring-progress');
@@ -245,13 +255,34 @@ function initPlugin() {
             if (bar) bar.setAttribute('style', 'display:block; height:3px; background:#333; border-radius:2px; margin-top:2px;');
             const pct = Math.round((data.computed / data.total) * 100);
             if (fill) fill.setAttribute('style', 'height:100%; width:' + pct + '%; background:#4da6ff; border-radius:2px;');
-            setStatus('Scoring archetypes\u2026 ' + data.computed + '/' + data.total);
+            setStatus('Scoring ' + data.computed + '/' + data.total + '\u2026');
+
+            // Update stats panel ΔE when the active archetype is scored
+            const state = sessionState.getState();
+            if (data.id === state.activeArchetypeId) {
+                const deltaEl = document.getElementById('stat-delta');
+                if (deltaEl) deltaEl.textContent = `\u0394E ${data.meanDeltaE.toFixed(1)}`;
+            }
         });
         sessionState.on('scoringComplete', () => {
             const bar = document.getElementById('scoring-progress');
             if (bar) bar.setAttribute('style', 'display:none;');
             setStatus('');
-            _hideProgress();
+            // Remove busy state and auto-sort by live ΔE
+            const carouselEl = document.getElementById('carousel');
+            if (carouselEl) {
+                carouselEl.setAttribute('style', '');
+            }
+            if (carousel) carousel.sortByDisplayedDeltaE();
+        });
+
+        // When the user clicks a card, update the stats panel ΔE from the stored value
+        sessionState.on('archetypeChanged', () => {
+            const deltaEl = document.getElementById('stat-delta');
+            const storedDE = sessionState.getArchetypeDeltaE();
+            if (deltaEl) {
+                deltaEl.textContent = storedDE != null ? `\u0394E ${storedDE.toFixed(1)}` : '';
+            }
         });
 
         // Pulse 1: dnaReady fires ~50ms after ingest — update radar + DNA stats immediately
@@ -302,10 +333,11 @@ function initPlugin() {
                 const count = data.activeColorCount != null ? data.activeColorCount : data.palette.length;
                 colorsEl.textContent = `${count} colors`;
             }
+            // ΔE comes from the single stored value (background scoring),
+            // NOT from calculateCurrentAccuracy(). Updated by archetypeScored/archetypeChanged.
             if (deltaEl) {
-                deltaEl.textContent = data.accuracyDeltaE != null
-                    ? `\u0394E ${data.accuracyDeltaE.toFixed(1)}`
-                    : '';
+                const storedDE = sessionState.getArchetypeDeltaE();
+                if (storedDE != null) deltaEl.textContent = `\u0394E ${storedDE.toFixed(1)}`;
             }
             if (timeEl && data.elapsedMs != null) {
                 timeEl.textContent = `${data.elapsedMs.toFixed(0)}ms`;
@@ -350,14 +382,6 @@ function initPlugin() {
         const btnFinalize = document.getElementById('btn-finalize');
         if (btnFinalize) {
             btnFinalize.addEventListener('click', () => handleFinalize());
-        }
-
-        // Wire Sort button — re-sort carousel by displayed ΔE
-        const btnSort = document.getElementById('btn-sort-carousel');
-        if (btnSort) {
-            btnSort.addEventListener('click', () => {
-                if (carousel) carousel.sortByDisplayedDeltaE();
-            });
         }
 
         // Keyboard shortcuts
@@ -533,10 +557,9 @@ async function ingestActiveDocument(showDialog) {
         logger.log(`[Navigator] Ingested ${width}x${height} from ${validation.info.name}`);
 
         // ── Phases 2-4 are driven by SessionState.loadImage progress events ──
-        // Splash stays visible until scoringComplete fires (all ΔE scores ready).
+        // Splash hides on carouselReady (after top-match posterization).
+        // Background ΔE scoring continues asynchronously.
         await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
-
-        _showProgress('Scoring archetypes\u2026', 85);
 
     } catch (err) {
         logger.log(`[Navigator] Ingest failed: ${err.message}`);

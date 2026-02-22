@@ -1,10 +1,11 @@
 /**
  * ArchetypeCarousel - Horizontal card strip for archetype navigation
  *
- * Renders once when background ΔE scoring completes (scoringComplete event).
- * Cards sorted by ascending ΔE (best quality first).
- * Active card shows real palette swatches from proxy separation.
+ * Two-phase rendering:
+ *   1. carouselReady — builds cards immediately with DNA scores (~400ms)
+ *   2. scoringComplete — rebuilds with ΔE-sorted order (~7-18s background)
  *
+ * Active card shows real palette swatches from proxy separation.
  * Vanilla+ pattern: subscribes to SessionState events.
  */
 
@@ -34,10 +35,17 @@ class ArchetypeCarousel {
     }
 
     _bindEvents() {
-        // Single-phase: build carousel once when all ΔE scores are ready.
-        // Splash stays visible until this fires.
-        this._session.on('scoringComplete', (data) => {
+        // Build carousel immediately when top-match preview is ready (DNA scores only).
+        this._session.on('carouselReady', (data) => {
             this._rebuild(data.scores);
+        });
+        // Update individual card ΔE as each archetype is scored in the background.
+        this._session.on('archetypeScored', (data) => {
+            this._updateCardDeltaE(data.id, data.meanDeltaE);
+        });
+        // All scored — sort by displayed ΔE (includes live values from clicked cards).
+        this._session.on('scoringComplete', () => {
+            this.sortByDisplayedDeltaE();
         });
         this._session.on('archetypeChanged', (data) => {
             this._activeId = data.archetypeId;
@@ -179,6 +187,26 @@ class ArchetypeCarousel {
     }
 
     /**
+     * Update a single card's displayed ΔE from a background scoring event.
+     * Skips the active card — its ΔE is synced to the live value by previewUpdated.
+     */
+    _updateCardDeltaE(id, meanDeltaE) {
+        const card = this._container.querySelector(`.carousel-card[data-id="${id}"]`);
+        if (!card) return;
+
+        const de = meanDeltaE.toFixed(1);
+        const scoreVal = card.querySelector('.card-score-val');
+        if (scoreVal) scoreVal.textContent = de;
+        const scoreFill = card.querySelector('.card-score-fill');
+        if (scoreFill) scoreFill.style.width = Math.min(100, Math.max(0, 100 - meanDeltaE * 4)) + '%';
+        const debugDiv = card.querySelector('.card-debug-de');
+        if (debugDiv) {
+            const idx = debugDiv.textContent.split(' ')[0];
+            debugDiv.textContent = `${idx} ΔE=${de}`;
+        }
+    }
+
+    /**
      * Update which card has the 'active' highlight.
      * Does NOT refresh swatches — that's done by previewUpdated after
      * posterization completes with correct palette data.
@@ -204,22 +232,6 @@ class ArchetypeCarousel {
             const isActive = card.classList.contains('active');
 
             if (isActive) {
-                // Sync displayed ΔE to the live value (post-knobs),
-                // so the card matches the stats panel exactly.
-                if (data && data.accuracyDeltaE != null) {
-                    const liveDE = data.accuracyDeltaE;
-                    const scoreVal = card.querySelector('.card-score-val');
-                    if (scoreVal) scoreVal.textContent = liveDE.toFixed(1);
-                    const scoreFill = card.querySelector('.card-score-fill');
-                    if (scoreFill) scoreFill.style.width = Math.min(100, Math.max(0, 100 - liveDE * 4)) + '%';
-                    // Update yellow debug text
-                    const debugDiv = card.querySelector('.card-debug-de');
-                    if (debugDiv) {
-                        const idx = debugDiv.textContent.split(' ')[0]; // preserve sort index
-                        debugDiv.textContent = `${idx} ΔE=${liveDE.toFixed(1)}`;
-                    }
-                }
-
                 // Active card: show real palette swatches
                 const rgbPalette = this._getActiveRgbPalette();
                 if (!rgbPalette || rgbPalette.length === 0) return;

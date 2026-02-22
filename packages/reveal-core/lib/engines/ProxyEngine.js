@@ -381,13 +381,14 @@ class ProxyEngine {
      * @param {Object} config - Posterization config
      * @returns {Promise<{labPalette, rgbPalette, meanDeltaE: number}>}
      */
-    async getPaletteWithQuality(config) {
+    async getPaletteWithQuality(config, knobs) {
         if (!this.proxyBuffer || !this.separationState) {
             throw new Error('Proxy not initialized');
         }
 
         const proxyW = this.separationState.width;
         const proxyH = this.separationState.height;
+        const pixelCount = proxyW * proxyH;
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
@@ -403,8 +404,20 @@ class ProxyEngine {
             { ditherType: 'none', distanceMetric: config.distanceMetric || 'cie76' }
         );
 
+        // Apply minVolume so ΔE matches the live post-knob state.
+        // minVolume remaps pixels from weak colors → biggest ΔE impact.
+        // speckleRescue/shadowClamp operate on masks (minor ΔE effect, skip here).
+        if (knobs && knobs.minVolume != null && knobs.minVolume > 0) {
+            const target = config.targetColors || 0;
+            const maxColors = target > 0 ? target + 2 : 0;
+            MechanicalKnobs.applyMinVolume(
+                colorIndices, result.paletteLab, pixelCount,
+                knobs.minVolume, { maxColors }
+            );
+        }
+
         const meanDeltaE = RevelationError.meanDeltaE16(
-            this.proxyBuffer, colorIndices, result.paletteLab, proxyW * proxyH
+            this.proxyBuffer, colorIndices, result.paletteLab, pixelCount
         );
 
         return {

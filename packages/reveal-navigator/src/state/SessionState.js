@@ -132,6 +132,10 @@ class SessionState extends EventEmitter {
 
         // Generation counter for background scoring cancellation
         this._scoringGeneration = 0;
+
+        // Single source of truth: ΔE per archetype, computed once by background scoring.
+        // Everything reads from here — cards, stats panel, sort.
+        this._archetypeDeltaE = new Map();
     }
 
     /**
@@ -310,11 +314,7 @@ class SessionState extends EventEmitter {
         });
 
         // ── Pulse 3: Emit carousel immediately with DNA scores ──
-        // Top match already has ΔE from the proxy we just built.
-        const activeDE = this.calculateCurrentAccuracy();
-        const activeMatch = allScores.find(s => s.id === topMatch.id);
-        if (activeMatch) activeMatch.meanDeltaE = activeDE;
-
+        // No ΔE yet — background scoring will compute them all uniformly.
         const sorted = this._sortByDeltaE(allScores);
         this.emit('carouselReady', { scores: sorted, topMatchId: topMatch.id });
         logger.log(`[SessionState] Carousel emitted (1/${allScores.length} scored by ΔE)`);
@@ -357,11 +357,18 @@ class SessionState extends EventEmitter {
      * @private
      */
     async _scoreAllArchetypes(allScores, topId, generation) {
-        const total = allScores.length - 1;  // exclude topMatch (already scored)
+        const total = allScores.length;
         let computed = 0;
         let cancelled = false;
+
+        // Knobs — same for all archetypes in this scoring run
+        const knobs = {
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp
+        };
+
         for (const match of allScores) {
-            if (match.id === topId) continue;  // already scored
             if (this._scoringGeneration !== generation) {
                 logger.log(`[SessionState] Background scoring cancelled (gen ${generation} → ${this._scoringGeneration})`);
                 cancelled = true;
@@ -369,25 +376,30 @@ class SessionState extends EventEmitter {
             }
 
             try {
+                // Full pipeline: rePosterize + knobs + calculateCurrentAccuracy
+                // Produces the SAME ΔE as the blue stats panel value.
                 const config = match.id === 'dynamic_interpolator'
                     ? Reveal.generateConfigurationMk2(this.imageDNA)
                     : Reveal.generateConfiguration(this.imageDNA, {
                         manualArchetypeId: match.id
                     });
-                const result = await this.proxyEngine.getPaletteWithQuality(config);
 
-                // Check generation again after await — may have been cancelled during scoring
+                await this.proxyEngine.rePosterize(config);
+                await this.proxyEngine.updateProxy(knobs);
+                const deltaE = this.calculateCurrentAccuracy();
+
                 if (this._scoringGeneration !== generation) {
                     logger.log(`[SessionState] Background scoring cancelled after await (gen ${generation} → ${this._scoringGeneration})`);
                     cancelled = true;
                     break;
                 }
 
-                match.meanDeltaE = result.meanDeltaE;
+                match.meanDeltaE = deltaE;
+                this._archetypeDeltaE.set(match.id, deltaE);
                 computed++;
                 this.emit('archetypeScored', {
                     id: match.id,
-                    meanDeltaE: result.meanDeltaE,
+                    meanDeltaE: deltaE,
                     computed,
                     total
                 });
@@ -397,8 +409,23 @@ class SessionState extends EventEmitter {
             }
         }
 
-        // Always emit scoringComplete — even on cancellation, rebuild with partial scores
-        // so the carousel shows correct sort order for whatever we've computed so far.
+        // Restore the active archetype so the preview shows the right image
+        if (!cancelled) {
+            try {
+                const activeConfig = topId === 'dynamic_interpolator'
+                    ? Reveal.generateConfigurationMk2(this.imageDNA)
+                    : Reveal.generateConfiguration(this.imageDNA, {
+                        manualArchetypeId: topId
+                    });
+                await this.proxyEngine.rePosterize(activeConfig);
+                const knobResult = await this.proxyEngine.updateProxy(knobs);
+                this.previewBuffer = knobResult.previewBuffer;
+                this._emitPreviewUpdated(knobResult);
+            } catch (err) {
+                logger.log(`[SessionState] Failed to restore active archetype: ${err.message}`);
+            }
+        }
+
         const sorted = this._sortByDeltaE(allScores);
         logger.log(`[SessionState] Background scoring ${cancelled ? 'cancelled' : 'complete'}: ${computed}/${total} archetypes scored`);
         this.emit('scoringComplete', { scores: sorted, topMatchId: topId });
@@ -1179,6 +1206,17 @@ class SessionState extends EventEmitter {
             sep.width,
             sep.height
         );
+    }
+
+    /**
+     * Get the stored ΔE for an archetype (from background scoring).
+     * Single source of truth — same value displayed on card and stats panel.
+     * @param {string} [archetypeId] - defaults to active archetype
+     * @returns {number|null}
+     */
+    getArchetypeDeltaE(archetypeId) {
+        const id = archetypeId || this.state.activeArchetypeId;
+        return this._archetypeDeltaE.get(id) || null;
     }
 
     // ─── State Access ────────────────────────────────────────
