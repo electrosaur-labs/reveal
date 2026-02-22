@@ -665,6 +665,9 @@ function setStatus(text) {
 }
 
 function _showProgress(label) {
+    // Hide root content — UXP <select> elements render above z-index layers
+    const root = document.getElementById('root');
+    if (root) root.style.display = 'none';
     const overlay = document.getElementById('progress-overlay');
     const status = document.getElementById('splash-status');
     if (overlay) overlay.setAttribute('style', 'display: flex');
@@ -684,12 +687,15 @@ function _hideProgress() {
     if (!overlay) return;
 
     // GIF is 31 frames: 4 hold (100ms) + 26 wipe (100ms) + 1 final (2000ms) = 5000ms total.
-    // Ensure at least 5400ms have elapsed so the final "REVEAL" frame is visible.
+    // Ensure at least 5400ms have elapsed so the final frame is visible.
     const MIN_SPLASH_MS = 5400;
     const elapsed = Date.now() - splashShownAt;
     const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
 
     setTimeout(() => {
+        // Restore root content before fade so it's visible underneath
+        const root = document.getElementById('root');
+        if (root) root.style.display = '';
         overlay.classList.add('fade-out');
         setTimeout(() => {
             overlay.setAttribute('style', 'display: none');
@@ -880,9 +886,6 @@ async function showDialog() {
         // Reset any stale state from previous session
         if (sessionState) sessionState.reset();
         _clearUI();
-
-        const root = document.getElementById('root');
-        if (root) root.style.display = '';
 
         dialogOpen = true;
 

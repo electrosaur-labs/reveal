@@ -3,28 +3,35 @@
  * Generate the silkscreen splash animated GIF.
  *
  * Scene: Looking down at a fine silkscreen mesh (green, tilted 22.5°).
- * "REVEAL" in single-line multicolor ink (one color per letter) sits UNDER
- * the mesh — realistic screen printing where ink is pushed THROUGH the mesh
- * by the squeegee, visible through the mesh openings. A yellow squeegee
- * blade wipes from top to bottom, uncovering the ink+mesh composite.
+ * "REVEAL" in single-line multicolor ink sits UNDER the mesh — realistic
+ * screen printing where ink is pushed THROUGH the mesh by the squeegee,
+ * visible through the mesh openings. A yellow squeegee blade wipes from
+ * top to bottom, uncovering the ink+mesh composite.
+ *
+ * "Reduction IS Revelation" tagline sits ABOVE the mesh — printed on
+ * top of the screen, always opaque over the mesh threads.
+ *
+ * Text is rasterized from Anton Regular (TTF) via opentype.js.
  *
  * Compositing (above squeegee, already wiped):
- *   mesh thread present → mesh color (threads on top)
- *   else if text present → ink color (visible through opening)
+ *   overMap (tagline) → always on top
+ *   mesh thread present → mesh color (threads on top of ink)
+ *   inkMap (REVEAL) → visible through mesh openings
  *   else → dark background
  *
- * Output: src/squeegee.gif (512x512, ~36 frames)
+ * Output: src/squeegee.gif (1024x640, ~31 frames)
  */
 const fs = require('fs');
 const path = require('path');
 const { GifWriter } = require('omggif');
+const opentype = require('opentype.js');
 
-const W = 512, H = 512;
+const W = 1024, H = 640;
 const FRAME_COUNT = 31;     // 4 hold + 26 wipe + 1 long hold (2s reading pause)
 const FRAME_DELAY = 10;     // centiseconds (100ms per frame)
-const MESH_ANGLE = Math.PI / 8;   // 22.5° — slightly steeper for visual interest
-const MESH_SPACING = 14;    // fine mesh (high mesh count)
-const MESH_LINE_W = 2.0;    // thin threads
+const MESH_ANGLE = 37 * Math.PI / 180;   // 37° (prime)
+const MESH_SPACING = 28;    // coarse mesh (larger openings)
+const MESH_LINE_W = 1.0;    // fine threads — letters stay readable under mesh
 
 // ─── Color Palette (GIF indexed, 16 entries) ───
 const PALETTE = [
@@ -46,148 +53,164 @@ const PALETTE = [
     0x000000,   // 15: pure black (pad)
 ];
 
-// ─── Per-letter ink color indices ───
-const LETTER_COLORS = {
-    R: 5,   // red
-    E1: 6,  // orange (first E)
-    V: 7,   // warm yellow
-    E2: 8,  // green (second E)
-    A: 9,   // cyan
-    L: 10,  // blue/indigo
-};
+// ─── Per-letter ink color indices (REVEAL) ───
+const LETTER_COLORS = [5, 6, 7, 8, 9, 10]; // R=red, E=orange, V=yellow, E=green, A=cyan, L=blue
+const TAG_COLOR = 13;  // white
 
-// ─── Bitmap font: 8x11 glyphs — wider, chunkier letterforms ───
-const GLYPHS = {
-    R: [
-        '111111..',
-        '11...011',
-        '11...011',
-        '11..011.',
-        '111111..',
-        '11.11...',
-        '11..11..',
-        '11...11.',
-        '11...011',
-        '11....11',
-        '........',
-    ],
-    E: [
-        '11111111',
-        '11......',
-        '11......',
-        '11......',
-        '1111111.',
-        '11......',
-        '11......',
-        '11......',
-        '11......',
-        '11111111',
-        '........',
-    ],
-    V: [
-        '11....11',
-        '11....11',
-        '011..11.',
-        '011..11.',
-        '.011.11.',
-        '.01111..',
-        '..0111..',
-        '..0111..',
-        '...11...',
-        '...11...',
-        '........',
-    ],
-    A: [
-        '...11...',
-        '..0111..',
-        '..1..1..',
-        '.11..11.',
-        '.11..11.',
-        '011..011',
-        '11111111',
-        '11....11',
-        '11....11',
-        '11....11',
-        '........',
-    ],
-    L: [
-        '11......',
-        '11......',
-        '11......',
-        '11......',
-        '11......',
-        '11......',
-        '11......',
-        '11......',
-        '11......',
-        '11111111',
-        '........',
-    ],
-};
+// ─── Load Anton font ───
+const fontPath = path.join(__dirname, '..', 'src', 'Anton-Regular.ttf');
+if (!fs.existsSync(fontPath)) {
+    console.error('Anton-Regular.ttf not found at ' + fontPath);
+    process.exit(1);
+}
+const font = opentype.loadSync(fontPath);
+console.log('Loaded Anton Regular');
 
-const GLYPH_W = 8, GLYPH_H = 11;
-const SCALE = 8;             // 64×88 per character
-const CHAR_W = GLYPH_W * SCALE;   // 64px
-const CHAR_H = GLYPH_H * SCALE;   // 88px
-const LETTER_GAP = 10;       // between characters
-const BOLD_RADIUS = 5;       // thicker dilation for impact
+// ─── Scanline rasterizer ───
 
-// ─── Small 5x7 font for tagline ───
-const TAG_GLYPHS = {
-    R: ['.111.','1...1','1...1','1111.','1.1..','1..1.','1...1'],
-    E: ['11111','1....','1....','1111.','1....','1....','11111'],
-    D: ['1111.','1...1','1...1','1...1','1...1','1...1','1111.'],
-    U: ['1...1','1...1','1...1','1...1','1...1','1...1','.111.'],
-    C: ['.1111','1....','1....','1....','1....','1....','.1111'],
-    T: ['11111','..1..','..1..','..1..','..1..','..1..','..1..'],
-    I: ['111','010','010','010','010','010','111'],
-    O: ['.111.','1...1','1...1','1...1','1...1','1...1','.111.'],
-    N: ['1...1','11..1','11..1','1.1.1','1..11','1..11','1...1'],
-    S: ['.1111','1....','1....','.111.','....1','....1','1111.'],
-    V: ['1...1','1...1','1...1','.1.1.','.1.1.','..1..','..1..'],
-    L: ['1....','1....','1....','1....','1....','1....','11111'],
-    A: ['..1..','.1.1.','1...1','1...1','11111','1...1','1...1'],
-};
-const TAG_GW = 5, TAG_GH = 7;
-const TAG_SCALE = 3;          // 15×21 per character
-const TAG_CHAR_W = TAG_GW * TAG_SCALE;  // 15px
-const TAG_CHAR_H = TAG_GH * TAG_SCALE;  // 21px
-const TAG_LETTER_GAP = 3;    // between characters
-const TAG_WORD_GAP = 12;     // between words
-const TAG_BOLD_RADIUS = 1;   // subtle thickening
-const TAG_COLOR = 13;        // light gray
-const TAGLINE = 'REDUCTION IS REVELATION';
+/**
+ * Rasterize an opentype.js Path into a bitmap using scanline fill.
+ */
+function rasterizePath(bitmap, w, h, pathObj, colorIndex) {
+    // Convert path commands to line segments
+    const segments = [];
+    let cx = 0, cy = 0;
+    let startX = 0, startY = 0;
 
-// Layout: main "REVEAL" centered, tagline below
-const TEXT_W = 6 * CHAR_W + 5 * LETTER_GAP;  // 434
-const TAG_GAP = 24;          // gap between REVEAL and tagline
+    for (const cmd of pathObj.commands) {
+        switch (cmd.type) {
+            case 'M':
+                cx = cmd.x; cy = cmd.y;
+                startX = cx; startY = cy;
+                break;
+            case 'L':
+                segments.push({ x1: cx, y1: cy, x2: cmd.x, y2: cmd.y });
+                cx = cmd.x; cy = cmd.y;
+                break;
+            case 'Q': {
+                const steps = 10;
+                for (let t = 0; t < steps; t++) {
+                    const t0 = t / steps, t1 = (t + 1) / steps;
+                    const x0 = (1-t0)*(1-t0)*cx + 2*(1-t0)*t0*cmd.x1 + t0*t0*cmd.x;
+                    const y0 = (1-t0)*(1-t0)*cy + 2*(1-t0)*t0*cmd.y1 + t0*t0*cmd.y;
+                    const x1 = (1-t1)*(1-t1)*cx + 2*(1-t1)*t1*cmd.x1 + t1*t1*cmd.x;
+                    const y1 = (1-t1)*(1-t1)*cy + 2*(1-t1)*t1*cmd.y1 + t1*t1*cmd.y;
+                    segments.push({ x1: x0, y1: y0, x2: x1, y2: y1 });
+                }
+                cx = cmd.x; cy = cmd.y;
+                break;
+            }
+            case 'C': {
+                const steps = 14;
+                for (let t = 0; t < steps; t++) {
+                    const t0 = t / steps, t1 = (t + 1) / steps;
+                    const x0 = (1-t0)**3*cx + 3*(1-t0)**2*t0*cmd.x1 + 3*(1-t0)*t0**2*cmd.x2 + t0**3*cmd.x;
+                    const y0 = (1-t0)**3*cy + 3*(1-t0)**2*t0*cmd.y1 + 3*(1-t0)*t0**2*cmd.y2 + t0**3*cmd.y;
+                    const x1 = (1-t1)**3*cx + 3*(1-t1)**2*t1*cmd.x1 + 3*(1-t1)*t1**2*cmd.x2 + t1**3*cmd.x;
+                    const y1 = (1-t1)**3*cy + 3*(1-t1)**2*t1*cmd.y1 + 3*(1-t1)*t1**2*cmd.y2 + t1**3*cmd.y;
+                    segments.push({ x1: x0, y1: y0, x2: x1, y2: y1 });
+                }
+                cx = cmd.x; cy = cmd.y;
+                break;
+            }
+            case 'Z':
+                if (cx !== startX || cy !== startY) {
+                    segments.push({ x1: cx, y1: cy, x2: startX, y2: startY });
+                }
+                cx = startX; cy = startY;
+                break;
+        }
+    }
 
-// Measure tagline width
-let taglineWidth = 0;
-for (let i = 0; i < TAGLINE.length; i++) {
-    if (TAGLINE[i] === ' ') { taglineWidth += TAG_WORD_GAP; continue; }
-    const g = TAG_GLYPHS[TAGLINE[i]];
-    if (!g) continue;
-    if (i > 0 && TAGLINE[i - 1] !== ' ') taglineWidth += TAG_LETTER_GAP;
-    taglineWidth += g[0].length * TAG_SCALE;
+    // Scanline fill using even-odd rule
+    let minY = h, maxY = 0;
+    for (const s of segments) {
+        const lo = Math.floor(Math.min(s.y1, s.y2));
+        const hi = Math.ceil(Math.max(s.y1, s.y2));
+        if (lo < minY) minY = lo;
+        if (hi > maxY) maxY = hi;
+    }
+    minY = Math.max(0, minY);
+    maxY = Math.min(h - 1, maxY);
+
+    for (let y = minY; y <= maxY; y++) {
+        const scanY = y + 0.5;
+        const crossings = [];
+
+        for (const s of segments) {
+            const { x1, y1, x2, y2 } = s;
+            if ((y1 <= scanY && y2 > scanY) || (y2 <= scanY && y1 > scanY)) {
+                const t = (scanY - y1) / (y2 - y1);
+                crossings.push(x1 + t * (x2 - x1));
+            }
+        }
+
+        crossings.sort((a, b) => a - b);
+
+        for (let i = 0; i + 1 < crossings.length; i += 2) {
+            const xStart = Math.max(0, Math.ceil(crossings[i]));
+            const xEnd = Math.min(w - 1, Math.floor(crossings[i + 1]));
+            for (let x = xStart; x <= xEnd; x++) {
+                bitmap[y * w + x] = colorIndex;
+            }
+        }
+    }
 }
 
-// Vertically center the combined block (REVEAL + gap + tagline)
-const BLOCK_H = CHAR_H + TAG_GAP + TAG_CHAR_H;
-const BASE_X = Math.round((W - TEXT_W) / 2);
-const BASE_Y = Math.round((H - BLOCK_H) / 2);
-const TAG_X = Math.round((W - taglineWidth) / 2);
-const TAG_Y = BASE_Y + CHAR_H + TAG_GAP;
+// ─── Build text bitmaps ───
+const inkMap = new Uint8Array(W * H);    // REVEAL: under the mesh
+const overMap = new Uint8Array(W * H);   // tagline: above the mesh
 
-// Word: each entry is { char, colorIndex }
-const WORD = [
-    { char: 'R', colorIndex: LETTER_COLORS.R },
-    { char: 'E', colorIndex: LETTER_COLORS.E1 },
-    { char: 'V', colorIndex: LETTER_COLORS.V },
-    { char: 'E', colorIndex: LETTER_COLORS.E2 },
-    { char: 'A', colorIndex: LETTER_COLORS.A },
-    { char: 'L', colorIndex: LETTER_COLORS.L },
-];
+// ── Measure text ──
+const REVEAL_SIZE = 320;
+const revealText = 'REVEAL';
+const revealBBox = font.getPath(revealText, 0, 0, REVEAL_SIZE).getBoundingBox();
+const revealWidth = revealBBox.x2 - revealBBox.x1;
+const revealHeight = revealBBox.y2 - revealBBox.y1;
+
+const TAGLINE_SIZE = 90;
+const taglineText = 'Reduction is Revelation';
+const taglineBBox = font.getPath(taglineText, 0, 0, TAGLINE_SIZE).getBoundingBox();
+const taglineWidth = taglineBBox.x2 - taglineBBox.x1;
+const taglineHeight = taglineBBox.y2 - taglineBBox.y1;
+
+const TAG_GAP = 30;
+const BLOCK_H = revealHeight + TAG_GAP + taglineHeight;
+
+// Center the block
+const revealX = Math.round((W - revealWidth) / 2) - Math.round(revealBBox.x1);
+const revealBaselineY = Math.round((H - BLOCK_H) / 2) - Math.round(revealBBox.y1);
+
+const taglineX = Math.round((W - taglineWidth) / 2) - Math.round(taglineBBox.x1);
+// Tagline visual top starts at REVEAL visual bottom + gap
+// REVEAL visual bottom = revealBaselineY + revealBBox.y2
+// Tagline visual top = taglineBaselineY + taglineBBox.y1
+// So: taglineBaselineY + taglineBBox.y1 = revealBaselineY + revealBBox.y2 + TAG_GAP
+const taglineBaselineY = Math.round(revealBaselineY + revealBBox.y2 + TAG_GAP - taglineBBox.y1);
+
+console.log(`REVEAL: ${revealWidth.toFixed(0)}x${revealHeight.toFixed(0)}px at (${revealX}, ${revealBaselineY})`);
+console.log(`Tagline: ${taglineWidth.toFixed(0)}x${taglineHeight.toFixed(0)}px at (${taglineX}, ${taglineBaselineY})`);
+
+// ── Rasterize REVEAL with per-character colors ──
+console.log('Rasterizing REVEAL...');
+const revealGlyphs = font.stringToGlyphs(revealText);
+let cursorX = revealX;
+for (let i = 0; i < revealGlyphs.length; i++) {
+    const glyph = revealGlyphs[i];
+    const charPath = glyph.getPath(cursorX, revealBaselineY, REVEAL_SIZE);
+    rasterizePath(inkMap, W, H, charPath, LETTER_COLORS[i]);
+    cursorX += (glyph.advanceWidth / font.unitsPerEm) * REVEAL_SIZE;
+}
+
+// ── Rasterize tagline above mesh ──
+console.log('Rasterizing tagline...');
+const taglinePath = font.getPath(taglineText, taglineX, taglineBaselineY, TAGLINE_SIZE);
+rasterizePath(overMap, W, H, taglinePath, TAG_COLOR);
+
+// Verify tagline pixels exist
+let tagPixels = 0;
+for (let i = 0; i < overMap.length; i++) if (overMap[i] > 0) tagPixels++;
+console.log(`Tagline pixels: ${tagPixels}`);
 
 // ─── Precompute mesh grid ───
 console.log('Computing mesh...');
@@ -201,107 +224,21 @@ for (let y = 0; y < H; y++) {
         const d2 = Math.abs((cosA * x + sinA * y) % MESH_SPACING);
         const dist2 = Math.min(d2, MESH_SPACING - d2);
 
-        let idx = 0; // background (opening)
+        let idx = 0;
         if (dist1 < MESH_LINE_W * 0.4 || dist2 < MESH_LINE_W * 0.4) {
-            idx = 3;  // bright mesh line (core)
+            idx = 3;
         } else if (dist1 < MESH_LINE_W * 0.7 || dist2 < MESH_LINE_W * 0.7) {
-            idx = 2;  // medium mesh
+            idx = 2;
         } else if (dist1 < MESH_LINE_W * 1.2 || dist2 < MESH_LINE_W * 1.2) {
-            idx = 1;  // dark mesh shadow
+            idx = 1;
         }
         meshGrid[y * W + x] = idx;
     }
 }
 
-// ─── Precompute text bitmap (thin, pre-bold) ───
-console.log('Rendering text...');
-const textMap = new Uint8Array(W * H);
-
-for (let i = 0; i < WORD.length; i++) {
-    const { char, colorIndex } = WORD[i];
-    const glyph = GLYPHS[char];
-    if (!glyph) continue;
-    const charX = BASE_X + i * (CHAR_W + LETTER_GAP);
-
-    for (let gy = 0; gy < GLYPH_H; gy++) {
-        const row = glyph[gy];
-        for (let gx = 0; gx < GLYPH_W; gx++) {
-            if (row[gx] !== '1') continue;
-            for (let sy = 0; sy < SCALE; sy++) {
-                for (let sx = 0; sx < SCALE; sx++) {
-                    const px = charX + gx * SCALE + sx;
-                    const py = BASE_Y + gy * SCALE + sy;
-                    if (px >= 0 && px < W && py >= 0 && py < H) {
-                        textMap[py * W + px] = colorIndex;
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ─── Render tagline: "REDUCTION IS REVELATION" ───
-console.log('Rendering tagline...');
-let cursorX = TAG_X;
-for (let i = 0; i < TAGLINE.length; i++) {
-    const ch = TAGLINE[i];
-    if (ch === ' ') { cursorX += TAG_WORD_GAP; continue; }
-    const glyph = TAG_GLYPHS[ch];
-    if (!glyph) continue;
-    if (i > 0 && TAGLINE[i - 1] !== ' ') cursorX += TAG_LETTER_GAP;
-    const glyphW = glyph[0].length;
-    for (let gy = 0; gy < TAG_GH; gy++) {
-        const row = glyph[gy];
-        for (let gx = 0; gx < glyphW; gx++) {
-            if (row[gx] !== '1') continue;
-            for (let sy = 0; sy < TAG_SCALE; sy++) {
-                for (let sx = 0; sx < TAG_SCALE; sx++) {
-                    const px = cursorX + gx * TAG_SCALE + sx;
-                    const py = TAG_Y + gy * TAG_SCALE + sy;
-                    if (px >= 0 && px < W && py >= 0 && py < H) {
-                        textMap[py * W + px] = TAG_COLOR;
-                    }
-                }
-            }
-        }
-    }
-    cursorX += glyphW * TAG_SCALE;
-}
-
-// ─── Bold pass: dilate text by BOLD_RADIUS pixels (circular) ───
-// Main text gets full BOLD_RADIUS, tagline gets TAG_BOLD_RADIUS
-console.log('Applying bold...');
-const textBold = new Uint8Array(W * H);
-const BR2 = BOLD_RADIUS * BOLD_RADIUS;
-
-const TBR2 = TAG_BOLD_RADIUS * TAG_BOLD_RADIUS;
-
-for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-        const color = textMap[y * W + x];
-        if (color === 0) continue;
-        // Use smaller radius for tagline text
-        const isTag = (color === TAG_COLOR);
-        const rad = isTag ? TAG_BOLD_RADIUS : BOLD_RADIUS;
-        const r2 = isTag ? TBR2 : BR2;
-        for (let dy = -rad; dy <= rad; dy++) {
-            const ny = y + dy;
-            if (ny < 0 || ny >= H) continue;
-            for (let dx = -rad; dx <= rad; dx++) {
-                if (dx * dx + dy * dy > r2) continue;
-                const nx = x + dx;
-                if (nx < 0 || nx >= W) continue;
-                if (textBold[ny * W + nx] === 0) {
-                    textBold[ny * W + nx] = color;
-                }
-            }
-        }
-    }
-}
-
 // ─── Generate frames ───
 const SQUEEGEE_H = 48;
-const buf = Buffer.alloc(W * H * FRAME_COUNT + 1024 * FRAME_COUNT);
+const buf = Buffer.alloc(W * H * FRAME_COUNT + 4096 * FRAME_COUNT);
 const gw = new GifWriter(buf, W, H, {
     palette: PALETTE,
     loop: 0,
@@ -309,8 +246,8 @@ const gw = new GifWriter(buf, W, H, {
 
 console.log(`Generating ${FRAME_COUNT} frames at ${W}x${H}...`);
 
-const WIPE_START = Math.round(H * 0.08);
-const WIPE_END   = Math.round(H * 0.78);
+const WIPE_START = Math.round(H * 0.05);
+const WIPE_END   = Math.round(H * 0.85);
 const WIPE_RANGE = WIPE_END - WIPE_START;
 
 for (let f = 0; f < FRAME_COUNT; f++) {
@@ -329,27 +266,33 @@ for (let f = 0; f < FRAME_COUNT; f++) {
     for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
             const off = y * W + x;
+
+            // Layer 1: base compositing
             if (y >= squeegeeY && y < squeegeeY + SQUEEGEE_H && squeegeeY < WIPE_END) {
                 // Squeegee blade
                 const bladePos = y - squeegeeY;
                 frame[off] = (bladePos < 4 || bladePos >= SQUEEGEE_H - 4) ? 14 : 4;
             } else if (y < squeegeeY) {
-                // Above squeegee — ink on top of mesh
-                if (textBold[off] > 0) {
-                    frame[off] = textBold[off];       // ink on top
-                } else if (meshGrid[off] > 0) {
-                    frame[off] = meshGrid[off];       // mesh visible where no ink
+                // Above squeegee — mesh on top, ink visible through openings
+                if (meshGrid[off] > 0) {
+                    frame[off] = meshGrid[off];
+                } else if (inkMap[off] > 0) {
+                    frame[off] = inkMap[off];
                 } else {
-                    frame[off] = 0;                   // dark background
+                    frame[off] = 0;
                 }
             } else {
                 // Below squeegee — mesh only (no ink yet)
                 frame[off] = meshGrid[off];
             }
+
+            // Layer 2: tagline ABOVE mesh — always wins when revealed
+            if (overMap[off] > 0 && y < squeegeeY) {
+                frame[off] = overMap[off];
+            }
         }
     }
 
-    // Last frame gets a 2-second pause for reading
     const delay = (f === FRAME_COUNT - 1) ? 200 : FRAME_DELAY;
     gw.addFrame(0, 0, W, H, frame, { delay });
     process.stdout.write(`\r  Frame ${f + 1}/${FRAME_COUNT}`);

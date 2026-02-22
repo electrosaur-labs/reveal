@@ -33,4 +33,12 @@ if (fs.existsSync(gifSrc)) {
     console.log('✓ Copied squeegee.gif');
 }
 
+// Copy src/Anton-Regular.ttf → dist/
+const fontSrc = path.join(srcDir, 'Anton-Regular.ttf');
+const fontDst = path.join(distDir, 'Anton-Regular.ttf');
+if (fs.existsSync(fontSrc)) {
+    fs.copyFileSync(fontSrc, fontDst);
+    console.log('✓ Copied Anton-Regular.ttf');
+}
+
 console.log('Asset copying complete!');
