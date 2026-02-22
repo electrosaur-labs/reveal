@@ -16,6 +16,8 @@
  * Vanilla+ pattern: subscribes to SessionState events.
  */
 
+const logger = require('@reveal/core').logger;
+
 const KNOB_DEFS = [
     // Primary knobs
     { key: 'targetColors',   sliderId: 'knob-targetColors',   valId: 'targetColors-val',   revertId: 'revert-targetColors',   decimals: 0, unit: ''   },
@@ -89,7 +91,7 @@ class MechanicalKnobs {
             entry.slider.addEventListener('input', () => {
                 const value = parseFloat(entry.slider.value);
                 if (key === 'targetColors') {
-                    console.log(`[Knobs] targetColors input: slider.value=${entry.slider.value} parsed=${value}`);
+                    logger.log(`[Knobs] targetColors input: slider.value=${entry.slider.value} parsed=${value}`);
                 }
                 this._updateDisplay(entry, value);
                 this._session.updateParameter(key, value);

@@ -1,7 +1,8 @@
 /**
  * Minimal event emitter for Navigator UI reactivity.
- * No external dependencies — safe for UXP runtime.
  */
+const logger = require('@reveal/core').logger;
+
 class EventEmitter {
     constructor() {
         this._listeners = Object.create(null);
@@ -42,7 +43,7 @@ class EventEmitter {
             try {
                 list[i](data);
             } catch (err) {
-                console.error(`[EventEmitter] Error in "${event}" listener:`, err);
+                logger.log(`[EventEmitter] Error in "${event}" listener:`, err);
             }
         }
     }

@@ -9,9 +9,9 @@
  */
 
 const jpeg = require("jpeg-js");
+const { uint8ToBase64 } = require("../utils/base64");
 
 const JPEG_QUALITY = 95;
-const CHUNK_SIZE = 0x8000; // 32KB chunks for String.fromCharCode.apply
 
 class Preview {
 
@@ -152,8 +152,7 @@ class Preview {
             height: height
         }, JPEG_QUALITY);
 
-        // Use btoa() + String.fromCharCode — proven pattern from reveal-adobe
-        const base64 = Preview._uint8ToBase64(jpegData.data);
+        const base64 = uint8ToBase64(jpegData.data);
         this._img.src = `data:image/jpeg;base64,${base64}`;
 
         // Make image visible, hide placeholder
@@ -174,18 +173,6 @@ class Preview {
             : '';
     }
 
-    /**
-     * Convert Uint8Array to base64 using btoa() — same pattern as reveal-adobe.
-     * Uses chunked String.fromCharCode.apply to avoid call stack overflow.
-     */
-    static _uint8ToBase64(buffer) {
-        const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
-        }
-        return btoa(binary);
-    }
 }
 
 module.exports = Preview;

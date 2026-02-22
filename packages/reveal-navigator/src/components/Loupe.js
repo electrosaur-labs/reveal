@@ -21,9 +21,10 @@
 const jpeg = require("jpeg-js");
 const Reveal = require("@reveal/core");
 const ProductionWorker = require("../bridge/ProductionWorker");
+const { uint8ToBase64 } = require("../utils/base64");
+const logger = Reveal.logger;
 
 const JPEG_QUALITY = 92;
-const CHUNK_SIZE = 0x8000;
 const LOUPE_TILE_SIZE = 256;       // Native-res tile: 256px = true 1:1 in 256px loupe
 const DEBOUNCE_MS = 80;            // Fast debounce for responsive feel
 
@@ -256,7 +257,7 @@ class Loupe {
             this._renderBuffer(buffer, width, height);
         } catch (err) {
             if (this._active) {
-                console.error('[Loupe] Tile fetch failed:', err.message);
+                logger.log('[Loupe] Tile fetch failed:', err.message);
             }
         } finally {
             this._isFetching = false;
@@ -331,18 +332,10 @@ class Loupe {
             height: height
         }, JPEG_QUALITY);
 
-        const base64 = Loupe._uint8ToBase64(jpegData.data);
+        const base64 = uint8ToBase64(jpegData.data);
         this._img.src = `data:image/jpeg;base64,${base64}`;
     }
 
-    static _uint8ToBase64(buffer) {
-        const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
-        }
-        return btoa(binary);
-    }
 }
 
 module.exports = Loupe;

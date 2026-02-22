@@ -24,6 +24,7 @@
 
 const jpeg = require('jpeg-js');
 const Reveal = require('@reveal/core');
+const { uint8ToBase64 } = require('../utils/base64');
 
 const AXES = [
     { key: 'l',                     label: 'L',       max: 100 },
@@ -416,13 +417,7 @@ class RadarHUD {
             height: SIZE
         }, 95);
 
-        // btoa() + String.fromCharCode — proven pattern from Preview.js
-        let binary = '';
-        const bytes = jpegData.data;
-        for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        this._img.src = 'data:image/jpeg;base64,' + btoa(binary);
+        this._img.src = 'data:image/jpeg;base64,' + uint8ToBase64(jpegData.data);
     }
 
     // ─── HTML Labels ────────────────────────────────────────
