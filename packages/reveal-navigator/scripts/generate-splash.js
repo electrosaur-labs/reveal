@@ -2,10 +2,16 @@
 /**
  * Generate the silkscreen splash animated GIF.
  *
- * Scene: Looking down at a coarse silkscreen mesh (green, tilted 17°).
- * RE/VE/AL in bold multicolor ink sits on top of mesh, with a dark outline
- * for contrast. A yellow squeegee blade wipes from top to bottom,
- * uncovering the text+mesh composite.
+ * Scene: Looking down at a fine silkscreen mesh (green, tilted 22.5°).
+ * "REVEAL" in single-line multicolor ink (one color per letter) sits UNDER
+ * the mesh — realistic screen printing where ink is pushed THROUGH the mesh
+ * by the squeegee, visible through the mesh openings. A yellow squeegee
+ * blade wipes from top to bottom, uncovering the ink+mesh composite.
+ *
+ * Compositing (above squeegee, already wiped):
+ *   mesh thread present → mesh color (threads on top)
+ *   else if text present → ink color (visible through opening)
+ *   else → dark background
  *
  * Output: src/squeegee.gif (512x512, ~36 frames)
  */
@@ -16,116 +22,129 @@ const { GifWriter } = require('omggif');
 const W = 512, H = 512;
 const FRAME_COUNT = 36;     // 4 hold + 26 wipe + 6 hold
 const FRAME_DELAY = 10;     // centiseconds (100ms per frame)
-const MESH_ANGLE = 17 * Math.PI / 180;
-const MESH_SPACING = 28;    // coarse mesh
-const MESH_LINE_W = 4.0;    // extra-thick thread width
+const MESH_ANGLE = Math.PI / 8;   // 22.5° — slightly steeper for visual interest
+const MESH_SPACING = 14;    // fine mesh (high mesh count)
+const MESH_LINE_W = 2.0;    // thin threads
 
-// ─── Color Palette (GIF indexed) ───
-// 16 colors as packed 0xRRGGBB integers (omggif format)
+// ─── Color Palette (GIF indexed, 16 entries) ───
 const PALETTE = [
-    0x1e1e1e,   // 0: dark background
-    0x1a4a18,   // 1: dark mesh shadow (green)
-    0x2a8a28,   // 2: medium mesh (green)
-    0x38d030,   // 3: bright mesh line (green)
-    0xd0c020,   // 4: squeegee yellow
-    0xe05040,   // 5: red (RE)
-    0x4090e0,   // 6: blue (VE)
-    0x40b868,   // 7: green (AL)
-    0xffffff,   // 8: white (unused, pad)
-    0x183a14,   // 9: darker mesh (green)
-    0x2cb028,   // 10: mid-bright mesh (green)
-    0x282828,   // 11: slightly lighter bg
-    0xb04030,   // 12: dark red
-    0x3070b0,   // 13: dark blue
-    0x309050,   // 14: dark green
-    0x988818,   // 15: squeegee edge (dark yellow)
+    0x1e1e1e,   //  0: dark background
+    0x1a4a18,   //  1: dark mesh shadow (green)
+    0x2a8a28,   //  2: medium mesh (green)
+    0x38d030,   //  3: bright mesh line (green)
+    0xd0c020,   //  4: squeegee yellow
+    0xe05040,   //  5: R ink (red)
+    0xe09030,   //  6: E ink (orange)
+    0xe0d040,   //  7: V ink (warm yellow — distinct from squeegee)
+    0x40b868,   //  8: E ink (green)
+    0x4090e0,   //  9: A ink (cyan)
+    0x6060d0,   // 10: L ink (blue/indigo)
+    0x183a14,   // 11: darker mesh
+    0x2cb028,   // 12: mid-bright mesh
+    0x282828,   // 13: slightly lighter bg
+    0x988818,   // 14: squeegee edge (dark yellow)
+    0x000000,   // 15: pure black (pad)
 ];
 
-// ─── Bitmap font: 7x10 glyphs for R, E, V, A, L ───
+// ─── Per-letter ink color indices ───
+const LETTER_COLORS = {
+    R: 5,   // red
+    E1: 6,  // orange (first E)
+    V: 7,   // warm yellow
+    E2: 8,  // green (second E)
+    A: 9,   // cyan
+    L: 10,  // blue/indigo
+};
+
+// ─── Bitmap font: 8x11 glyphs — wider, chunkier letterforms ───
 const GLYPHS = {
     R: [
-        '111110.',
-        '1....11',
-        '1....11',
-        '1...11.',
-        '111110.',
-        '1..11..',
-        '1...11.',
-        '1....11',
-        '1....11',
-        '.......',
+        '111111..',
+        '11...011',
+        '11...011',
+        '11..011.',
+        '111111..',
+        '11.11...',
+        '11..11..',
+        '11...11.',
+        '11...011',
+        '11....11',
+        '........',
     ],
     E: [
-        '1111111',
-        '1......',
-        '1......',
-        '1......',
-        '111111.',
-        '1......',
-        '1......',
-        '1......',
-        '1111111',
-        '.......',
+        '11111111',
+        '11......',
+        '11......',
+        '11......',
+        '1111111.',
+        '11......',
+        '11......',
+        '11......',
+        '11......',
+        '11111111',
+        '........',
     ],
     V: [
-        '1.....1',
-        '1.....1',
-        '.1...1.',
-        '.1...1.',
-        '..1.1..',
-        '..1.1..',
-        '...1...',
-        '...1...',
-        '...1...',
-        '.......',
+        '11....11',
+        '11....11',
+        '011..11.',
+        '011..11.',
+        '.011.11.',
+        '.01111..',
+        '..0111..',
+        '..0111..',
+        '...11...',
+        '...11...',
+        '........',
     ],
     A: [
-        '..111..',
-        '.1...1.',
-        '1.....1',
-        '1.....1',
-        '1111111',
-        '1.....1',
-        '1.....1',
-        '1.....1',
-        '1.....1',
-        '.......',
+        '...11...',
+        '..0111..',
+        '..1..1..',
+        '.11..11.',
+        '.11..11.',
+        '011..011',
+        '11111111',
+        '11....11',
+        '11....11',
+        '11....11',
+        '........',
     ],
     L: [
-        '1......',
-        '1......',
-        '1......',
-        '1......',
-        '1......',
-        '1......',
-        '1......',
-        '1......',
-        '1111111',
-        '.......',
+        '11......',
+        '11......',
+        '11......',
+        '11......',
+        '11......',
+        '11......',
+        '11......',
+        '11......',
+        '11......',
+        '11111111',
+        '........',
     ],
 };
 
-const GLYPH_W = 7, GLYPH_H = 10;
-const SCALE = 10;  // Each glyph pixel = 10x10 output pixels
-const CHAR_W = GLYPH_W * SCALE;  // 70px per character
-const CHAR_H = GLYPH_H * SCALE;  // 100px per character
-const LETTER_GAP = 18;            // gap between letters in a pair
-const LINE_GAP = 24;              // gap between lines
+const GLYPH_W = 8, GLYPH_H = 11;
+const SCALE = 8;             // 64×88 per character
+const CHAR_W = GLYPH_W * SCALE;   // 64px
+const CHAR_H = GLYPH_H * SCALE;   // 88px
+const LETTER_GAP = 10;       // between characters
+const BOLD_RADIUS = 5;       // thicker dilation for impact
 
-// Bold/outline radii (output pixels)
-const BOLD_RADIUS = 3;     // thicken strokes by 3px each side (10→16px)
-const OUTLINE_RADIUS = 3;  // dark outline around bold text
+// Layout: 6 characters + 5 gaps, centered in 512
+const TEXT_W = 6 * CHAR_W + 5 * LETTER_GAP;  // 434
+const BASE_X = Math.round((W - TEXT_W) / 2);  // 39
+const BASE_Y = Math.round((H - CHAR_H) / 2); // 212
 
-// Layout: 3 lines centered in 512x512
-const LINE_W = CHAR_W * 2 + LETTER_GAP;
-const BLOCK_H = CHAR_H * 3 + LINE_GAP * 2;
-const BASE_X = Math.round((W - LINE_W) / 2);
-const BASE_Y = Math.round((H - BLOCK_H) / 2) - 15;
-
-const LINES = [
-    { chars: 'RE', color: 5 },
-    { chars: 'VE', color: 6 },
-    { chars: 'AL', color: 7 },
+// Word: each entry is { char, colorIndex }
+const WORD = [
+    { char: 'R', colorIndex: LETTER_COLORS.R },
+    { char: 'E', colorIndex: LETTER_COLORS.E1 },
+    { char: 'V', colorIndex: LETTER_COLORS.V },
+    { char: 'E', colorIndex: LETTER_COLORS.E2 },
+    { char: 'A', colorIndex: LETTER_COLORS.A },
+    { char: 'L', colorIndex: LETTER_COLORS.L },
 ];
 
 // ─── Precompute mesh grid ───
@@ -140,7 +159,7 @@ for (let y = 0; y < H; y++) {
         const d2 = Math.abs((cosA * x + sinA * y) % MESH_SPACING);
         const dist2 = Math.min(d2, MESH_SPACING - d2);
 
-        let idx = 0; // background
+        let idx = 0; // background (opening)
         if (dist1 < MESH_LINE_W * 0.4 || dist2 < MESH_LINE_W * 0.4) {
             idx = 3;  // bright mesh line (core)
         } else if (dist1 < MESH_LINE_W * 0.7 || dist2 < MESH_LINE_W * 0.7) {
@@ -156,27 +175,22 @@ for (let y = 0; y < H; y++) {
 console.log('Rendering text...');
 const textMap = new Uint8Array(W * H);
 
-for (let lineIdx = 0; lineIdx < LINES.length; lineIdx++) {
-    const { chars, color } = LINES[lineIdx];
-    const lineY = BASE_Y + lineIdx * (CHAR_H + LINE_GAP);
+for (let i = 0; i < WORD.length; i++) {
+    const { char, colorIndex } = WORD[i];
+    const glyph = GLYPHS[char];
+    if (!glyph) continue;
+    const charX = BASE_X + i * (CHAR_W + LETTER_GAP);
 
-    for (let ci = 0; ci < chars.length; ci++) {
-        const ch = chars[ci];
-        const glyph = GLYPHS[ch];
-        if (!glyph) continue;
-        const charX = BASE_X + ci * (CHAR_W + LETTER_GAP);
-
-        for (let gy = 0; gy < GLYPH_H; gy++) {
-            const row = glyph[gy];
-            for (let gx = 0; gx < GLYPH_W; gx++) {
-                if (row[gx] !== '1') continue;
-                for (let sy = 0; sy < SCALE; sy++) {
-                    for (let sx = 0; sx < SCALE; sx++) {
-                        const px = charX + gx * SCALE + sx;
-                        const py = lineY + gy * SCALE + sy;
-                        if (px >= 0 && px < W && py >= 0 && py < H) {
-                            textMap[py * W + px] = color;
-                        }
+    for (let gy = 0; gy < GLYPH_H; gy++) {
+        const row = glyph[gy];
+        for (let gx = 0; gx < GLYPH_W; gx++) {
+            if (row[gx] !== '1') continue;
+            for (let sy = 0; sy < SCALE; sy++) {
+                for (let sx = 0; sx < SCALE; sx++) {
+                    const px = charX + gx * SCALE + sx;
+                    const py = BASE_Y + gy * SCALE + sy;
+                    if (px >= 0 && px < W && py >= 0 && py < H) {
+                        textMap[py * W + px] = colorIndex;
                     }
                 }
             }
@@ -184,7 +198,7 @@ for (let lineIdx = 0; lineIdx < LINES.length; lineIdx++) {
     }
 }
 
-// ─── Bold pass: dilate text by BOLD_RADIUS pixels ───
+// ─── Bold pass: dilate text by BOLD_RADIUS pixels (circular) ───
 console.log('Applying bold...');
 const textBold = new Uint8Array(W * H);
 const BR2 = BOLD_RADIUS * BOLD_RADIUS;
@@ -197,35 +211,11 @@ for (let y = 0; y < H; y++) {
             const ny = y + dy;
             if (ny < 0 || ny >= H) continue;
             for (let dx = -BOLD_RADIUS; dx <= BOLD_RADIUS; dx++) {
-                if (dx * dx + dy * dy > BR2) continue; // circular
+                if (dx * dx + dy * dy > BR2) continue; // circular kernel
                 const nx = x + dx;
                 if (nx < 0 || nx >= W) continue;
                 if (textBold[ny * W + nx] === 0) {
                     textBold[ny * W + nx] = color;
-                }
-            }
-        }
-    }
-}
-
-// ─── Outline pass: dilate bold text by OUTLINE_RADIUS pixels ───
-console.log('Applying outline...');
-const outlineMap = new Uint8Array(W * H);
-const OR2 = OUTLINE_RADIUS * OUTLINE_RADIUS;
-
-for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-        if (textBold[y * W + x] === 0) continue;
-        for (let dy = -OUTLINE_RADIUS; dy <= OUTLINE_RADIUS; dy++) {
-            const ny = y + dy;
-            if (ny < 0 || ny >= H) continue;
-            for (let dx = -OUTLINE_RADIUS; dx <= OUTLINE_RADIUS; dx++) {
-                if (dx * dx + dy * dy > OR2) continue;
-                const nx = x + dx;
-                if (nx < 0 || nx >= W) continue;
-                const off = ny * W + nx;
-                if (textBold[off] === 0 && outlineMap[off] === 0) {
-                    outlineMap[off] = 1;
                 }
             }
         }
@@ -242,8 +232,8 @@ const gw = new GifWriter(buf, W, H, {
 
 console.log(`Generating ${FRAME_COUNT} frames at ${W}x${H}...`);
 
-const WIPE_START = Math.round(H * 0.08);   // start a little below the top
-const WIPE_END   = Math.round(H * 0.90);   // end a little above the bottom
+const WIPE_START = Math.round(H * 0.08);
+const WIPE_END   = Math.round(H * 0.90);
 const WIPE_RANGE = WIPE_END - WIPE_START;
 
 for (let f = 0; f < FRAME_COUNT; f++) {
@@ -262,20 +252,21 @@ for (let f = 0; f < FRAME_COUNT; f++) {
     for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
             const off = y * W + x;
-            if (y >= squeegeeY && y < squeegeeY + SQUEEGEE_H && squeegeeY < H) {
+            if (y >= squeegeeY && y < squeegeeY + SQUEEGEE_H && squeegeeY < WIPE_END) {
                 // Squeegee blade
-                frame[off] = 4;
+                const bladePos = y - squeegeeY;
+                frame[off] = (bladePos < 4 || bladePos >= SQUEEGEE_H - 4) ? 14 : 4;
             } else if (y < squeegeeY) {
-                // Above squeegee: text (bold) > outline (dark) > mesh
-                if (textBold[off]) {
-                    frame[off] = textBold[off];
-                } else if (outlineMap[off]) {
-                    frame[off] = 0; // dark outline
+                // Above squeegee — ink visible THROUGH mesh openings
+                if (meshGrid[off] > 0) {
+                    frame[off] = meshGrid[off];      // mesh thread on top
+                } else if (textBold[off] > 0) {
+                    frame[off] = textBold[off];       // ink visible through opening
                 } else {
-                    frame[off] = meshGrid[off]; // mesh visible through
+                    frame[off] = 0;                   // dark background
                 }
             } else {
-                // Below squeegee: mesh only
+                // Below squeegee — mesh only (no ink yet)
                 frame[off] = meshGrid[off];
             }
         }
