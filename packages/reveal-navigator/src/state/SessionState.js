@@ -129,6 +129,9 @@ class SessionState extends EventEmitter {
         this._updateQueued = false;
         this._loadInFlight = false;
         this._swapInFlight = false;
+
+        // Generation counter for background scoring cancellation
+        this._scoringGeneration = 0;
     }
 
     /**
@@ -157,6 +160,7 @@ class SessionState extends EventEmitter {
         this._updateQueued = false;
         this._loadInFlight = false;
         this._swapInFlight = false;
+        this._scoringGeneration++;
         this.state.activeArchetypeId = null;
         this.state.isArchetypeDirty = false;
         this.state.isProcessing = false;
@@ -174,13 +178,13 @@ class SessionState extends EventEmitter {
     /**
      * Load a new image into the session.
      *
-     * Three sequential phases (all awaited — no background tasks):
+     * Three phases:
      *   Phase 1 — DNA + archetype scoring (~51ms)
-     *   Phase 2 — Proxy posterization of top match (~400ms) → previewUpdated
-     *   Phase 3 — ΔE scoring of all archetypes (~18s) → carouselReady
+     *   Phase 2 — Proxy posterization of top match (~400ms) → previewUpdated + carouselReady
+     *   Phase 3 — Background ΔE scoring (~350ms each) → archetypeScored events
      *
-     * loadImage blocks until all phases complete. The caller should keep the
-     * splash screen visible until the returned promise resolves.
+     * loadImage blocks until Phase 2 completes (carousel visible, preview ready).
+     * Phase 3 ΔE scoring runs in the background — cards update progressively.
      *
      * IMPORTANT: We do NOT copy labPixels — UXP's Uint16Array copy produces
      * stale all-white buffers. Instead, we use the original reference for the
@@ -246,7 +250,7 @@ class SessionState extends EventEmitter {
         const chameleonEntry = allScores.find(s => s.id === 'dynamic_interpolator');
         logger.log(`[SessionState] Pulse 1: Scored ${allScores.length} entries, Chameleon=${chameleonEntry.score.toFixed(0)}, top=${topMatch.id} (${topMatch.score.toFixed(0)})`);
 
-        // No carouselReady here — single emission after ALL ΔE computed (end of loadImage)
+        // carouselReady emitted after Pulse 2 preview — cards appear immediately with DNA scores
 
         // ── Phase 4: VISUAL — proxy posterization + knob init (~400ms) ──
         this.emit('progress', { phase: 'visual', label: 'Initializing navigator\u2026', percent: 65 });
@@ -305,37 +309,19 @@ class SessionState extends EventEmitter {
             dnaFidelity: initialFidelity
         });
 
-        // ── Pulse 3: Score ALL archetypes by ΔE before returning ──
-        // No background tasks. loadImage blocks until everything is sorted.
-        this.emit('progress', { phase: 'scoring', label: 'Scoring all archetypes\u2026', percent: 90 });
-        await new Promise(r => setTimeout(r, 20)); // yield for repaint
-
+        // ── Pulse 3: Emit carousel immediately with DNA scores ──
+        // Top match already has ΔE from the proxy we just built.
         const activeDE = this.calculateCurrentAccuracy();
         const activeMatch = allScores.find(s => s.id === topMatch.id);
         if (activeMatch) activeMatch.meanDeltaE = activeDE;
 
-        let computed = 1;
-        for (const match of allScores) {
-            if (match.id === topMatch.id) continue;
-
-            try {
-                const config = match.id === 'dynamic_interpolator'
-                    ? Reveal.generateConfigurationMk2(this.imageDNA)
-                    : Reveal.generateConfiguration(this.imageDNA, {
-                        manualArchetypeId: match.id
-                    });
-                const palette = await this.proxyEngine.getPaletteWithQuality(config);
-                match.meanDeltaE = palette.meanDeltaE;
-                computed++;
-            } catch (err) {
-                logger.log(`[SessionState] Palette gen failed for ${match.id}: ${err.message}`);
-            }
-        }
-
-        // Single sorted emission — carousel builds once, fully sorted
         const sorted = this._sortByDeltaE(allScores);
         this.emit('carouselReady', { scores: sorted, topMatchId: topMatch.id });
-        logger.log(`[SessionState] All ${computed}/${allScores.length} archetypes scored by ΔE`);
+        logger.log(`[SessionState] Carousel emitted (1/${allScores.length} scored by ΔE)`);
+
+        // Fire-and-forget background ΔE scoring — cards update progressively
+        this._scoringGeneration++;
+        this._scoreAllArchetypes(allScores, topMatch.id, this._scoringGeneration);
 
         return proxyResult;
     }
@@ -343,26 +329,79 @@ class SessionState extends EventEmitter {
     /**
      * Sort scores by meanDeltaE ascending (best quality first).
      * Entries without ΔE are appended in their original order.
-     * Uses manual insertion to avoid Array.sort() JSC issues.
      * @private
      */
     _sortByDeltaE(scores) {
-        const withDE = [];
-        const withoutDE = [];
-        for (const s of scores) {
-            const de = s.meanDeltaE;
-            if (de == null || de !== de) { withoutDE.push(s); continue; }
-            // Round to 1 decimal so sort matches the displayed card value
-            const rounded = Math.round(de * 10) / 10;
-            // Insert ascending by rounded value
-            let idx = withDE.length;
-            for (let i = 0; i < withDE.length; i++) {
-                const ri = Math.round(withDE[i].meanDeltaE * 10) / 10;
-                if (rounded < ri) { idx = i; break; }
+        const copy = scores.slice();
+        copy.sort((a, b) => {
+            const aDE = a.meanDeltaE;
+            const bDE = b.meanDeltaE;
+            const aNull = aDE == null || aDE !== aDE;
+            const bNull = bDE == null || bDE !== bDE;
+            if (aNull && bNull) return 0;
+            if (aNull) return 1;
+            if (bNull) return -1;
+            return aDE - bDE;
+        });
+        return copy;
+    }
+
+    /**
+     * Background ΔE scoring loop. Scores archetypes one by one and emits
+     * `archetypeScored` events so the carousel can update cards progressively.
+     * Cancels if `_scoringGeneration` changes (new image or archetype swap).
+     *
+     * @param {Array} allScores - Score array (mutated in place with meanDeltaE)
+     * @param {string} topId - Already-scored top match ID (skip it)
+     * @param {number} generation - Generation counter at time of launch
+     * @private
+     */
+    async _scoreAllArchetypes(allScores, topId, generation) {
+        const total = allScores.length - 1;  // exclude topMatch (already scored)
+        let computed = 0;
+        let cancelled = false;
+        for (const match of allScores) {
+            if (match.id === topId) continue;  // already scored
+            if (this._scoringGeneration !== generation) {
+                logger.log(`[SessionState] Background scoring cancelled (gen ${generation} → ${this._scoringGeneration})`);
+                cancelled = true;
+                break;
             }
-            withDE.splice(idx, 0, s);
+
+            try {
+                const config = match.id === 'dynamic_interpolator'
+                    ? Reveal.generateConfigurationMk2(this.imageDNA)
+                    : Reveal.generateConfiguration(this.imageDNA, {
+                        manualArchetypeId: match.id
+                    });
+                const result = await this.proxyEngine.getPaletteWithQuality(config);
+
+                // Check generation again after await — may have been cancelled during scoring
+                if (this._scoringGeneration !== generation) {
+                    logger.log(`[SessionState] Background scoring cancelled after await (gen ${generation} → ${this._scoringGeneration})`);
+                    cancelled = true;
+                    break;
+                }
+
+                match.meanDeltaE = result.meanDeltaE;
+                computed++;
+                this.emit('archetypeScored', {
+                    id: match.id,
+                    meanDeltaE: result.meanDeltaE,
+                    computed,
+                    total
+                });
+            } catch (err) {
+                computed++;
+                logger.log(`[SessionState] Background scoring failed for ${match.id}: ${err.message}`);
+            }
         }
-        return withDE.concat(withoutDE);
+
+        // Always emit scoringComplete — even on cancellation, rebuild with partial scores
+        // so the carousel shows correct sort order for whatever we've computed so far.
+        const sorted = this._sortByDeltaE(allScores);
+        logger.log(`[SessionState] Background scoring ${cancelled ? 'cancelled' : 'complete'}: ${computed}/${total} archetypes scored`);
+        this.emit('scoringComplete', { scores: sorted, topMatchId: topId });
     }
 
     // ─── Knob Reset ─────────────────────────────────────────
@@ -577,6 +616,9 @@ class SessionState extends EventEmitter {
             return null;
         }
         this._swapInFlight = true;
+
+        // Cancel any in-flight background scoring
+        this._scoringGeneration++;
 
         try {
             // 1. Snapshot outgoing archetype state (always — no gate)
@@ -829,13 +871,18 @@ class SessionState extends EventEmitter {
         }
         dead.add(colorIndex);  // the one we're about to delete
 
-        // Find nearest live color using CIE76 squared distance
+        // Find nearest live color using the session's active distance metric
+        const metric = (this.currentConfig && this.currentConfig.distanceMetric) || 'cie76';
+        const distFn = metric === 'cie2000' ? Reveal.LabDistance.cie2000SquaredInline
+                     : metric === 'cie94'   ? Reveal.LabDistance.cie94SquaredInline
+                     :                        Reveal.LabDistance.cie76SquaredInline;
+
         const src = palette[colorIndex];
         let bestDist = Infinity;
         let bestIdx = -1;
         for (let i = 0; i < palette.length; i++) {
             if (dead.has(i)) continue;
-            const d = Reveal.LabDistance.cie76SquaredInline(
+            const d = distFn(
                 src.L, src.a, src.b,
                 palette[i].L, palette[i].a, palette[i].b
             );

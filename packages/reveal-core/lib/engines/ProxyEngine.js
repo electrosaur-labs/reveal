@@ -397,9 +397,10 @@ class ProxyEngine {
         );
 
         // Run nearest-neighbor separation (no dither) to get pixel assignments
+        // Use the config's distance metric to match actual posterization behavior
         const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
             this.proxyBuffer, result.paletteLab, null, proxyW, proxyH,
-            { ditherType: 'none', distanceMetric: 'cie76' }
+            { ditherType: 'none', distanceMetric: config.distanceMetric || 'cie76' }
         );
 
         const meanDeltaE = RevelationError.meanDeltaE16(

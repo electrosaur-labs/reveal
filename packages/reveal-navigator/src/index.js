@@ -238,6 +238,22 @@ function initPlugin() {
             _showProgress(data.label, data.percent);
         });
 
+        // Background scoring progress — visible after splash hides
+        sessionState.on('archetypeScored', (data) => {
+            const bar = document.getElementById('scoring-progress');
+            const fill = document.getElementById('scoring-progress-fill');
+            if (bar) bar.setAttribute('style', 'display:block; height:3px; background:#333; border-radius:2px; margin-top:2px;');
+            const pct = Math.round((data.computed / data.total) * 100);
+            if (fill) fill.setAttribute('style', 'height:100%; width:' + pct + '%; background:#4da6ff; border-radius:2px;');
+            setStatus('Scoring archetypes\u2026 ' + data.computed + '/' + data.total);
+        });
+        sessionState.on('scoringComplete', () => {
+            const bar = document.getElementById('scoring-progress');
+            if (bar) bar.setAttribute('style', 'display:none;');
+            setStatus('');
+            _hideProgress();
+        });
+
         // Pulse 1: dnaReady fires ~50ms after ingest — update radar + DNA stats immediately
         sessionState.on('dnaReady', (dna) => {
             const sectorEl = document.getElementById('dominant-sector');
@@ -334,6 +350,14 @@ function initPlugin() {
         const btnFinalize = document.getElementById('btn-finalize');
         if (btnFinalize) {
             btnFinalize.addEventListener('click', () => handleFinalize());
+        }
+
+        // Wire Sort button — re-sort carousel by displayed ΔE
+        const btnSort = document.getElementById('btn-sort-carousel');
+        if (btnSort) {
+            btnSort.addEventListener('click', () => {
+                if (carousel) carousel.sortByDisplayedDeltaE();
+            });
         }
 
         // Keyboard shortcuts
@@ -509,9 +533,10 @@ async function ingestActiveDocument(showDialog) {
         logger.log(`[Navigator] Ingested ${width}x${height} from ${validation.info.name}`);
 
         // ── Phases 2-4 are driven by SessionState.loadImage progress events ──
+        // Splash stays visible until scoringComplete fires (all ΔE scores ready).
         await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
 
-        _showProgress('Ready', 100);
+        _showProgress('Scoring archetypes\u2026', 85);
 
     } catch (err) {
         logger.log(`[Navigator] Ingest failed: ${err.message}`);
@@ -519,8 +544,8 @@ async function ingestActiveDocument(showDialog) {
             showErrorDialog('Ingest Failed', err.message);
         }
         setStatus('Error: ' + err.message);
-    } finally {
         _hideProgress();
+    } finally {
         isIngesting = false;
         if (btnSync) btnSync.disabled = false;
     }

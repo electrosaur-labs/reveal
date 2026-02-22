@@ -1,10 +1,9 @@
 /**
  * ArchetypeCarousel - Horizontal card strip for archetype navigation
  *
- * All cards show name + ΔE score + hue indicators.
+ * Renders once when background ΔE scoring completes (scoringComplete event).
+ * Cards sorted by ascending ΔE (best quality first).
  * Active card shows real palette swatches from proxy separation.
- * Cards are built once from a single carouselReady event after all
- * archetypes are scored and sorted by ΔE.
  *
  * Vanilla+ pattern: subscribes to SessionState events.
  */
@@ -35,8 +34,11 @@ class ArchetypeCarousel {
     }
 
     _bindEvents() {
-        // carouselReady fires once — all archetypes scored and sorted by ΔE.
-        this._session.on('carouselReady', (data) => this._rebuild(data.scores));
+        // Single-phase: build carousel once when all ΔE scores are ready.
+        // Splash stays visible until this fires.
+        this._session.on('scoringComplete', (data) => {
+            this._rebuild(data.scores);
+        });
         this._session.on('archetypeChanged', (data) => {
             this._activeId = data.archetypeId;
             this._updateActiveCard();
@@ -61,7 +63,7 @@ class ArchetypeCarousel {
 
     /**
      * Rebuild the full card strip from scored archetypes.
-     * @param {Array} [scores] - Pre-sorted scores from carouselReady event (descending by DNA score).
+     * @param {Array} [scores] - Pre-sorted scores (by DNA or ΔE).
      */
     _rebuild(scores) {
         if (!scores) scores = this._session.getAllArchetypeScores();
@@ -75,14 +77,16 @@ class ArchetypeCarousel {
         this._activeId = state.activeArchetypeId;
 
         this._cards = scores;
+
         this._container.innerHTML = '';
 
-        for (const match of scores) {
+        for (let i = 0; i < scores.length; i++) {
+            const match = scores[i];
             // Chameleon is synthetic — not in ArchetypeLoader
             const archetype = archetypeMap.get(match.id) || match._synthetic;
             if (!archetype) continue;
 
-            const card = this._createCard(match, archetype);
+            const card = this._createCard(match, archetype, i);
             this._container.appendChild(card);
         }
 
@@ -95,13 +99,13 @@ class ArchetypeCarousel {
      * All cards start with hue indicators; only the active card
      * gets real swatches via _refreshActiveSwatches after posterization.
      */
-    _createCard(match, archetype) {
+    _createCard(match, archetype, sortIndex) {
         const isActive = match.id === this._activeId;
         const card = document.createElement('div');
         card.className = 'carousel-card' + (isActive ? ' active' : '');
-        card.dataset.archetypeId = match.id;
+        card.dataset.id = match.id;
 
-        // Score bar — show ΔE when available (Pulse 3), otherwise DNA score (Pulse 1)
+        // Score bar — show ΔE when available, otherwise DNA score
         const hasDE = match.meanDeltaE != null;
         const scoreLabel = hasDE ? match.meanDeltaE.toFixed(1) : match.score.toFixed(0);
         const scorePercent = hasDE
@@ -112,7 +116,9 @@ class ArchetypeCarousel {
         const hueIndicator = this._buildHueIndicator(archetype);
         card.dataset.hueHtml = hueIndicator;
 
+        const de = match.meanDeltaE != null ? match.meanDeltaE.toFixed(1) : '?';
         card.innerHTML =
+            `<div class="card-debug-de" style="background:#ff0;color:#000;font-size:14px;font-weight:bold;text-align:center;">${String(sortIndex + 1).padStart(2, '0')} ΔE=${de}</div>` +
             `<div class="card-name">${archetype.name}</div>` +
             `<div class="card-score-row">` +
                 `<div class="card-score-bar"><div class="card-score-fill" style="width:${scorePercent}%"></div></div>` +
@@ -180,7 +186,7 @@ class ArchetypeCarousel {
     _updateActiveCard() {
         const cards = this._container.querySelectorAll('.carousel-card');
         cards.forEach(card => {
-            card.classList.toggle('active', card.dataset.archetypeId === this._activeId);
+            card.classList.toggle('active', card.dataset.id === this._activeId);
         });
         this._scrollToActive();
     }
@@ -198,6 +204,22 @@ class ArchetypeCarousel {
             const isActive = card.classList.contains('active');
 
             if (isActive) {
+                // Sync displayed ΔE to the live value (post-knobs),
+                // so the card matches the stats panel exactly.
+                if (data && data.accuracyDeltaE != null) {
+                    const liveDE = data.accuracyDeltaE;
+                    const scoreVal = card.querySelector('.card-score-val');
+                    if (scoreVal) scoreVal.textContent = liveDE.toFixed(1);
+                    const scoreFill = card.querySelector('.card-score-fill');
+                    if (scoreFill) scoreFill.style.width = Math.min(100, Math.max(0, 100 - liveDE * 4)) + '%';
+                    // Update yellow debug text
+                    const debugDiv = card.querySelector('.card-debug-de');
+                    if (debugDiv) {
+                        const idx = debugDiv.textContent.split(' ')[0]; // preserve sort index
+                        debugDiv.textContent = `${idx} ΔE=${liveDE.toFixed(1)}`;
+                    }
+                }
+
                 // Active card: show real palette swatches
                 const rgbPalette = this._getActiveRgbPalette();
                 if (!rgbPalette || rgbPalette.length === 0) return;
@@ -254,6 +276,33 @@ class ArchetypeCarousel {
             dot.textContent = '\u2022';
             nameEl.appendChild(dot);
         }
+    }
+
+    /**
+     * Re-sort carousel cards in DOM order by their currently displayed ΔE.
+     * Reads the value from each card's .card-score-val text.
+     */
+    sortByDisplayedDeltaE() {
+        const cards = Array.from(this._container.querySelectorAll('.carousel-card'));
+        if (cards.length === 0) return;
+
+        cards.sort((a, b) => {
+            const aVal = parseFloat(a.querySelector('.card-score-val')?.textContent) || 999;
+            const bVal = parseFloat(b.querySelector('.card-score-val')?.textContent) || 999;
+            return aVal - bVal;
+        });
+
+        // Re-insert in sorted order and update debug sort indices
+        for (let i = 0; i < cards.length; i++) {
+            this._container.appendChild(cards[i]);
+            const debugDiv = cards[i].querySelector('.card-debug-de');
+            if (debugDiv) {
+                const de = cards[i].querySelector('.card-score-val')?.textContent || '?';
+                debugDiv.textContent = `${String(i + 1).padStart(2, '0')} ΔE=${de}`;
+            }
+        }
+
+        this._scrollToActive();
     }
 
     _scrollToActive() {

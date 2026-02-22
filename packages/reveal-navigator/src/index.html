@@ -356,7 +356,6 @@
         }
 
         .carousel-card {
-            flex: 0 0 auto;
             width: 110px;
             background: #2a2a2a;
             border: 1px solid #444;
@@ -832,7 +831,10 @@
 
             <!-- Finalize Flight Plan -->
             <div id="finalize-row" style="display:none;">
-                <sp-action-button id="btn-finalize" variant="accent">Commit to Press</sp-action-button>
+                <div style="display:flex;gap:4px;">
+                    <sp-action-button id="btn-sort-carousel" style="min-width:auto;padding:0 6px;font-size:10px;">Sort</sp-action-button>
+                    <sp-action-button id="btn-finalize" variant="accent" style="flex:1;">Commit to Press</sp-action-button>
+                </div>
                 <div id="finalize-progress"></div>
                 <div id="finalize-summary"></div>
             </div>
@@ -1181,6 +1183,9 @@
                 <div id="status-bar">
                     <span id="status-text">Waiting for document...</span>
                     <span id="accuracy-text"></span>
+                </div>
+                <div id="scoring-progress" style="display:none; height:3px; background:#333; border-radius:2px; margin-top:2px;">
+                    <div id="scoring-progress-fill" style="height:100%; width:0%; background:#4da6ff; border-radius:2px; transition:width 0.15s;"></div>
                 </div>
                 <div id="dominant-sector"></div>
             </div>
