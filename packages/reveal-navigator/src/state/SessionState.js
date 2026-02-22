@@ -385,7 +385,7 @@ class SessionState extends EventEmitter {
                     });
 
                 await this.proxyEngine.rePosterize(config);
-                await this.proxyEngine.updateProxy(knobs);
+                const knobResult = await this.proxyEngine.updateProxy(knobs);
                 const deltaE = this.calculateCurrentAccuracy();
 
                 if (this._scoringGeneration !== generation) {
@@ -397,6 +397,17 @@ class SessionState extends EventEmitter {
                 match.meanDeltaE = deltaE;
                 this._archetypeDeltaE.set(match.id, deltaE);
                 computed++;
+
+                // Show this archetype's posterization in the preview
+                // so the user sees each color treatment as it's scored.
+                this.emit('scoringPreview', {
+                    previewBuffer: knobResult.previewBuffer,
+                    archetypeId: match.id,
+                    meanDeltaE: deltaE,
+                    computed,
+                    total
+                });
+
                 this.emit('archetypeScored', {
                     id: match.id,
                     meanDeltaE: deltaE,

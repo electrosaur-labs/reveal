@@ -36,9 +36,19 @@ class Preview {
     _bindEvents() {
         this._session.on('proxyReady', (data) => this._onProxyReady(data));
         this._session.on('previewUpdated', (data) => this._onPreviewUpdated(data));
+        this._session.on('scoringPreview', (data) => this._onScoringPreview(data));
         this._session.on('processingStart', () => this._onProcessingStart());
         this._session.on('error', (err) => this._onError(err));
         this._session.on('highlightChanged', (data) => this._onHighlightChanged(data));
+    }
+
+    _onScoringPreview(data) {
+        try {
+            if (!this._dimensions || !data.previewBuffer) return;
+            this._renderBuffer(data.previewBuffer, this._dimensions.width, this._dimensions.height);
+        } catch (_) {
+            // Non-critical — scoring continues even if preview render fails
+        }
     }
 
     _onProxyReady(data) {

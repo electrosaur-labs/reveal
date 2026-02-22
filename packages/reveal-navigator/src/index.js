@@ -241,21 +241,36 @@ function initPlugin() {
         // Reveal preview + carousel as soon as top-match posterization is ready
         sessionState.on('carouselReady', () => {
             _hideProgress();
-            // Show busy state on carousel while background scoring runs
+            // Busy state: dimmed carousel, wait cursor, show progress bar
             const carouselEl = document.getElementById('carousel');
             if (carouselEl) {
-                carouselEl.setAttribute('style', 'opacity:0.5; pointer-events:none; cursor:wait;');
+                carouselEl.setAttribute('style', 'opacity:0.5; pointer-events:none;');
             }
+            document.body.style.cursor = 'wait';
+            const cprog = document.getElementById('carousel-progress');
+            if (cprog) cprog.setAttribute('style', 'display:block;');
         });
 
-        // Background scoring progress — visible after splash hides
+        // Background scoring progress
         sessionState.on('archetypeScored', (data) => {
-            const bar = document.getElementById('scoring-progress');
-            const fill = document.getElementById('scoring-progress-fill');
-            if (bar) bar.setAttribute('style', 'display:block; height:3px; background:#333; border-radius:2px; margin-top:2px;');
+            // Update progress bar
             const pct = Math.round((data.computed / data.total) * 100);
-            if (fill) fill.setAttribute('style', 'height:100%; width:' + pct + '%; background:#4da6ff; border-radius:2px;');
-            setStatus('Scoring ' + data.computed + '/' + data.total + '\u2026');
+            const fill = document.getElementById('carousel-progress-fill');
+            if (fill) fill.setAttribute('style', 'height:100%; width:' + pct + '%; background:#4da6ff; border-radius:6px;');
+            const txt = document.getElementById('carousel-progress-text');
+            if (txt) txt.textContent = 'Scoring archetypes ' + data.computed + ' / ' + data.total;
+
+            // Highlight the card being scored + scroll to it
+            const carouselEl = document.getElementById('carousel');
+            if (carouselEl) {
+                const prev = carouselEl.querySelector('.carousel-card.scoring');
+                if (prev) prev.classList.remove('scoring');
+                const card = carouselEl.querySelector('.carousel-card[data-id="' + data.id + '"]');
+                if (card) {
+                    card.classList.add('scoring');
+                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                }
+            }
 
             // Update stats panel ΔE when the active archetype is scored
             const state = sessionState.getState();
@@ -264,16 +279,25 @@ function initPlugin() {
                 if (deltaEl) deltaEl.textContent = `\u0394E ${data.meanDeltaE.toFixed(1)}`;
             }
         });
+
         sessionState.on('scoringComplete', () => {
-            const bar = document.getElementById('scoring-progress');
-            if (bar) bar.setAttribute('style', 'display:none;');
-            setStatus('');
-            // Remove busy state and auto-sort by live ΔE
+            // Hide progress bar
+            const cprog = document.getElementById('carousel-progress');
+            if (cprog) cprog.setAttribute('style', 'display:none;');
+            // Remove scoring highlight from all cards
             const carouselEl = document.getElementById('carousel');
             if (carouselEl) {
+                const sc = carouselEl.querySelector('.carousel-card.scoring');
+                if (sc) sc.classList.remove('scoring');
+                // Remove busy state
                 carouselEl.setAttribute('style', '');
             }
+            document.body.style.cursor = '';
+            setStatus('Ready');
+            // Auto-sort and scroll to active
             if (carousel) carousel.sortByDisplayedDeltaE();
+            // Clear "Ready" after a moment
+            setTimeout(() => setStatus(''), 2000);
         });
 
         // When the user clicks a card, update the stats panel ΔE from the stored value
