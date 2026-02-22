@@ -28,6 +28,7 @@ let radar = null;
 let knobs = null;
 let surgeon = null;
 let loupe = null;
+let splashShownAt = 0;    // timestamp when splash was shown
 let isIngesting = false;
 let isProductionRunning = false;
 let currentDocId = null;    // Track which document we've ingested
@@ -668,18 +669,35 @@ function _showProgress(label) {
     const status = document.getElementById('splash-status');
     if (overlay) overlay.setAttribute('style', 'display: flex');
     if (status) status.textContent = label;
+    // Reset the GIF animation by re-assigning src
+    const img = document.getElementById('splash-img');
+    if (img) {
+        const src = img.getAttribute('src');
+        img.setAttribute('src', '');
+        img.setAttribute('src', src);
+    }
+    splashShownAt = Date.now();
 }
 
 function _hideProgress() {
     const overlay = document.getElementById('progress-overlay');
     if (!overlay) return;
-    overlay.classList.add('fade-out');
+
+    // GIF is 31 frames: 4 hold (100ms) + 26 wipe (100ms) + 1 final (2000ms) = 5000ms total.
+    // Ensure at least 5400ms have elapsed so the final "REVEAL" frame is visible.
+    const MIN_SPLASH_MS = 5400;
+    const elapsed = Date.now() - splashShownAt;
+    const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
+
     setTimeout(() => {
-        overlay.setAttribute('style', 'display: none');
-        overlay.classList.remove('fade-out');
-        const status = document.getElementById('splash-status');
-        if (status) status.textContent = '';
-    }, 350);
+        overlay.classList.add('fade-out');
+        setTimeout(() => {
+            overlay.setAttribute('style', 'display: none');
+            overlay.classList.remove('fade-out');
+            const status = document.getElementById('splash-status');
+            if (status) status.textContent = '';
+        }, 350);
+    }, remaining);
 }
 
 // ─── Finalize ────────────────────────────────────────────
