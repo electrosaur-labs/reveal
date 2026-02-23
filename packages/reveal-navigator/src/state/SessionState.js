@@ -73,7 +73,7 @@ const ALL_KNOBS = new Set([
     ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS
 ]);
 
-const EAGER_SCORE_COUNT = 3;
+const EAGER_SCORE_COUNT = 8;
 
 const DEBOUNCE_MS = 50;
 
