@@ -82,9 +82,12 @@ class PaletteSurgeon {
             counts[colorIndices[i]]++;
         }
 
-        // If selected swatch was pruned away, deselect
+        // If selected swatch was pruned away, deselect (but keep deleted swatches selected —
+        // they always have zero counts because their pixels were merged into neighbors)
         if (this._state === 'SELECTED') {
-            if (this._selectedIndex >= rgbPalette.length || counts[this._selectedIndex] === 0) {
+            const selectedIsDeleted = this._session.deletedColors.has(this._selectedIndex);
+            if (this._selectedIndex >= rgbPalette.length ||
+                (counts[this._selectedIndex] === 0 && !selectedIsDeleted)) {
                 this._state = 'IDLE';
                 this._selectedIndex = -1;
                 this._session.clearHighlight();
@@ -229,8 +232,7 @@ class PaletteSurgeon {
             this._selectedIndex = i;
             this._header.textContent = `Deleted — click \u21BA or Alt+click to restore`;
             this._session.setHighlight(i);
-            this._updateSelectionCSS();
-            this._rebuild();
+            this._rebuild();  // rebuild reads _state/_selectedIndex to set selection + revert button
             return;
         }
 
@@ -376,6 +378,7 @@ class PaletteSurgeon {
 
     _updateSelectionCSS() {
         const isOverriddenMap = this._session.paletteOverrides;
+        const deletedColors = this._session.deletedColors;
         for (const [idx, swatch] of this._swatchElements) {
             const selected = (this._state === 'SELECTED' && idx === this._selectedIndex);
             if (selected) {
@@ -383,10 +386,10 @@ class PaletteSurgeon {
             } else {
                 swatch.classList.remove('surgeon-selected');
             }
-            // Show revert button only when selected AND overridden
+            // Show revert button when selected AND (overridden OR deleted)
             const revertBtn = swatch.querySelector('.surgeon-revert');
             if (revertBtn) {
-                if (selected && isOverriddenMap.has(idx)) {
+                if (selected && (isOverriddenMap.has(idx) || deletedColors.has(idx))) {
                     revertBtn.classList.add('visible');
                 } else {
                     revertBtn.classList.remove('visible');

@@ -6,6 +6,7 @@
  *   - PROXY_SAFE_OVERRIDES applied consistently across all ProxyEngine methods
  *   - meanDeltaE16 cross-validation with manual inline computation
  *   - Multi-archetype quality ranking via ΔE scoring
+ *   - getOriginalPreviewRGBA() Lab16→Lab8→RGB→RGBA conversion + caching
  *
  * Fixture: Jethro 1600×1095 16-bit Lab TIFF (same as end-to-end-posterization tests)
  */
@@ -22,6 +23,7 @@ import DNAGenerator from '../../lib/analysis/DNAGenerator.js';
 import ParameterGenerator from '../../lib/analysis/ParameterGenerator.js';
 import ArchetypeLoader from '../../lib/analysis/ArchetypeLoader.js';
 import ArchetypeMapper from '../../lib/analysis/ArchetypeMapper.js';
+import LabEncoding from '../../lib/color/LabEncoding.js';
 
 const UTIF = require('utif2');
 
@@ -478,4 +480,140 @@ describe('RevelationError.meanDeltaE16 with real proxy data', () => {
         // More colors = lower ΔE (closer approximation of original)
         expect(q10.meanDeltaE).toBeLessThan(q5.meanDeltaE);
     }, 30000);
+});
+
+
+// ═══════════════════════════════════════════════════════════
+// 6. getOriginalPreviewRGBA (blink comparator support)
+// ═══════════════════════════════════════════════════════════
+
+describe('ProxyEngine.getOriginalPreviewRGBA', () => {
+    let proxyEngine;
+    let proxyW, proxyH;
+
+    beforeAll(async () => {
+        const config = ParameterGenerator.generate(jethroDNA, {
+            manualArchetypeId: 'subtle_naturalist'
+        });
+        proxyEngine = new ProxyEngine();
+        const result = await proxyEngine.initializeProxy(jethroPixels, jethroWidth, jethroHeight, {
+            ...config,
+            targetColors: 10,
+            targetColorsSlider: 10,
+            engineType: config.engineType || 'reveal-mk1.5'
+        });
+        proxyW = result.dimensions.width;
+        proxyH = result.dimensions.height;
+    }, 30000);
+
+    it('should return RGBA buffer with correct dimensions', () => {
+        const result = proxyEngine.getOriginalPreviewRGBA();
+
+        expect(result).not.toBeNull();
+        expect(result.width).toBe(proxyW);
+        expect(result.height).toBe(proxyH);
+        expect(result.buffer).toBeInstanceOf(Uint8ClampedArray);
+        expect(result.buffer.length).toBe(proxyW * proxyH * 4);
+    });
+
+    it('should have alpha=255 for every pixel', () => {
+        const result = proxyEngine.getOriginalPreviewRGBA();
+        const buf = result.buffer;
+
+        for (let i = 3; i < buf.length; i += 4) {
+            if (buf[i] !== 255) {
+                throw new Error(`Pixel ${i / 4}: alpha=${buf[i]}, expected 255`);
+            }
+        }
+    });
+
+    it('should match manual Lab16→Lab8→RGB→RGBA conversion', () => {
+        const result = proxyEngine.getOriginalPreviewRGBA();
+        const pixelCount = proxyW * proxyH;
+
+        // Manually replicate the conversion path
+        const lab8 = LabEncoding.convertEngine16bitTo8bitLab(proxyEngine.proxyBuffer, pixelCount);
+        const rgb = LabEncoding.lab8bitToRgb(lab8, pixelCount);
+
+        // Compare a sample of pixels (every 100th) to avoid slow full-buffer comparison
+        for (let i = 0; i < pixelCount; i += 100) {
+            const src = i * 3;
+            const dst = i * 4;
+            expect(result.buffer[dst]).toBe(rgb[src]);         // R
+            expect(result.buffer[dst + 1]).toBe(rgb[src + 1]); // G
+            expect(result.buffer[dst + 2]).toBe(rgb[src + 2]); // B
+            expect(result.buffer[dst + 3]).toBe(255);          // A
+        }
+    });
+
+    it('should produce plausible RGB values for a photographic image', () => {
+        const result = proxyEngine.getOriginalPreviewRGBA();
+        const pixelCount = proxyW * proxyH;
+
+        // Collect RGB statistics — a real photo shouldn't be all black or all white
+        let sumR = 0, sumG = 0, sumB = 0;
+        let minR = 255, maxR = 0;
+
+        for (let i = 0; i < pixelCount; i++) {
+            const off = i * 4;
+            sumR += result.buffer[off];
+            sumG += result.buffer[off + 1];
+            sumB += result.buffer[off + 2];
+            minR = Math.min(minR, result.buffer[off]);
+            maxR = Math.max(maxR, result.buffer[off]);
+        }
+
+        const avgR = sumR / pixelCount;
+        const avgG = sumG / pixelCount;
+        const avgB = sumB / pixelCount;
+
+        // Averages should be in a reasonable photographic range (not all 0 or all 255)
+        expect(avgR).toBeGreaterThan(20);
+        expect(avgR).toBeLessThan(240);
+        expect(avgG).toBeGreaterThan(20);
+        expect(avgG).toBeLessThan(240);
+        expect(avgB).toBeGreaterThan(20);
+        expect(avgB).toBeLessThan(240);
+
+        // Should have dynamic range (not flat)
+        expect(maxR - minR).toBeGreaterThan(50);
+    });
+
+    it('should return cached result on second call', () => {
+        const result1 = proxyEngine.getOriginalPreviewRGBA();
+        const result2 = proxyEngine.getOriginalPreviewRGBA();
+
+        // Same object reference (cached)
+        expect(result1).toBe(result2);
+    });
+
+    it('should invalidate cache after re-ingest', async () => {
+        const result1 = proxyEngine.getOriginalPreviewRGBA();
+
+        // Re-ingest with same data (simulates new image load)
+        const config = ParameterGenerator.generate(jethroDNA, {
+            manualArchetypeId: 'subtle_naturalist'
+        });
+        await proxyEngine.initializeProxy(jethroPixels, jethroWidth, jethroHeight, {
+            ...config,
+            targetColors: 10,
+            targetColorsSlider: 10,
+            engineType: config.engineType || 'reveal-mk1.5'
+        });
+
+        const result2 = proxyEngine.getOriginalPreviewRGBA();
+
+        // Different object (cache was invalidated)
+        expect(result2).not.toBe(result1);
+        // But same content (same image data)
+        expect(result2.width).toBe(result1.width);
+        expect(result2.height).toBe(result1.height);
+        expect(result2.buffer.length).toBe(result1.buffer.length);
+    }, 30000);
+
+    it('should return null before initializeProxy', () => {
+        const freshEngine = new ProxyEngine();
+        const result = freshEngine.getOriginalPreviewRGBA();
+        expect(result).toBeNull();
+    });
 });
