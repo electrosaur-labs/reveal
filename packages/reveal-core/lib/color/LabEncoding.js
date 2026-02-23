@@ -288,6 +288,158 @@ function rgbToHex(r, g, b) {
 }
 
 // ============================================================================
+// Single-Color Conversions: sRGB ↔ Perceptual Lab (D65 illuminant)
+// ============================================================================
+//
+// These convert individual palette entries between sRGB and perceptual Lab.
+// Pipeline: sRGB → Linear RGB → XYZ (D65) → Lab / Lab → XYZ → sRGB
+//
+// Note: lab8bitToRgb (above) uses D50+Bradford for bulk buffer rendering.
+// These D65 functions are the canonical single-color converters used by
+// PosterizationEngine, ColorSpace, and the public API.
+
+/** @private sRGB gamma correction (inverse): sRGB → Linear RGB */
+function _gammaToLinear(channel) {
+    if (channel <= 0.04045) {
+        return channel / 12.92;
+    } else {
+        return Math.pow((channel + 0.055) / 1.055, 2.4);
+    }
+}
+
+/** @private sRGB gamma correction (forward): Linear RGB → sRGB */
+function _linearToGamma(channel) {
+    if (channel <= 0.0031308) {
+        return channel * 12.92;
+    } else {
+        return 1.055 * Math.pow(channel, 1 / 2.4) - 0.055;
+    }
+}
+
+/** @private XYZ to Lab helper function (CIE standard) */
+function _xyzToLabHelper(t) {
+    const delta = 6 / 29;
+    if (t > delta * delta * delta) {
+        return Math.pow(t, 1 / 3);
+    } else {
+        return t / (3 * delta * delta) + 4 / 29;
+    }
+}
+
+/** @private Lab to XYZ helper function (CIE standard inverse) */
+function _labToXyzHelper(t) {
+    const delta = 6 / 29;
+    if (t > delta) {
+        return t * t * t;
+    } else {
+        return 3 * delta * delta * (t - 4 / 29);
+    }
+}
+
+/**
+ * Convert sRGB color to CIELAB color space.
+ *
+ * Pipeline: sRGB → Linear RGB → XYZ → CIELAB (D65 illuminant)
+ *
+ * @param {{r: number, g: number, b: number}} rgb - sRGB color (0-255)
+ * @returns {{L: number, a: number, b: number}} Perceptual Lab
+ */
+function rgbToLab(rgb) {
+    const r = _gammaToLinear(rgb.r / 255);
+    const g = _gammaToLinear(rgb.g / 255);
+    const b = _gammaToLinear(rgb.b / 255);
+
+    let x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
+    let y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
+    let z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
+
+    x = x / 0.95047;
+    y = y / 1.00000;
+    z = z / 1.08883;
+
+    x = _xyzToLabHelper(x);
+    y = _xyzToLabHelper(y);
+    z = _xyzToLabHelper(z);
+
+    const L = 116 * y - 16;
+    const a = 500 * (x - y);
+    const b_value = 200 * (y - z);
+
+    return { L, a, b: b_value };
+}
+
+/**
+ * Convert CIELAB color to sRGB color space with gamut mapping.
+ *
+ * Pipeline: CIELAB → XYZ → Linear RGB → sRGB (D65 illuminant)
+ * Out-of-gamut Lab colors have chroma iteratively reduced (max 20 iterations)
+ * to force into sRGB gamut, preserving hue and preventing clipping artifacts.
+ *
+ * @param {{L: number, a: number, b: number}} lab - Perceptual Lab
+ * @returns {{r: number, g: number, b: number}} sRGB color (0-255)
+ */
+function labToRgb(lab) {
+    const MAX_ITERATIONS = 20;
+    let currentLab = { L: lab.L, a: lab.a, b: lab.b };
+    let iteration = 0;
+    let inGamut = false;
+
+    while (!inGamut && iteration < MAX_ITERATIONS) {
+        let y = (currentLab.L + 16) / 116;
+        let x = currentLab.a / 500 + y;
+        let z = y - currentLab.b / 200;
+
+        x = _labToXyzHelper(x) * 0.95047;
+        y = _labToXyzHelper(y) * 1.00000;
+        z = _labToXyzHelper(z) * 1.08883;
+
+        let r = x *  3.2404542 + y * -1.5371385 + z * -0.4985314;
+        let g = x * -0.9692660 + y *  1.8760108 + z *  0.0415560;
+        let b = x *  0.0556434 + y * -0.2040259 + z *  1.0572252;
+
+        r = _linearToGamma(r);
+        g = _linearToGamma(g);
+        b = _linearToGamma(b);
+
+        if (r >= 0 && r <= 1 && g >= 0 && g <= 1 && b >= 0 && b <= 1) {
+            inGamut = true;
+            return {
+                r: Math.round(r * 255),
+                g: Math.round(g * 255),
+                b: Math.round(b * 255)
+            };
+        }
+
+        currentLab.a *= 0.95;
+        currentLab.b *= 0.95;
+        iteration++;
+    }
+
+    // Fallback: clamp
+    let y = (currentLab.L + 16) / 116;
+    let x = currentLab.a / 500 + y;
+    let z = y - currentLab.b / 200;
+
+    x = _labToXyzHelper(x) * 0.95047;
+    y = _labToXyzHelper(y) * 1.00000;
+    z = _labToXyzHelper(z) * 1.08883;
+
+    let r = x *  3.2404542 + y * -1.5371385 + z * -0.4985314;
+    let g = x * -0.9692660 + y *  1.8760108 + z *  0.0415560;
+    let b = x *  0.0556434 + y * -0.2040259 + z *  1.0572252;
+
+    r = _linearToGamma(r);
+    g = _linearToGamma(g);
+    b = _linearToGamma(b);
+
+    r = Math.max(0, Math.min(255, Math.round(r * 255)));
+    g = Math.max(0, Math.min(255, Math.round(g * 255)));
+    b = Math.max(0, Math.min(255, Math.round(b * 255)));
+
+    return { r, g, b };
+}
+
+// ============================================================================
 // Exports
 // ============================================================================
 
@@ -316,5 +468,9 @@ module.exports = {
 
     // Display conversions
     lab8bitToRgb,
-    rgbToHex
+    rgbToHex,
+
+    // Single-color sRGB ↔ Lab (D65, gamut-mapped)
+    rgbToLab,
+    labToRgb
 };

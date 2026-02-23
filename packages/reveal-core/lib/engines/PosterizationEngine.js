@@ -23,6 +23,7 @@ const HueAnalysis = require('./HueAnalysis');
 const { CentroidStrategies } = require('./CentroidStrategies');
 const PeakFinder = require('../analysis/PeakFinder');
 const LabDistance = require('../color/LabDistance');
+const LabEncoding = require('../color/LabEncoding');
 
 // Import extracted modules
 const LabMedianCut = require('./LabMedianCut');
@@ -257,135 +258,14 @@ class PosterizationEngine {
     // Color Conversion (kept inline — has gamut mapping logic)
     // ========================================================================
 
-    /**
-     * Convert sRGB color to CIELAB color space
-     * Pipeline: sRGB → Linear RGB → XYZ → CIELAB (D65 illuminant)
-     */
+    /** Convert sRGB color to CIELAB. Delegates to LabEncoding. */
     static rgbToLab(rgb) {
-        const r = this._gammaToLinear(rgb.r / 255);
-        const g = this._gammaToLinear(rgb.g / 255);
-        const b = this._gammaToLinear(rgb.b / 255);
-
-        let x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
-        let y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
-        let z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
-
-        x = x / 0.95047;
-        y = y / 1.00000;
-        z = z / 1.08883;
-
-        x = this._xyzToLabHelper(x);
-        y = this._xyzToLabHelper(y);
-        z = this._xyzToLabHelper(z);
-
-        const L = 116 * y - 16;
-        const a = 500 * (x - y);
-        const b_value = 200 * (y - z);
-
-        return { L, a, b: b_value };
+        return LabEncoding.rgbToLab(rgb);
     }
 
-    /**
-     * Convert CIELAB color to sRGB color space with gamut mapping
-     * Pipeline: CIELAB → XYZ → Linear RGB → sRGB
-     */
+    /** Convert CIELAB to sRGB with gamut mapping. Delegates to LabEncoding. */
     static labToRgb(lab) {
-        const MAX_ITERATIONS = 20;
-        let currentLab = { L: lab.L, a: lab.a, b: lab.b };
-        let iteration = 0;
-        let inGamut = false;
-
-        while (!inGamut && iteration < MAX_ITERATIONS) {
-            let y = (currentLab.L + 16) / 116;
-            let x = currentLab.a / 500 + y;
-            let z = y - currentLab.b / 200;
-
-            x = this._labToXyzHelper(x) * 0.95047;
-            y = this._labToXyzHelper(y) * 1.00000;
-            z = this._labToXyzHelper(z) * 1.08883;
-
-            let r = x *  3.2404542 + y * -1.5371385 + z * -0.4985314;
-            let g = x * -0.9692660 + y *  1.8760108 + z *  0.0415560;
-            let b = x *  0.0556434 + y * -0.2040259 + z *  1.0572252;
-
-            r = this._linearToGamma(r);
-            g = this._linearToGamma(g);
-            b = this._linearToGamma(b);
-
-            if (r >= 0 && r <= 1 && g >= 0 && g <= 1 && b >= 0 && b <= 1) {
-                inGamut = true;
-                return {
-                    r: Math.round(r * 255),
-                    g: Math.round(g * 255),
-                    b: Math.round(b * 255)
-                };
-            }
-
-            currentLab.a *= 0.95;
-            currentLab.b *= 0.95;
-            iteration++;
-        }
-
-        // Fallback: clamp
-        let y = (currentLab.L + 16) / 116;
-        let x = currentLab.a / 500 + y;
-        let z = y - currentLab.b / 200;
-
-        x = this._labToXyzHelper(x) * 0.95047;
-        y = this._labToXyzHelper(y) * 1.00000;
-        z = this._labToXyzHelper(z) * 1.08883;
-
-        let r = x *  3.2404542 + y * -1.5371385 + z * -0.4985314;
-        let g = x * -0.9692660 + y *  1.8760108 + z *  0.0415560;
-        let b = x *  0.0556434 + y * -0.2040259 + z *  1.0572252;
-
-        r = this._linearToGamma(r);
-        g = this._linearToGamma(g);
-        b = this._linearToGamma(b);
-
-        r = Math.max(0, Math.min(255, Math.round(r * 255)));
-        g = Math.max(0, Math.min(255, Math.round(g * 255)));
-        b = Math.max(0, Math.min(255, Math.round(b * 255)));
-
-        return { r, g, b };
-    }
-
-    /** @private sRGB gamma correction (inverse): sRGB → Linear RGB */
-    static _gammaToLinear(channel) {
-        if (channel <= 0.04045) {
-            return channel / 12.92;
-        } else {
-            return Math.pow((channel + 0.055) / 1.055, 2.4);
-        }
-    }
-
-    /** @private sRGB gamma correction (forward): Linear RGB → sRGB */
-    static _linearToGamma(channel) {
-        if (channel <= 0.0031308) {
-            return channel * 12.92;
-        } else {
-            return 1.055 * Math.pow(channel, 1 / 2.4) - 0.055;
-        }
-    }
-
-    /** @private XYZ to Lab helper function (CIE standard function) */
-    static _xyzToLabHelper(t) {
-        const delta = 6 / 29;
-        if (t > delta * delta * delta) {
-            return Math.pow(t, 1 / 3);
-        } else {
-            return t / (3 * delta * delta) + 4 / 29;
-        }
-    }
-
-    /** @private Lab to XYZ helper function (CIE standard function inverse) */
-    static _labToXyzHelper(t) {
-        const delta = 6 / 29;
-        if (t > delta) {
-            return t * t * t;
-        } else {
-            return 3 * delta * delta * (t - 4 / 29);
-        }
+        return LabEncoding.labToRgb(lab);
     }
 
     // ========================================================================
