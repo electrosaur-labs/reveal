@@ -36,11 +36,24 @@ const AXES = [
     { key: 'k',                     label: 'K',        max: 100 }
 ];
 
+// Maps each radar axis to a draggable SessionState parameter.
+// Outward = increase value. Axis indices match AXES array above.
+const DRAG_MAP = [
+    { key: 'lWeight',       min: 0.5, max: 3.0,  step: 0.1, tip: 'Luminance Weight (drag to favor lightness)' },
+    { key: 'cWeight',       min: 0.5, max: 6.0,  step: 0.1, tip: 'Chroma Weight (drag to favor color saturation)' },
+    { key: 'targetColors',  min: 3,   max: 10,   step: 1,   tip: 'Color Count (drag to add/remove screens)' },
+    { key: 'shadowClamp',   min: 0,   max: 40,   step: 0.5, tip: 'Shadow Clamp (drag to control ink body)' },
+    { key: 'speckleRescue', min: 0,   max: 30,   step: 1,   tip: 'Speckle Rescue (drag to clean halftone)' },
+    { key: 'minVolume',     min: 0,   max: 5,    step: 0.1, tip: 'Min Volume (drag to remove ghost plates)' },
+    { key: 'blackBias',     min: 0,   max: 10,   step: 0.5, tip: 'Black Bias (drag to pull toward black plate)' }
+];
+
 const AXIS_COUNT = AXES.length;
 const SIZE = 300;               // Pixel buffer and display size
 const CENTER = SIZE / 2;
 const RADIUS = 108;
 const LABEL_RADIUS = RADIUS + 24;
+const HANDLE_SIZE = 14;         // Drag handle diameter in pixels
 
 // Background matches panel: #323232
 const BG_R = 0x32, BG_G = 0x32, BG_B = 0x32;
@@ -66,6 +79,12 @@ class RadarHUD {
 
         // Axis labels as HTML spans (UXP supports positioned text)
         this._labelEls = this._createLabelElements();
+
+        // Draggable handles overlaid on green polygon vertices
+        this._effectivePoints = null;
+        this._dragAxisIndex = -1;
+        this._handles = this._createHandles();
+        this._bindDragEvents();
 
         this._bindEvents();
         this._renderEmpty();
@@ -125,6 +144,7 @@ class RadarHUD {
         }
 
         this._display(buf);
+        this._positionHandles(this._effectivePoints);
         this._setLabelColors('#888');
     }
 
@@ -132,6 +152,7 @@ class RadarHUD {
         const buf = this._newBuffer();
         this._drawGrid(buf, true);
         this._display(buf);
+        this._hideHandles();
         this._setLabelColors('#555');
     }
 
@@ -265,9 +286,17 @@ class RadarHUD {
         const values = this._normalizeValues(effective);
         const points = this._valuesToPoints(values);
 
+        // Store for handle positioning
+        this._effectivePoints = points;
+
         // Green fill + outline
         this._fillPolygon(buf, points, 100, 220, 130, 51);
         this._strokePolygon(buf, points, 100, 220, 130);
+
+        // White ring affordances at vertices (visual hint: these are grabbable)
+        for (const pt of points) {
+            this._strokeCircle(buf, pt.x, pt.y, 5, 255, 255, 255);
+        }
     }
 
     // ─── Polygon Helpers ────────────────────────────────────
@@ -448,6 +477,185 @@ class RadarHUD {
         if (!this._labelEls) return;
         for (const el of this._labelEls) {
             el.style.color = color;
+        }
+    }
+
+    // ─── Draggable Handles ─────────────────────────────────
+
+    /**
+     * Create 7 absolutely-positioned div elements as drag handles.
+     * Hidden until first render positions them.
+     */
+    _createHandles() {
+        const handles = [];
+
+        // Shared tooltip element (one for all handles, repositioned on hover)
+        this._tooltip = document.createElement('span');
+        this._tooltip.setAttribute('style',
+            'position: absolute; display: none; pointer-events: none; z-index: 10; ' +
+            'font-size: 10px; color: #fff; background: rgba(0,0,0,0.8); ' +
+            'padding: 3px 6px; border-radius: 3px; white-space: nowrap;'
+        );
+        this._container.appendChild(this._tooltip);
+
+        for (let i = 0; i < AXIS_COUNT; i++) {
+            const el = document.createElement('div');
+            el.setAttribute('style',
+                'position: absolute; width: ' + HANDLE_SIZE + 'px; height: ' + HANDLE_SIZE + 'px; ' +
+                'border-radius: 50%; background: rgba(255,255,255,0.85); ' +
+                'border: 2px solid #4da6ff; cursor: grab; display: none; ' +
+                'box-sizing: border-box; z-index: 5;'
+            );
+
+            // Show tooltip on hover
+            const tip = DRAG_MAP[i].tip;
+            el.addEventListener('pointerenter', () => {
+                if (this._dragAxisIndex >= 0) return; // Hide during drag
+                this._tooltip.textContent = tip;
+                // Position above the handle, centered horizontally.
+                // UXP ignores CSS transform, so offset manually.
+                const left = parseFloat(el.style.left || 0);
+                const top = parseFloat(el.style.top || 0);
+                // Estimate text width (~6px per char) to center without transform
+                const estWidth = tip.length * 5.5;
+                const tipLeft = left + HANDLE_SIZE / 2 - estWidth / 2;
+                this._tooltip.setAttribute('style',
+                    'position: absolute; display: block; pointer-events: none; z-index: 10; ' +
+                    'font-size: 10px; color: #fff; background: rgba(0,0,0,0.8); ' +
+                    'padding: 3px 6px; border-radius: 3px; white-space: nowrap; ' +
+                    'left: ' + Math.max(0, tipLeft) + 'px; top: ' + (top - 20) + 'px;'
+                );
+            });
+            el.addEventListener('pointerleave', () => {
+                this._tooltip.setAttribute('style',
+                    'position: absolute; display: none; pointer-events: none; z-index: 10; ' +
+                    'font-size: 10px; color: #fff; background: rgba(0,0,0,0.8); ' +
+                    'padding: 3px 6px; border-radius: 3px; white-space: nowrap;'
+                );
+            });
+
+            this._container.appendChild(el);
+            handles.push(el);
+        }
+        return handles;
+    }
+
+    /**
+     * Position handles at the green polygon vertex locations.
+     * Skips the axis currently being dragged (that tracks the pointer).
+     */
+    _positionHandles(points) {
+        if (!points || !this._handles) return;
+        const half = HANDLE_SIZE / 2;
+        for (let i = 0; i < AXIS_COUNT; i++) {
+            if (i === this._dragAxisIndex) continue;
+            const h = this._handles[i];
+            const pt = points[i];
+            if (!pt) continue;
+            h.setAttribute('style',
+                'position: absolute; width: ' + HANDLE_SIZE + 'px; height: ' + HANDLE_SIZE + 'px; ' +
+                'border-radius: 50%; background: rgba(255,255,255,0.85); ' +
+                'border: 2px solid #4da6ff; cursor: grab; display: block; ' +
+                'box-sizing: border-box; z-index: 5; ' +
+                'left: ' + (pt.x - half) + 'px; top: ' + (pt.y - half) + 'px;'
+            );
+        }
+    }
+
+    /** Hide all handles (e.g. when rendering empty state). */
+    _hideHandles() {
+        if (!this._handles) return;
+        for (const h of this._handles) {
+            h.setAttribute('style',
+                'position: absolute; width: ' + HANDLE_SIZE + 'px; height: ' + HANDLE_SIZE + 'px; ' +
+                'border-radius: 50%; background: rgba(255,255,255,0.85); ' +
+                'border: 2px solid #4da6ff; cursor: grab; display: none; ' +
+                'box-sizing: border-box; z-index: 5;'
+            );
+        }
+    }
+
+    /**
+     * Bind pointer events for dragging handles along their axis radials.
+     * pointermove projects the cursor position onto the axis direction
+     * vector, maps the radial fraction to the parameter range, and calls
+     * sessionState.updateParameter().
+     */
+    _bindDragEvents() {
+        if (!this._handles) return;
+
+        for (let i = 0; i < AXIS_COUNT; i++) {
+            const handle = this._handles[i];
+            const axisIndex = i;
+
+            handle.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                // Hide tooltip during drag
+                if (this._tooltip) this._tooltip.setAttribute('style',
+                    'position: absolute; display: none; pointer-events: none; z-index: 10; ' +
+                    'font-size: 10px; color: #fff; background: rgba(0,0,0,0.8); ' +
+                    'padding: 3px 6px; border-radius: 3px; white-space: nowrap;'
+                );
+
+                this._dragAxisIndex = axisIndex;
+                handle.setAttribute('style', handle.getAttribute('style').replace('cursor: grab', 'cursor: grabbing'));
+
+                const onMove = (ev) => {
+                    ev.preventDefault();
+                    const rect = this._container.getBoundingClientRect();
+                    const localX = ev.clientX - rect.left;
+                    const localY = ev.clientY - rect.top;
+
+                    // Axis direction vector (from center outward)
+                    const angle = this._axisAngle(axisIndex);
+                    const dirX = Math.sin(angle);
+                    const dirY = -Math.cos(angle);
+
+                    // Vector from center to cursor
+                    const dx = localX - CENTER;
+                    const dy = localY - CENTER;
+
+                    // Project onto axis direction (dot product / RADIUS → 0..1+)
+                    const projection = (dx * dirX + dy * dirY) / RADIUS;
+                    const clamped = Math.max(0, Math.min(1, projection));
+
+                    // Map to parameter range with step snapping
+                    const dm = DRAG_MAP[axisIndex];
+                    let value = dm.min + clamped * (dm.max - dm.min);
+                    value = Math.round(value / dm.step) * dm.step;
+                    value = Math.max(dm.min, Math.min(dm.max, value));
+
+                    // Integer snap for targetColors
+                    if (dm.step >= 1) value = Math.round(value);
+
+                    // Position handle at the projected point on the axis
+                    const r = clamped * RADIUS;
+                    const hx = CENTER + r * dirX;
+                    const hy = CENTER + r * dirY;
+                    const half = HANDLE_SIZE / 2;
+                    handle.setAttribute('style',
+                        'position: absolute; width: ' + HANDLE_SIZE + 'px; height: ' + HANDLE_SIZE + 'px; ' +
+                        'border-radius: 50%; background: rgba(255,255,255,0.95); ' +
+                        'border: 2px solid #64dc78; cursor: grabbing; display: block; ' +
+                        'box-sizing: border-box; z-index: 5; ' +
+                        'left: ' + (hx - half) + 'px; top: ' + (hy - half) + 'px;'
+                    );
+
+                    // Update parameter (debounced internally by SessionState)
+                    this._session.updateParameter(dm.key, value);
+                };
+
+                const onUp = () => {
+                    this._dragAxisIndex = -1;
+                    document.removeEventListener('pointermove', onMove);
+                    document.removeEventListener('pointerup', onUp);
+                };
+
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+            });
         }
     }
 

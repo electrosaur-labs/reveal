@@ -131,6 +131,17 @@ class MechanicalKnobs {
         this._session.on('knobsCustomizedChanged', () => {
             this._updateAllRevertIcons();
         });
+
+        // External parameter change (e.g. radar HUD drag) — keep sliders in sync
+        this._session.on('parameterChanged', ({ key, value }) => {
+            const entry = this._sliders[key];
+            if (!entry) return;
+            if (parseFloat(entry.slider.value) !== value) {
+                entry.slider.value = value;
+                this._updateDisplay(entry, value);
+                this._updateRevertIcon(key, entry);
+            }
+        });
     }
 
     // ─── Display ──────────────────────────────────────────────
