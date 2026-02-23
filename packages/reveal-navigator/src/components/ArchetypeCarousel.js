@@ -113,9 +113,8 @@ class ArchetypeCarousel {
         card.className = 'carousel-card' + (isActive ? ' active' : '');
         card.dataset.id = match.id;
 
-        // Score bar — show ΔE when available, otherwise DNA score
+        // Score bar — ΔE drives the bar when available, otherwise DNA score
         const hasDE = match.meanDeltaE != null;
-        const scoreLabel = hasDE ? match.meanDeltaE.toFixed(1) : match.score.toFixed(0);
         const scorePercent = hasDE
             ? Math.min(100, Math.max(0, 100 - match.meanDeltaE * 4))  // Lower ΔE = fuller bar
             : Math.min(100, Math.max(0, match.score));
@@ -124,13 +123,15 @@ class ArchetypeCarousel {
         const hueIndicator = this._buildHueIndicator(archetype);
         card.dataset.hueHtml = hueIndicator;
 
-        const de = match.meanDeltaE != null ? match.meanDeltaE.toFixed(1) : '?';
+        const deStr = hasDE ? match.meanDeltaE.toFixed(1) : '-';
+        const dnaStr = match.score != null ? match.score.toFixed(0) : '-';
+        const debugBg = hasDE ? '#ff0' : '#888';
         card.innerHTML =
-            `<div class="card-debug-de" style="background:#ff0;color:#000;font-size:14px;font-weight:bold;text-align:center;">${String(sortIndex + 1).padStart(2, '0')} ΔE=${de}</div>` +
+            `<div class="card-debug-de" style="background:${debugBg};color:#000;font-size:14px;font-weight:bold;text-align:center;">${String(sortIndex + 1).padStart(2, '0')} \u0394E=${deStr} DNA=${dnaStr}</div>` +
             `<div class="card-name">${archetype.name}</div>` +
             `<div class="card-score-row">` +
                 `<div class="card-score-bar"><div class="card-score-fill" style="width:${scorePercent}%"></div></div>` +
-                `<span class="card-score-val">${scoreLabel}</span>` +
+                `<span class="card-score-val">${deStr}</span>` +
             `</div>` +
             `<div class="card-hue">${hueIndicator}</div>`;
 
@@ -201,8 +202,12 @@ class ArchetypeCarousel {
         if (scoreFill) scoreFill.style.width = Math.min(100, Math.max(0, 100 - meanDeltaE * 4)) + '%';
         const debugDiv = card.querySelector('.card-debug-de');
         if (debugDiv) {
-            const idx = debugDiv.textContent.split(' ')[0];
-            debugDiv.textContent = `${idx} ΔE=${de}`;
+            // Preserve sort index and DNA value, update ΔE
+            const parts = debugDiv.textContent.match(/^(\d+)\s.*DNA=(.+)$/);
+            const idx = parts ? parts[1] : '??';
+            const dna = parts ? parts[2] : '-';
+            debugDiv.textContent = `${idx} \u0394E=${de} DNA=${dna}`;
+            debugDiv.style.background = '#ff0';
         }
     }
 
@@ -309,8 +314,11 @@ class ArchetypeCarousel {
             this._container.appendChild(cards[i]);
             const debugDiv = cards[i].querySelector('.card-debug-de');
             if (debugDiv) {
-                const de = cards[i].querySelector('.card-score-val')?.textContent || '?';
-                debugDiv.textContent = `${String(i + 1).padStart(2, '0')} ΔE=${de}`;
+                const de = cards[i].querySelector('.card-score-val')?.textContent || '-';
+                // Preserve DNA value from existing debug text
+                const parts = debugDiv.textContent.match(/DNA=(.+)$/);
+                const dna = parts ? parts[1] : '-';
+                debugDiv.textContent = `${String(i + 1).padStart(2, '0')} \u0394E=${de} DNA=${dna}`;
             }
         }
 

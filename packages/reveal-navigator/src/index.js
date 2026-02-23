@@ -239,41 +239,16 @@ function initPlugin() {
             _showProgress(data.label, data.percent);
         });
 
-        // Reveal preview + carousel as soon as top-match posterization is ready
+        // Carousel cards built during splash (root hidden) — no splash interaction.
         sessionState.on('carouselReady', () => {
-            _hideProgress();
-            // Busy state: dimmed carousel, wait cursor, show progress bar
-            const carouselEl = document.getElementById('carousel');
-            if (carouselEl) {
-                carouselEl.setAttribute('style', 'opacity:0.5; pointer-events:none;');
-            }
-            document.body.style.cursor = 'wait';
-            const cprog = document.getElementById('carousel-progress');
-            if (cprog) cprog.setAttribute('style', 'display:block;');
+            // Cards are built by ArchetypeCarousel._rebuild().
+            // Splash stays up — scoring hasn't finished yet.
         });
 
-        // Background scoring progress
+        // Background scoring progress — update stats panel ΔE for active archetype.
+        // No progress bar / card highlight / scroll — all happens under hidden root
+        // during splash, and the scoring loop is only 3 archetypes (~1s).
         sessionState.on('archetypeScored', (data) => {
-            // Update progress bar
-            const pct = Math.round((data.computed / data.total) * 100);
-            const fill = document.getElementById('carousel-progress-fill');
-            if (fill) fill.setAttribute('style', 'height:100%; width:' + pct + '%; background:#4da6ff; border-radius:6px;');
-            const txt = document.getElementById('carousel-progress-text');
-            if (txt) txt.textContent = 'Scoring archetypes ' + data.computed + ' / ' + data.total;
-
-            // Highlight the card being scored + scroll to it
-            const carouselEl = document.getElementById('carousel');
-            if (carouselEl) {
-                const prev = carouselEl.querySelector('.carousel-card.scoring');
-                if (prev) prev.classList.remove('scoring');
-                const card = carouselEl.querySelector('.carousel-card[data-id="' + data.id + '"]');
-                if (card) {
-                    card.classList.add('scoring');
-                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-                }
-            }
-
-            // Update stats panel ΔE when the active archetype is scored
             const state = sessionState.getState();
             if (data.id === state.activeArchetypeId) {
                 const deltaEl = document.getElementById('stat-delta');
@@ -281,24 +256,11 @@ function initPlugin() {
             }
         });
 
+        // All scoring done — dismiss splash, reveal fully-formed UI.
+        // Cards already have ΔE, sort is applied, no "turning yellow" phase.
         sessionState.on('scoringComplete', () => {
-            // Hide progress bar
-            const cprog = document.getElementById('carousel-progress');
-            if (cprog) cprog.setAttribute('style', 'display:none;');
-            // Remove scoring highlight from all cards
-            const carouselEl = document.getElementById('carousel');
-            if (carouselEl) {
-                const sc = carouselEl.querySelector('.carousel-card.scoring');
-                if (sc) sc.classList.remove('scoring');
-                // Remove busy state
-                carouselEl.setAttribute('style', '');
-            }
-            document.body.style.cursor = '';
-            setStatus('Ready');
-            // Auto-sort and scroll to active
+            _hideProgress();
             if (carousel) carousel.sortByDisplayedDeltaE();
-            // Clear "Ready" after a moment
-            setTimeout(() => setStatus(''), 2000);
         });
 
         // When the user clicks a card, update the stats panel ΔE from the stored value
@@ -665,21 +627,27 @@ function setStatus(text) {
 }
 
 function _showProgress(label) {
+    const overlay = document.getElementById('progress-overlay');
+    const isAlreadyVisible = overlay && overlay.style.display === 'flex';
+
     // Hide root content — UXP <select> elements render above z-index layers
     const root = document.getElementById('root');
     if (root) root.style.display = 'none';
-    const overlay = document.getElementById('progress-overlay');
-    const status = document.getElementById('splash-status');
     if (overlay) overlay.setAttribute('style', 'display: flex');
+    const status = document.getElementById('splash-status');
     if (status) status.textContent = label;
-    // Reset the GIF animation by re-assigning src
-    const img = document.getElementById('splash-img');
-    if (img) {
-        const src = img.getAttribute('src');
-        img.setAttribute('src', '');
-        img.setAttribute('src', src);
+
+    // Only reset GIF + timestamp on the first show.
+    // Subsequent calls just update the status text — no blink.
+    if (!isAlreadyVisible) {
+        const img = document.getElementById('splash-img');
+        if (img) {
+            const src = img.getAttribute('src');
+            img.setAttribute('src', '');
+            img.setAttribute('src', src);
+        }
+        splashShownAt = Date.now();
     }
-    splashShownAt = Date.now();
 }
 
 function _hideProgress() {

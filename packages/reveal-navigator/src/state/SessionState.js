@@ -73,6 +73,8 @@ const ALL_KNOBS = new Set([
     ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS
 ]);
 
+const EAGER_SCORE_COUNT = 3;
+
 const DEBOUNCE_MS = 50;
 
 class SessionState extends EventEmitter {
@@ -313,15 +315,17 @@ class SessionState extends EventEmitter {
             dnaFidelity: initialFidelity
         });
 
-        // ── Pulse 3: Emit carousel immediately with DNA scores ──
-        // No ΔE yet — background scoring will compute them all uniformly.
+        // ── Pulse 3: Build carousel cards with DNA scores ──
+        // Cards built now (under hidden root during splash), ΔE filled by scoring below.
         const sorted = this._sortByDeltaE(allScores);
         this.emit('carouselReady', { scores: sorted, topMatchId: topMatch.id });
         logger.log(`[SessionState] Carousel emitted (1/${allScores.length} scored by ΔE)`);
 
-        // Fire-and-forget background ΔE scoring — cards update progressively
+        // ── Pulse 4: Eager ΔE scoring (top 3 archetypes, ~1s) ──
+        // Awaited so loadImage doesn't return until scoring is done.
+        // This keeps the splash up for the full duration — no partial UI.
         this._scoringGeneration++;
-        this._scoreAllArchetypes(allScores, topMatch.id, this._scoringGeneration);
+        await this._scoreAllArchetypes(allScores, topMatch.id, this._scoringGeneration);
 
         return proxyResult;
     }
@@ -357,7 +361,10 @@ class SessionState extends EventEmitter {
      * @private
      */
     async _scoreAllArchetypes(allScores, topId, generation) {
-        const total = allScores.length;
+        // Only eagerly score the top N archetypes by DNA score.
+        // The rest get posterized on-demand when the user clicks their card.
+        const eagerSlice = allScores.slice(0, EAGER_SCORE_COUNT);
+        const total = eagerSlice.length;
         let computed = 0;
         let cancelled = false;
 
@@ -368,7 +375,7 @@ class SessionState extends EventEmitter {
             shadowClamp: this.state.shadowClamp
         };
 
-        for (const match of allScores) {
+        for (const match of eagerSlice) {
             if (this._scoringGeneration !== generation) {
                 logger.log(`[SessionState] Background scoring cancelled (gen ${generation} → ${this._scoringGeneration})`);
                 cancelled = true;
@@ -726,6 +733,11 @@ class SessionState extends EventEmitter {
             this.state.isProcessing = false;
 
             const swapAccuracy = this.calculateCurrentAccuracy();
+            // Store ΔE so on-demand clicked cards update their display
+            if (swapAccuracy != null) {
+                this._archetypeDeltaE.set(archetypeId, swapAccuracy);
+                this.emit('archetypeScored', { id: archetypeId, meanDeltaE: swapAccuracy });
+            }
             const swapFidelity = this.calculateDNAFidelity();
             this.emit('previewUpdated', {
                 previewBuffer: knobResult.previewBuffer,
