@@ -199,6 +199,19 @@ class LabMedianCut {
             return basePriority;
         }
 
+        // NEUTRAL SUPPRESSION: Reduce split priority for achromatic boxes.
+        // In images with large neutral fractions (e.g., white substrate, gray
+        // backgrounds), neutral L-variance overwhelms chromatic signals and
+        // consumes most color slots. This penalty ensures chromatic content
+        // gets sufficient splits even when outnumbered by neutrals.
+        // The 0.25× factor means a neutral box needs 4× more variance than
+        // a chromatic box to win a split — this roughly compensates for
+        // neutrals' inflated L-range spanning the full 0-100 scale.
+        const meanChroma = Math.sqrt(metadata.meanA ** 2 + metadata.meanB ** 2);
+        if (meanChroma < 10.0) {
+            basePriority *= 0.25;
+        }
+
         // Apply Hue-Aware multiplier
         let multiplier = 1.0;
         const boxSector = metadata.sector;
@@ -433,7 +446,6 @@ class LabMedianCut {
         // Start with single box containing all colors
         const boxes = [{ colors, depth: 0, grayscaleOnly }];
 
-
         // Split until we have targetColors boxes
         let splitIteration = 0;
         while (boxes.length < targetColors) {
@@ -461,11 +473,25 @@ class LabMedianCut {
                 boxes.push(box1, box2);
 
                 // HUE-AWARE PRIORITY: Track which hue sectors are now covered
+                // CHROMA-GATED COVERAGE: Only mark a sector as covered when the
+                // box has sufficient mean chroma to genuinely represent that hue.
+                // Neutral-dominated boxes (mean C < threshold) have misleading
+                // mean hue angles from tiny a/b residuals. Marking their sector
+                // as "covered" prematurely kills hue hunger for sectors that
+                // still need more splits — causing warm/cool minority signals
+                // to lose color slots to neutral-dominated boxes.
                 if (!grayscaleOnly && sectorEnergy) {
+                    const COVERAGE_CHROMA_MIN = 10.0;
                     const meta1 = this._calculateBoxMetadata(box1, grayscaleOnly, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
                     const meta2 = this._calculateBoxMetadata(box2, grayscaleOnly, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                    if (meta1.sector >= 0) coveredSectors.add(meta1.sector);
-                    if (meta2.sector >= 0) coveredSectors.add(meta2.sector);
+                    if (meta1.sector >= 0) {
+                        const c1 = Math.sqrt(meta1.meanA ** 2 + meta1.meanB ** 2);
+                        if (c1 >= COVERAGE_CHROMA_MIN) coveredSectors.add(meta1.sector);
+                    }
+                    if (meta2.sector >= 0) {
+                        const c2 = Math.sqrt(meta2.meanA ** 2 + meta2.meanB ** 2);
+                        if (c2 >= COVERAGE_CHROMA_MIN) coveredSectors.add(meta2.sector);
+                    }
                 }
 
             } else {

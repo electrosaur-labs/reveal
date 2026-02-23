@@ -1408,12 +1408,18 @@ class PosterizationEngine {
         });
 
         // Slot reservation
+        // NOTE: Forced centroids (PeakFinder peaks) are NOT deducted from the
+        // median cut budget. They are injected AFTER median cut with duplicate
+        // checking (Step 7). If median cut already found the peak color, the
+        // forced centroid is skipped (no wasted slot). If median cut missed it,
+        // it's added as a bonus. Deducting forced slots starved the median cut
+        // in neutral-heavy images, leaving no room for chromatic minority signals.
         let numPreserved = 0;
         if (preserveWhite) numPreserved++;
         if (preserveBlack) numPreserved++;
 
         const numForced = forcedCentroids.length;
-        const medianCutTarget = Math.max(1, targetColors - numForced - numPreserved);
+        const medianCutTarget = Math.max(1, targetColors - numPreserved);
 
         logger.log(`[Mk1.5] Slot budget: targetColors=${targetColors}, numForced=${numForced}, numPreserved=${numPreserved} → medianCutTarget=${medianCutTarget}`);
 
