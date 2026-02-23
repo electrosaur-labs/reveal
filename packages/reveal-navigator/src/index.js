@@ -644,9 +644,9 @@ function _hideProgress() {
     const overlay = document.getElementById('progress-overlay');
     if (!overlay) return;
 
-    // GIF is 31 frames: 4 hold (100ms) + 26 wipe (100ms) + 1 final (2000ms) = 5000ms total.
-    // Ensure at least 5400ms have elapsed so the final frame is visible.
-    const MIN_SPLASH_MS = 5400;
+    // GIF is 16 frames: 2 hold (100ms) + 13 wipe (100ms) + 1 final (200ms) = 1700ms total.
+    // Ensure at least 2000ms so the wipe animation completes.
+    const MIN_SPLASH_MS = 2000;
     const elapsed = Date.now() - splashShownAt;
     const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
 

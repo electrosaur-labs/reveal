@@ -1,6 +1,6 @@
 {
   "id": "org.electrosaur.navigator",
-  "name": "Navigator",
+  "name": "Electrosaur",
   "version": "1.0.0",
   "main": "index.html",
   "host": {
@@ -16,7 +16,7 @@
       "type": "command",
       "id": "navigator.showDialog",
       "label": {
-        "default": "Navigator..."
+        "default": "Reveal..."
       }
     }
   ],
