@@ -30,7 +30,17 @@ class Preview {
         this._session = sessionState;
         this._dimensions = null;
 
+        // Blink comparator state
+        this._showingOriginal = false;
+        this._holdTimer = null;
+        this._blinkInterval = null;
+        this._blinkMode = false;
+
+        // Corner label for "ORIGINAL" indicator
+        this._originalLabel = this._createOriginalLabel();
+
         this._bindEvents();
+        this._bindBlinkComparator();
     }
 
     _bindEvents() {
@@ -40,6 +50,62 @@ class Preview {
         this._session.on('processingStart', () => this._onProcessingStart());
         this._session.on('error', (err) => this._onError(err));
         this._session.on('highlightChanged', (data) => this._onHighlightChanged(data));
+    }
+
+    /**
+     * Blink comparator: click preview to toggle original/posterized.
+     * Hold click > 300ms to enter blink mode (alternates every 400ms).
+     * Release from blink snaps back to posterized.
+     */
+    _bindBlinkComparator() {
+        if (!this._img) return;
+
+        this._img.addEventListener('pointerdown', (e) => {
+            // Skip if highlight active or no preview ready
+            if (this._session.state.highlightColorIndex >= 0) return;
+            if (!this._session.state.proxyBufferReady) return;
+
+            // Immediate: show original
+            this.showOriginal();
+
+            // After 300ms, enter blink mode
+            this._holdTimer = setTimeout(() => {
+                this._blinkMode = true;
+                this._blinkInterval = setInterval(() => {
+                    if (this._showingOriginal) {
+                        this.showPosterized();
+                    } else {
+                        this.showOriginal();
+                    }
+                }, 400);
+            }, 300);
+        });
+
+        this._img.addEventListener('pointerup', () => {
+            this._clearBlinkTimers();
+
+            if (this._blinkMode) {
+                // Was holding — snap back to posterized
+                this._blinkMode = false;
+                this.showPosterized();
+            }
+            // Tap: leave toggled (tap again to swap back)
+        });
+
+        this._img.addEventListener('pointerleave', () => {
+            // If pointer leaves the image while held, cancel blink
+            if (this._holdTimer || this._blinkInterval) {
+                this._clearBlinkTimers();
+                this._blinkMode = false;
+                this.showPosterized();
+            }
+        });
+    }
+
+    /** @private */
+    _clearBlinkTimers() {
+        if (this._holdTimer) { clearTimeout(this._holdTimer); this._holdTimer = null; }
+        if (this._blinkInterval) { clearInterval(this._blinkInterval); this._blinkInterval = null; }
     }
 
     _onScoringPreview(data) {
@@ -64,6 +130,15 @@ class Preview {
     _onPreviewUpdated(data) {
         try {
             if (!this._dimensions) return;
+
+            // Snap back from original view — the posterized data just changed
+            this._showingOriginal = false;
+            if (this._originalLabel) this._originalLabel.setAttribute('style',
+                'position: absolute; top: 8px; left: 8px; ' +
+                'font-size: 11px; font-weight: bold; color: #e0a030; ' +
+                'background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 3px; ' +
+                'pointer-events: none; z-index: 10; display: none;'
+            );
 
             // If a color is highlighted, regenerate isolation preview from updated separation
             const highlightIdx = this._session.state.highlightColorIndex;
@@ -129,6 +204,74 @@ class Preview {
         if (this._img) {
             this._img.style.display = 'none';
         }
+    }
+
+    // ─── Blink Comparator ─────────────────────────────────────
+
+    /**
+     * Create the "ORIGINAL" corner label overlay.
+     * @returns {HTMLElement}
+     * @private
+     */
+    _createOriginalLabel() {
+        const label = document.createElement('span');
+        label.textContent = 'ORIGINAL';
+        label.setAttribute('style',
+            'position: absolute; top: 8px; left: 8px; ' +
+            'font-size: 11px; font-weight: bold; color: #e0a030; ' +
+            'background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 3px; ' +
+            'pointer-events: none; z-index: 10; display: none;'
+        );
+        // Insert label next to the preview image
+        if (this._img && this._img.parentElement) {
+            this._img.parentElement.appendChild(label);
+        }
+        return label;
+    }
+
+    /**
+     * Show the original (pre-posterization) proxy image.
+     * No-op if highlight is active or no preview available.
+     */
+    showOriginal() {
+        if (!this._dimensions) return;
+        if (this._session.state.highlightColorIndex >= 0) return;
+
+        const original = this._session.getOriginalPreviewBuffer();
+        if (!original) return;
+
+        this._renderBuffer(original.buffer, original.width, original.height);
+        this._showingOriginal = true;
+        if (this._originalLabel) this._originalLabel.setAttribute('style',
+            'position: absolute; top: 8px; left: 8px; ' +
+            'font-size: 11px; font-weight: bold; color: #e0a030; ' +
+            'background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 3px; ' +
+            'pointer-events: none; z-index: 10; display: block;'
+        );
+    }
+
+    /**
+     * Show the posterized preview (normal view).
+     */
+    showPosterized() {
+        if (!this._dimensions) return;
+
+        const buf = this._session.getPreview();
+        if (!buf) return;
+
+        this._renderBuffer(buf, this._dimensions.width, this._dimensions.height);
+        this._showingOriginal = false;
+        if (this._originalLabel) this._originalLabel.setAttribute('style',
+            'position: absolute; top: 8px; left: 8px; ' +
+            'font-size: 11px; font-weight: bold; color: #e0a030; ' +
+            'background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 3px; ' +
+            'pointer-events: none; z-index: 10; display: none;'
+        );
+    }
+
+    /** @returns {boolean} Whether the original image is currently displayed */
+    isShowingOriginal() {
+        return this._showingOriginal;
     }
 
     /**

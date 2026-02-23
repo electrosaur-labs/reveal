@@ -20,6 +20,7 @@ const BilateralFilter = require('../preprocessing/BilateralFilter');
 const MechanicalKnobs = require('./MechanicalKnobs');
 const DNAFidelity = require('../metrics/DNAFidelity');
 const RevelationError = require('../metrics/RevelationError');
+const LabEncoding = require('../color/LabEncoding');
 
 // Proxy-safe overrides for resolution-dependent thresholds.
 // snapThreshold & densityFloor are calibrated for full-res pixel counts
@@ -82,6 +83,7 @@ class ProxyEngine {
         }
 
         this.proxyBuffer = proxyBuffer;
+        this._originalRGBA = null;  // Invalidate cached original preview
 
         const proxyConfig = { ...initialConfig, ...PROXY_SAFE_OVERRIDES };
 
@@ -437,6 +439,44 @@ class ProxyEngine {
             palette: this.separationState.palette,
             targetColors: this.separationState.palette.length
         };
+    }
+
+    /**
+     * Get the original (pre-posterization) proxy image as an RGBA buffer.
+     * Converts the cached Lab16 proxyBuffer to display-ready RGBA.
+     * Result is cached — invalidated on next initializeProxy().
+     *
+     * @returns {{buffer: Uint8ClampedArray, width: number, height: number}|null}
+     */
+    getOriginalPreviewRGBA() {
+        if (!this.proxyBuffer || !this.separationState) return null;
+
+        const w = this.separationState.width;
+        const h = this.separationState.height;
+
+        // Return cached result if proxy hasn't changed
+        if (this._originalRGBA && this._originalRGBA.width === w && this._originalRGBA.height === h) {
+            return this._originalRGBA;
+        }
+
+        const pixelCount = w * h;
+
+        // Lab16 → Lab8 → RGB (3ch) → RGBA (4ch)
+        const lab8 = LabEncoding.convertEngine16bitTo8bitLab(this.proxyBuffer, pixelCount);
+        const rgb = LabEncoding.lab8bitToRgb(lab8, pixelCount);
+
+        const rgba = new Uint8ClampedArray(pixelCount * 4);
+        for (let i = 0; i < pixelCount; i++) {
+            const src = i * 3;
+            const dst = i * 4;
+            rgba[dst]     = rgb[src];
+            rgba[dst + 1] = rgb[src + 1];
+            rgba[dst + 2] = rgb[src + 2];
+            rgba[dst + 3] = 255;
+        }
+
+        this._originalRGBA = { buffer: rgba, width: w, height: h };
+        return this._originalRGBA;
     }
 
     /**

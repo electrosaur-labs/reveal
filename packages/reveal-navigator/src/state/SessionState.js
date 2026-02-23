@@ -1269,6 +1269,16 @@ class SessionState extends EventEmitter {
     }
 
     /**
+     * Returns the original (pre-posterization) proxy as an RGBA buffer.
+     * Used by the blink comparator to toggle between original and posterized.
+     * @returns {{buffer: Uint8ClampedArray, width: number, height: number}|null}
+     */
+    getOriginalPreviewBuffer() {
+        if (!this.proxyEngine) return null;
+        return this.proxyEngine.getOriginalPreviewRGBA();
+    }
+
+    /**
      * Map proxy pixel coordinates to full-resolution document coordinates.
      * Used by Loupe to convert preview mouse position → PS sourceBounds.
      *

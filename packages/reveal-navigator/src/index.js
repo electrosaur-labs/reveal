@@ -372,22 +372,12 @@ function initPlugin() {
         }
 
         // Keyboard shortcuts
+        // NOTE: UXP non-modal dialogs do NOT receive keyboard events.
+        // Photoshop intercepts them at the application level.
+        // Blink comparator uses pointer events on Preview instead.
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && surgeon) {
                 surgeon.deselect();
-            }
-            // Z key → toggle Loupe (uses current dropdown zoom, defaults to 1:1)
-            if ((e.key === 'z' || e.key === 'Z') && loupe && !e.ctrlKey && !e.metaKey) {
-                const zoomEl = document.getElementById('loupe-zoom');
-                if (loupe.isActive) {
-                    loupe.deactivate();
-                    if (zoomEl) zoomEl.value = '0';
-                } else {
-                    const factor = zoomEl ? parseInt(zoomEl.value, 10) : 0;
-                    if (factor === 0 && zoomEl) zoomEl.value = '1'; // default to 1:1
-                    loupe.activate();
-                    loupe.setZoom(factor || 1);
-                }
             }
         });
 
