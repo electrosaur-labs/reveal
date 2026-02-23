@@ -117,7 +117,7 @@ class ProductionWorker {
 
             // ── Step 1b: Bilateral filter (matches proxy preprocessing) ──
             const preprocessing = prodConfig.preprocessingIntensity || 'off';
-            if (preprocessing !== 'off') {
+            if (preprocessing !== 'off' && preprocessing !== 'none') {
                 const BilateralFilter = Reveal.BilateralFilter;
                 const isHeavy = preprocessing === 'heavy';
                 const radius = isHeavy ? 5 : 3;
@@ -451,8 +451,6 @@ class ProductionWorker {
     _buildLayers(colorIndices, labPalette, hexColors, width, height, minVolume, shadowClamp, speckleRescue, trapSize) {
         const layers = [];
         const pixelCount = width * height;
-        const MIN_COVERAGE = 0.001; // 0.1%
-
         // ── Apply minVolume (shared with ProxyEngine) ──
         if (minVolume > 0) {
             const result = MechanicalKnobs.applyMinVolume(colorIndices, labPalette, pixelCount, minVolume);
@@ -484,7 +482,11 @@ class ProductionWorker {
             logger.log(`[ProductionWorker] Trapping: ${trapResult.trappedCount} colors trapped (max=${trapSize}px)`);
         }
 
-        // Build layer objects, skipping empty layers
+        // Build layer objects — every palette color gets a layer.
+        // "Once seen, there forever": the user approved this palette in the
+        // preview. Production must honor it. Only truly empty masks (zero
+        // pixels after knobs) are skipped. The user's only opt-out is
+        // explicit deletion via PaletteSurgeon (Alt+click).
         for (let idx = 0; idx < labPalette.length; idx++) {
             const mask = masks[idx];
 
@@ -493,8 +495,7 @@ class ProductionWorker {
                 if (mask[i] === 255) opaqueCount++;
             }
 
-            const coverage = opaqueCount / pixelCount;
-            if (opaqueCount === 0 || coverage < MIN_COVERAGE) continue;
+            if (opaqueCount === 0) continue;
 
             layers.push({
                 labColor: labPalette[idx],
