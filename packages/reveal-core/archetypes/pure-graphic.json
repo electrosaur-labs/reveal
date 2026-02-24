@@ -2,6 +2,7 @@
   "id": "pure_graphic",
   "version": "1.0.0",
   "name": "Pure Graphic / Vector",
+  "group": "graphic",
   "description": "Ultra-flat colors, zero gradients. High hue-locking for surgical separation of spot colors.",
   "centroid": {
     "l": 50,

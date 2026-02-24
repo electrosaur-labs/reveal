@@ -2,6 +2,7 @@
   "id": "muted_vintage",
   "version": "1.0.0",
   "name": "Muted / Vintage",
+  "group": "soft",
   "description": "Mid-bright, desaturated. Ideal for faded posters and WPA aesthetics.",
   "preferred_sectors": [
     "orange",

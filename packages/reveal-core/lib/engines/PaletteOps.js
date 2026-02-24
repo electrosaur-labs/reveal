@@ -384,7 +384,7 @@ class PaletteOps {
      * @param {Array<{L,a,b}>} palette - Initial palette from median cut
      * @returns {Array<{L,a,b}>} Refined palette (new array, metadata preserved)
      */
-    static _refineKMeans(labPixels, palette) {
+    static _refineKMeans(labPixels, palette, tuning = null) {
         const GRID_STRIDE = 4; // Sample every 4th pixel for performance
         const pixelCount = labPixels.length / 3;
 
@@ -393,7 +393,15 @@ class PaletteOps {
         const numColors = palette.length;
         const currentPalette = palette.map(c => ({ L: c.L, a: c.a, b: c.b }));
 
-        // Step 1: Reassign each sampled pixel to nearest centroid (CIE76 squared)
+        // WARM A-AXIS WEIGHTING: When warmABoost is active, amplify a-axis
+        // differences in the K-means distance metric. This prevents green
+        // background pixels (a*<0) from being assigned to yellow centroids (a*>0)
+        // during refinement. Without this, K-means erases the yellow/green
+        // distinction that the median cut achieved.
+        const warmABoost = tuning?.split?.warmABoost ?? 1.0;
+        const aWeight = warmABoost > 1.0 ? Math.sqrt(warmABoost) : 1.0;
+
+        // Step 1: Reassign each sampled pixel to nearest centroid (weighted CIE76 squared)
         const sumL = new Float64Array(numColors);
         const sumA = new Float64Array(numColors);
         const sumB = new Float64Array(numColors);
@@ -411,7 +419,7 @@ class PaletteOps {
             for (let c = 0; c < numColors; c++) {
                 const p = currentPalette[c];
                 const dL = L - p.L;
-                const da = a - p.a;
+                const da = (a - p.a) * aWeight;
                 const db = b - p.b;
                 const dist = dL * dL + da * da + db * db;
                 if (dist < bestDist) {

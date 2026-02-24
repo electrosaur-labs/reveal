@@ -168,6 +168,154 @@ function SALIENCY(bucket, weights) {
 }
 
 /**
+ * THE "ROBUST" STRATEGY (Population Mean + Black Protection)
+ *
+ * Designed for warm specialist archetypes where SALIENCY's top-5% slice
+ * inflates centroids far beyond the actual color mass. Validated against
+ * Photoshop's Indexed Color (adaptive median cut) on the horse image:
+ *
+ *   PS bright gold:  a*=2,  b*=80, C=80, H=88° (pure yellow axis)
+ *   SALIENCY output: a*=50, b*=123, C=134, H=68° (orange, 1.7x C inflation)
+ *
+ * The top-5% slice selects the highest-chroma pixels in each bucket. Those
+ * tend to be the most orange (high a*), not the most yellow (high b*, low a*).
+ * The actual pixel population is much more yellow — a weighted average matches PS.
+ *
+ * Strategy: pixel-count-weighted average (like VOLUMETRIC) plus:
+ * - CHROMA WINSORIZATION: Cap at P75 before averaging to tame gamut-clipped
+ *   outliers (C≈135 → C≈80) while preserving hue angle.
+ * - BLACK PROTECTION: Massive score boost for L<10 pixels ensures dark buckets
+ *   snap to black rather than averaging into gray (from SALIENCY).
+ * - ACHROMATIC EXCLUSION: Filters low-chroma pixels when cWeight >= 2.5
+ *   to prevent neutral background leaking into chromatic centroids.
+ * - NEUTRALITY GATE: Sub-threshold chroma snaps to perfect neutral (from SALIENCY).
+ *
+ * @param {Array} bucket - Array of Lab colors with count: [{L, a, b, count}, ...]
+ * @param {Object} weights - Strategy weights {lWeight, cWeight, blackBias, bitDepth}
+ * @returns {{L: number, a: number, b: number}} - Representative Lab color (perceptual space)
+ */
+function ROBUST_SALIENCY(bucket, weights) {
+    if (!bucket || bucket.length === 0) return { L: 50, a: 0, b: 0 };
+
+    const blackBias = weights.blackBias || 5.0;
+    const is16Bit = weights.bitDepth === 16;
+    const isEightBit = !is16Bit;
+    const cWeight = weights.cWeight || 1.0;
+    const vibrancyBoost = weights.vibrancyBoost || 1.0;
+
+    // CHROMA WINSORIZATION: Cap extreme chroma at P90 while preserving hue angle.
+    // Gamut-clipped pixels (b=128, C≈135) keep their hue direction but get
+    // capped magnitude, preventing centroid chroma inflation.
+    // P90 (not P75) to avoid over-muting warm tones — only clips true outliers.
+    const chromas = bucket.map(p => Math.sqrt(p.a * p.a + p.b * p.b));
+    const sortedChromas = [...chromas].sort((a, b) => a - b);
+    const p90Idx = Math.min(sortedChromas.length - 1, Math.floor(sortedChromas.length * 0.90));
+    const chromaCap = sortedChromas[p90Idx];
+
+    const workingBucket = bucket.map((p, i) => {
+        if (chromas[i] <= chromaCap || chromaCap === 0) return p;
+        const scale = chromaCap / chromas[i];
+        return { L: p.L, a: p.a * scale, b: p.b * scale, count: p.count };
+    });
+
+    // ACHROMATIC EXCLUSION WALL (same as SALIENCY)
+    const achromaticFloor = cWeight >= 2.5 ? 15.0 : 0.0;
+    let eligibleBucket = achromaticFloor > 0
+        ? workingBucket.filter(p => Math.sqrt(p.a * p.a + p.b * p.b) >= achromaticFloor)
+        : workingBucket;
+
+    // If all pixels filtered out, fall back to full volumetric average
+    if (eligibleBucket.length === 0) {
+        let sumL = 0, sumA = 0, sumB = 0, totalWeight = 0;
+        workingBucket.forEach(p => {
+            const weight = p.count || 1;
+            sumL += p.L * weight;
+            sumA += p.a * weight;
+            sumB += p.b * weight;
+            totalWeight += weight;
+        });
+        return { L: sumL / totalWeight, a: sumA / totalWeight, b: sumB / totalWeight };
+    }
+
+    // GREEN EXCLUSION: When a bucket spans the green-yellow boundary (has both
+    // a*<0 and a*>0 pixels with high b*), the green background drags the centroid
+    // away from the true yellow/gold. Filter out negative-a* pixels so the centroid
+    // reflects the warm (positive-a*) majority. This matches PS Indexed Color which
+    // produces bright gold at a*≈7 rather than green-yellow at a*≈-26.
+    // Only active when cWeight >= 2.5 (precision color work).
+    if (cWeight >= 2.5) {
+        const hasWarm = eligibleBucket.some(p => p.a > 0 && p.b > 30);
+        const hasCool = eligibleBucket.some(p => p.a < -5 && p.b > 20);
+        if (hasWarm && hasCool) {
+            const warmOnly = eligibleBucket.filter(p => p.a >= 0);
+            if (warmOnly.length > 0) {
+                eligibleBucket = warmOnly;
+            }
+        }
+    }
+
+    // POPULATION-WEIGHTED AVERAGE with BLACK PROTECTION
+    // Unlike SALIENCY's top-5% slice, we average ALL eligible pixels weighted by count.
+    // This matches Photoshop's Indexed Color behavior for warm tones.
+    // Black protection adds extra weight to very dark pixels (L<10) to ensure
+    // dark buckets snap to black rather than averaging into gray.
+    let sumL = 0, sumA = 0, sumB = 0, totalWeight = 0;
+
+    for (let i = 0; i < eligibleBucket.length; i++) {
+        const p = eligibleBucket[i];
+        let weight = p.count || 1;
+
+        // BLACK PROTECTION: Boost weight for very dark pixels
+        // so dark buckets snap to Black instead of averaging to Gray.
+        if (p.L < 10) {
+            weight *= (1 + (10 - p.L) * blackBias);
+        }
+
+        sumL += p.L * weight;
+        sumA += p.a * weight;
+        sumB += p.b * weight;
+        totalWeight += weight;
+    }
+
+    let finalLab = { L: sumL / totalWeight, a: sumA / totalWeight, b: sumB / totalWeight };
+
+    // VIBRANCY CONTROL: Continuous chroma scaling around the population mean.
+    //   vibrancyBoost < 1.0 → dampen chroma (chroma-conservative, prevents neon overshoot)
+    //   vibrancyBoost = 1.0 → neutral (pure population mean)
+    //   vibrancyBoost > 1.0 → boost toward P90 (recover vivid tones averaging suppresses)
+    // Preserves hue angle. Boost capped at P90, dampen floors at vibrancyBoost × centroidC.
+    if (vibrancyBoost !== 1.0) {
+        const centroidC = Math.sqrt(finalLab.a ** 2 + finalLab.b ** 2);
+        if (centroidC > 5.0) {
+            let targetC;
+            if (vibrancyBoost > 1.0) {
+                // Boost: interpolate toward P90, capped at P90
+                targetC = centroidC + (chromaCap - centroidC) * (vibrancyBoost - 1.0);
+                targetC = Math.min(targetC, chromaCap);
+            } else {
+                // Dampen: scale chroma directly (0.8 → 80% of centroid chroma)
+                targetC = centroidC * vibrancyBoost;
+            }
+            if (targetC !== centroidC) {
+                const scale = targetC / centroidC;
+                finalLab.a *= scale;
+                finalLab.b *= scale;
+            }
+        }
+    }
+
+    // ADAPTIVE NEUTRALITY GATE (same as SALIENCY)
+    const neutralityThreshold = isEightBit ? 5.0 : 0.0;
+    const finalChroma = Math.sqrt(finalLab.a**2 + finalLab.b**2);
+    if (finalChroma < neutralityThreshold) {
+        finalLab.a = 0;
+        finalLab.b = 0;
+    }
+
+    return finalLab;
+}
+
+/**
  * THE "BALANCED" STRATEGY (Volumetric)
  *
  * Standard weighted average by pixel count.
@@ -201,11 +349,13 @@ function VOLUMETRIC(bucket, weights) {
  */
 const CentroidStrategies = {
     SALIENCY,
+    ROBUST_SALIENCY,
     VOLUMETRIC
 };
 
 module.exports = {
     CentroidStrategies,
     SALIENCY,
+    ROBUST_SALIENCY,
     VOLUMETRIC
 };

@@ -55,7 +55,9 @@ class PosterizationEngine {
         split: {
             highlightBoost: 2.2,    // Balanced multiplier for facial highlights
             vibrancyBoost: 1.6,     // Weights chroma-rich pixels (Greens/Skin)
-            minVariance: 10         // Minimum variance to consider splitting
+            minVariance: 10,        // Minimum variance to consider splitting
+            chromaAxisWeight: 0,    // 0=disabled; >0 enables C* (chroma magnitude) as virtual split axis
+            neutralIsolationThreshold: 0  // 0=disabled; >0 pre-isolates neutrals (C* < threshold) into separate box
         },
         prune: {
             threshold: 9.0,         // Delta-E distance for merging
@@ -151,7 +153,10 @@ class PosterizationEngine {
             split: {
                 highlightBoost: options.highlightBoost !== undefined ? options.highlightBoost : this.TUNING.split.highlightBoost,
                 vibrancyBoost: options.vibrancyBoost !== undefined ? options.vibrancyBoost : this.TUNING.split.vibrancyBoost,
-                minVariance: this.TUNING.split.minVariance
+                minVariance: this.TUNING.split.minVariance,
+                chromaAxisWeight: options.chromaAxisWeight !== undefined ? options.chromaAxisWeight : this.TUNING.split.chromaAxisWeight,
+                neutralIsolationThreshold: options.neutralIsolationThreshold !== undefined ? options.neutralIsolationThreshold : this.TUNING.split.neutralIsolationThreshold,
+                warmABoost: options.warmABoost !== undefined ? options.warmABoost : 1.0
             },
             prune: {
                 threshold: options.paletteReduction !== undefined ? options.paletteReduction : this.TUNING.prune.threshold,
@@ -415,8 +420,8 @@ class PosterizationEngine {
     }
 
     /** @private Delegate to PaletteOps */
-    static _refineKMeans(labPixels, palette) {
-        return PaletteOps._refineKMeans(labPixels, palette);
+    static _refineKMeans(labPixels, palette, tuning = null) {
+        return PaletteOps._refineKMeans(labPixels, palette, tuning);
     }
 
     /** @private Delegate to PaletteOps */
@@ -831,7 +836,7 @@ class PosterizationEngine {
         const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : 1;
         if (!grayscaleOnly && initialPaletteLab.length > 1 && refinementPasses > 0) {
             for (let pass = 0; pass < refinementPasses; pass++) {
-                initialPaletteLab = PaletteOps._refineKMeans(nonPreservedLabPixels, initialPaletteLab);
+                initialPaletteLab = PaletteOps._refineKMeans(nonPreservedLabPixels, initialPaletteLab, options.tuning || null);
             }
         }
 
@@ -1437,10 +1442,72 @@ class PosterizationEngine {
 
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_median_cut');
 
+        // NEUTRAL SOVEREIGNTY: Extract near-neutral pixels and give them a fixed
+        // 1-slot allocation. This prevents the neutral majority (often 70%+ of
+        // pixels in subject-on-background images) from consuming median cut split
+        // budget. All remaining splits go to chromatic content, rescuing minority
+        // highlight signals (like a 2% golden shimmer) that volumetric bias deletes.
+        const neutralSovereigntyThreshold = options.neutralSovereigntyThreshold || 0;
+        let sovereignNeutralCentroid = null;
+        let medianCutPixels = nonPreservedLabPixels;
+        let adjustedMedianCutTarget = medianCutTarget;
+
+        if (neutralSovereigntyThreshold > 0 && !grayscaleOnly) {
+            let neutralSumL = 0, neutralSumA = 0, neutralSumB = 0, neutralCount = 0;
+            let chromaticCount = 0;
+
+            // First pass: count neutrals and chromatics
+            for (let i = 0; i < nonPreservedLabPixels.length; i += 3) {
+                const a = nonPreservedLabPixels[i + 1];
+                const b = nonPreservedLabPixels[i + 2];
+                const chroma = Math.sqrt(a * a + b * b);
+                if (chroma < neutralSovereigntyThreshold) {
+                    neutralSumL += nonPreservedLabPixels[i];
+                    neutralSumA += a;
+                    neutralSumB += b;
+                    neutralCount++;
+                } else {
+                    chromaticCount++;
+                }
+            }
+
+            // Only activate if there are both neutrals and chromatics,
+            // and neutrals are substantial (>20% of non-preserved pixels)
+            const neutralFraction = neutralCount / (neutralCount + chromaticCount);
+            if (neutralCount > 0 && chromaticCount > 0 && neutralFraction > 0.20) {
+                // Build sovereign neutral centroid (1 slot)
+                sovereignNeutralCentroid = {
+                    L: neutralSumL / neutralCount,
+                    a: neutralSumA / neutralCount,
+                    b: neutralSumB / neutralCount
+                };
+
+                // Extract ONLY chromatic pixels for median cut
+                const chromaticPixels = new Float32Array(chromaticCount * 3);
+                let writeIdx = 0;
+                for (let i = 0; i < nonPreservedLabPixels.length; i += 3) {
+                    const a = nonPreservedLabPixels[i + 1];
+                    const b = nonPreservedLabPixels[i + 2];
+                    const chroma = Math.sqrt(a * a + b * b);
+                    if (chroma >= neutralSovereigntyThreshold) {
+                        chromaticPixels[writeIdx] = nonPreservedLabPixels[i];
+                        chromaticPixels[writeIdx + 1] = a;
+                        chromaticPixels[writeIdx + 2] = b;
+                        writeIdx += 3;
+                    }
+                }
+
+                medianCutPixels = chromaticPixels;
+                adjustedMedianCutTarget = Math.max(1, medianCutTarget - 1); // Reserve 1 slot for neutral
+
+                logger.log(`[Mk1.5] Neutral sovereignty: ${(neutralFraction * 100).toFixed(1)}% neutral (C<${neutralSovereigntyThreshold}), extracted → 1 neutral slot + ${adjustedMedianCutTarget} chromatic slots`);
+            }
+        }
+
         // Step 2: Median cut with reduced target
         let initialPaletteLab = LabMedianCut.medianCutInLabSpace(
-            nonPreservedLabPixels,
-            medianCutTarget,
+            medianCutPixels,
+            adjustedMedianCutTarget,
             grayscaleOnly,
             width,
             height,
@@ -1458,10 +1525,121 @@ class PosterizationEngine {
         logger.log(`[Mk1.5] Median cut produced ${initialPaletteLab.length} colors: ${initialPaletteLab.map(c => `L=${c.L.toFixed(1)} a=${c.a.toFixed(1)} b=${c.b.toFixed(1)}`).join(' | ')}`);
 
         // K-means refinement
+        // When sovereignty is active, refine ONLY chromatic centroids against chromatic
+        // pixels. Running on all pixels lets neutrals leak back into warm centroids,
+        // creating wasted near-neutral slots (C≈6) that steal budget from the warm ramp.
         const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : 1;
         if (!grayscaleOnly && initialPaletteLab.length > 1 && refinementPasses > 0) {
+            const kmeansPixels = sovereignNeutralCentroid ? medianCutPixels : nonPreservedLabPixels;
             for (let pass = 0; pass < refinementPasses; pass++) {
-                initialPaletteLab = PaletteOps._refineKMeans(nonPreservedLabPixels, initialPaletteLab);
+                initialPaletteLab = PaletteOps._refineKMeans(kmeansPixels, initialPaletteLab, options.tuning || null);
+            }
+        }
+
+        // Inject sovereign neutral centroid AFTER K-means (frozen, not refined)
+        if (sovereignNeutralCentroid) {
+            initialPaletteLab.push(sovereignNeutralCentroid);
+        }
+
+        // HIGHLIGHT RESCUE: Detect bright warm highlights that median cut missed.
+        // The "shimmer" layer — low-volume (<5%), high-impact highlights (L>85, b*>40)
+        // that define the "pop" in warm images. Median cut deletes these because their
+        // 2% volume can't justify a dedicated box against 60% background.
+        // Scan the chromatic pixels for golden highlights, and if the palette's nearest
+        // entry is too far away, replace the highest-chroma warm entry (the "neon overshoot").
+        const highlightRescueThreshold = options.highlightRescueThreshold !== undefined
+            ? options.highlightRescueThreshold : (neutralSovereigntyThreshold > 0 ? 85 : 0);
+
+        if (highlightRescueThreshold > 0 && !grayscaleOnly && initialPaletteLab.length > 2) {
+            // Scan for golden highlight pixels: bright (L > threshold), warm yellow (b > 40, a < 20)
+            const hlPixels = [];
+            const pixelSource = medianCutPixels; // Use chromatic-only pixels if sovereignty active
+            const pixelTotal = pixelSource.length / 3;
+
+            for (let i = 0; i < pixelSource.length; i += 3) {
+                const L = pixelSource[i];
+                const a = pixelSource[i + 1];
+                const b = pixelSource[i + 2];
+                if (L > highlightRescueThreshold && b > 40 && a >= 0 && a < 20) {
+                    hlPixels.push({ L, a, b });
+                }
+            }
+
+            const hlCount = hlPixels.length;
+            const hlFraction = hlCount / pixelTotal;
+            // Activate if highlight signal exists (>0.5% of chromatic pixels)
+            if (hlCount > 0 && hlFraction > 0.005) {
+                // Use P90 of b* to capture the vivid end of the golden distribution.
+                // Mean averages in dim golden pixels (b≈45), P90 captures the true
+                // "shimmer" peak (b≈75-80) that defines the pop.
+                const sortedB = hlPixels.map(p => p.b).sort((a, b) => a - b);
+                const p90Idx = Math.min(sortedB.length - 1, Math.floor(sortedB.length * 0.90));
+                const bTarget = sortedB[p90Idx];
+
+                // Use mean L and a but P75 b for the centroid
+                let hlSumL = 0, hlSumA = 0;
+                for (const p of hlPixels) {
+                    hlSumL += p.L;
+                    hlSumA += p.a;
+                }
+                const hlCentroid = {
+                    L: hlSumL / hlCount,
+                    a: hlSumA / hlCount,
+                    b: bTarget
+                };
+                const hlC = Math.sqrt(hlCentroid.a ** 2 + hlCentroid.b ** 2);
+                const hlH = ((Math.atan2(hlCentroid.b, hlCentroid.a) * 180 / Math.PI) + 360) % 360;
+
+                // Find nearest palette entry to the highlight
+                let nearestDE = Infinity, nearestIdx = -1;
+                for (let j = 0; j < initialPaletteLab.length; j++) {
+                    const p = initialPaletteLab[j];
+                    const dL = hlCentroid.L - p.L;
+                    const da = hlCentroid.a - p.a;
+                    const db = hlCentroid.b - p.b;
+                    const de = Math.sqrt(dL * dL + da * da + db * db);
+                    if (de < nearestDE) {
+                        nearestDE = de;
+                        nearestIdx = j;
+                    }
+                }
+
+                // If highlight is underrepresented (nearest entry is too far), rescue it
+                // by replacing the LEAST VALUABLE chromatic entry (lowest pixel coverage
+                // after a quick nearest-neighbor pass). This preserves vivid warm tones
+                // while evicting ghost slots like 0.5% green.
+                if (nearestDE > 20) {
+                    // Quick coverage count: assign each chromatic pixel to nearest centroid
+                    const palLen = initialPaletteLab.length;
+                    const slotCounts = new Array(palLen).fill(0);
+                    for (let pi = 0; pi < pixelSource.length; pi += 3) {
+                        const pL = pixelSource[pi], pa = pixelSource[pi + 1], pb = pixelSource[pi + 2];
+                        let bestD = Infinity, bestJ = 0;
+                        for (let j = 0; j < palLen; j++) {
+                            const c = initialPaletteLab[j];
+                            const d = (pL - c.L) ** 2 + (pa - c.a) ** 2 + (pb - c.b) ** 2;
+                            if (d < bestD) { bestD = d; bestJ = j; }
+                        }
+                        slotCounts[bestJ]++;
+                    }
+
+                    // Find the lowest-coverage slot to replace
+                    let minCount = Infinity, minIdx = -1;
+                    for (let j = 0; j < palLen; j++) {
+                        if (slotCounts[j] < minCount) {
+                            minCount = slotCounts[j];
+                            minIdx = j;
+                        }
+                    }
+
+                    if (minIdx >= 0) {
+                        const replaced = initialPaletteLab[minIdx];
+                        const repC = Math.sqrt(replaced.a ** 2 + replaced.b ** 2);
+                        const repPct = (minCount / pixelTotal * 100).toFixed(1);
+                        logger.log(`[Mk1.5] Highlight rescue: ${hlCount} golden pixels (${(hlFraction * 100).toFixed(1)}%), centroid L=${hlCentroid.L.toFixed(1)} a=${hlCentroid.a.toFixed(1)} b=${hlCentroid.b.toFixed(1)} C=${hlC.toFixed(1)} H=${hlH.toFixed(1)}° → replacing Prod ${minIdx + 1} (${repPct}% coverage, C=${repC.toFixed(1)}), nearestDE=${nearestDE.toFixed(1)}`);
+                        initialPaletteLab[minIdx] = hlCentroid;
+                    }
+                }
             }
         }
 

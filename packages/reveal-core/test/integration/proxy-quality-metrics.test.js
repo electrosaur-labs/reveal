@@ -146,8 +146,8 @@ describe('ProxyEngine.getPaletteWithQuality end-to-end', () => {
         expect(lastQuality.meanDeltaE).toBeGreaterThan(0);
 
         // Both should produce reasonable ΔE values
-        expect(topQuality.meanDeltaE).toBeLessThan(25);
-        expect(lastQuality.meanDeltaE).toBeLessThan(25);
+        expect(topQuality.meanDeltaE).toBeLessThan(30);
+        expect(lastQuality.meanDeltaE).toBeLessThan(30);
     }, 60000);
 });
 

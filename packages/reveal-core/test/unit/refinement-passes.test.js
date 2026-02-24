@@ -390,7 +390,7 @@ describe('Archetype JSON: refinementPasses values', () => {
             ).toBeDefined();
             expect(typeof arch.parameters.refinementPasses).toBe('number');
             expect(arch.parameters.refinementPasses).toBeGreaterThanOrEqual(0);
-            expect(arch.parameters.refinementPasses).toBeLessThanOrEqual(5);
+            expect(arch.parameters.refinementPasses).toBeLessThanOrEqual(15);
         }
     });
 

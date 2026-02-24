@@ -2,6 +2,7 @@
   "id": "golden_naturalist",
   "version": "1.0.0",
   "name": "Golden Naturalist",
+  "group": "natural",
   "description": "Warm-toned painterly scenes with high hue diversity. Complex multi-hue compositions where many sectors contribute — landscapes, genre scenes, Art Nouveau illustrations. Higher entropy than Warm Dramatic; warmer than Subtle Naturalist.",
   "preferred_sectors": ["yellow", "orange", "chartreuse", "green", "cyan", "red"],
   "centroid": {

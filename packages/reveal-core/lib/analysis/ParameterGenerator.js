@@ -172,6 +172,15 @@ class ParameterGenerator {
             neutralCentroidClampThreshold: params.neutralCentroidClampThreshold || 0.5,
             neutralSovereigntyThreshold: params.neutralSovereigntyThreshold || 0,
 
+            // Chroma split axis + neutral isolation (median cut enhancements)
+            chromaAxisWeight: params.chromaAxisWeight !== undefined ? params.chromaAxisWeight : 0,
+            neutralIsolationThreshold: params.neutralIsolationThreshold !== undefined ? params.neutralIsolationThreshold : 0,
+            warmABoost: params.warmABoost !== undefined ? params.warmABoost : 1.0,
+
+            // PeakFinder tuning (Mk 1.5 identity peak detection)
+            peakFinderMaxPeaks: params.peakFinderMaxPeaks !== undefined ? params.peakFinderMaxPeaks : 1,
+            peakFinderBlacklistedSectors: params.peakFinderBlacklistedSectors !== undefined ? params.peakFinderBlacklistedSectors : [3, 4],
+
             // Conditional overrides (DNA v2.0 surgical fixes)
             // Provide sensible defaults so state/UI always has a value
             shadowClamp: params.shadowClamp !== undefined ? params.shadowClamp : 0,
@@ -567,6 +576,15 @@ class ParameterGenerator {
             // Neutral clamping
             neutralCentroidClampThreshold: config.neutralCentroidClampThreshold,
             neutralSovereigntyThreshold: config.neutralSovereigntyThreshold,
+
+            // Chroma split axis + neutral isolation + warm axis boost
+            chromaAxisWeight: config.chromaAxisWeight,
+            neutralIsolationThreshold: config.neutralIsolationThreshold,
+            warmABoost: config.warmABoost,
+
+            // PeakFinder tuning
+            peakFinderMaxPeaks: config.peakFinderMaxPeaks,
+            peakFinderBlacklistedSectors: config.peakFinderBlacklistedSectors,
 
             // K-means refinement
             refinementPasses: config.refinementPasses,

@@ -2,6 +2,7 @@
   "id": "vibrant_tonal",
   "version": "1.1.0",
   "name": "Vibrant Tonal / Neon-High-Chroma",
+  "group": "vibrant",
   "description": "Finds vibrant details inside underexposed frames. High c-weight prioritizes chroma spikes over volume.",
   "centroid": {
     "l": 50,

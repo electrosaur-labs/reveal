@@ -2,6 +2,7 @@
   "id": "standard_balanced",
   "version": "1.0.0",
   "name": "Standard / Balanced",
+  "group": "natural",
   "description": "Baseline metrics for standard photographic scenes.",
   "centroid": {
     "l": 50,

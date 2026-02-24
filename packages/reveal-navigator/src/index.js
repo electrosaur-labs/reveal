@@ -256,10 +256,8 @@ function initPlugin() {
             }
         });
 
-        // All scoring done — dismiss splash, reveal fully-formed UI.
-        // Cards already have ΔE, sort is applied, no "turning yellow" phase.
+        // Background scoring done — re-sort carousel by ΔE now that badges are filled.
         sessionState.on('scoringComplete', () => {
-            _hideProgress();
             if (carousel) carousel.sortByDisplayedDeltaE();
         });
 
@@ -534,10 +532,10 @@ async function ingestActiveDocument(showDialog) {
             await PhotoshopBridge.getDocumentLab();
         logger.log(`[Navigator] Ingested ${width}x${height} from ${validation.info.name}`);
 
-        // ── Phases 2-4 are driven by SessionState.loadImage progress events ──
-        // Splash hides on carouselReady (after top-match posterization).
-        // Background ΔE scoring continues asynchronously.
+        // ── Phases 2-3 are driven by SessionState.loadImage progress events ──
+        // Splash hides when preview is ready. Background ΔE scoring continues asynchronously.
         await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
+        _hideProgress();
 
     } catch (err) {
         logger.log(`[Navigator] Ingest failed: ${err.message}`);
@@ -645,24 +643,16 @@ function _hideProgress() {
     const overlay = document.getElementById('progress-overlay');
     if (!overlay) return;
 
-    // GIF is 16 frames: 2 hold (100ms) + 13 wipe (100ms) + 1 final (200ms) = 1700ms total.
-    // Ensure at least 2000ms so the wipe animation completes.
-    const MIN_SPLASH_MS = 2000;
-    const elapsed = Date.now() - splashShownAt;
-    const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
-
+    // Dismiss immediately — Chameleon preview is ready, show it now.
+    const root = document.getElementById('root');
+    if (root) root.style.display = '';
+    overlay.classList.add('fade-out');
     setTimeout(() => {
-        // Restore root content before fade so it's visible underneath
-        const root = document.getElementById('root');
-        if (root) root.style.display = '';
-        overlay.classList.add('fade-out');
-        setTimeout(() => {
-            overlay.setAttribute('style', 'display: none');
-            overlay.classList.remove('fade-out');
-            const status = document.getElementById('splash-status');
-            if (status) status.textContent = '';
-        }, 350);
-    }, remaining);
+        overlay.setAttribute('style', 'display: none');
+        overlay.classList.remove('fade-out');
+        const status = document.getElementById('splash-status');
+        if (status) status.textContent = '';
+    }, 350);
 }
 
 // ─── Finalize ────────────────────────────────────────────

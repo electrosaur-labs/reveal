@@ -2,6 +2,7 @@
   "id": "pastel_high_key",
   "version": "1.0.0",
   "name": "Pastel / High-Key",
+  "group": "soft",
   "description": "Very bright, soft colors. Protects gradients in high-key photography.",
   "centroid": {
     "l": 85,

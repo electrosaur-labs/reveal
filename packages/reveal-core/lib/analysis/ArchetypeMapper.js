@@ -177,12 +177,8 @@ class ArchetypeMapper {
     // 45% Weight: Sector Affinity Voting (Enhanced)
     calculateSectorAffinity(dna, archetype) {
         let affinity = 50; // Baseline
-        const profile = this.ARCHETYPE_PROFILES[archetype.id];
-
-        if (!profile) {
-            // No specific profile, just check preferred sectors
-            return this._basicSectorAffinity(dna, archetype);
-        }
+        const profile = this.ARCHETYPE_PROFILES[archetype.id]
+            || this._deriveProfile(archetype);
 
         let totalWeight = 0;
         let weightedAffinity = 0;
@@ -338,7 +334,8 @@ class ArchetypeMapper {
         score = (entropyScore * 0.4) + (tempScore * 0.3) + (sectorWeightScore * 0.3);
 
         // Pattern bonuses
-        const profile = this.ARCHETYPE_PROFILES[archetype.id];
+        const profile = this.ARCHETYPE_PROFILES[archetype.id]
+            || this._deriveProfile(archetype);
         if (profile) {
             if (profile.expects_monochrome && dna.global.hue_entropy < 0.3) {
                 score += 20;
@@ -355,6 +352,38 @@ class ArchetypeMapper {
         }
 
         return Math.max(0, Math.min(100, score));
+    }
+
+    // Auto-derive profile flags from archetype centroid values
+    _deriveProfile(archetype) {
+        const c = archetype.centroid;
+        const profile = {};
+
+        // chromaProfile from centroid.c
+        if (c.c < 5)        profile.chromaProfile = 'achromatic';
+        else if (c.c < 15)  profile.chromaProfile = 'very_low';
+        else if (c.c < 30)  profile.chromaProfile = 'low';
+        else if (c.c < 60)  profile.chromaProfile = 'moderate';
+        else                 profile.chromaProfile = 'extreme';
+
+        // tonalRange from centroid.l
+        if (c.l < 45)            profile.tonalRange = 'dark';
+        else if (c.l < 55)       profile.tonalRange = 'mid';
+        else if (c.l < 70)       profile.tonalRange = 'mid-bright';
+        else                      profile.tonalRange = 'bright';
+
+        // Boolean flags from centroid dimensions
+        if (c.temperature_bias > 0.3)  profile.expects_warm = true;
+        if (c.temperature_bias < -0.3) profile.expects_cool = true;
+        if (c.hue_entropy < 0.3)       profile.expects_monochrome = true;
+        if (c.hue_entropy > 0.7)       profile.expects_diversity = true;
+        if (c.primary_sector_weight > 0.4) profile.expects_dominance = true;
+        if (c.l_std_dev > 20)          profile.rewards_high_texture = true;
+
+        // Derived gates (only for extreme centroids)
+        if (c.l_std_dev < 12) profile.max_l_std_dev_gate = c.l_std_dev + 5;
+
+        return profile;
     }
 }
 

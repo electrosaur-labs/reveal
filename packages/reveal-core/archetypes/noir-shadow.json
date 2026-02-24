@@ -2,6 +2,7 @@
   "id": "noir_shadow",
   "version": "1.0.0",
   "name": "Deep Shadow / Noir",
+  "group": "dramatic",
   "description": "Dark, high contrast. Optimized for woodcuts and film noir aesthetics.",
   "centroid": {
     "l": 25,

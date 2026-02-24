@@ -2,6 +2,7 @@
   "id": "structural_outlier_rescue",
   "version": "1.0.0",
   "name": "Subtle Naturalist / Structural Rescue",
+  "group": "specialist",
   "description": "Surgical recovery for monochromatic, high-detail images. Prevents saliency shadow.",
   "centroid": {
     "l": 60,

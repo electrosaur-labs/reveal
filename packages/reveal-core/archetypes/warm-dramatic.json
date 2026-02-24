@@ -2,6 +2,7 @@
   "id": "warm_dramatic",
   "version": "1.3.0",
   "name": "Warm Dramatic",
+  "group": "vibrant",
   "description": "Bright warm scenes with dramatic shadows and concentrated hue. High K, high L-std, warm temperature, low entropy. Painted murals, warm-lit architecture, sunlit folk art against dark backgrounds.",
   "preferred_sectors": [
     "yellow",

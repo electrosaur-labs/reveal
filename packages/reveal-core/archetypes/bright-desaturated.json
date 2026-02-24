@@ -2,6 +2,7 @@
   "id": "bright_desaturated",
   "version": "1.1.0",
   "name": "Bright Desaturated / High-Key Contrast",
+  "group": "soft",
   "description": "Bright, washed-out photographic images with extreme contrast and minimal color.",
   "preferred_sectors": [],
   "centroid": {

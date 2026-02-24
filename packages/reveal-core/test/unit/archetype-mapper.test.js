@@ -444,6 +444,149 @@ describe('ArchetypeMapper v2.2', () => {
         });
     });
 
+    describe('Derived profile scoring (previously profileless archetypes)', () => {
+        it('should derive noir_shadow profile and score dark monochromatic DNA well', () => {
+            const noir = archetypes.find(a => a.id === 'noir_shadow');
+            // noir centroid: L=25, C=10, entropy=0.15, temp=0
+            // Should derive: chromaProfile='very_low', tonalRange='dark', expects_monochrome=true
+            const dna = {
+                version: '2.0',
+                global: {
+                    l: 25, c: 10, k: 80, l_std_dev: 30,
+                    hue_entropy: 0.15,
+                    temperature_bias: 0.0,
+                    primary_sector_weight: 0.80
+                },
+                dominant_sector: 'red',
+                sectors: {
+                    red: { weight: 0.80, lMean: 25, cMax: 12, cMean: 8 }
+                }
+            };
+
+            const sectorScore = mapper.calculateSectorAffinity(dna, noir);
+            // With derived profile (very_low chroma + dark tonal), should score > 60
+            // Previously fell through to _basicSectorAffinity (~50 + preferred sector boost)
+            expect(sectorScore).toBeGreaterThan(60);
+
+            // Pattern bonus for expects_monochrome should fire (entropy=0.15 < 0.3)
+            const patternScore = mapper.calculatePatternScore(dna, noir);
+            expect(patternScore).toBeGreaterThan(60);
+        });
+
+        it('should derive warm_sovereign profile and fire warm/dominance bonuses', () => {
+            const ws = archetypes.find(a => a.id === 'warm_sovereign');
+            // ws centroid: L=78, C=15, temp=0.75, psw=0.50
+            // Should derive: chromaProfile='low', tonalRange='bright', expects_warm=true, expects_dominance=true
+            const dna = {
+                version: '2.0',
+                global: {
+                    l: 78, c: 15, k: 100, l_std_dev: 30,
+                    hue_entropy: 0.50,
+                    temperature_bias: 0.75,
+                    primary_sector_weight: 0.50
+                },
+                dominant_sector: 'orange',
+                sectors: {
+                    orange: { weight: 0.50, lMean: 65, cMax: 20, cMean: 12 },
+                    yellow: { weight: 0.30, lMean: 72, cMax: 18, cMean: 10 }
+                }
+            };
+
+            // Pattern score should include expects_warm bonus (temp=0.75 > 0.4)
+            const patternScore = mapper.calculatePatternScore(dna, ws);
+            expect(patternScore).toBeGreaterThan(60);
+
+            // Sector affinity should include dominance bonus (psw=0.50 > 0.4 + preferred sector)
+            const sectorScore = mapper.calculateSectorAffinity(dna, ws);
+            expect(sectorScore).toBeGreaterThan(60);
+        });
+
+        it('should derive pastel_high_key profile and score bright low-contrast DNA', () => {
+            const pastel = archetypes.find(a => a.id === 'pastel_high_key');
+            // pastel centroid: L=85, C=20, entropy=0.6, temp=0.1, l_std_dev=15
+            // Should derive: chromaProfile='low', tonalRange='bright'
+            const dna = {
+                version: '2.0',
+                global: {
+                    l: 85, c: 20, k: 30, l_std_dev: 15,
+                    hue_entropy: 0.60,
+                    temperature_bias: 0.10,
+                    primary_sector_weight: 0.20
+                },
+                dominant_sector: 'rose',
+                sectors: {
+                    rose: { weight: 0.20, lMean: 80, cMax: 25, cMean: 18 },
+                    cyan: { weight: 0.18, lMean: 85, cMax: 22, cMean: 15 },
+                    yellow: { weight: 0.15, lMean: 88, cMax: 20, cMean: 14 }
+                }
+            };
+
+            // Tonal alignment (bright) should fire for sectors with lMean > 55
+            const sectorScore = mapper.calculateSectorAffinity(dna, pastel);
+            expect(sectorScore).toBeGreaterThan(60);
+        });
+
+        it('should derive vibrant_tonal profile and score high-chroma mid-toned DNA', () => {
+            const vt = archetypes.find(a => a.id === 'vibrant_tonal');
+            // vt centroid: L=50, C=45, entropy=0.4, temp=0, l_std_dev=25
+            // Should derive: chromaProfile='moderate', tonalRange='mid', rewards_high_texture=true
+            const dna = {
+                version: '2.0',
+                global: {
+                    l: 50, c: 45, k: 95, l_std_dev: 25,
+                    hue_entropy: 0.40,
+                    temperature_bias: 0.0,
+                    primary_sector_weight: 0.30
+                },
+                dominant_sector: 'magenta',
+                sectors: {
+                    magenta: { weight: 0.30, lMean: 48, cMax: 55, cMean: 40 },
+                    blue: { weight: 0.25, lMean: 42, cMax: 50, cMean: 35 }
+                }
+            };
+
+            // Chroma alignment (moderate, cMax 20-60) should fire
+            const sectorScore = mapper.calculateSectorAffinity(dna, vt);
+            expect(sectorScore).toBeGreaterThan(60);
+        });
+
+        it('should derive _deriveProfile correctly from centroid values', () => {
+            // Test the derivation logic directly
+            const profile = mapper._deriveProfile({
+                centroid: {
+                    l: 25, c: 10, k: 80, l_std_dev: 30,
+                    hue_entropy: 0.15, temperature_bias: 0,
+                    primary_sector_weight: 0.8
+                }
+            });
+
+            expect(profile.chromaProfile).toBe('very_low');
+            expect(profile.tonalRange).toBe('dark');
+            expect(profile.expects_monochrome).toBe(true);
+            expect(profile.expects_dominance).toBe(true);
+            expect(profile.rewards_high_texture).toBe(true);
+            expect(profile.expects_warm).toBeUndefined();
+            expect(profile.expects_cool).toBeUndefined();
+            expect(profile.expects_diversity).toBeUndefined();
+        });
+
+        it('should derive warm+bright profile for high-L warm archetype', () => {
+            const profile = mapper._deriveProfile({
+                centroid: {
+                    l: 85, c: 20, k: 30, l_std_dev: 8,
+                    hue_entropy: 0.80, temperature_bias: 0.5,
+                    primary_sector_weight: 0.20
+                }
+            });
+
+            expect(profile.chromaProfile).toBe('low');
+            expect(profile.tonalRange).toBe('bright');
+            expect(profile.expects_warm).toBe(true);
+            expect(profile.expects_diversity).toBe(true);
+            expect(profile.max_l_std_dev_gate).toBe(13); // 8 + 5
+        });
+    });
+
     describe('Score breakdown validation', () => {
         it('should provide detailed score breakdown', () => {
             const dna = {

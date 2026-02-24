@@ -2,6 +2,7 @@
   "id": "cinematic_moody",
   "version": "1.0.0",
   "name": "Cinematic / Moody",
+  "group": "dramatic",
   "description": "Deep tones and heavy shadows. Prevents shadow fusion in low-exposure shots.",
   "preferred_sectors": [
     "blue",

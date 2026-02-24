@@ -38,7 +38,7 @@ class PeakFinder {
         this.volumeThreshold = options.volumeThreshold || 0.05; // < 5% volume
         this.minDeltaE = options.minDeltaE || 15; // ΔE > 15 from dominant
         this.gridSize = options.gridSize || 5; // Perceptual bucketing grid (5 = L/5, a/5, b/5)
-        this.maxPeaks = options.maxPeaks || 1; // SURGICAL: Default to 1 peak (Monroe blue only)
+        this.maxPeaks = options.maxPeaks !== undefined ? options.maxPeaks : 1; // SURGICAL: Default to 1 peak (Monroe blue only)
 
         // SECTOR SANITIZATION: Blacklist known 16-bit noise traps
         // Sectors 3-4 (green/yellow-green) are quantization artifacts in monochrome scans
@@ -60,7 +60,7 @@ class PeakFinder {
     findIdentityPeaks(labPixels, options = {}) {
         const chromaThreshold = options.chromaThreshold || this.chromaThreshold;
         const volumeThreshold = options.volumeThreshold || this.volumeThreshold;
-        const maxPeaks = options.maxPeaks || this.maxPeaks;
+        const maxPeaks = options.maxPeaks !== undefined ? options.maxPeaks : this.maxPeaks;
         const bitDepth = options.bitDepth || 16;
 
         // SURGICAL FIX: Relax isolation for 16-bit clinical scans

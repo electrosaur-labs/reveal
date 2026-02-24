@@ -14,6 +14,11 @@
       "type": "string",
       "description": "Human-readable name for the archetype"
     },
+    "group": {
+      "type": "string",
+      "enum": ["natural", "soft", "graphic", "dramatic", "vibrant", "specialist"],
+      "description": "Intent-based grouping for carousel filtering"
+    },
     "description": {
       "type": "string",
       "description": "Target image characteristics"
@@ -130,6 +135,20 @@
           "maximum": 5,
           "default": 1,
           "description": "K-means refinement passes after median cut. 0=skip (graphic/grayscale archetypes), 1=default single pass, 2+=extra convergence for complex photographic content."
+        },
+        "chromaAxisWeight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 0,
+          "description": "Weight for C* (chroma magnitude) as a virtual 4th split axis in median cut. 0=disabled (default). When >0, boxes can split along the chroma gradient (e.g. C=5→C=145) independent of hue angle. Critical for warm images with smooth chroma ramps where Cartesian a/b splits miss the chroma dimension."
+        },
+        "neutralIsolationThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 30,
+          "default": 0,
+          "description": "Pre-isolate neutral pixels (C* < threshold) into a separate box before median cut begins. 0=disabled (default). When >0, prevents the neutral majority from consuming split budget and dragging centroids toward low chroma. Particularly effective in images with >50% neutral content."
         }
       }
     }

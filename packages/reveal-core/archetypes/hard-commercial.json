@@ -2,6 +2,7 @@
   "id": "hard_commercial",
   "version": "1.0.0",
   "name": "Punchy / Commercial",
+  "group": "graphic",
   "description": "High contrast, saturated commercial photography. Optimized for edge-sharpness and vibrant results.",
   "centroid": {
     "l": 50,

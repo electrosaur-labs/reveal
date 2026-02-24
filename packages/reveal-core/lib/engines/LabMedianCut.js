@@ -443,8 +443,35 @@ class LabMedianCut {
         const sectorEnergy = grayscaleOnly ? null : HueGapRecovery._analyzeImageHueSectors(labPixels, hueChromaThreshold);
         const coveredSectors = new Set();
 
-        // Start with single box containing all colors
-        const boxes = [{ colors, depth: 0, grayscaleOnly }];
+        // Start with initial box(es) — optionally pre-isolate neutrals
+        // When neutralIsolationThreshold > 0, split colors into neutral vs chromatic
+        // boxes BEFORE the median cut loop. This prevents the neutral majority (often
+        // 65%+ of pixels) from consuming split budget and dragging centroids toward
+        // low chroma. The neutral box gets its own splits for tonal ramps while
+        // chromatic colors compete only among themselves.
+        const neutralIsolationThreshold = tuning?.split?.neutralIsolationThreshold ?? 0;
+        let boxes;
+        if (!grayscaleOnly && neutralIsolationThreshold > 0) {
+            const neutralColors = [];
+            const chromaticColors = [];
+            for (const c of colors) {
+                if (Math.sqrt(c.a * c.a + c.b * c.b) < neutralIsolationThreshold) {
+                    neutralColors.push(c);
+                } else {
+                    chromaticColors.push(c);
+                }
+            }
+            if (neutralColors.length > 0 && chromaticColors.length > 0) {
+                boxes = [
+                    { colors: neutralColors, depth: 0, grayscaleOnly },
+                    { colors: chromaticColors, depth: 0, grayscaleOnly }
+                ];
+            } else {
+                boxes = [{ colors, depth: 0, grayscaleOnly }];
+            }
+        } else {
+            boxes = [{ colors, depth: 0, grayscaleOnly }];
+        }
 
         // Split until we have targetColors boxes
         let splitIteration = 0;
@@ -638,12 +665,45 @@ class LabMedianCut {
             const avgB = colors.reduce((sum, c) => sum + c.b, 0) / colors.length;
 
             // Apply weights to variance - cWeight makes chroma dominate.
-            // bWeight (optional) further boosts b-axis splits — in warm images,
-            // b separates yellow from orange more effectively than a or L.
+            // bWeight (optional) further boosts b-axis splits.
             const bWeight = tuning?.centroid?.bWeight ?? 1.0;
+            const chromaAxisWeight = tuning?.split?.chromaAxisWeight ?? 0;
+
+            // WARM A-AXIS BOOST: In warm hue boxes (hue 20-80°, chroma > 15),
+            // the b-axis has ~5x more raw variance than a, so b wins every split.
+            // This prevents yellow (low a*, high b*) from separating from orange
+            // (high a*, moderate b*). PS Indexed Color makes this split naturally.
+            // Boost a-axis variance in warm boxes to let it compete with b.
+            const warmABoost = tuning?.split?.warmABoost ?? 1.0;
+            let aAxisMultiplier = 1.0;
+            if (warmABoost > 1.0) {
+                const meanChroma = Math.sqrt(avgA * avgA + avgB * avgB);
+                const meanHue = ((Math.atan2(avgB, avgA) * 180 / Math.PI) + 360) % 360;
+                if (meanChroma > 15 && meanHue >= 20 && meanHue <= 75) {
+                    aAxisMultiplier = warmABoost;
+                }
+            }
+
             const varL = colors.reduce((sum, c) => sum + (c.L - avgL) ** 2, 0) * lWeight;
-            const varA = colors.reduce((sum, c) => sum + (c.a - avgA) ** 2, 0) * cWeight;
+            const varA = colors.reduce((sum, c) => sum + (c.a - avgA) ** 2, 0) * cWeight * aAxisMultiplier;
             const varB = colors.reduce((sum, c) => sum + (c.b - avgB) ** 2, 0) * cWeight * bWeight;
+
+            // C* (chroma magnitude) as virtual 4th split axis
+            // When enabled, allows splitting along chroma gradient (e.g. C=5→C=145)
+            // independent of hue angle — critical for warm images with smooth chroma ramps
+            let varC = 0;
+            if (chromaAxisWeight > 0) {
+                let chromaSum = 0;
+                for (let i = 0; i < colors.length; i++) {
+                    chromaSum += Math.sqrt(colors[i].a * colors[i].a + colors[i].b * colors[i].b);
+                }
+                const avgC = chromaSum / colors.length;
+                for (let i = 0; i < colors.length; i++) {
+                    const c = Math.sqrt(colors[i].a * colors[i].a + colors[i].b * colors[i].b);
+                    varC += (c - avgC) ** 2;
+                }
+                varC *= chromaAxisWeight;
+            }
 
             // Choose channel with highest WEIGHTED variance
             let splitChannel = 'L';
@@ -656,14 +716,22 @@ class LabMedianCut {
                 splitChannel = 'b';
                 maxVar = varB;
             }
+            if (varC > maxVar) {
+                splitChannel = 'C';
+                maxVar = varC;
+            }
 
             // If variance is 0 in all channels, all colors are identical - can't split
             if (maxVar === 0) {
                 return [null, null];
             }
 
-            // Sort by split channel
-            colors.sort((a, b) => a[splitChannel] - b[splitChannel]);
+            // Sort by split channel (C* sorts by chroma magnitude)
+            if (splitChannel === 'C') {
+                colors.sort((x, y) => Math.sqrt(x.a * x.a + x.b * x.b) - Math.sqrt(y.a * y.a + y.b * y.b));
+            } else {
+                colors.sort((a, b) => a[splitChannel] - b[splitChannel]);
+            }
 
             // Split at median
             const median = Math.floor(colors.length / 2);
