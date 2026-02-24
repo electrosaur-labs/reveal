@@ -134,6 +134,14 @@ class PaletteSurgeon {
                 colorBlock.appendChild(xBadge);
             }
 
+            // ── Added color badge ("+" on user-added swatches) ──
+            if (this._session.addedColors.has(i)) {
+                const addBadge = document.createElement('span');
+                addBadge.className = 'surgeon-add-badge';
+                addBadge.textContent = '+';
+                colorBlock.appendChild(addBadge);
+            }
+
             // ── Merge badge ("+N" on target swatches that absorbed others) ──
             const mergedSources = this._session.mergeHistory.get(i);
             const mergeCount = mergedSources ? mergedSources.size : 0;
@@ -150,11 +158,12 @@ class PaletteSurgeon {
             label.className = 'surgeon-pct';
             label.textContent = pct;
 
-            // ── Revert button (only visible when selected + overridden) ──
+            // ── Revert button (visible when selected + overridden/deleted/added) ──
             const revertBtn = document.createElement('button');
             revertBtn.className = 'surgeon-revert';
             const isSelected = (this._state === 'SELECTED' && i === this._selectedIndex);
-            if ((isOverridden || isDeleted) && isSelected) revertBtn.classList.add('visible');
+            const isAdded = this._session.addedColors.has(i);
+            if ((isOverridden || isDeleted || isAdded) && isSelected) revertBtn.classList.add('visible');
             revertBtn.textContent = '\u21BA';
             revertBtn.title = 'Revert to original color';
             revertBtn.onclick = (e) => {
@@ -203,6 +212,19 @@ class PaletteSurgeon {
 
             this._grid.appendChild(swatch);
             this._swatchElements.set(i, swatch);
+        }
+
+        // "+" add button (if room for more colors, max 10 live)
+        const liveCount = rgbPalette.length - this._session.deletedColors.size;
+        if (liveCount < 10) {
+            const addBtn = document.createElement('div');
+            addBtn.className = 'surgeon-swatch surgeon-add';
+            const addColor = document.createElement('span');
+            addColor.className = 'surgeon-color surgeon-add-color';
+            addColor.textContent = '+';
+            addBtn.appendChild(addColor);
+            addBtn.onclick = () => this._openAddColorPicker();
+            this._grid.appendChild(addBtn);
         }
 
         this._container.style.display = 'block';
@@ -365,10 +387,78 @@ class PaletteSurgeon {
         }
     }
 
+    // ─── Add Color Picker ──────────────────────────────────────
+
+    async _openAddColorPicker() {
+        if (this._pickerOpen) return;
+
+        this._pickerOpen = true;
+        this._header.textContent = 'Pick a color to add...';
+
+        try {
+            const { core, action, app } = require("photoshop");
+            let result = null;
+
+            // Seed with mid-gray so any change counts as "confirmed"
+            const seedR = 128, seedG = 128, seedB = 128;
+
+            await core.executeAsModal(async () => {
+                await action.batchPlay([{
+                    _obj: "set",
+                    _target: [{ _ref: "color", _property: "foregroundColor" }],
+                    to: {
+                        _obj: "RGBColor",
+                        red: seedR, grain: seedG, blue: seedB
+                    }
+                }], {});
+
+                await action.batchPlay([{
+                    _obj: "showColorPicker"
+                }], {});
+
+                const c = app.foregroundColor;
+                const newR = Math.round(c.rgb.red);
+                const newG = Math.round(c.rgb.green);
+                const newB = Math.round(c.rgb.blue);
+
+                // Treat as confirmed if color changed from seed
+                if (newR !== seedR || newG !== seedG || newB !== seedB) {
+                    result = { r: newR, g: newG, b: newB };
+                }
+            }, { commandName: "Pick New Color" });
+
+            if (result) {
+                const lab = Reveal.rgbToLab(result.r, result.g, result.b);
+                logger.log(`[PaletteSurgeon] Adding color: rgb(${result.r},${result.g},${result.b}) → Lab(${lab.L.toFixed(1)},${lab.a.toFixed(1)},${lab.b.toFixed(1)})`);
+                await this._session.addPaletteColor(lab);
+            }
+
+            this._header.textContent = 'Click a color to isolate';
+        } catch (err) {
+            logger.log(`[PaletteSurgeon] Add color picker error: ${err.message}`);
+            this._header.textContent = 'Click a color to isolate';
+        } finally {
+            this._pickerOpen = false;
+        }
+    }
+
     // ─── Revert ──────────────────────────────────────────────
 
     _onRevert(i) {
         if (this._pickerOpen) return;
+
+        // Added colors get fully removed (palette shrinks) instead of reverted
+        if (this._session.addedColors.has(i)) {
+            this._state = 'IDLE';
+            this._selectedIndex = -1;
+            this._session.clearHighlight();
+            this._header.textContent = 'Click a color to isolate';
+            this._session.removeAddedColor(i).catch(err => {
+                logger.log(`[PaletteSurgeon] Remove added color failed: ${err.message}`);
+            });
+            return;
+        }
+
         this._session.revertPaletteColor(i).catch(err => {
             logger.log(`[PaletteSurgeon] Revert failed: ${err.message}`);
         });
@@ -386,10 +476,11 @@ class PaletteSurgeon {
             } else {
                 swatch.classList.remove('surgeon-selected');
             }
-            // Show revert button when selected AND (overridden OR deleted)
+            // Show revert button when selected AND (overridden OR deleted OR added)
             const revertBtn = swatch.querySelector('.surgeon-revert');
             if (revertBtn) {
-                if (selected && (isOverriddenMap.has(idx) || deletedColors.has(idx))) {
+                const addedColors = this._session.addedColors;
+                if (selected && (isOverriddenMap.has(idx) || deletedColors.has(idx) || addedColors.has(idx))) {
                     revertBtn.classList.add('visible');
                 } else {
                     revertBtn.classList.remove('visible');

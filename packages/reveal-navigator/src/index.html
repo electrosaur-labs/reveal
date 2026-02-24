@@ -342,6 +342,78 @@
             cursor: default;
         }
 
+/* ─── Carousel Filter Chips ─── */
+        #carousel-filters {
+            display: none;
+            flex-shrink: 0;
+            gap: 4px;
+            padding: 2px 0;
+        }
+
+        .filter-chip {
+            display: inline-block;
+            padding: 2px 10px;
+            font-size: 10px;
+            color: #999;
+            background: #383838;
+            border: 1px solid #555;
+            border-radius: 10px;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .filter-chip:hover {
+            color: #ccc;
+            border-color: #777;
+            background: #444;
+        }
+
+        .filter-chip.active {
+            color: #fff;
+            background: #3a5a8a;
+            border-color: #4da6ff;
+        }
+
+        /* ─── Trait Badges ─── */
+        .card-traits {
+            display: flex;
+            gap: 3px;
+            flex-wrap: wrap;
+            margin-bottom: 2px;
+        }
+
+        .trait-badge {
+            display: inline-block;
+            padding: 0 4px;
+            font-size: 8px;
+            color: #bbb;
+            background: #3a3a3a;
+            border-radius: 6px;
+            white-space: nowrap;
+            line-height: 14px;
+        }
+
+        /* ─── Description Tooltip ─── */
+        .archetype-tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            margin-bottom: 4px;
+            padding: 6px 10px;
+            background: #1a1a1a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #ccc;
+            font-size: 10px;
+            line-height: 1.4;
+            max-width: 220px;
+            white-space: normal;
+            pointer-events: none;
+            z-index: 60;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+
 /* ─── Archetype Carousel (horizontal scroll) ─── */
         #carousel {
             display: flex;
@@ -456,6 +528,13 @@
             border-radius: 1px;
             border: 1px solid rgba(255,255,255,0.1);
             display: inline-block;
+        }
+
+        .card-explore-hint {
+            font-size: 9px;
+            color: #888;
+            font-style: italic;
+            margin-top: 2px;
         }
 
         .card-customized {
@@ -591,6 +670,33 @@
         .surgeon-pct {
             font-size: 10px;
             color: #999;
+        }
+
+        .surgeon-add { cursor: pointer; opacity: 0.6; }
+        .surgeon-add:hover { opacity: 1.0; }
+        .surgeon-add-color {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 2px;
+            border: 1px dashed rgba(255,255,255,0.3);
+            color: #888;
+            font-size: 16px;
+            background: transparent;
+        }
+        .surgeon-add-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            font-size: 8px;
+            font-weight: bold;
+            color: #fff;
+            background: #50c878;
+            border-radius: 6px;
+            padding: 0 3px;
+            line-height: 13px;
         }
 
         /* ─── Finalize Row ─── */
@@ -864,6 +970,17 @@
                 <div id="carousel-progress-text"></div>
             </div>
 
+            <!-- Carousel Group Filters -->
+            <div id="carousel-filters">
+                <span class="filter-chip active" data-group="all">All</span>
+                <span class="filter-chip" data-group="natural">Natural</span>
+                <span class="filter-chip" data-group="soft">Soft</span>
+                <span class="filter-chip" data-group="graphic">Graphic</span>
+                <span class="filter-chip" data-group="dramatic">Dramatic</span>
+                <span class="filter-chip" data-group="vibrant">Vibrant</span>
+                <span class="filter-chip" data-group="specialist">Specialist</span>
+            </div>
+
             <!-- Archetype Carousel (horizontal scroll) -->
             <div id="carousel"></div>
 
@@ -959,6 +1076,7 @@
                     </div>
                     <select id="picker-centroidStrategy">
                         <option value="SALIENCY">Saliency</option>
+                        <option value="ROBUST_SALIENCY">Robust Saliency</option>
                         <option value="VOLUMETRIC">Volumetric</option>
                         <option value="AVERAGE">Average</option>
                     </select>

@@ -430,6 +430,94 @@ class ProxyEngine {
     }
 
     /**
+     * Add a new color to the palette and re-separate all pixels.
+     * The new color becomes a first-class palette entry — pixels redistribute
+     * via nearest-neighbor so the added color gets real coverage.
+     *
+     * @param {{L: number, a: number, b: number}} labColor - Lab color to add
+     * @returns {Promise<Object>} Updated preview data
+     */
+    async addColorAndReseparate(labColor) {
+        if (!this.separationState || !this.proxyBuffer) {
+            throw new Error('Proxy not initialized');
+        }
+
+        // Append to current separation state palette
+        this.separationState.palette.push({ ...labColor });
+        this.separationState.rgbPalette.push(PosterizationEngine.labToRgb(labColor));
+
+        // Full nearest-neighbor re-separation with expanded palette
+        await this._recomputeSeparation();
+
+        // Take new baseline snapshot (added color is now part of baseline)
+        this._snapshotBaseline();
+
+        // Generate preview
+        const previewBuffer = this._generatePreviewFromMasks(
+            this.separationState.masks,
+            this.separationState.colorIndices,
+            this.separationState.rgbPalette,
+            this.separationState.width,
+            this.separationState.height
+        );
+
+        return {
+            previewBuffer,
+            palette: this.separationState.palette,
+            statistics: this.separationState.statistics,
+            elapsedMs: 0
+        };
+    }
+
+    /**
+     * Remove a color from the palette and re-separate all pixels.
+     * Splices the color out, remaps indices, and runs nearest-neighbor
+     * so remaining colors absorb the removed color's pixels.
+     *
+     * @param {number} colorIndex - Index of the color to remove
+     * @returns {Promise<Object>} Updated preview data
+     */
+    async removeColorAndReseparate(colorIndex) {
+        if (!this.separationState || !this.proxyBuffer) {
+            throw new Error('Proxy not initialized');
+        }
+
+        const palette = this.separationState.palette;
+        if (colorIndex < 0 || colorIndex >= palette.length) {
+            throw new Error(`Invalid color index: ${colorIndex}`);
+        }
+        if (palette.length <= 1) {
+            throw new Error('Cannot remove the last remaining color');
+        }
+
+        // Splice from palette and rgbPalette
+        this.separationState.palette.splice(colorIndex, 1);
+        this.separationState.rgbPalette.splice(colorIndex, 1);
+
+        // Full nearest-neighbor re-separation with reduced palette
+        await this._recomputeSeparation();
+
+        // Take new baseline snapshot
+        this._snapshotBaseline();
+
+        // Generate preview
+        const previewBuffer = this._generatePreviewFromMasks(
+            this.separationState.masks,
+            this.separationState.colorIndices,
+            this.separationState.rgbPalette,
+            this.separationState.width,
+            this.separationState.height
+        );
+
+        return {
+            previewBuffer,
+            palette: this.separationState.palette,
+            statistics: this.separationState.statistics,
+            elapsedMs: 0
+        };
+    }
+
+    /**
      * Get full-res parameters for production render
      * @returns {Object} Parameters for high-res posterization
      */

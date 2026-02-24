@@ -73,7 +73,9 @@ const ALL_KNOBS = new Set([
     ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS
 ]);
 
-const EAGER_SCORE_COUNT = 3;
+// Chameleon is scored during initial posterization. All other archetypes
+// are scored on-demand when the user clicks their card.
+const EAGER_SCORE_COUNT = 0;
 
 const DEBOUNCE_MS = 50;
 
@@ -107,6 +109,7 @@ class SessionState extends EventEmitter {
         this.paletteOverrides = new Map();  // colorIndex → {L, a, b}
         this.mergeHistory = new Map();      // targetIndex → Set<sourceIndex>
         this.deletedColors = new Set();     // colorIndex values deleted via Alt+click
+        this.addedColors = new Set();       // palette indices added by user (via "+" button)
         this.proxyEngine = null;
         this.currentConfig = null;          // Full config from ParameterGenerator
         this.previewBuffer = null;          // Current RGBA preview
@@ -152,6 +155,7 @@ class SessionState extends EventEmitter {
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
         this.deletedColors.clear();
+        this.addedColors.clear();
         this._archetypeStateCache.clear();
         this.proxyEngine = null;
         this.currentConfig = null;
@@ -230,48 +234,27 @@ class SessionState extends EventEmitter {
         this.deletedColors.clear();
         this._archetypeStateCache.clear();
 
-        // ── Phase 2: STRUCTURAL — DNA analysis (~51ms) ──
+        // ── Phase 1: DNA analysis (~51ms) ──
+        // Needed for Chameleon's Mk2 interpolation config.
         this.emit('progress', { phase: 'structural', label: 'Analyzing image DNA\u2026', percent: 35 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
         const dnaGen = new Reveal.DNAGenerator();
         this.imageDNA = dnaGen.generate(labPixels, width, height, { bitDepth: 16 });
-        logger.log(`[SessionState] Pulse 1: DNA generated (dominant_sector=${this.imageDNA.dominant_sector})`);
+        logger.log(`[SessionState] DNA generated (dominant_sector=${this.imageDNA.dominant_sector})`);
 
         this.emit('dnaReady', this.imageDNA);
 
-        // ── Phase 3: STRATEGIC — score all archetypes (<1ms) ──
-        this.emit('progress', { phase: 'strategic', label: 'Mapping archetypes\u2026', percent: 50 });
+        // ── Phase 2: Chameleon posterization (~400ms) ──
+        // No archetype scoring at startup — just DNA → Chameleon → preview.
+        // Other archetypes are scored on-demand when the user clicks their card.
+        this.emit('progress', { phase: 'visual', label: 'Initializing navigator\u2026', percent: 55 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
-        const mapper = new Reveal.ArchetypeMapper(archetypes);
-        const allScores = mapper.getTopMatches(this.imageDNA, archetypes.length);
-
-        // Inject Chameleon entry at its scored position
         this._chameleonConfig = Reveal.generateConfigurationMk2(this.imageDNA);
-        this._injectChameleon(allScores);
-
-        const topMatch = allScores[0];
-        const chameleonEntry = allScores.find(s => s.id === 'dynamic_interpolator');
-        logger.log(`[SessionState] Pulse 1: Scored ${allScores.length} entries, Chameleon=${chameleonEntry.score.toFixed(0)}, top=${topMatch.id} (${topMatch.score.toFixed(0)})`);
-
-        // carouselReady emitted after Pulse 2 preview — cards appear immediately with DNA scores
-
-        // ── Phase 4: VISUAL — proxy posterization + knob init (~400ms) ──
-        this.emit('progress', { phase: 'visual', label: 'Initializing navigator\u2026', percent: 65 });
-        await new Promise(r => setTimeout(r, 20)); // yield for repaint
-
-        // Generate config from the top match.
-        // Chameleon uses cached Mk2 config; archetypes use ParameterGenerator.
-        if (topMatch.id === 'dynamic_interpolator') {
-            this.currentConfig = this._chameleonConfig;
-        } else {
-            this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
-                manualArchetypeId: topMatch.id
-            });
-        }
+        this.currentConfig = this._chameleonConfig;
         this._applyConfigToState(this.currentConfig);
+        this.state.activeArchetypeId = 'dynamic_interpolator';
         if (!this.currentConfig.engineType) {
             this.currentConfig.engineType = this.state.engineType;
         }
@@ -279,20 +262,16 @@ class SessionState extends EventEmitter {
         this.emit('imageLoaded', { width, height, dna: this.imageDNA });
         this.emit('configChanged', this.currentConfig);
 
-        // Initialize ProxyEngine — pass the live buffer directly.
-        // If Photoshop GPU already downsampled to proxy size,
-        // ProxyEngine will skip redundant _downsampleBilinear().
         this.proxyEngine = new Reveal.ProxyEngine();
         const proxyResult = await this.proxyEngine.initializeProxy(
             labPixels, width, height, this.currentConfig
         );
 
-        logger.log(`[SessionState] Pulse 2: Posterized ${proxyResult.palette.length} colors, ${proxyResult.dimensions.width}x${proxyResult.dimensions.height} in ${proxyResult.elapsedMs.toFixed(0)}ms`);
+        logger.log(`[SessionState] Chameleon posterized: ${proxyResult.palette.length} colors, ${proxyResult.dimensions.width}x${proxyResult.dimensions.height} in ${proxyResult.elapsedMs.toFixed(0)}ms`);
         this.emit('proxyReady', proxyResult);
         this.emit('progress', { phase: 'visual', label: 'Applying knobs\u2026', percent: 85 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        // Apply knobs (speckleRescue, shadowClamp, minVolume) with explicit state values
         const knobResult = await this.proxyEngine.updateProxy({
             minVolume: this.state.minVolume,
             speckleRescue: this.state.speckleRescue,
@@ -305,6 +284,12 @@ class SessionState extends EventEmitter {
 
         const initialAccuracy = this.calculateCurrentAccuracy();
         const initialFidelity = this.calculateDNAFidelity();
+
+        // Store Chameleon's ΔE
+        if (initialAccuracy != null) {
+            this._archetypeDeltaE.set('dynamic_interpolator', initialAccuracy);
+        }
+
         this.emit('previewUpdated', {
             previewBuffer: knobResult.previewBuffer,
             palette: knobResult.palette,
@@ -315,17 +300,30 @@ class SessionState extends EventEmitter {
             dnaFidelity: initialFidelity
         });
 
-        // ── Pulse 3: Build carousel cards with DNA scores ──
-        // Cards built now (under hidden root during splash), ΔE filled by scoring below.
-        const sorted = this._sortByDeltaE(allScores);
-        this.emit('carouselReady', { scores: sorted, topMatchId: topMatch.id });
-        logger.log(`[SessionState] Carousel emitted (1/${allScores.length} scored by ΔE)`);
+        // ── Phase 3: Build carousel from archetype definitions (no scoring) ──
+        // Cards show name/group/traits only. ΔE filled on-demand when clicked.
+        const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
+        const cardEntries = archetypes.map(a => ({
+            id: a.id,
+            score: null,
+            meanDeltaE: null,
+            _synthetic: null
+        }));
+        // Add Chameleon with its ΔE
+        cardEntries.push({
+            id: 'dynamic_interpolator',
+            score: null,
+            meanDeltaE: initialAccuracy,
+            _synthetic: {
+                name: 'Chameleon',
+                description: 'Adaptive interpolation from image DNA. Blends nearest archetype parameters weighted by distance.',
+                preferred_sectors: [],
+                parameters: {}
+            }
+        });
 
-        // ── Pulse 4: Eager ΔE scoring (top 3 archetypes, ~1s) ──
-        // Awaited so loadImage doesn't return until scoring is done.
-        // This keeps the splash up for the full duration — no partial UI.
-        this._scoringGeneration++;
-        await this._scoreAllArchetypes(allScores, topMatch.id, this._scoringGeneration);
+        this.emit('carouselReady', { scores: cardEntries, topMatchId: 'dynamic_interpolator' });
+        logger.log(`[SessionState] Carousel ready — Chameleon ΔE=${initialAccuracy != null ? initialAccuracy.toFixed(1) : '?'}, ${archetypes.length} others on-demand`);
 
         return proxyResult;
     }
@@ -428,7 +426,8 @@ class SessionState extends EventEmitter {
         }
 
         // Restore the active archetype so the preview shows the right image
-        if (!cancelled) {
+        // (only needed if we actually scored other archetypes)
+        if (!cancelled && computed > 0) {
             try {
                 const activeConfig = topId === 'dynamic_interpolator'
                     ? Reveal.generateConfigurationMk2(this.imageDNA)
@@ -1001,6 +1000,111 @@ class SessionState extends EventEmitter {
         return result;
     }
 
+    // ─── Add / Remove Colors ─────────────────────────────────
+
+    /**
+     * Add a new color to the palette via the "+" button.
+     * Calls ProxyEngine.addColorAndReseparate() which expands the
+     * baseline palette and runs full nearest-neighbor re-separation
+     * so the new color gets real pixel coverage.
+     *
+     * @param {{L: number, a: number, b: number}} labColor - Lab color to add
+     * @returns {Promise<Object|null>} Updated preview data
+     */
+    async addPaletteColor(labColor) {
+        if (!this.proxyEngine || !this.proxyEngine.separationState) {
+            throw new Error('Proxy not initialized');
+        }
+
+        // Enforce max 10 colors
+        const palette = this.proxyEngine._baselineState.palette;
+        const liveCount = palette.length - this.deletedColors.size;
+        if (liveCount >= 10) {
+            logger.log('[SessionState.addColor] Max 10 colors reached — ignoring add');
+            return null;
+        }
+
+        const newIndex = palette.length;
+        logger.log(`[SessionState.addColor] Adding Lab=(${labColor.L.toFixed(1)},${labColor.a.toFixed(1)},${labColor.b.toFixed(1)}) at index ${newIndex}`);
+
+        this.addedColors.add(newIndex);
+
+        const result = await this.proxyEngine.addColorAndReseparate(labColor);
+
+        this.previewBuffer = result.previewBuffer;
+        this.state.proxyBufferReady = true;
+
+        this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+        this._emitPreviewUpdated(result);
+
+        return result;
+    }
+
+    /**
+     * Remove a user-added color from the palette entirely.
+     * Unlike revert (which restores to baseline), this splices the
+     * color out of the palette and re-separates so remaining colors
+     * absorb its pixels. Only works on colors in addedColors set.
+     *
+     * @param {number} colorIndex - Index of the added color to remove
+     * @returns {Promise<Object|null>} Updated preview data
+     */
+    async removeAddedColor(colorIndex) {
+        if (!this.addedColors.has(colorIndex)) {
+            logger.log(`[SessionState.removeAddedColor] Index ${colorIndex} is not an added color — ignoring`);
+            return null;
+        }
+
+        logger.log(`[SessionState.removeAddedColor] Removing added color at index ${colorIndex}`);
+
+        // Remove from addedColors; shift tracked indices above the removed one
+        this.addedColors.delete(colorIndex);
+        const shifted = new Set();
+        for (const idx of this.addedColors) {
+            shifted.add(idx > colorIndex ? idx - 1 : idx);
+        }
+        this.addedColors = shifted;
+
+        // Shift paletteOverrides, mergeHistory, deletedColors for indices above removed
+        const newOverrides = new Map();
+        for (const [idx, color] of this.paletteOverrides) {
+            if (idx === colorIndex) continue;  // drop the removed color's override
+            const newIdx = idx > colorIndex ? idx - 1 : idx;
+            newOverrides.set(newIdx, color);
+        }
+        this.paletteOverrides = newOverrides;
+
+        const newMergeHistory = new Map();
+        for (const [target, sources] of this.mergeHistory) {
+            if (target === colorIndex) continue;
+            const newTarget = target > colorIndex ? target - 1 : target;
+            const newSources = new Set();
+            for (const s of sources) {
+                if (s === colorIndex) continue;
+                newSources.add(s > colorIndex ? s - 1 : s);
+            }
+            if (newSources.size > 0) newMergeHistory.set(newTarget, newSources);
+        }
+        this.mergeHistory = newMergeHistory;
+
+        const newDeleted = new Set();
+        for (const idx of this.deletedColors) {
+            if (idx === colorIndex) continue;
+            newDeleted.add(idx > colorIndex ? idx - 1 : idx);
+        }
+        this.deletedColors = newDeleted;
+
+        const result = await this.proxyEngine.removeColorAndReseparate(colorIndex);
+
+        this.previewBuffer = result.previewBuffer;
+        this.state.proxyBufferReady = true;
+
+        this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+        this._emitPreviewUpdated(result);
+
+        return result;
+    }
+
     // ─── Production Export ────────────────────────────────────
 
     /**
@@ -1332,12 +1436,14 @@ class SessionState extends EventEmitter {
         }
 
         const deletedColors = new Set(this.deletedColors);
+        const addedColors = new Set(this.addedColors);
 
         this._archetypeStateCache.set(id, {
             knobs,
             paletteOverrides,
             mergeHistory,
-            deletedColors
+            deletedColors,
+            addedColors
         });
     }
 
@@ -1377,6 +1483,8 @@ class SessionState extends EventEmitter {
             this.deletedColors.add(idx);
         }
 
+        this.addedColors = new Set(cached.addedColors || []);
+
         // Detect if restored values differ from archetype defaults
         this.state.isKnobsCustomized = false;
         if (this._archetypeDefaults) {
@@ -1400,7 +1508,8 @@ class SessionState extends EventEmitter {
     isCustomized() {
         return this.state.isKnobsCustomized ||
             this.paletteOverrides.size > 0 ||
-            this.deletedColors.size > 0;
+            this.deletedColors.size > 0 ||
+            this.addedColors.size > 0;
     }
 
     // ─── Private Helpers ─────────────────────────────────────
@@ -1455,7 +1564,12 @@ class SessionState extends EventEmitter {
         const entry = {
             id: 'dynamic_interpolator',
             score: chameleonScore,
-            _synthetic: { name: 'Chameleon', preferred_sectors: [] }
+            _synthetic: {
+                name: 'Chameleon',
+                description: 'Adaptive interpolation from image DNA. Blends nearest archetype parameters weighted by distance.',
+                preferred_sectors: [],
+                parameters: {}
+            }
         };
 
         // Insert at correct descending position (avoid Array.sort JSC issues)
