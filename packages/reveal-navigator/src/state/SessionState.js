@@ -477,6 +477,8 @@ class SessionState extends EventEmitter {
         this.paletteOverrides.clear();
         this.mergeHistory.clear();
         this.deletedColors.clear();
+        const hadAddedColors = this.addedColors.size > 0;
+        this.addedColors.clear();
 
         // Delete cache entry so re-entering doesn't restore stale state
         const id = this.state.activeArchetypeId;
@@ -488,7 +490,20 @@ class SessionState extends EventEmitter {
         this.emit('knobsCustomizedChanged', { customized: false });
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
         this.emit('configChanged', this.currentConfig);  // triggers MechanicalKnobs sync
-        this._scheduleProxyUpdate();
+
+        // If user had added colors, rePosterize to get a fresh baseline palette
+        // (added colors are baked into the baseline — clearing the Set isn't enough)
+        if (hadAddedColors && this.proxyEngine && this.currentConfig) {
+            this.proxyEngine.rePosterize(this.currentConfig).then(result => {
+                this.previewBuffer = result.previewBuffer;
+                this.state.proxyBufferReady = true;
+                this._emitPreviewUpdated(result);
+            }).catch(err => {
+                logger.log(`[SessionState.resetToDefaults] rePosterize failed: ${err.message}`);
+            });
+        } else {
+            this._scheduleProxyUpdate();
+        }
     }
 
     /**
@@ -1016,11 +1031,10 @@ class SessionState extends EventEmitter {
             throw new Error('Proxy not initialized');
         }
 
-        // Enforce max 10 colors
+        // Sanity cap at 20 screens (auto presses max ~14 stations)
         const palette = this.proxyEngine._baselineState.palette;
-        const liveCount = palette.length - this.deletedColors.size;
-        if (liveCount >= 10) {
-            logger.log('[SessionState.addColor] Max 10 colors reached — ignoring add');
+        if (palette.length >= 20) {
+            logger.log('[SessionState.addColor] Max 20 colors reached — ignoring add');
             return null;
         }
 

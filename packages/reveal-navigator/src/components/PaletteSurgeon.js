@@ -214,9 +214,8 @@ class PaletteSurgeon {
             this._swatchElements.set(i, swatch);
         }
 
-        // "+" add button (if room for more colors, max 10 live)
-        const liveCount = rgbPalette.length - this._session.deletedColors.size;
-        if (liveCount < 10) {
+        // "+" add button — always available unless at hard max (20 screens)
+        if (rgbPalette.length < 20) {
             const addBtn = document.createElement('div');
             addBtn.className = 'surgeon-swatch surgeon-add';
             const addColor = document.createElement('span');

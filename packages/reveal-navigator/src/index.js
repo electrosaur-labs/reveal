@@ -359,7 +359,11 @@ function initPlugin() {
         if (btnOk) {
             btnOk.addEventListener('click', () => {
                 const overlay = document.getElementById('error-overlay');
-                if (overlay) overlay.style.display = 'none';
+                if (overlay) overlay.setAttribute('style', 'display: none');
+                // If no document was ingested, close the dialog entirely
+                if (!currentDocId) {
+                    _closeDialog();
+                }
             });
         }
 
@@ -478,7 +482,7 @@ function showErrorDialog(title, message) {
 
     if (titleEl) titleEl.textContent = title;
     if (msgEl) msgEl.textContent = message;
-    overlay.style.display = 'block';
+    overlay.setAttribute('style', 'display: flex');
 }
 
 /**
@@ -837,14 +841,16 @@ async function showDialog() {
 
         dialogOpen = true;
 
-        // Validate document — show error inside the dialog so it's visible
+        // Validate before showing dialog — reject with native PS alert (no big dialog)
         const validation = validateDocument();
         if (!validation.ok) {
-            showErrorDialog(validation.title, validation.message);
-        } else {
-            // Auto-ingest the active document
-            ingestActiveDocument(false);
+            dialogOpen = false;
+            await app.showAlert(validation.title + '\n\n' + validation.message);
+            return;
         }
+
+        // Auto-ingest the active document
+        ingestActiveDocument(false);
 
         // Show non-modal dialog (allows Photoshop Color Panel access)
         dialog.show({
