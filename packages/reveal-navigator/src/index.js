@@ -381,7 +381,7 @@ function initPlugin() {
             }
         });
 
-        // Listen for document changes (open, switch, close)
+        // Snap back to originating document if user switches tabs
         setupDocumentChangeListener();
 
         // Listen for manual dialog dismiss (X button / Escape).
@@ -410,32 +410,33 @@ function initPlugin() {
     }
 }
 
-// ─── Document Change Detection ──────────────────────────
+// ─── Document Lock (snap-back) ───────────────────────────
 
 function setupDocumentChangeListener() {
     try {
-        // Listen for document open and select (tab switch) events
         action.addNotificationListener(["open", "select"], onDocumentChanged);
-        logger.log('[Navigator] Document change listener registered');
+        logger.log('[Navigator] Document lock listener registered');
     } catch (err) {
         logger.log('[Navigator] Could not register document listener: ' + err.message);
     }
 }
 
 function onDocumentChanged() {
-    if (!dialogOpen) return;
+    if (!dialogOpen || !currentDocId) return;
 
-    // Check if the active document actually changed
     try {
-        const doc = app.activeDocument;
-        const newDocId = doc ? doc.id : null;
-
+        const newDocId = app.activeDocument ? app.activeDocument.id : null;
         if (newDocId && newDocId !== currentDocId) {
-            logger.log(`[Navigator] Document changed: ${currentDocId} → ${newDocId}`);
-            ingestActiveDocument(false);
+            logger.log(`[Navigator] Tab switch blocked — snapping back to doc ${currentDocId}`);
+            require("photoshop").core.executeAsModal(async () => {
+                await action.batchPlay([{
+                    _obj: "select",
+                    _target: [{ _ref: "document", _id: currentDocId }]
+                }], {});
+            }, { commandName: "Navigator: return to locked document" });
         }
     } catch (_) {
-        // No document open — ignore
+        // No document open or snap-back failed — ignore
     }
 }
 
@@ -829,16 +830,15 @@ async function showDialog() {
             return;
         }
 
-        // Validate document BEFORE showing dialog
-        const validation = validateDocument();
-        if (!validation.ok) {
-            alert(`${validation.title}\n\n${validation.message}`);
-            return;
-        }
-
         // Initialize plugin on first open
         if (!sessionState) {
             initPlugin();
+        }
+
+        // Guard against re-entry while Navigator is already open
+        if (dialogOpen) {
+            logger.log('[Navigator] Already open — ignoring re-invocation');
+            return;
         }
 
         // Reset any stale state from previous session
@@ -847,8 +847,14 @@ async function showDialog() {
 
         dialogOpen = true;
 
-        // Auto-ingest the active document
-        ingestActiveDocument(false);
+        // Validate document — show error inside the dialog so it's visible
+        const validation = validateDocument();
+        if (!validation.ok) {
+            showErrorDialog(validation.title, validation.message);
+        } else {
+            // Auto-ingest the active document
+            ingestActiveDocument(false);
+        }
 
         // Show non-modal dialog (allows Photoshop Color Panel access)
         dialog.show({
@@ -867,7 +873,6 @@ async function showDialog() {
 
     } catch (err) {
         logger.log('[Navigator] Error showing dialog: ' + err.message);
-        alert(`Navigator error: ${err.message}`);
     }
 }
 
