@@ -73,9 +73,9 @@ const ALL_KNOBS = new Set([
     ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS
 ]);
 
-// Chameleon is scored during initial posterization. All other archetypes
-// are scored on-demand when the user clicks their card.
-const EAGER_SCORE_COUNT = 0;
+// All archetypes get ΔE-scored in the background after splash.
+// Scoring is async/non-blocking — carousel updates progressively.
+const EAGER_SCORE_COUNT = Infinity;
 
 const DEBOUNCE_MS = 50;
 
@@ -300,50 +300,62 @@ class SessionState extends EventEmitter {
             dnaFidelity: initialFidelity
         });
 
-        // ── Phase 3: Build carousel from archetype definitions (no scoring) ──
-        // Cards show name/group/traits only. ΔE filled on-demand when clicked.
-        const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
-        const cardEntries = archetypes.map(a => ({
-            id: a.id,
-            score: null,
-            meanDeltaE: null,
-            _synthetic: null
-        }));
-        // Add Chameleon with its ΔE
-        cardEntries.push({
-            id: 'dynamic_interpolator',
-            score: null,
-            meanDeltaE: initialAccuracy,
-            _synthetic: {
-                name: 'Chameleon',
-                description: 'Adaptive interpolation from image DNA. Blends nearest archetype parameters weighted by distance.',
-                preferred_sectors: [],
-                parameters: {}
-            }
-        });
+        // ── Phase 3: DNA-scored carousel + background ΔE scoring ──
+        // Compute instant DNA scores, build cards sorted by affinity.
+        // Then score top N by actual ΔE during remaining splash time.
+        this.emit('progress', { phase: 'visual', label: 'Scoring archetypes\u2026', percent: 90 });
+        await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        this.emit('carouselReady', { scores: cardEntries, topMatchId: 'dynamic_interpolator' });
-        logger.log(`[SessionState] Carousel ready — Chameleon ΔE=${initialAccuracy != null ? initialAccuracy.toFixed(1) : '?'}, ${archetypes.length} others on-demand`);
+        const allScores = this.getAllArchetypeScores(); // instant DNA ranking
+        // Inject Chameleon's ΔE and screen count (already computed above)
+        const chameleonEntry = allScores.find(s => s.id === 'dynamic_interpolator');
+        if (chameleonEntry) {
+            const sep = this.proxyEngine.separationState;
+            const chameleonColors = sep && sep.palette ? sep.palette.length : 0;
+            chameleonEntry.meanDeltaE = initialAccuracy;
+            chameleonEntry.targetColors = chameleonColors;
+            chameleonEntry.sortScore = initialAccuracy != null
+                ? this._computeSortScore(initialAccuracy, chameleonColors) : null;
+        }
+
+        this.emit('carouselReady', { scores: allScores, topMatchId: 'dynamic_interpolator' });
+        logger.log(`[SessionState] Carousel ready — ${allScores.length} archetypes sorted by DNA, Chameleon ΔE=${initialAccuracy != null ? initialAccuracy.toFixed(1) : '?'}`);
+
+        // Launch background ΔE scoring for top N (read-only, no state mutation)
+        const generation = this._scoringGeneration;
+        this._scoreAllArchetypes(allScores, 'dynamic_interpolator', generation);
 
         return proxyResult;
     }
 
     /**
-     * Sort scores by meanDeltaE ascending (best quality first).
+     * Compute sort score: raw ΔE + exponential screen count penalty.
+     * Baseline 8 screens, no penalty at ≤8. Above 8, penalty grows
+     * exponentially: 9→0.5, 10→1.4, 11→2.9, 12→5.0, 14→11.3
+     * @private
+     */
+    _computeSortScore(meanDeltaE, targetColors) {
+        const excess = Math.max(0, (targetColors || 0) - 8);
+        const penalty = excess > 0 ? 0.5 * Math.pow(1.6, excess - 1) : 0;
+        return meanDeltaE + penalty;
+    }
+
+    /**
+     * Sort scores by sortScore ascending (best adjusted quality first).
      * Entries without ΔE are appended in their original order.
      * @private
      */
     _sortByDeltaE(scores) {
         const copy = scores.slice();
         copy.sort((a, b) => {
-            const aDE = a.meanDeltaE;
-            const bDE = b.meanDeltaE;
-            const aNull = aDE == null || aDE !== aDE;
-            const bNull = bDE == null || bDE !== bDE;
+            const aS = a.sortScore;
+            const bS = b.sortScore;
+            const aNull = aS == null || aS !== aS;
+            const bNull = bS == null || bS !== bS;
             if (aNull && bNull) return 0;
             if (aNull) return 1;
             if (bNull) return -1;
-            return aDE - bDE;
+            return aS - bS;
         });
         return copy;
     }
@@ -360,8 +372,11 @@ class SessionState extends EventEmitter {
      */
     async _scoreAllArchetypes(allScores, topId, generation) {
         // Only eagerly score the top N archetypes by DNA score.
-        // The rest get posterized on-demand when the user clicks their card.
-        const eagerSlice = allScores.slice(0, EAGER_SCORE_COUNT);
+        // The rest get scored on-demand when the user clicks their card.
+        // Skip Chameleon — already scored during Phase 2.
+        const eagerSlice = allScores
+            .filter(s => s.id !== 'dynamic_interpolator')
+            .slice(0, EAGER_SCORE_COUNT);
         const total = eagerSlice.length;
         let computed = 0;
         let cancelled = false;
@@ -381,17 +396,15 @@ class SessionState extends EventEmitter {
             }
 
             try {
-                // Full pipeline: rePosterize + knobs + calculateCurrentAccuracy
-                // Produces the SAME ΔE as the blue stats panel value.
-                const config = match.id === 'dynamic_interpolator'
-                    ? Reveal.generateConfigurationMk2(this.imageDNA)
-                    : Reveal.generateConfiguration(this.imageDNA, {
-                        manualArchetypeId: match.id
-                    });
+                // Read-only scoring via getPaletteWithQuality — does NOT mutate
+                // the active separationState, so the Chameleon preview stays intact.
+                const config = Reveal.generateConfiguration(this.imageDNA, {
+                    manualArchetypeId: match.id
+                });
 
-                await this.proxyEngine.rePosterize(config);
-                const knobResult = await this.proxyEngine.updateProxy(knobs);
-                const deltaE = this.calculateCurrentAccuracy();
+                const quality = await this.proxyEngine.getPaletteWithQuality(config, knobs);
+                const deltaE = quality.meanDeltaE;
+                const colors = quality.rgbPalette ? quality.rgbPalette.length : 0;
 
                 if (this._scoringGeneration !== generation) {
                     logger.log(`[SessionState] Background scoring cancelled after await (gen ${generation} → ${this._scoringGeneration})`);
@@ -400,48 +413,29 @@ class SessionState extends EventEmitter {
                 }
 
                 match.meanDeltaE = deltaE;
+                match.targetColors = colors;
+                match.sortScore = this._computeSortScore(deltaE, colors);
                 this._archetypeDeltaE.set(match.id, deltaE);
                 computed++;
-
-                // Show this archetype's posterization in the preview
-                // so the user sees each color treatment as it's scored.
-                this.emit('scoringPreview', {
-                    previewBuffer: knobResult.previewBuffer,
-                    archetypeId: match.id,
-                    meanDeltaE: deltaE,
-                    computed,
-                    total
-                });
 
                 this.emit('archetypeScored', {
                     id: match.id,
                     meanDeltaE: deltaE,
+                    targetColors: colors,
+                    sortScore: match.sortScore,
                     computed,
                     total
                 });
+
+                // Yield to let carousel update the card
+                await new Promise(r => setTimeout(r, 5));
             } catch (err) {
                 computed++;
                 logger.log(`[SessionState] Background scoring failed for ${match.id}: ${err.message}`);
             }
         }
 
-        // Restore the active archetype so the preview shows the right image
-        // (only needed if we actually scored other archetypes)
-        if (!cancelled && computed > 0) {
-            try {
-                const activeConfig = topId === 'dynamic_interpolator'
-                    ? Reveal.generateConfigurationMk2(this.imageDNA)
-                    : Reveal.generateConfiguration(this.imageDNA, {
-                        manualArchetypeId: topId
-                    });
-                await this.proxyEngine.rePosterize(activeConfig);
-                const knobResult = await this.proxyEngine.updateProxy(knobs);
-                this.previewBuffer = knobResult.previewBuffer;
-                this._emitPreviewUpdated(knobResult);
-            } catch (err) {
-                logger.log(`[SessionState] Failed to restore active archetype: ${err.message}`);
-            }
-        }
+        // No restore needed — getPaletteWithQuality is read-only.
 
         const sorted = this._sortByDeltaE(allScores);
         logger.log(`[SessionState] Background scoring ${cancelled ? 'cancelled' : 'complete'}: ${computed}/${total} archetypes scored`);

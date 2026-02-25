@@ -65,8 +65,13 @@ class Preview {
             if (this._session.state.highlightColorIndex >= 0) return;
             if (!this._session.state.proxyBufferReady) return;
 
-            // Immediate: show original
-            this.showOriginal();
+            // Immediate: toggle between original and posterized
+            this._tappedToOriginal = !this._showingOriginal;
+            if (this._showingOriginal) {
+                this.showPosterized();
+            } else {
+                this.showOriginal();
+            }
 
             // After 300ms, enter blink mode
             this._holdTimer = setTimeout(() => {

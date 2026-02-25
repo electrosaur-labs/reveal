@@ -56,9 +56,13 @@ function initPlugin() {
         // Update archetype badge on config change
         sessionState.on('configChanged', (config) => {
             const badge = document.getElementById('archetype-badge');
-            if (badge && config.id) {
-                badge.textContent = config.id;
-                badge.style.display = 'block';
+            if (badge) {
+                const activeId = sessionState.getState().activeArchetypeId;
+                const label = activeId === 'dynamic_interpolator' ? 'Chameleon' : (config.id || activeId || '');
+                if (label) {
+                    badge.textContent = label;
+                    badge.style.display = 'block';
+                }
             }
         });
 
@@ -574,8 +578,8 @@ function updateDocumentHeader(info) {
 
 function updateMatchScore() {
     const scoreEl = document.getElementById('stat-score');
-    const breakdownEl = document.getElementById('stat-breakdown');
-    if (!scoreEl || !sessionState) return;
+    const nameEl = document.getElementById('stat-archetype-name');
+    if (!sessionState) return;
 
     const state = sessionState.getState();
     const activeId = state.activeArchetypeId;
@@ -584,34 +588,27 @@ function updateMatchScore() {
     // Find the active archetype's score from the ranked list
     const scores = sessionState.getAllArchetypeScores();
     const match = scores.find(s => s.id === activeId);
-    if (!match) return;
 
-    scoreEl.textContent = match.score.toFixed(0);
+    if (scoreEl && match) {
+        scoreEl.textContent = `DNA ${match.score.toFixed(0)}`;
+    }
 
-    if (breakdownEl && match.breakdown) {
-        const b = match.breakdown;
-        breakdownEl.textContent =
-            `S:${b.structural.toFixed(0)} A:${b.sectorAffinity.toFixed(0)} P:${b.pattern.toFixed(0)}`;
+    // Update archetype name in stats line
+    if (nameEl) {
+        if (activeId === 'dynamic_interpolator') {
+            nameEl.textContent = 'Chameleon';
+        } else {
+            const Reveal = require('@reveal/core');
+            const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
+            const arch = archetypes.find(a => a.id === activeId);
+            nameEl.textContent = arch ? arch.name : activeId;
+        }
     }
 }
 
 function updateDNADisplay() {
-    const dnaEl = document.getElementById('stat-dna');
-    if (!dnaEl || !sessionState) return;
-
-    const dna = sessionState.getDNA();
-    if (!dna || !dna.global) return;
-
-    const g = dna.global;
-    const parts = [
-        `L:${Number(g.l).toFixed(0)}`,
-        `C:${Number(g.c).toFixed(0)}`,
-        `K:${Number(g.k).toFixed(0)}`,
-        `\u03C3L:${Number(g.l_std_dev).toFixed(0)}`,
-        `H:${Number(g.hue_entropy).toFixed(2)}`,
-        `T:${Number(g.temperature_bias) >= 0 ? '+' : ''}${Number(g.temperature_bias).toFixed(1)}`
-    ];
-    dnaEl.textContent = parts.join(' \u00b7 ');
+    // DNA details removed from stats panel (consolidated to single line).
+    // DNA score is now shown inline via updateMatchScore.
 }
 
 function setStatus(text) {
@@ -627,8 +624,12 @@ function _showProgress(label) {
     const root = document.getElementById('root');
     if (root) root.style.display = 'none';
     if (overlay) overlay.setAttribute('style', 'display: flex');
+    // Status is a separate element — updating it doesn't reflow the splash GIF
     const status = document.getElementById('splash-status');
-    if (status) status.textContent = label;
+    if (status) {
+        status.textContent = label;
+        status.setAttribute('style', 'display: block;');
+    }
 
     // Only reset GIF + timestamp on the first show.
     // Subsequent calls just update the status text — no blink.
@@ -651,11 +652,11 @@ function _hideProgress() {
     const root = document.getElementById('root');
     if (root) root.style.display = '';
     overlay.classList.add('fade-out');
+    const status = document.getElementById('splash-status');
+    if (status) status.setAttribute('style', 'display: none;');
     setTimeout(() => {
         overlay.setAttribute('style', 'display: none');
         overlay.classList.remove('fade-out');
-        const status = document.getElementById('splash-status');
-        if (status) status.textContent = '';
     }, 350);
 }
 

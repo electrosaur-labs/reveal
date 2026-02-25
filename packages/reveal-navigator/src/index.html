@@ -44,8 +44,14 @@
         }
 
         #splash-status {
-            margin-top: 16px; color: #888; font-size: 11px;
+            position: absolute;
+            bottom: 8px;
+            left: 0; right: 0;
+            text-align: center;
+            color: #888; font-size: 11px;
             letter-spacing: 0.5px; min-height: 14px;
+            z-index: 101;
+            pointer-events: none;
         }
 
         /* ─── Dialog fills its allocation ─── */
@@ -375,6 +381,48 @@
             border-color: #4da6ff;
         }
 
+        #carousel-sort {
+            display: none;
+            gap: 4px;
+            padding: 2px 0;
+            align-items: center;
+        }
+
+        .sort-label {
+            font-size: 9px;
+            color: #777;
+            margin-right: 2px;
+        }
+
+        .sort-chip {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 10px;
+            color: #999;
+            background: #383838;
+            border: 1px solid #555;
+            border-radius: 10px;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .sort-chip:hover {
+            color: #ccc;
+            border-color: #777;
+            background: #444;
+        }
+
+        .sort-chip.active {
+            color: #fff;
+            background: #4a3a2a;
+            border-color: #d4a017;
+        }
+
+        .sort-arrow {
+            font-size: 8px;
+        }
+
         /* ─── Trait Badges ─── */
         .card-traits {
             display: flex;
@@ -450,6 +498,22 @@
         .carousel-card.scoring {
             border-color: #ff0;
             box-shadow: 0 0 6px rgba(255, 255, 0, 0.5);
+        }
+
+        .carousel-card.recommended {
+            border-left: 3px solid #d4a017;
+        }
+
+        .recommended-badge {
+            background: #d4a017;
+            color: #000;
+            font-size: 9px;
+            font-weight: bold;
+            text-align: center;
+            padding: 1px 0;
+            margin: -4px -5px 3px -5px;
+            border-radius: 2px 2px 0 0;
+            letter-spacing: 0.5px;
         }
 
         #carousel-progress {
@@ -906,8 +970,8 @@
     <!-- Splash Screen -->
     <div id="progress-overlay" style="display:none;">
         <img id="splash-img" src="squeegee.gif" width="512" height="320" />
-        <div id="splash-status"></div>
     </div>
+    <div id="splash-status" style="display:none;"></div>
     <div id="root">
         <!-- Left Panel: Full workflow -->
         <div id="main-panel">
@@ -938,25 +1002,20 @@
                 </div>
             </div>
 
-            <!-- Stats panel -->
+            <!-- Stats panel (single line) -->
             <div id="preview-stats" style="display:none;">
                 <div class="stat-row" id="stat-row-poster">
+                    <span class="stat-val" id="stat-archetype-name"></span>
+                    <span class="stat-sep">&middot;</span>
                     <span class="stat-val" id="stat-colors"></span>
                     <span class="stat-sep">&middot;</span>
                     <span class="stat-highlight" id="stat-delta"></span>
                     <span class="stat-sep">&middot;</span>
+                    <span class="stat-score" id="stat-score"></span>
+                    <span class="stat-sep">&middot;</span>
                     <span id="dna-fidelity-text"></span>
                     <span class="stat-sep">&middot;</span>
                     <span class="stat-dim" id="stat-time"></span>
-                </div>
-                <div class="stat-row" id="stat-row-match">
-                    <span class="stat-label">Match</span>
-                    <span class="stat-score" id="stat-score"></span>
-                    <span class="stat-breakdown" id="stat-breakdown"></span>
-                </div>
-                <div class="stat-row" id="stat-row-dna">
-                    <span class="stat-label">DNA</span>
-                    <span class="stat-dim" id="stat-dna"></span>
                 </div>
             </div>
 
@@ -969,7 +1028,7 @@
                 <div id="carousel-progress-text"></div>
             </div>
 
-            <!-- Carousel Group Filters -->
+            <!-- Carousel Group Filters + Sort Chips -->
             <div id="carousel-filters">
                 <span class="filter-chip active" data-group="all">All</span>
                 <span class="filter-chip" data-group="natural">Natural</span>
@@ -979,13 +1038,20 @@
                 <span class="filter-chip" data-group="vibrant">Vibrant</span>
                 <span class="filter-chip" data-group="specialist">Specialist</span>
             </div>
+            <div id="carousel-sort" style="display:none;">
+                <span class="sort-label">Sort:</span>
+                <span class="sort-chip active" data-sort="score">Score <span class="sort-arrow">&#x25B2;</span></span>
+                <span class="sort-chip" data-sort="de">&#x0394;E <span class="sort-arrow"></span></span>
+                <span class="sort-chip" data-sort="dna">DNA <span class="sort-arrow"></span></span>
+                <span class="sort-chip" data-sort="screens">#Screens <span class="sort-arrow"></span></span>
+            </div>
 
             <!-- Archetype Carousel (horizontal scroll) -->
             <div id="carousel"></div>
 
             <!-- Finalize Flight Plan -->
             <div id="finalize-row" style="display:none;">
-                <sp-action-button id="btn-finalize" variant="accent">Commit to Press</sp-action-button>
+                <sp-action-button id="btn-finalize" variant="accent">Build Separations</sp-action-button>
                 <div id="finalize-progress"></div>
                 <div id="finalize-summary"></div>
             </div>

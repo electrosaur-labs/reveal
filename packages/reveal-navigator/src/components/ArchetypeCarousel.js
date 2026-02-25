@@ -31,8 +31,11 @@ class ArchetypeCarousel {
         this._activeId = null;      // Currently active archetype
         this._hoveredId = null;
         this._activeFilter = 'all'; // Current group filter
+        this._activeSort = 'score'; // Current sort axis
+        this._sortAscending = true; // Sort direction
 
         this._initFilterChips();
+        this._initSortChips();
         this._initTooltip();
         this._bindEvents();
     }
@@ -50,6 +53,111 @@ class ArchetypeCarousel {
                 this._setFilter(chip.dataset.group);
             });
         });
+    }
+
+    /**
+     * Initialize sort chip click handlers.
+     */
+    _initSortChips() {
+        this._sortContainer = document.getElementById('carousel-sort');
+        if (!this._sortContainer) return;
+
+        const chips = this._sortContainer.querySelectorAll('.sort-chip');
+        chips.forEach(chip => {
+            chip.addEventListener('pointerup', () => {
+                const axis = chip.dataset.sort;
+                if (axis === this._activeSort) {
+                    // Same chip: toggle direction
+                    this._sortAscending = !this._sortAscending;
+                } else {
+                    // New chip: default direction per axis
+                    this._activeSort = axis;
+                    // DNA: higher is better (descending), others: lower is better (ascending)
+                    this._sortAscending = axis !== 'dna';
+                }
+                this._applySortChipState();
+                this._sortCards();
+            });
+        });
+    }
+
+    /**
+     * Update sort chip visual state (active + arrow direction).
+     */
+    _applySortChipState() {
+        if (!this._sortContainer) return;
+        const chips = this._sortContainer.querySelectorAll('.sort-chip');
+        chips.forEach(chip => {
+            const isActive = chip.dataset.sort === this._activeSort;
+            chip.classList.toggle('active', isActive);
+            const arrow = chip.querySelector('.sort-arrow');
+            if (arrow) arrow.textContent = isActive ? (this._sortAscending ? '\u25B2' : '\u25BC') : '';
+        });
+    }
+
+    /**
+     * Sort cards in the DOM by the active sort axis.
+     */
+    _sortCards() {
+        const cards = Array.from(this._container.querySelectorAll('.carousel-card'));
+        if (cards.length === 0) return;
+
+        const axis = this._activeSort;
+        const asc = this._sortAscending;
+
+        cards.sort((a, b) => {
+            let aVal, bVal;
+            if (axis === 'score') {
+                aVal = parseFloat(a.dataset.sortScore) || 999;
+                bVal = parseFloat(b.dataset.sortScore) || 999;
+            } else if (axis === 'de') {
+                aVal = parseFloat(a.dataset.deltaE) || 999;
+                bVal = parseFloat(b.dataset.deltaE) || 999;
+            } else if (axis === 'dna') {
+                aVal = parseFloat(a.dataset.dnaScore) || 0;
+                bVal = parseFloat(b.dataset.dnaScore) || 0;
+            } else if (axis === 'screens') {
+                aVal = parseInt(a.dataset.screenCount) || 999;
+                bVal = parseInt(b.dataset.screenCount) || 999;
+            }
+            const primary = asc ? aVal - bVal : bVal - aVal;
+            if (primary !== 0) return primary;
+            // Tiebreak by sortScore ascending (best composite quality first)
+            const aScore = parseFloat(a.dataset.sortScore) || 999;
+            const bScore = parseFloat(b.dataset.sortScore) || 999;
+            return aScore - bScore;
+        });
+
+        // Re-insert sorted, update debug indices, apply recommended badges
+        let recommendedCount = 0;
+        for (let i = 0; i < cards.length; i++) {
+            this._container.appendChild(cards[i]);
+
+            // Recommended badges only when sorted by score (the composite metric)
+            const oldBadge = cards[i].querySelector('.recommended-badge');
+            if (oldBadge) oldBadge.remove();
+            cards[i].classList.remove('recommended');
+            if (axis === 'score') {
+                const sortVal = parseFloat(cards[i].dataset.sortScore);
+                if (!isNaN(sortVal) && sortVal < 900 && recommendedCount < 3) {
+                    cards[i].classList.add('recommended');
+                    const badge = document.createElement('div');
+                    badge.className = 'recommended-badge';
+                    badge.textContent = '\u2605 Top Pick';
+                    cards[i].insertBefore(badge, cards[i].firstChild);
+                    recommendedCount++;
+                }
+            }
+
+            const debugDiv = cards[i].querySelector('.card-debug-de');
+            if (debugDiv) {
+                const parts = debugDiv.textContent.match(/^\d+\s(.+)$/);
+                const rest = parts ? parts[1] : debugDiv.textContent;
+                debugDiv.textContent = `${String(i + 1).padStart(2, '0')} ${rest}`;
+            }
+        }
+
+        this._scrollToActive();
     }
 
     /**
@@ -138,7 +246,7 @@ class ArchetypeCarousel {
         });
         // Update individual card ΔE as each archetype is scored in the background.
         this._session.on('archetypeScored', (data) => {
-            this._updateCardDeltaE(data.id, data.meanDeltaE);
+            this._updateCardDeltaE(data.id, data.meanDeltaE, data.targetColors, data.sortScore);
         });
         // All scored — sort by displayed ΔE (includes live values from clicked cards).
         this._session.on('scoringComplete', () => {
@@ -195,9 +303,12 @@ class ArchetypeCarousel {
             this._container.appendChild(card);
         }
 
-        // Show filter chips now that cards exist
+        // Show filter and sort chips now that cards exist
         if (this._filtersContainer) {
             this._filtersContainer.setAttribute('style', 'display: flex;');
+        }
+        if (this._sortContainer) {
+            this._sortContainer.setAttribute('style', 'display: flex;');
         }
 
         // Apply current filter
@@ -240,15 +351,22 @@ class ArchetypeCarousel {
             : '';
 
         const deStr = hasDE ? match.meanDeltaE.toFixed(1) : '-';
+        const colorsStr = match.targetColors ? `${match.targetColors}c` : '';
+        const deDisplay = hasDE && colorsStr ? `${deStr} (${colorsStr})` : deStr;
         const dnaStr = match.score != null ? match.score.toFixed(0) : '-';
         const debugBg = hasDE ? '#ff0' : '#888';
+        if (match.sortScore != null) card.dataset.sortScore = match.sortScore.toFixed(2);
+        if (match.meanDeltaE != null) card.dataset.deltaE = match.meanDeltaE.toFixed(2);
+        if (match.score != null) card.dataset.dnaScore = match.score.toFixed(2);
+        if (match.targetColors != null) card.dataset.screenCount = match.targetColors;
+        const debugTitle = `${archetype.name} \u00b7 \u0394E ${deStr} \u00b7 ${colorsStr || '?c'} \u00b7 DNA ${dnaStr}`;
         card.innerHTML =
-            `<div class="card-debug-de" style="background:${debugBg};color:#000;font-size:14px;font-weight:bold;text-align:center;">${String(sortIndex + 1).padStart(2, '0')} \u0394E=${deStr} DNA=${dnaStr}</div>` +
+            `<div class="card-debug-de" title="${debugTitle}" style="background:${debugBg};color:#000;font-size:14px;font-weight:bold;text-align:center;">${String(sortIndex + 1).padStart(2, '0')} \u0394E=${deStr} ${colorsStr} DNA=${dnaStr}</div>` +
             `<div class="card-name">${archetype.name}</div>` +
             traitsHtml +
             `<div class="card-score-row">` +
                 `<div class="card-score-bar"><div class="card-score-fill" style="width:${scorePercent}%"></div></div>` +
-                `<span class="card-score-val">${deStr}</span>` +
+                `<span class="card-score-val">${deDisplay}</span>` +
             `</div>` +
             `<div class="card-hue">${hueIndicator}</div>` +
             (!isActive && !hasDE ? `<div class="card-explore-hint">Click to explore</div>` : '');
@@ -315,23 +433,30 @@ class ArchetypeCarousel {
      * Update a single card's displayed ΔE from a background scoring event.
      * Skips the active card — its ΔE is synced to the live value by previewUpdated.
      */
-    _updateCardDeltaE(id, meanDeltaE) {
+    _updateCardDeltaE(id, meanDeltaE, targetColors, sortScore) {
         const card = this._container.querySelector(`.carousel-card[data-id="${id}"]`);
         if (!card) return;
 
         const de = meanDeltaE.toFixed(1);
+        const colorsStr = targetColors ? `${targetColors}c` : '';
         const scoreVal = card.querySelector('.card-score-val');
-        if (scoreVal) scoreVal.textContent = de;
+        if (scoreVal) scoreVal.textContent = colorsStr ? `${de} (${colorsStr})` : de;
+        if (sortScore != null) card.dataset.sortScore = sortScore.toFixed(2);
+        card.dataset.deltaE = meanDeltaE.toFixed(2);
+        if (targetColors != null) card.dataset.screenCount = targetColors;
         const scoreFill = card.querySelector('.card-score-fill');
         if (scoreFill) scoreFill.style.width = Math.min(100, Math.max(0, 100 - meanDeltaE * 4)) + '%';
         const debugDiv = card.querySelector('.card-debug-de');
         if (debugDiv) {
-            // Preserve sort index and DNA value, update ΔE
+            // Preserve sort index and DNA value, update ΔE + screen count
             const parts = debugDiv.textContent.match(/^(\d+)\s.*DNA=(.+)$/);
             const idx = parts ? parts[1] : '??';
             const dna = parts ? parts[2] : '-';
-            debugDiv.textContent = `${idx} \u0394E=${de} DNA=${dna}`;
+            debugDiv.textContent = `${idx} \u0394E=${de} ${colorsStr} DNA=${dna}`;
             debugDiv.style.background = '#ff0';
+            // Update hover with archetype name + scores
+            const name = card.querySelector('.card-name')?.textContent || '?';
+            debugDiv.title = `${name} \u00b7 \u0394E ${de} \u00b7 ${colorsStr || '?c'} \u00b7 DNA ${dna}`;
         }
     }
 
@@ -422,33 +547,14 @@ class ArchetypeCarousel {
     }
 
     /**
-     * Re-sort carousel cards in DOM order by their currently displayed ΔE.
-     * Reads the value from each card's .card-score-val text.
+     * Re-sort carousel cards after scoring completes.
+     * Switches to score sort (the composite metric) and re-sorts.
      */
     sortByDisplayedDeltaE() {
-        const cards = Array.from(this._container.querySelectorAll('.carousel-card'));
-        if (cards.length === 0) return;
-
-        cards.sort((a, b) => {
-            const aVal = parseFloat(a.querySelector('.card-score-val')?.textContent) || 999;
-            const bVal = parseFloat(b.querySelector('.card-score-val')?.textContent) || 999;
-            return aVal - bVal;
-        });
-
-        // Re-insert in sorted order and update debug sort indices
-        for (let i = 0; i < cards.length; i++) {
-            this._container.appendChild(cards[i]);
-            const debugDiv = cards[i].querySelector('.card-debug-de');
-            if (debugDiv) {
-                const de = cards[i].querySelector('.card-score-val')?.textContent || '-';
-                // Preserve DNA value from existing debug text
-                const parts = debugDiv.textContent.match(/DNA=(.+)$/);
-                const dna = parts ? parts[1] : '-';
-                debugDiv.textContent = `${String(i + 1).padStart(2, '0')} \u0394E=${de} DNA=${dna}`;
-            }
-        }
-
-        this._scrollToActive();
+        this._activeSort = 'score';
+        this._sortAscending = true;
+        this._applySortChipState();
+        this._sortCards();
     }
 
     _scrollToActive() {
