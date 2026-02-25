@@ -1,6 +1,12 @@
 /**
  * HueAnalysis - Hue Sector Analysis and Gap Detection
  *
+ * @deprecated Superseded by HueGapRecovery.js which provides improved hue gap
+ * detection with PeakFinder integration and better minority hue rescue.
+ * PosterizationEngine imports this module but does not use it.
+ * Retained temporarily for backward compatibility with external consumers.
+ * New code should use HueGapRecovery.js instead.
+ *
  * Implements the "Artist-Centric / Hue-Aware Model" for color quantization:
  * - Divides color wheel into 12 sectors (30° each)
  * - Analyzes image hue distribution
@@ -11,7 +17,8 @@
  */
 
 const logger = require("../utils/logger");
-const { labDistance } = require('./ColorSpace');
+const LabDistance = require('../color/LabDistance');
+const labDistance = (lab1, lab2) => LabDistance.cie76(lab1, lab2);
 
 /**
  * Sector names for the 12 hue sectors (30° each)

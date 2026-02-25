@@ -13,7 +13,7 @@ const jpeg = require("jpeg-js");
 
 const pluginState = require('./PluginState');
 const { bufferToBase64, buildRemapTable } = require('./ColorUtils');
-const { applyShadowClamp, applyMinVolume, applySpeckleRescue } = require('./MechanicalFilters');
+const { applyShadowClamp, applyMinVolume, applySpeckleRescue } = require('./MechanicalFiltersAdapter');
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 
 /**

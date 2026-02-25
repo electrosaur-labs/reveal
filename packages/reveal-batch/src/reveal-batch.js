@@ -134,8 +134,8 @@ async function processImage(inputPath, outputDir) {
             if (pruneResult.mergedCount > 0) {
                 console.log(chalk.yellow(`  Pruned: ${finalPaletteLab.length} → ${pruneResult.prunedPalette.length} colors (minVolume=${minVolume}%, cap=${targetColors})`));
                 finalPaletteLab = pruneResult.prunedPalette;
-                const ColorSpace = Reveal.ColorSpace;
-                finalPaletteRgb = finalPaletteLab.map(lab => ColorSpace.labToRgb(lab));
+                const LabEnc = Reveal.LabEncoding;
+                finalPaletteRgb = finalPaletteLab.map(lab => LabEnc.labToRgb(lab));
                 colorIndices = pruneResult.remappedIndices;
             }
         }

@@ -13,7 +13,8 @@ import { describe, it, expect } from 'vitest';
 
 const Reveal = require('../../index.js');
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
-const ColorSpace = Reveal.engines.ColorSpace;
+const LabEncoding = Reveal.LabEncoding;
+const LabDistance = Reveal.LabDistance;
 const HueAnalysis = Reveal.engines.HueAnalysis;
 
 /**
@@ -493,38 +494,38 @@ describe('PosterizationEngine - Coverage Tests', () => {
     });
 });
 
-describe('ColorSpace Module', () => {
+describe('LabEncoding Module (formerly ColorSpace)', () => {
     describe('rgbToLab', () => {
         it('should convert white correctly', () => {
-            const lab = ColorSpace.rgbToLab({ r: 255, g: 255, b: 255 });
+            const lab = LabEncoding.rgbToLab({ r: 255, g: 255, b: 255 });
             expect(lab.L).toBeCloseTo(100, 0);
             expect(Math.abs(lab.a)).toBeLessThan(1);
             expect(Math.abs(lab.b)).toBeLessThan(1);
         });
 
         it('should convert black correctly', () => {
-            const lab = ColorSpace.rgbToLab({ r: 0, g: 0, b: 0 });
+            const lab = LabEncoding.rgbToLab({ r: 0, g: 0, b: 0 });
             expect(lab.L).toBeCloseTo(0, 0);
             expect(Math.abs(lab.a)).toBeLessThan(1);
             expect(Math.abs(lab.b)).toBeLessThan(1);
         });
 
         it('should convert red correctly', () => {
-            const lab = ColorSpace.rgbToLab({ r: 255, g: 0, b: 0 });
+            const lab = LabEncoding.rgbToLab({ r: 255, g: 0, b: 0 });
             expect(lab.L).toBeGreaterThan(50);
             expect(lab.a).toBeGreaterThan(60); // Red has positive a
             expect(lab.b).toBeGreaterThan(40); // Red has positive b
         });
 
         it('should convert green correctly', () => {
-            const lab = ColorSpace.rgbToLab({ r: 0, g: 255, b: 0 });
+            const lab = LabEncoding.rgbToLab({ r: 0, g: 255, b: 0 });
             expect(lab.L).toBeGreaterThan(80);
             expect(lab.a).toBeLessThan(-80); // Green has negative a
             expect(lab.b).toBeGreaterThan(70); // Green has positive b
         });
 
         it('should convert blue correctly', () => {
-            const lab = ColorSpace.rgbToLab({ r: 0, g: 0, b: 255 });
+            const lab = LabEncoding.rgbToLab({ r: 0, g: 0, b: 255 });
             expect(lab.L).toBeGreaterThan(30);
             expect(lab.a).toBeGreaterThan(60);  // Blue has positive a
             expect(lab.b).toBeLessThan(-100);   // Blue has negative b
@@ -533,14 +534,14 @@ describe('ColorSpace Module', () => {
 
     describe('labToRgb', () => {
         it('should convert white correctly', () => {
-            const rgb = ColorSpace.labToRgb({ L: 100, a: 0, b: 0 });
+            const rgb = LabEncoding.labToRgb({ L: 100, a: 0, b: 0 });
             expect(rgb.r).toBeCloseTo(255, 0);
             expect(rgb.g).toBeCloseTo(255, 0);
             expect(rgb.b).toBeCloseTo(255, 0);
         });
 
         it('should convert black correctly', () => {
-            const rgb = ColorSpace.labToRgb({ L: 0, a: 0, b: 0 });
+            const rgb = LabEncoding.labToRgb({ L: 0, a: 0, b: 0 });
             expect(rgb.r).toBeCloseTo(0, 0);
             expect(rgb.g).toBeCloseTo(0, 0);
             expect(rgb.b).toBeCloseTo(0, 0);
@@ -548,7 +549,7 @@ describe('ColorSpace Module', () => {
 
         it('should handle out-of-gamut colors gracefully', () => {
             // Very saturated Lab color that may be out of sRGB gamut
-            const rgb = ColorSpace.labToRgb({ L: 50, a: 100, b: 100 });
+            const rgb = LabEncoding.labToRgb({ L: 50, a: 100, b: 100 });
             expect(rgb.r).toBeGreaterThanOrEqual(0);
             expect(rgb.r).toBeLessThanOrEqual(255);
             expect(rgb.g).toBeGreaterThanOrEqual(0);
@@ -559,8 +560,8 @@ describe('ColorSpace Module', () => {
 
         it('should roundtrip RGB -> Lab -> RGB', () => {
             const originalRgb = { r: 128, g: 64, b: 192 };
-            const lab = ColorSpace.rgbToLab(originalRgb);
-            const roundtripRgb = ColorSpace.labToRgb(lab);
+            const lab = LabEncoding.rgbToLab(originalRgb);
+            const roundtripRgb = LabEncoding.labToRgb(lab);
 
             expect(roundtripRgb.r).toBeCloseTo(originalRgb.r, 0);
             expect(roundtripRgb.g).toBeCloseTo(originalRgb.g, 0);
@@ -568,37 +569,9 @@ describe('ColorSpace Module', () => {
         });
     });
 
-    describe('colorDistance', () => {
-        it('should return 0 for identical colors', () => {
-            const dist = ColorSpace.colorDistance(
-                { r: 100, g: 150, b: 200 },
-                { r: 100, g: 150, b: 200 }
-            );
-            expect(dist).toBe(0);
-        });
-
-        it('should return positive distance for different colors', () => {
-            const dist = ColorSpace.colorDistance(
-                { r: 255, g: 0, b: 0 },
-                { r: 0, g: 255, b: 0 }
-            );
-            expect(dist).toBeGreaterThan(0);
-        });
-
-        it('should be symmetric', () => {
-            const color1 = { r: 100, g: 50, b: 200 };
-            const color2 = { r: 200, g: 100, b: 50 };
-
-            const dist1 = ColorSpace.colorDistance(color1, color2);
-            const dist2 = ColorSpace.colorDistance(color2, color1);
-
-            expect(dist1).toBeCloseTo(dist2, 10);
-        });
-    });
-
-    describe('labDistance', () => {
+    describe('LabDistance.cie76', () => {
         it('should return 0 for identical Lab colors', () => {
-            const dist = ColorSpace.labDistance(
+            const dist = LabDistance.cie76(
                 { L: 50, a: 20, b: -30 },
                 { L: 50, a: 20, b: -30 }
             );
@@ -607,17 +580,39 @@ describe('ColorSpace Module', () => {
 
         it('should calculate CIE76 ΔE correctly', () => {
             // ΔE = sqrt(dL² + da² + db²)
-            const dist = ColorSpace.labDistance(
+            const dist = LabDistance.cie76(
                 { L: 50, a: 0, b: 0 },
                 { L: 50, a: 3, b: 4 }  // ΔE should be 5
             );
             expect(dist).toBeCloseTo(5, 5);
         });
+
+        it('should return 0 for identical RGB-converted colors', () => {
+            const lab1 = LabEncoding.rgbToLab({ r: 100, g: 150, b: 200 });
+            const lab2 = LabEncoding.rgbToLab({ r: 100, g: 150, b: 200 });
+            const dist = LabDistance.cie76(lab1, lab2);
+            expect(dist).toBe(0);
+        });
+
+        it('should return positive distance for different RGB colors', () => {
+            const lab1 = LabEncoding.rgbToLab({ r: 255, g: 0, b: 0 });
+            const lab2 = LabEncoding.rgbToLab({ r: 0, g: 255, b: 0 });
+            const dist = LabDistance.cie76(lab1, lab2);
+            expect(dist).toBeGreaterThan(0);
+        });
+
+        it('should be symmetric', () => {
+            const lab1 = LabEncoding.rgbToLab({ r: 100, g: 50, b: 200 });
+            const lab2 = LabEncoding.rgbToLab({ r: 200, g: 100, b: 50 });
+            const dist1 = LabDistance.cie76(lab1, lab2);
+            const dist2 = LabDistance.cie76(lab2, lab1);
+            expect(dist1).toBeCloseTo(dist2, 10);
+        });
     });
 
-    describe('calculateCIELABDistance', () => {
+    describe('PosterizationEngine.calculateCIELABDistance', () => {
         it('should return squared distance for performance', () => {
-            const distSq = ColorSpace.calculateCIELABDistance(
+            const distSq = PosterizationEngine.calculateCIELABDistance(
                 { L: 50, a: 0, b: 0 },
                 { L: 50, a: 3, b: 4 }
             );
@@ -626,12 +621,12 @@ describe('ColorSpace Module', () => {
         });
 
         it('should apply higher L weight for grayscale', () => {
-            const distColor = ColorSpace.calculateCIELABDistance(
+            const distColor = PosterizationEngine.calculateCIELABDistance(
                 { L: 50, a: 0, b: 0 },
                 { L: 60, a: 0, b: 0 },
                 false
             );
-            const distGray = ColorSpace.calculateCIELABDistance(
+            const distGray = PosterizationEngine.calculateCIELABDistance(
                 { L: 50, a: 0, b: 0 },
                 { L: 60, a: 0, b: 0 },
                 true
@@ -641,33 +636,33 @@ describe('ColorSpace Module', () => {
         });
     });
 
-    describe('paletteToHex', () => {
+    describe('PosterizationEngine.paletteToHex', () => {
         it('should convert RGB palette to hex strings', () => {
             const palette = [
                 { r: 255, g: 0, b: 0 },
                 { r: 0, g: 255, b: 0 },
                 { r: 0, g: 0, b: 255 }
             ];
-            const hex = ColorSpace.paletteToHex(palette);
+            const hex = PosterizationEngine.paletteToHex(palette);
 
             expect(hex).toEqual(['#FF0000', '#00FF00', '#0000FF']);
         });
 
         it('should pad single-digit hex values', () => {
             const palette = [{ r: 1, g: 2, b: 3 }];
-            const hex = ColorSpace.paletteToHex(palette);
+            const hex = PosterizationEngine.paletteToHex(palette);
             expect(hex).toEqual(['#010203']);
         });
     });
 
-    describe('calculateHexDistance', () => {
+    describe('PosterizationEngine.calculateHexDistance', () => {
         it('should return 0 for identical hex colors', () => {
-            const dist = ColorSpace.calculateHexDistance('#FF0000', '#FF0000');
+            const dist = PosterizationEngine.calculateHexDistance('#FF0000', '#FF0000');
             expect(dist).toBe(0);
         });
 
         it('should calculate distance between hex colors', () => {
-            const dist = ColorSpace.calculateHexDistance('#FF0000', '#00FF00');
+            const dist = PosterizationEngine.calculateHexDistance('#FF0000', '#00FF00');
             expect(dist).toBeGreaterThan(0);
         });
     });

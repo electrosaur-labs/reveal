@@ -362,8 +362,8 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
             colorIndices = pruneResult.remappedIndices;
 
             // Build pruned RGB palette by filtering original palette using strong indices
-            const ColorSpace = Reveal.ColorSpace;
-            finalPaletteRgb = finalPaletteLab.map(lab => ColorSpace.labToRgb(lab));
+            const LabEnc = Reveal.LabEncoding;
+            finalPaletteRgb = finalPaletteLab.map(lab => LabEnc.labToRgb(lab));
 
             console.log(chalk.green(`  ✅ Pruned: ${posterizeResult.paletteLab.length} → ${finalPaletteLab.length} colors`));
         }

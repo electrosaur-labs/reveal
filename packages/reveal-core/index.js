@@ -452,7 +452,6 @@ module.exports.engines = {
     ImageHeuristicAnalyzer,
 
     // Modular components (v2.0)
-    ColorSpace: require('./lib/engines/ColorSpace'),
     HueAnalysis: require('./lib/engines/HueAnalysis'),
     CentroidStrategies: require('./lib/engines/CentroidStrategies').CentroidStrategies,
     DitheringStrategies: require('./lib/engines/DitheringStrategies').DitheringStrategies,
@@ -515,8 +514,6 @@ module.exports.LabConverter = require('./lib/utils/LabConverter');
 // Export MedianFilter at top level for salt-and-pepper noise removal
 module.exports.MedianFilter = require('./lib/preprocessing/MedianFilter');
 
-// Export ColorSpace at top level for Lab↔RGB conversions
-module.exports.ColorSpace = require('./lib/engines/ColorSpace');
 
 // Export MechanicalKnobs at top level for shared knob processing
 module.exports.MechanicalKnobs = MechanicalKnobs;

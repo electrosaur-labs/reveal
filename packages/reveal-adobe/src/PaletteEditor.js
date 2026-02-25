@@ -18,7 +18,7 @@ const logger = Reveal.logger;
 
 const pluginState = require('./PluginState');
 const { hexToRgb, rgbToHex, showPhotoshopColorPicker, resolveDistanceMetric } = require('./ColorUtils');
-const { applyShadowClamp, applyMinVolume, applySpeckleRescue } = require('./MechanicalFilters');
+const { applyShadowClamp, applyMinVolume, applySpeckleRescue } = require('./MechanicalFiltersAdapter');
 const { handleSwatchClick, handleSwatchDelete, updateSwatchHighlights, updateSwatchVisuals, clearSwatchSelection } = require('./SwatchManager');
 const { renderPreview, renderNavigatorMap, render1to1Preview, renderCropWithFilters } = require('./PreviewRenderer');
 const { detachPreviewZoomHandlers } = require('./ViewModeController');

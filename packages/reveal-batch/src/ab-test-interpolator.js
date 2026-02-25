@@ -376,7 +376,7 @@ async function runPipelineTest(sampleSize, opts = {}) {
     const BilateralFilter = Reveal.BilateralFilter;
     const MedianFilter = Reveal.MedianFilter;
     const MechanicalKnobs = Reveal.MechanicalKnobs;
-    const ColorSpace = Reveal.ColorSpace;
+    const LabEncoding = Reveal.LabEncoding;
 
     // Load data
     const harvest = JSON.parse(fs.readFileSync(HARVEST_PATH, 'utf8'));
@@ -445,7 +445,7 @@ async function runPipelineTest(sampleSize, opts = {}) {
             // Run interpolated pipeline
             const interpResult = await processWithInterpolation(
                 info.inputPsd, info.interpOutputDir, img, engine,
-                { Reveal, readPsd, MetricsCalculator, BilateralFilter, MedianFilter, MechanicalKnobs, ColorSpace },
+                { Reveal, readPsd, MetricsCalculator, BilateralFilter, MedianFilter, MechanicalKnobs, LabEncoding },
                 { writePsd }
             );
 
@@ -602,7 +602,7 @@ async function runPipelineTest(sampleSize, opts = {}) {
 // ---------------------------------------------------------------------------
 
 async function processWithInterpolation(inputPath, outputDir, harvestImg, engine, deps, options = {}) {
-    const { Reveal, readPsd, MetricsCalculator, BilateralFilter, MedianFilter, MechanicalKnobs, ColorSpace } = deps;
+    const { Reveal, readPsd, MetricsCalculator, BilateralFilter, MedianFilter, MechanicalKnobs, LabEncoding } = deps;
     const writePsd = options.writePsd || false;
 
     const basename = path.basename(inputPath, '.psd');
@@ -772,7 +772,7 @@ async function processWithInterpolation(inputPath, outputDir, harvestImg, engine
     );
 
     // Build RGB palette and coverage for output
-    const finalPaletteRgb = finalPaletteLab.map(lab => ColorSpace.labToRgb(lab));
+    const finalPaletteRgb = finalPaletteLab.map(lab => LabEncoding.labToRgb(lab));
     const coverageCounts = new Uint32Array(finalPaletteLab.length);
     for (let i = 0; i < pixelCount; i++) coverageCounts[colorIndices[i]]++;
 

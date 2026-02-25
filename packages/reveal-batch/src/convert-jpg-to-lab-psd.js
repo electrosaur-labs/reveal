@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { PSDWriter } = require('@reveal/psd-writer');
-const ColorSpace = require('@reveal/core').ColorSpace;
+const LabEncoding = require('@reveal/core').LabEncoding;
 
 const INPUT_DIR = path.join(__dirname, '../data/SP100/input/minkler/jpg');
 const OUTPUT_8BIT = path.join(__dirname, '../data/SP100/output/minkler/psd/8bit');
@@ -31,7 +31,7 @@ function rgbToLab8bit(rgbBuffer, pixelCount) {
         const b = rgbBuffer[i * 3 + 2];
 
         // Convert RGB to Lab
-        const lab = ColorSpace.rgbToLab({ r, g, b });
+        const lab = LabEncoding.rgbToLab({ r, g, b });
 
         // Encode to 8-bit PSD format:
         // L: 0-100 → 0-255
@@ -60,7 +60,7 @@ function rgbToLab16bit(rgbBuffer, pixelCount) {
         const b = rgbBuffer[i * 3 + 2];
 
         // Convert RGB to Lab
-        const lab = ColorSpace.rgbToLab({ r, g, b });
+        const lab = LabEncoding.rgbToLab({ r, g, b });
 
         // Encode to 16-bit PSD format (big-endian):
         // L: 0-100 → 0-65535

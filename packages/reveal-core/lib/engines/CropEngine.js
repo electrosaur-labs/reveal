@@ -20,7 +20,7 @@
 
 const PosterizationEngine = require('./PosterizationEngine');
 const SeparationEngine = require('./SeparationEngine');
-const ColorSpace = require('./ColorSpace');
+const LabEncoding = require('../color/LabEncoding');
 
 class CropEngine {
     // No longer fixed - Elastic Portal architecture
@@ -191,14 +191,14 @@ class CropEngine {
                 rgbPalette = posterizeResult.palette;
             } else if ('L' in firstColor) {
                 // Contains Lab values, convert to RGB
-                rgbPalette = posterizeResult.palette.map(lab => ColorSpace.labToRgb(lab));
+                rgbPalette = posterizeResult.palette.map(lab => LabEncoding.labToRgb(lab));
             } else {
                 // Unknown format, convert from paletteLab as fallback
-                rgbPalette = posterizeResult.paletteLab.map(lab => ColorSpace.labToRgb(lab));
+                rgbPalette = posterizeResult.paletteLab.map(lab => LabEncoding.labToRgb(lab));
             }
         } else {
             // No RGB palette provided, convert from Lab palette
-            rgbPalette = posterizeResult.paletteLab.map(lab => ColorSpace.labToRgb(lab));
+            rgbPalette = posterizeResult.paletteLab.map(lab => LabEncoding.labToRgb(lab));
         }
 
 

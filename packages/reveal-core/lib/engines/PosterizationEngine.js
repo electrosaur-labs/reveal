@@ -11,14 +11,13 @@
  * - RgbMedianCut.js: Classic RGB median cut engine
  * - PixelAssignment.js: Stride-based pixel assignment
  * - CentroidStrategies.js: Centroid selection strategies
- * - ColorSpace.js: Lab/RGB conversions (legacy, unused by engine)
+ * - HueAnalysis.js: Hue analysis (legacy, superseded by HueGapRecovery)
  * - HueAnalysis.js: Hue analysis (legacy, unused by engine)
  */
 
 const logger = require("../utils/logger");
 
 // Import modular components
-const ColorSpace = require('./ColorSpace');
 const HueAnalysis = require('./HueAnalysis');
 const { CentroidStrategies } = require('./CentroidStrategies');
 const PeakFinder = require('../analysis/PeakFinder');
