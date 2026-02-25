@@ -36,6 +36,8 @@ class PaletteSurgeon {
 
         // Currently selected suggested swatch index (within filtered list), -1 = none
         this._selectedSuggestionIdx = -1;
+        // View mode for selected suggestion: 'integrated' (what-if) or 'solo' (isolation)
+        this._suggestionViewMode = null;
 
         this._swatchElements = new Map();
 
@@ -61,6 +63,7 @@ class PaletteSurgeon {
             this._state = 'IDLE';
             this._selectedIndex = -1;
             this._selectedSuggestionIdx = -1;
+            this._suggestionViewMode = null;
             this._session.clearHighlight();
             this._header.textContent = 'Click a color to isolate';
         });
@@ -250,6 +253,7 @@ class PaletteSurgeon {
         // Clear any suggested swatch selection
         if (this._selectedSuggestionIdx >= 0) {
             this._selectedSuggestionIdx = -1;
+            this._suggestionViewMode = null;
             this._renderSuggestedColors();
         }
 
@@ -579,16 +583,29 @@ class PaletteSurgeon {
                 }
 
                 if (this._selectedSuggestionIdx === idx) {
-                    // Same swatch → deselect
-                    this._selectedSuggestionIdx = -1;
-                    this._session.clearHighlight();
-                    this._header.textContent = 'Click a color to isolate';
+                    if (this._suggestionViewMode === 'solo') {
+                        // Solo → show integrated "what if" preview
+                        this._suggestionViewMode = 'integrated';
+                        this._session.setSuggestionGhost(
+                            { L: suggestion.L, a: suggestion.a, b: suggestion.b },
+                            'integrated'
+                        );
+                        this._header.textContent = 'Showing "what if" \u2014 click to deselect';
+                    } else {
+                        // Integrated → deselect
+                        this._selectedSuggestionIdx = -1;
+                        this._suggestionViewMode = null;
+                        this._session.clearHighlight();
+                        this._header.textContent = 'Click a color to isolate';
+                    }
                 } else {
-                    // Select this suggestion → show ghost preview
+                    // Select this suggestion → show solo isolation
                     this._selectedSuggestionIdx = idx;
-                    this._session.setSuggestionGhost({
-                        L: suggestion.L, a: suggestion.a, b: suggestion.b
-                    });
+                    this._suggestionViewMode = 'solo';
+                    this._session.setSuggestionGhost(
+                        { L: suggestion.L, a: suggestion.a, b: suggestion.b },
+                        'solo'
+                    );
                     this._header.textContent = 'Ctrl+click to mark "must have"';
                 }
                 this._renderSuggestedColors();

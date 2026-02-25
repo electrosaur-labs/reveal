@@ -61,8 +61,9 @@ class Preview {
         if (!this._img) return;
 
         this._img.addEventListener('pointerdown', (e) => {
-            // Skip if highlight active or no preview ready
+            // Skip if highlight or suggestion ghost active, or no preview ready
             if (this._session.state.highlightColorIndex >= 0) return;
+            if (this._session.state.highlightColorIndex === -2) return;
             if (!this._session.state.proxyBufferReady) return;
 
             // Immediate: toggle between original and posterized
@@ -147,7 +148,15 @@ class Preview {
 
             // If a color is highlighted, regenerate isolation preview from updated separation
             const highlightIdx = this._session.state.highlightColorIndex;
-            if (highlightIdx >= 0) {
+            if (highlightIdx === -2 && this._session._ghostLabColor) {
+                // Suggestion ghost active — regenerate from stored Lab color
+                const ghostBuf = this._session.generateSuggestionGhostPreview(this._session._ghostLabColor, this._session._ghostMode);
+                if (ghostBuf) {
+                    this._renderBuffer(ghostBuf, this._dimensions.width, this._dimensions.height);
+                } else {
+                    this._renderBuffer(data.previewBuffer, this._dimensions.width, this._dimensions.height);
+                }
+            } else if (highlightIdx >= 0) {
                 const hlBuf = this._session.generateHighlightPreview(highlightIdx);
                 if (hlBuf) {
                     this._renderBuffer(hlBuf, this._dimensions.width, this._dimensions.height);
@@ -244,6 +253,7 @@ class Preview {
     showOriginal() {
         if (!this._dimensions) return;
         if (this._session.state.highlightColorIndex >= 0) return;
+        if (this._session.state.highlightColorIndex === -2) return;
 
         const original = this._session.getOriginalPreviewBuffer();
         if (!original) return;

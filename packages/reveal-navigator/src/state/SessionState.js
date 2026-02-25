@@ -791,12 +791,16 @@ class SessionState extends EventEmitter {
      * @param {number} colorIndex - 0+ to highlight, -1 to clear
      */
     setHighlight(colorIndex) {
+        this._ghostLabColor = null;
+        this._ghostMode = null;
         this.state.highlightColorIndex = colorIndex;
         this.emit('highlightChanged', { colorIndex });
     }
 
     /** Clear highlight — restore normal preview. */
     clearHighlight() {
+        this._ghostLabColor = null;
+        this._ghostMode = null;
         this.setHighlight(-1);
     }
 
@@ -1450,12 +1454,13 @@ class SessionState extends EventEmitter {
      * Generate ghost preview: show which pixels a suggested color would capture.
      * For each pixel, checks if labColor is closer than the pixel's current assignment.
      * Pixels that would be captured → shown in labColor's RGB at full brightness.
-     * All other pixels → dimmed to #282828.
+     * Non-captured pixels: 'integrated' mode keeps palette color, 'solo' mode dims to #282828.
      *
      * @param {{L: number, a: number, b: number}} labColor - The suggested Lab color
+     * @param {'integrated'|'solo'} [mode='integrated'] - Rendering mode
      * @returns {Uint8ClampedArray|null} RGBA buffer, or null if not ready
      */
-    generateSuggestionGhostPreview(labColor) {
+    generateSuggestionGhostPreview(labColor, mode = 'integrated') {
         if (!this.proxyEngine || !this.proxyEngine.separationState) return null;
 
         const state = this.proxyEngine.separationState;
@@ -1470,13 +1475,12 @@ class SessionState extends EventEmitter {
 
         // Pre-compute the suggested color's RGB for captured pixels
         const sugRgb = Reveal.labToRgb(labColor.L, labColor.a, labColor.b);
+        const solo = (mode === 'solo');
 
         // 16-bit Lab encoding constants
         const L_SCALE = 327.68;
         const AB_NEUTRAL = 16384;
         const AB_SCALE = 128;
-
-        const DIM_R = 0x28, DIM_G = 0x28, DIM_B = 0x28;
 
         for (let i = 0; i < pixelCount; i++) {
             const off3 = i * 3;
@@ -1506,10 +1510,17 @@ class SessionState extends EventEmitter {
                 rgba[off4]     = sugRgb.r;
                 rgba[off4 + 1] = sugRgb.g;
                 rgba[off4 + 2] = sugRgb.b;
+            } else if (solo) {
+                // Solo mode: dim non-captured pixels
+                rgba[off4]     = 0x28;
+                rgba[off4 + 1] = 0x28;
+                rgba[off4 + 2] = 0x28;
             } else {
-                rgba[off4]     = DIM_R;
-                rgba[off4 + 1] = DIM_G;
-                rgba[off4 + 2] = DIM_B;
+                // Integrated mode: keep normal palette color
+                const c = rgbPalette[ci];
+                rgba[off4]     = c.r;
+                rgba[off4 + 1] = c.g;
+                rgba[off4 + 2] = c.b;
             }
             rgba[off4 + 3] = 255;
         }
@@ -1518,14 +1529,18 @@ class SessionState extends EventEmitter {
     }
 
     /**
-     * Set a suggestion ghost preview (triggered by hovering a suggested swatch).
+     * Set a suggestion ghost preview (triggered by clicking a suggested swatch).
      * Emits highlightChanged with a ghost buffer instead of a color index.
      * @param {{L: number, a: number, b: number}} labColor
+     * @param {'integrated'|'solo'} [mode='integrated'] - 'integrated' shows all colors
+     *   with suggestion replacing captured pixels; 'solo' dims non-captured to #282828
      */
-    setSuggestionGhost(labColor) {
-        const ghostBuffer = this.generateSuggestionGhostPreview(labColor);
+    setSuggestionGhost(labColor, mode = 'integrated') {
+        const ghostBuffer = this.generateSuggestionGhostPreview(labColor, mode);
         if (ghostBuffer) {
-            this.state.highlightColorIndex = -1;
+            this._ghostLabColor = { L: labColor.L, a: labColor.a, b: labColor.b };
+            this._ghostMode = mode;
+            this.state.highlightColorIndex = -2;
             this.emit('highlightChanged', { colorIndex: -2, ghostBuffer });
         }
     }

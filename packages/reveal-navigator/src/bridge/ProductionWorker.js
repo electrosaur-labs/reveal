@@ -387,7 +387,7 @@ class ProductionWorker {
             buffer[idx + 3] = 255;
         }
 
-        return { buffer, width, height, eRev };
+        return { buffer, width, height, eRev, labPixels, colorIndices, labPalette };
     }
 
     // ─── Fast Pixel Mapping ──────────────────────────────────────
