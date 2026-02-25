@@ -211,18 +211,6 @@ class PaletteSurgeon {
                 this._onSwatchClick(idx, e.shiftKey, e.altKey);
             };
 
-            // ── Hover — lightweight highlight when IDLE ──
-            swatch.onmouseenter = () => {
-                if (this._state !== 'SELECTED' && !this._pickerOpen) {
-                    this._session.setHighlight(i);
-                }
-            };
-            swatch.onmouseleave = () => {
-                if (this._state !== 'SELECTED' && !this._pickerOpen) {
-                    this._session.clearHighlight();
-                }
-            };
-
             this._grid.appendChild(swatch);
             this._swatchElements.set(i, swatch);
         }
@@ -611,19 +599,6 @@ class PaletteSurgeon {
                 this._renderSuggestedColors();
             };
 
-            // Hover preview: temporary ghost when idle (nothing selected, no picker)
-            swatch.onmouseenter = () => {
-                if (this._state !== 'SELECTED' && this._selectedSuggestionIdx < 0 && !this._pickerOpen) {
-                    this._session.setSuggestionGhost({
-                        L: suggestion.L, a: suggestion.a, b: suggestion.b
-                    });
-                }
-            };
-            swatch.onmouseleave = () => {
-                if (this._state !== 'SELECTED' && this._selectedSuggestionIdx < 0 && !this._pickerOpen) {
-                    this._session.clearHighlight();
-                }
-            };
 
             row.appendChild(swatch);
         }

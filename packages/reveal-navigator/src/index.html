@@ -299,8 +299,9 @@
             display: none;
             font-size: 9px;
             color: #888;
-            padding: 0 0 3px 0;
-            line-height: 1.3;
+            padding: 0 0 2px 0;
+            margin-bottom: 4px;
+            line-height: 1.4;
         }
         #knobs-panel.show-help .knob-help {
             display: block;
@@ -1191,7 +1192,7 @@
                     <button class="knob-revert" id="revert-meshSize" title="Revert to default">&#x21BA;</button>
                 </div>
                 <select id="picker-meshSize">
-                    <option value="0">Pixel-Level</option>
+                    <option value="0">No Mesh (0)</option>
                     <option value="110">110 TPI</option>
                     <option value="156">156 TPI</option>
                     <option value="200">200 TPI</option>
@@ -1224,7 +1225,7 @@
                     <div class="knob-group-label">Method</div>
 
                     <div class="knob-row">
-                        <span class="knob-label">Engine</span>
+                        <span class="knob-label">Separation Method</span>
                         <button class="knob-revert" id="revert-engineType">&#x21BA;</button>
                     </div>
                     <select id="picker-engineType">
@@ -1248,7 +1249,7 @@
                     <span class="knob-help">How pixel-to-color distance is measured</span>
 
                     <div class="knob-row">
-                        <span class="knob-label">Strategy</span>
+                        <span class="knob-label">Color Selection</span>
                         <button class="knob-revert" id="revert-centroidStrategy">&#x21BA;</button>
                     </div>
                     <select id="picker-centroidStrategy">
@@ -1271,7 +1272,7 @@
                     <span class="knob-help">Full color, black & white, or grayscale output</span>
 
                     <div class="knob-row">
-                        <span class="knob-label">Preprocessing</span>
+                        <span class="knob-label">Pre-Smoothing</span>
                         <button class="knob-revert" id="revert-preprocessingIntensity">&#x21BA;</button>
                     </div>
                     <select id="picker-preprocessingIntensity">
@@ -1284,7 +1285,7 @@
                     <span class="knob-help">Noise reduction before separation — smooths photos</span>
 
                     <div class="knob-row">
-                        <span class="knob-label">Neutral Clamp</span>
+                        <span class="knob-label">Gray Snap</span>
                         <button class="knob-revert" id="revert-neutralCentroidClampThreshold">&#x21BA;</button>
                         <span class="knob-val" id="neutralCentroidClampThreshold-val">0.5</span>
                     </div>
@@ -1292,7 +1293,7 @@
                     <span class="knob-help">Snap near-neutral centroids to true gray</span>
 
                     <div class="knob-row">
-                        <span class="knob-label">Neutral Sovereignty</span>
+                        <span class="knob-label">Gray Protection</span>
                         <button class="knob-revert" id="revert-neutralSovereigntyThreshold">&#x21BA;</button>
                         <span class="knob-val" id="neutralSovereigntyThreshold-val">0</span>
                     </div>
