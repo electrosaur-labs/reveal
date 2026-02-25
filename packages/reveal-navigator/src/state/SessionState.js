@@ -21,11 +21,11 @@ const MECHANICAL_KNOBS = new Set(['minVolume', 'speckleRescue', 'shadowClamp']);
 
 // Parameters that only affect production render (not proxy preview).
 // Trap pixel sizes are resolution-dependent — meaningless at 512px proxy.
-const PRODUCTION_KNOBS = new Set(['trapSize']);
+const PRODUCTION_KNOBS = new Set(['trapSize', 'meshSize']);
 
 // Initial defaults for production-only knobs (archetype configs don't define these).
 // Without explicit reset, stale values leak across archetype swaps.
-const PRODUCTION_KNOB_DEFAULTS = { trapSize: 0 };
+const PRODUCTION_KNOB_DEFAULTS = { trapSize: 0, meshSize: 230 };
 
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
 // This is the complete set from ParameterGenerator output — any change triggers rePosterize.
@@ -34,7 +34,7 @@ const STRUCTURAL_PARAMS = new Set([
     // Saliency weights
     'lWeight', 'cWeight', 'blackBias',
     // Vibrancy
-    'vibrancyMode', 'vibrancyBoost', 'vibrancyThreshold',
+    'vibrancyMode', 'vibrancyBoost',
     // Highlights
     'highlightThreshold', 'highlightBoost',
     // Palette merging
@@ -51,26 +51,33 @@ const STRUCTURAL_PARAMS = new Set([
     'preserveWhite', 'preserveBlack',
     // Neutral clamping
     'neutralCentroidClampThreshold', 'neutralSovereigntyThreshold',
-    // Surgical
-    'chromaGate', 'detailRescue', 'medianPass',
-    // Dither
+    // Chroma gate (cWeight multiplier for high-chroma images)
+    'chromaGate',
+    // Dither + separation
     'ditherType',
     // Preprocessing
     'preprocessingIntensity',
     // Transparency
     'ignoreTransparent',
-    // Mask / Edge
-    'maskProfile',
-    // Screen mesh
-    'meshSize',
     // K-means refinement
     'refinementPasses'
 ]);
 
+// Parameters with UI controls that don't yet affect any engine.
+// Keep in ALL_KNOBS for config sync and dirty detection, but NOT in
+// STRUCTURAL_PARAMS — changing them should not trigger re-posterize.
+const UNIMPLEMENTED_KNOBS = new Set([
+    'vibrancyThreshold',    // Stored but no engine reads it
+    'detailRescue',         // Stored but no engine reads it
+    'medianPass',           // Stored but no engine reads it
+    'maskProfile',          // Stored but ProductionWorker doesn't use it yet
+]);
+
 // Union of all user-facing knobs (for snapshot/restore/reset/dirty loops).
-// Includes mechanical, production, and ALL structural params from config.
+// Includes mechanical, production, structural, and unimplemented params.
 const ALL_KNOBS = new Set([
-    ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS
+    ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS,
+    ...UNIMPLEMENTED_KNOBS
 ]);
 
 // All archetypes get ΔE-scored in the background after splash.
@@ -92,8 +99,9 @@ class SessionState extends EventEmitter {
             activeArchetypeId: null,
             isArchetypeDirty: false,
 
-            // Production-only (not in archetype config)
-            trapSize: 0,  // 0=off, 1-10px trap expansion
+            // Session-level equipment settings (not archetype-driven)
+            trapSize: 0,    // 0=off, 1-10px trap expansion
+            meshSize: 230,  // Screen mesh TPI (physical equipment, survives archetype swaps)
 
             // Engine & preview state
             isProcessing: false,
@@ -522,6 +530,11 @@ class SessionState extends EventEmitter {
         if (this.state[key] === value) return;
 
         this.state[key] = value;
+
+        // If user manually changes cWeight, update base for chromaGate recalculation
+        if (key === 'cWeight') {
+            this._baseCWeight = value;
+        }
 
         // Mark archetype dirty when structural param changes
         if (STRUCTURAL_PARAMS.has(key)) {
@@ -1775,6 +1788,15 @@ class SessionState extends EventEmitter {
             }
         }
 
+        // Store base cWeight BEFORE chromaGate multiplication.
+        // ParameterGenerator.generate() bakes chromaGate into cWeight at generation time,
+        // so config.cWeight = baseCWeight * chromaGate. To allow the chromaGate slider to
+        // recalculate cWeight on the fly, we need the pre-multiplied base.
+        const cg = config.chromaGate || 1.0;
+        this._baseCWeight = (cg !== 0 && cg !== 1.0)
+            ? (config.cWeight || 1.0) / cg
+            : (config.cWeight || 1.0);
+
         if (config.id) this.state.activeArchetypeId = config.id;
 
         // Snapshot archetype defaults for dirty detection (all user-facing knobs)
@@ -1798,6 +1820,14 @@ class SessionState extends EventEmitter {
             if (this.state[key] !== undefined) {
                 this.currentConfig[key] = this.state[key];
             }
+        }
+
+        // Recalculate cWeight from chromaGate.
+        // chromaGate is a multiplier on the base cWeight — ParameterGenerator bakes it in
+        // at generate time, but the user can change it independently via the slider.
+        if (this._baseCWeight !== undefined && this.state.chromaGate !== undefined) {
+            this.currentConfig.cWeight = this._baseCWeight * this.state.chromaGate;
+            this.state.cWeight = this.currentConfig.cWeight;
         }
 
         // targetColorsSlider alias (config uses both names)
