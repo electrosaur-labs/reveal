@@ -25,7 +25,7 @@ const opentype = require('opentype.js');
 const W = 512, H = 320;
 const FRAME_COUNT = 16;     // 2 hold + 13 wipe + 1 final hold
 const FRAME_DELAY = 10;     // centiseconds (100ms per frame)
-const MESH_ANGLE = 37 * Math.PI / 180;   // 37° (prime)
+const MESH_ANGLE = -19 * Math.PI / 180;  // 19° clockwise
 const MESH_SPACING = 14;    // scaled from 28 at 1024 → 14 at 512
 const MESH_LINE_W = 0.5;    // scaled from 1.0
 
