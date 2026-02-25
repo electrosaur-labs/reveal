@@ -763,6 +763,60 @@
             line-height: 13px;
         }
 
+        /* ─── Suggested Colors Tray ─── */
+        .surgeon-suggested-tray {
+            margin-top: 6px;
+            padding: 4px 0;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .surgeon-suggested-label {
+            font-size: 10px;
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .surgeon-suggested-row {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .surgeon-suggested-swatch {
+            width: 24px;
+            height: 24px;
+            border-radius: 3px;
+            border: 1px solid rgba(255,255,255,0.2);
+            cursor: pointer;
+        }
+        .surgeon-suggested-swatch:hover {
+            border-color: rgba(255,255,255,0.6);
+            transform: scale(1.15);
+        }
+        .surgeon-suggested-swatch.surgeon-selected {
+            border-color: #4da6ff;
+            transform: scale(1.15);
+            box-shadow: 0 0 6px rgba(77, 166, 255, 0.6);
+        }
+        .surgeon-suggested-swatch.added {
+            border-color: #50c878;
+            position: relative;
+            cursor: pointer;
+        }
+        .surgeon-suggested-swatch.added.surgeon-selected {
+            border-color: #4da6ff;
+            box-shadow: 0 0 6px rgba(77, 166, 255, 0.6);
+        }
+        .surgeon-suggested-swatch.added::after {
+            content: '\2713';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 0 0 3px rgba(0,0,0,0.8);
+        }
+
         /* ─── Finalize Row ─── */
         #finalize-row {
             flex-shrink: 0;
@@ -1051,7 +1105,7 @@
 
             <!-- Finalize Flight Plan -->
             <div id="finalize-row" style="display:none;">
-                <sp-action-button id="btn-finalize" variant="accent">Build Separations</sp-action-button>
+                <sp-action-button id="btn-finalize" variant="accent">Separate</sp-action-button>
                 <div id="finalize-progress"></div>
                 <div id="finalize-summary"></div>
             </div>

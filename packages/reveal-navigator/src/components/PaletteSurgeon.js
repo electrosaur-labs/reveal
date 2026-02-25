@@ -34,6 +34,9 @@ class PaletteSurgeon {
         // Guard: block clicks while Photoshop color picker modal is open
         this._pickerOpen = false;
 
+        // Currently selected suggested swatch index (within filtered list), -1 = none
+        this._selectedSuggestionIdx = -1;
+
         this._swatchElements = new Map();
 
         // Build DOM
@@ -46,11 +49,18 @@ class PaletteSurgeon {
         this._grid.className = 'surgeon-grid';
         this._container.appendChild(this._grid);
 
+        // Suggested colors tray (rendered below the palette grid)
+        this._suggestedTray = document.createElement('div');
+        this._suggestedTray.className = 'surgeon-suggested-tray';
+        this._suggestedTray.style.display = 'none';
+        this._container.appendChild(this._suggestedTray);
+
         // Subscribe to state events
         this._session.on('previewUpdated', () => this._rebuild());
         this._session.on('archetypeChanged', () => {
             this._state = 'IDLE';
             this._selectedIndex = -1;
+            this._selectedSuggestionIdx = -1;
             this._session.clearHighlight();
             this._header.textContent = 'Click a color to isolate';
         });
@@ -227,12 +237,21 @@ class PaletteSurgeon {
         }
 
         this._container.style.display = 'block';
+
+        // Render suggested colors below the palette
+        this._renderSuggestedColors();
     }
 
     // ─── Click ───────────────────────────────────────────────
 
     _onSwatchClick(i, shiftKey, altKey) {
         if (this._pickerOpen) return;
+
+        // Clear any suggested swatch selection
+        if (this._selectedSuggestionIdx >= 0) {
+            this._selectedSuggestionIdx = -1;
+            this._renderSuggestedColors();
+        }
 
         const isDeleted = this._session.deletedColors.has(i);
 
@@ -461,6 +480,138 @@ class PaletteSurgeon {
         this._session.revertPaletteColor(i).catch(err => {
             logger.log(`[PaletteSurgeon] Revert failed: ${err.message}`);
         });
+    }
+
+    // ─── Suggested Colors ─────────────────────────────────────
+
+    /** Check if a suggestion was already checked (delegates to SessionState) */
+    _isSuggestionAdded(suggestion) {
+        return this._session.isSuggestionChecked(suggestion);
+    }
+
+    /** Remove a checked suggestion (delegates to SessionState) */
+    _removeSuggestion(suggestion) {
+        this._session.removeCheckedSuggestion(suggestion);
+    }
+
+    /** ΔE between two Lab colors */
+    _deltaE(c1, c2) {
+        const dL = c1.L - c2.L, da = c1.a - c2.a, db = c1.b - c2.b;
+        return Math.sqrt(dL * dL + da * da + db * db);
+    }
+
+    /** Check if a suggestion is too close to any current palette entry (ΔE < 15) */
+    _isTooCloseToCurrentPalette(suggestion) {
+        const sep = this._session.getSeparationState();
+        if (!sep || !sep.palette) return false;
+        const EXCLUSION_DE = 15;
+        for (const pal of sep.palette) {
+            if (this._deltaE(suggestion, pal) < EXCLUSION_DE) return true;
+        }
+        return false;
+    }
+
+    _renderSuggestedColors() {
+        const cachedSuggestions = this._session.getSuggestedColors();
+
+        // Filter against CURRENT palette (which may include added/overridden colors)
+        const suggestions = (cachedSuggestions || []).filter(s => !this._isTooCloseToCurrentPalette(s));
+
+        if (suggestions.length === 0) {
+            this._suggestedTray.style.display = 'none';
+            return;
+        }
+
+        this._suggestedTray.innerHTML = '';
+        this._suggestedTray.style.display = 'block';
+
+        const label = document.createElement('div');
+        label.className = 'surgeon-suggested-label';
+        label.textContent = 'Suggested';
+        this._suggestedTray.appendChild(label);
+
+        const row = document.createElement('div');
+        row.className = 'surgeon-suggested-row';
+
+        for (let si = 0; si < suggestions.length; si++) {
+            const suggestion = suggestions[si];
+            const rgb = Reveal.labToRgb(suggestion.L, suggestion.a, suggestion.b);
+            const swatch = document.createElement('div');
+            swatch.className = 'surgeon-suggested-swatch';
+            swatch.style.background = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
+            swatch.title = `${suggestion.source}: ${suggestion.reason}`;
+
+            const isAdded = this._isSuggestionAdded(suggestion);
+            if (isAdded) swatch.classList.add('added');
+
+            const isSelected = (si === this._selectedSuggestionIdx);
+            if (isSelected) swatch.classList.add('surgeon-selected');
+
+            const idx = si;
+
+            // Ctrl+click: toggle "must be in final palette" checkmark
+            swatch.addEventListener('pointerdown', (e) => {
+                if (!e.ctrlKey || this._pickerOpen) return;
+                e.preventDefault();
+                e.stopPropagation();
+                swatch._ctrlHandled = true;
+
+                if (isAdded) {
+                    logger.log(`[Surgeon] Unmarked suggested color: L=${suggestion.L.toFixed(0)} a=${suggestion.a.toFixed(0)} b=${suggestion.b.toFixed(0)}`);
+                    this._removeSuggestion(suggestion);
+                } else {
+                    logger.log(`[Surgeon] Marked suggested color: ${suggestion.reason}`);
+                    this._session.addCheckedSuggestion(suggestion);
+                }
+                this._renderSuggestedColors();
+            });
+
+            // Plain click: select/deselect (solo view in preview)
+            swatch.onclick = (e) => {
+                if (swatch._ctrlHandled) { swatch._ctrlHandled = false; return; }
+                if (this._pickerOpen) return;
+
+                // Deselect any palette swatch
+                if (this._state === 'SELECTED') {
+                    this._state = 'IDLE';
+                    this._selectedIndex = -1;
+                    this._updateSelectionCSS();
+                }
+
+                if (this._selectedSuggestionIdx === idx) {
+                    // Same swatch → deselect
+                    this._selectedSuggestionIdx = -1;
+                    this._session.clearHighlight();
+                    this._header.textContent = 'Click a color to isolate';
+                } else {
+                    // Select this suggestion → show ghost preview
+                    this._selectedSuggestionIdx = idx;
+                    this._session.setSuggestionGhost({
+                        L: suggestion.L, a: suggestion.a, b: suggestion.b
+                    });
+                    this._header.textContent = 'Ctrl+click to mark "must have"';
+                }
+                this._renderSuggestedColors();
+            };
+
+            // Hover preview: temporary ghost when idle (nothing selected, no picker)
+            swatch.onmouseenter = () => {
+                if (this._state !== 'SELECTED' && this._selectedSuggestionIdx < 0 && !this._pickerOpen) {
+                    this._session.setSuggestionGhost({
+                        L: suggestion.L, a: suggestion.a, b: suggestion.b
+                    });
+                }
+            };
+            swatch.onmouseleave = () => {
+                if (this._state !== 'SELECTED' && this._selectedSuggestionIdx < 0 && !this._pickerOpen) {
+                    this._session.clearHighlight();
+                }
+            };
+
+            row.appendChild(swatch);
+        }
+
+        this._suggestedTray.appendChild(row);
     }
 
     // ─── Selection CSS ───────────────────────────────────────

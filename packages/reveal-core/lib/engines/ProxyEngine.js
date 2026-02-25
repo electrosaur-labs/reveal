@@ -21,6 +21,7 @@ const MechanicalKnobs = require('./MechanicalKnobs');
 const DNAFidelity = require('../metrics/DNAFidelity');
 const RevelationError = require('../metrics/RevelationError');
 const LabEncoding = require('../color/LabEncoding');
+const SuggestedColorAnalyzer = require('../analysis/SuggestedColorAnalyzer');
 
 // Proxy-safe overrides for resolution-dependent thresholds.
 // snapThreshold & densityFloor are calibrated for full-res pixel counts
@@ -124,7 +125,7 @@ class ProxyEngine {
             width: proxyW,
             height: proxyH,
             distanceMetric: initialConfig.distanceMetric || 'cie76',
-            statistics: posterizeResult.statistics || {}
+            metadata: posterizeResult.metadata || {}
         };
 
         // Snapshot baseline so mechanical knobs can restore from clean state
@@ -138,6 +139,9 @@ class ProxyEngine {
             bitDepth: initialConfig.bitDepth || 16,
             targetColors: initialConfig.targetColors || initialConfig.targetColorsSlider || 0
         };
+
+        // Track substrate mode so getSuggestedColors respects archetype config
+        this._substrateMode = initialConfig.substrateMode || 'auto';
 
         // 6. Generate clean preview (no knobs yet).
         // Caller (SessionState) follows up with updateProxy() to apply knobs.
@@ -154,7 +158,7 @@ class ProxyEngine {
             previewBuffer,
             palette: this.separationState.palette,
             dimensions: { width: proxyW, height: proxyH },
-            statistics: this.separationState.statistics,
+            metadata: this.separationState.metadata,
             elapsedMs: elapsed
         };
     }
@@ -214,12 +218,15 @@ class ProxyEngine {
             width: proxyW,
             height: proxyH,
             distanceMetric: config.distanceMetric || 'cie76',
-            statistics: posterizeResult.statistics || {}
+            metadata: posterizeResult.metadata || {}
         };
 
         // Update sourceMetadata.targetColors for the new archetype
         // (different archetypes may request different screen counts)
         this.sourceMetadata.targetColors = config.targetColors || config.targetColorsSlider || 0;
+
+        // Track substrate mode for getSuggestedColors
+        this._substrateMode = config.substrateMode || 'auto';
 
         // Snapshot baseline so mechanical knobs can restore from clean state
         this._snapshotBaseline();
@@ -239,7 +246,7 @@ class ProxyEngine {
             previewBuffer,
             palette: this.separationState.palette,
             dimensions: { width: proxyW, height: proxyH },
-            statistics: this.separationState.statistics,
+            metadata: this.separationState.metadata,
             elapsedMs: elapsed
         };
     }
@@ -302,7 +309,7 @@ class ProxyEngine {
         return {
             previewBuffer,
             palette: this.separationState.palette,
-            statistics: this.separationState.statistics,
+            metadata: this.separationState.metadata,
             elapsedMs: elapsed
         };
     }
@@ -464,7 +471,7 @@ class ProxyEngine {
         return {
             previewBuffer,
             palette: this.separationState.palette,
-            statistics: this.separationState.statistics,
+            metadata: this.separationState.metadata,
             elapsedMs: 0
         };
     }
@@ -512,7 +519,7 @@ class ProxyEngine {
         return {
             previewBuffer,
             palette: this.separationState.palette,
-            statistics: this.separationState.statistics,
+            metadata: this.separationState.metadata,
             elapsedMs: 0
         };
     }
@@ -568,6 +575,23 @@ class ProxyEngine {
     }
 
     /**
+     * Get suggested colors — distinctive image colors not covered by the palette.
+     * Uses "Rare Earth" algorithm: edge-weighted perceptual bucketing with
+     * distinctiveness scoring and palette exclusion.
+     *
+     * @returns {Array<{L, a, b, source, reason, score}>}
+     */
+    getSuggestedColors() {
+        if (!this.separationState || !this.proxyBuffer) return [];
+
+        const state = this.separationState;
+        return SuggestedColorAnalyzer.analyze(
+            this.proxyBuffer, state.width, state.height, state.palette,
+            { substrateMode: this._substrateMode || 'auto' }
+        );
+    }
+
+    /**
      * Deep-copy current separationState as the clean baseline.
      * Called after initializeProxy and rePosterize — never after knob application.
      * @private
@@ -584,7 +608,7 @@ class ProxyEngine {
             width: s.width,
             height: s.height,
             distanceMetric: s.distanceMetric || 'cie76',
-            statistics: { ...s.statistics }
+            metadata: { ...(s.metadata || {}) }
         };
     }
 
@@ -604,7 +628,7 @@ class ProxyEngine {
             width: b.width,
             height: b.height,
             distanceMetric: b.distanceMetric || 'cie76',
-            statistics: { ...b.statistics }
+            metadata: { ...(b.metadata || {}) }
         };
     }
 

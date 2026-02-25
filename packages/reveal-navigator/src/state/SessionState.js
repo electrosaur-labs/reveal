@@ -110,6 +110,7 @@ class SessionState extends EventEmitter {
         this.mergeHistory = new Map();      // targetIndex → Set<sourceIndex>
         this.deletedColors = new Set();     // colorIndex values deleted via Alt+click
         this.addedColors = new Set();       // palette indices added by user (via "+" button)
+        this._checkedSuggestions = [];       // suggested colors marked "must be in final palette"
         this.proxyEngine = null;
         this.currentConfig = null;          // Full config from ParameterGenerator
         this.previewBuffer = null;          // Current RGBA preview
@@ -603,6 +604,8 @@ class SessionState extends EventEmitter {
                 this.paletteOverrides.clear();
                 this.mergeHistory.clear();
                 this.deletedColors.clear();
+                this._cachedSuggestions = null;
+                this._checkedSuggestions = [];
                 this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
                 result = await this.proxyEngine.rePosterize(this.currentConfig);
                 this.state.isArchetypeDirty = false;
@@ -698,6 +701,8 @@ class SessionState extends EventEmitter {
             this.paletteOverrides.clear();
             this.mergeHistory.clear();
             this.deletedColors.clear();
+            this._cachedSuggestions = null;
+            this._checkedSuggestions = [];
 
             // Reset decision support state
             this.state.highlightColorIndex = -1;
@@ -1174,8 +1179,11 @@ class SessionState extends EventEmitter {
             merges[String(target)] = [...sources];
         }
 
-        // ── Palette with hex + coverage ──
-        const palette = this._buildOverriddenPalette();
+        // ── Palette with hex + coverage (includes checked suggestions for commit) ──
+        const basePalette = this._buildOverriddenPalette();
+        const palette = this._checkedSuggestions.length > 0
+            ? [...basePalette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+            : basePalette;
         const PosterizationEngine = Reveal.engines.PosterizationEngine;
         const sep = this.proxyEngine && this.proxyEngine.separationState;
         let pixelCounts = null;
@@ -1290,8 +1298,10 @@ class SessionState extends EventEmitter {
             // Archetype
             activeArchetypeId: this.state.activeArchetypeId,
 
-            // Palette (with overrides baked in)
-            palette: palette,
+            // Palette (with overrides baked in + checked suggestions appended)
+            palette: this._checkedSuggestions.length > 0
+                ? [...palette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+                : palette,
             paletteOverrides: Object.fromEntries(this.paletteOverrides),
 
             // Merge remap: source → target for collapsed colors
@@ -1388,6 +1398,136 @@ class SessionState extends EventEmitter {
     getOriginalPreviewBuffer() {
         if (!this.proxyEngine) return null;
         return this.proxyEngine.getOriginalPreviewRGBA();
+    }
+
+    /**
+     * Get suggested colors that the engine found but couldn't include.
+     * Surfaces underrepresented sectors, unmatched peaks, and chroma outliers.
+     * @returns {Array<{L, a, b, source, reason, impactScore}>}
+     */
+    getSuggestedColors() {
+        if (!this.proxyEngine) return [];
+        // Return cached suggestions — computed once per archetype, stable across palette surgery
+        if (this._cachedSuggestions) return this._cachedSuggestions;
+        this._cachedSuggestions = this.proxyEngine.getSuggestedColors();
+        return this._cachedSuggestions;
+    }
+
+    /** Suggested colors the user marked "must be in final palette". */
+    get checkedSuggestions() {
+        return this._checkedSuggestions;
+    }
+
+    /** Mark a suggested color as "must be in final palette". */
+    addCheckedSuggestion(labColor) {
+        this._checkedSuggestions.push({ L: labColor.L, a: labColor.a, b: labColor.b });
+    }
+
+    /** Remove a checked suggestion by proximity (ΔE < 4). */
+    removeCheckedSuggestion(labColor) {
+        const DE_SQ = 16; // 4²
+        for (let i = 0; i < this._checkedSuggestions.length; i++) {
+            const c = this._checkedSuggestions[i];
+            const dL = labColor.L - c.L, da = labColor.a - c.a, db = labColor.b - c.b;
+            if (dL * dL + da * da + db * db < DE_SQ) {
+                this._checkedSuggestions.splice(i, 1);
+                return;
+            }
+        }
+    }
+
+    /** Check if a suggestion is already checked (ΔE < 4). */
+    isSuggestionChecked(labColor) {
+        const DE_SQ = 16;
+        for (const c of this._checkedSuggestions) {
+            const dL = labColor.L - c.L, da = labColor.a - c.a, db = labColor.b - c.b;
+            if (dL * dL + da * da + db * db < DE_SQ) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Generate ghost preview: show which pixels a suggested color would capture.
+     * For each pixel, checks if labColor is closer than the pixel's current assignment.
+     * Pixels that would be captured → shown in labColor's RGB at full brightness.
+     * All other pixels → dimmed to #282828.
+     *
+     * @param {{L: number, a: number, b: number}} labColor - The suggested Lab color
+     * @returns {Uint8ClampedArray|null} RGBA buffer, or null if not ready
+     */
+    generateSuggestionGhostPreview(labColor) {
+        if (!this.proxyEngine || !this.proxyEngine.separationState) return null;
+
+        const state = this.proxyEngine.separationState;
+        const { colorIndices, palette, rgbPalette, width, height } = state;
+        if (!colorIndices || !palette || !rgbPalette) return null;
+
+        const proxyBuffer = this.proxyEngine.proxyBuffer;
+        if (!proxyBuffer) return null;
+
+        const pixelCount = width * height;
+        const rgba = new Uint8ClampedArray(pixelCount * 4);
+
+        // Pre-compute the suggested color's RGB for captured pixels
+        const sugRgb = Reveal.labToRgb(labColor.L, labColor.a, labColor.b);
+
+        // 16-bit Lab encoding constants
+        const L_SCALE = 327.68;
+        const AB_NEUTRAL = 16384;
+        const AB_SCALE = 128;
+
+        const DIM_R = 0x28, DIM_G = 0x28, DIM_B = 0x28;
+
+        for (let i = 0; i < pixelCount; i++) {
+            const off3 = i * 3;
+            const off4 = i * 4;
+
+            // Decode pixel Lab from 16-bit proxy buffer
+            const pL = proxyBuffer[off3] / L_SCALE;
+            const pa = (proxyBuffer[off3 + 1] - AB_NEUTRAL) / AB_SCALE;
+            const pb = (proxyBuffer[off3 + 2] - AB_NEUTRAL) / AB_SCALE;
+
+            // Distance from pixel to suggested color
+            const dSL = pL - labColor.L;
+            const dSA = pa - labColor.a;
+            const dSB = pb - labColor.b;
+            const distToSuggestion = dSL * dSL + dSA * dSA + dSB * dSB;
+
+            // Distance from pixel to its current palette assignment
+            const ci = colorIndices[i];
+            const assigned = palette[ci];
+            const dAL = pL - assigned.L;
+            const dAA = pa - assigned.a;
+            const dAB = pb - assigned.b;
+            const distToAssigned = dAL * dAL + dAA * dAA + dAB * dAB;
+
+            if (distToSuggestion < distToAssigned) {
+                // This pixel would be captured by the suggested color
+                rgba[off4]     = sugRgb.r;
+                rgba[off4 + 1] = sugRgb.g;
+                rgba[off4 + 2] = sugRgb.b;
+            } else {
+                rgba[off4]     = DIM_R;
+                rgba[off4 + 1] = DIM_G;
+                rgba[off4 + 2] = DIM_B;
+            }
+            rgba[off4 + 3] = 255;
+        }
+
+        return rgba;
+    }
+
+    /**
+     * Set a suggestion ghost preview (triggered by hovering a suggested swatch).
+     * Emits highlightChanged with a ghost buffer instead of a color index.
+     * @param {{L: number, a: number, b: number}} labColor
+     */
+    setSuggestionGhost(labColor) {
+        const ghostBuffer = this.generateSuggestionGhostPreview(labColor);
+        if (ghostBuffer) {
+            this.state.highlightColorIndex = -1;
+            this.emit('highlightChanged', { colorIndex: -2, ghostBuffer });
+        }
     }
 
     /**

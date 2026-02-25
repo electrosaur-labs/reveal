@@ -29,6 +29,7 @@ const MechanicalKnobs = require('./lib/engines/MechanicalKnobs');
 const TrapEngine = require('./lib/engines/TrapEngine');
 const RevelationError = require('./lib/metrics/RevelationError');
 const DNAFidelity = require('./lib/metrics/DNAFidelity');
+const SuggestedColorAnalyzer = require('./lib/analysis/SuggestedColorAnalyzer');
 const InterpolatorEngine = require('./lib/analysis/InterpolatorEngine').InterpolatorEngine;
 const logger = require('./lib/utils/logger');
 
@@ -474,6 +475,9 @@ module.exports.engines = {
     // Reveal Mk 1.5 - Identity Peak Detection
     PeakFinder: PeakFinder,
 
+    // Suggested Color Analysis - Surface rejected candidate colors
+    SuggestedColorAnalyzer: SuggestedColorAnalyzer,
+
     // Mechanical Knobs - Shared post-separation mask processing (v2.3)
     MechanicalKnobs: MechanicalKnobs,
 
@@ -526,3 +530,6 @@ module.exports.RevelationError = RevelationError;
 
 // Export DNAFidelity at top level for closed-loop posterization audit
 module.exports.DNAFidelity = DNAFidelity;
+
+// Export SuggestedColorAnalyzer at top level for palette suggestions
+module.exports.SuggestedColorAnalyzer = SuggestedColorAnalyzer;

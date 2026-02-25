@@ -169,7 +169,10 @@ class Preview {
         try {
             if (!this._dimensions) return;
 
-            if (data.colorIndex >= 0) {
+            if (data.ghostBuffer) {
+                // Ghost preview for suggested color hover
+                this._renderBuffer(data.ghostBuffer, this._dimensions.width, this._dimensions.height);
+            } else if (data.colorIndex >= 0) {
                 const hlBuf = this._session.generateHighlightPreview(data.colorIndex);
                 if (hlBuf) {
                     this._renderBuffer(hlBuf, this._dimensions.width, this._dimensions.height);
