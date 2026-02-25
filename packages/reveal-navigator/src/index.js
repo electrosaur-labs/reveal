@@ -320,7 +320,7 @@ function initPlugin() {
             const timeEl = document.getElementById('stat-time');
             if (colorsEl && data.palette) {
                 const count = data.activeColorCount != null ? data.activeColorCount : data.palette.length;
-                colorsEl.textContent = `${count} colors`;
+                colorsEl.textContent = `${count} screens`;
             }
             // ΔE comes from the single stored value (background scoring),
             // NOT from calculateCurrentAccuracy(). Updated by archetypeScored/archetypeChanged.
@@ -368,6 +368,16 @@ function initPlugin() {
                 if (!currentDocId) {
                     _closeDialog();
                 }
+            });
+        }
+
+        // Wire help toggle button
+        const btnHelp = document.getElementById('btn-help-toggle');
+        if (btnHelp) {
+            btnHelp.addEventListener('click', () => {
+                const panel = document.getElementById('knobs-panel');
+                if (panel) panel.classList.toggle('show-help');
+                btnHelp.classList.toggle('active');
             });
         }
 
@@ -590,7 +600,7 @@ function updateMatchScore() {
     const match = scores.find(s => s.id === activeId);
 
     if (scoreEl && match) {
-        scoreEl.textContent = `DNA ${match.score.toFixed(0)}`;
+        scoreEl.textContent = `Match ${match.score.toFixed(0)}%`;
     }
 
     // Update archetype name in stats line

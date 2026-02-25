@@ -39,13 +39,13 @@ const AXES = [
 // Maps each radar axis to a draggable SessionState parameter.
 // Outward = increase value. Axis indices match AXES array above.
 const DRAG_MAP = [
-    { key: 'lWeight',       min: 0.5, max: 3.0,  step: 0.1, tip: 'Luminance Weight (drag to favor lightness)' },
-    { key: 'cWeight',       min: 0.5, max: 6.0,  step: 0.1, tip: 'Chroma Weight (drag to favor color saturation)' },
-    { key: 'targetColors',  min: 3,   max: 10,   step: 1,   tip: 'Color Count (drag to add/remove screens)' },
-    { key: 'shadowClamp',   min: 0,   max: 40,   step: 0.5, tip: 'Shadow Clamp (drag to control ink body)' },
-    { key: 'speckleRescue', min: 0,   max: 30,   step: 1,   tip: 'Speckle Rescue (drag to clean halftone)' },
-    { key: 'minVolume',     min: 0,   max: 5,    step: 0.1, tip: 'Min Volume (drag to remove ghost plates)' },
-    { key: 'blackBias',     min: 0,   max: 10,   step: 0.5, tip: 'Black Bias (drag to pull toward black plate)' }
+    { key: 'lWeight',       min: 0.5, max: 3.0,  step: 0.1, tip: 'Lightness (drag to favor light/dark differences)' },
+    { key: 'cWeight',       min: 0.5, max: 6.0,  step: 0.1, tip: 'Color Intensity (drag to favor color saturation)' },
+    { key: 'targetColors',  min: 3,   max: 10,   step: 1,   tip: 'Screens (drag to add/remove screens)' },
+    { key: 'shadowClamp',   min: 0,   max: 40,   step: 0.5, tip: 'Shadow Floor (drag to control ink body)' },
+    { key: 'speckleRescue', min: 0,   max: 30,   step: 1,   tip: 'Dust Removal (drag to clean halftone)' },
+    { key: 'minVolume',     min: 0,   max: 5,    step: 0.1, tip: 'Ghost Screen Removal (drag to remove ghost plates)' },
+    { key: 'blackBias',     min: 0,   max: 10,   step: 0.5, tip: 'Black Pull (drag to pull toward black plate)' }
 ];
 
 const AXIS_COUNT = AXES.length;
