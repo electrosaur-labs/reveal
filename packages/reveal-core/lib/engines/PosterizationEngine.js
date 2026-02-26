@@ -155,7 +155,8 @@ class PosterizationEngine {
                 minVariance: this.TUNING.split.minVariance,
                 chromaAxisWeight: options.chromaAxisWeight !== undefined ? options.chromaAxisWeight : this.TUNING.split.chromaAxisWeight,
                 neutralIsolationThreshold: options.neutralIsolationThreshold !== undefined ? options.neutralIsolationThreshold : this.TUNING.split.neutralIsolationThreshold,
-                warmABoost: options.warmABoost !== undefined ? options.warmABoost : 1.0
+                warmABoost: options.warmABoost !== undefined ? options.warmABoost : 1.0,
+                splitMode: options.splitMode || 'median'  // 'median' (default) or 'variance' (Wu SSE-minimizing)
             },
             prune: {
                 threshold: options.paletteReduction !== undefined ? options.paletteReduction : this.TUNING.prune.threshold,
@@ -832,7 +833,9 @@ class PosterizationEngine {
         );
 
         // Step 2.5: K-means refinement
-        const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : 1;
+        // Wu variance mode defaults to 3 passes (Wu seeds + K-Means polish is the classical combo)
+        const defaultPasses = (options.tuning?.split?.splitMode === 'variance') ? 3 : 1;
+        const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : defaultPasses;
         if (!grayscaleOnly && initialPaletteLab.length > 1 && refinementPasses > 0) {
             for (let pass = 0; pass < refinementPasses; pass++) {
                 initialPaletteLab = PaletteOps._refineKMeans(nonPreservedLabPixels, initialPaletteLab, options.tuning || null);
@@ -1527,7 +1530,9 @@ class PosterizationEngine {
         // When sovereignty is active, refine ONLY chromatic centroids against chromatic
         // pixels. Running on all pixels lets neutrals leak back into warm centroids,
         // creating wasted near-neutral slots (C≈6) that steal budget from the warm ramp.
-        const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : 1;
+        // Wu variance mode defaults to 3 passes (Wu seeds + K-Means polish is the classical combo)
+        const mk15DefaultPasses = (options.tuning?.split?.splitMode === 'variance') ? 3 : 1;
+        const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : mk15DefaultPasses;
         if (!grayscaleOnly && initialPaletteLab.length > 1 && refinementPasses > 0) {
             const kmeansPixels = sovereignNeutralCentroid ? medianCutPixels : nonPreservedLabPixels;
             for (let pass = 0; pass < refinementPasses; pass++) {

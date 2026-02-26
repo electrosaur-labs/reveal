@@ -1238,6 +1238,16 @@
                     <span class="knob-help">Separation algorithm — Standard is best for most images</span>
 
                     <div class="knob-row">
+                        <span class="knob-label">Starting Palette</span>
+                        <button class="knob-revert" id="revert-splitMode">&#x21BA;</button>
+                    </div>
+                    <select id="picker-splitMode">
+                        <option value="median">Hue-Aware</option>
+                        <option value="variance">Wu Variance</option>
+                    </select>
+                    <span class="knob-help">How initial colors are chosen — Wu minimizes error, Hue-Aware preserves color diversity</span>
+
+                    <div class="knob-row">
                         <span class="knob-label">Color Matching</span>
                         <button class="knob-revert" id="revert-distanceMetric">&#x21BA;</button>
                     </div>

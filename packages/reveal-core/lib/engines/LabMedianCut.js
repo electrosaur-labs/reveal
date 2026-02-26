@@ -474,39 +474,36 @@ class LabMedianCut {
         }
 
         // Split until we have targetColors boxes
+        const splitMode = tuning?.split?.splitMode || 'median';
         let splitIteration = 0;
         while (boxes.length < targetColors) {
             splitIteration++;
 
-            // HUE-AWARE PRIORITY: Sort by priority (variance × hue hunger × vibrancy) instead of just population
-            boxes.sort((a, b) => {
-                const priorityB = this._calculateSplitPriority(b, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                const priorityA = this._calculateSplitPriority(a, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                return priorityB - priorityA;
-            });
-
-            const topBoxPriority = this._calculateSplitPriority(boxes[0], sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
+            if (splitMode === 'variance') {
+                // WU MODE: Sort by pure SSE — split the box with highest internal error
+                boxes.sort((a, b) => this._calculateBoxSSE(b, tuning) - this._calculateBoxSSE(a, tuning));
+            } else {
+                // DEFAULT: HUE-AWARE PRIORITY: Sort by priority (variance × hue hunger × vibrancy)
+                boxes.sort((a, b) => {
+                    const priorityB = this._calculateSplitPriority(b, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
+                    const priorityA = this._calculateSplitPriority(a, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
+                    return priorityB - priorityA;
+                });
+            }
 
             // If largest box has only 1 color, can't split further
             if (boxes[0].colors.length === 1) {
                 break;
             }
 
-            // Split the largest box
+            // Split the highest-priority box
             const box = boxes.shift();
             const [box1, box2] = this._splitBoxLab(box, grayscaleOnly, tuning);
 
             if (box1 && box2) {
                 boxes.push(box1, box2);
 
-                // HUE-AWARE PRIORITY: Track which hue sectors are now covered
-                // CHROMA-GATED COVERAGE: Only mark a sector as covered when the
-                // box has sufficient mean chroma to genuinely represent that hue.
-                // Neutral-dominated boxes (mean C < threshold) have misleading
-                // mean hue angles from tiny a/b residuals. Marking their sector
-                // as "covered" prematurely kills hue hunger for sectors that
-                // still need more splits — causing warm/cool minority signals
-                // to lose color slots to neutral-dominated boxes.
+                // Track which hue sectors are now covered
                 if (!grayscaleOnly && sectorEnergy) {
                     const COVERAGE_CHROMA_MIN = 10.0;
                     const meta1 = this._calculateBoxMetadata(box1, grayscaleOnly, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
@@ -589,6 +586,8 @@ class LabMedianCut {
 
         // Calculate representative color for each box (centroid in Lab space)
         // Use injected strategy or fallback to VOLUMETRIC
+        // splitMode is orthogonal to centroid strategy — Wu decides how to PARTITION,
+        // the archetype's strategy decides how to PICK the representative color.
         const palette = boxes.map((box, idx) => {
             // GREEN-PRIORITY CENTROID: Force green centroid for the box with most green content
             // Threshold lowered: ANY green content qualifies if this is the best green box
@@ -620,7 +619,57 @@ class LabMedianCut {
     }
 
     /**
-     * Split a box in Lab space by finding channel with highest variance
+     * WU SSE: Calculate total Sum of Squared Error for a box across all Lab channels.
+     *
+     * SSE = Σ(x - mean)² for each channel, weighted by lWeight/cWeight.
+     * Used as box priority in Wu variance mode — the box with highest SSE
+     * gets split first, concentrating error reduction where it matters most.
+     *
+     * @private
+     * @param {Object} box - Box containing colors array: [{ L, a, b, count }, ...]
+     * @param {Object} tuning - Tuning parameters with centroid.lWeight and centroid.cWeight
+     * @returns {number} Total weighted SSE across L, a, b channels
+     */
+    static _calculateBoxSSE(box, tuning = null) {
+        const { colors } = box;
+        if (!colors || colors.length === 0) return 0;
+
+        const lWeight = tuning?.centroid?.lWeight ?? 1.0;
+        const cWeight = tuning?.centroid?.cWeight ?? 1.0;
+
+        // Compute weighted means
+        let totalCount = 0, sumL = 0, sumA = 0, sumB = 0;
+        for (let i = 0; i < colors.length; i++) {
+            const w = colors[i].count || 1;
+            sumL += colors[i].L * w;
+            sumA += colors[i].a * w;
+            sumB += colors[i].b * w;
+            totalCount += w;
+        }
+        const meanL = sumL / totalCount;
+        const meanA = sumA / totalCount;
+        const meanB = sumB / totalCount;
+
+        // Compute weighted SSE
+        let sse = 0;
+        for (let i = 0; i < colors.length; i++) {
+            const w = colors[i].count || 1;
+            const dL = colors[i].L - meanL;
+            const dA = colors[i].a - meanA;
+            const dB = colors[i].b - meanB;
+            sse += w * (lWeight * dL * dL + cWeight * (dA * dA + dB * dB));
+        }
+        return sse;
+    }
+
+    /**
+     * Split a box in Lab space by finding channel with highest variance.
+     *
+     * Supports two split modes:
+     * - 'median' (default): Split at the median index (equal population halves)
+     * - 'variance': Wu-style SSE-minimizing split — scans all candidate split points
+     *   and picks the one that minimizes total SSE of the two resulting sub-boxes.
+     *
      * @private
      */
     static _splitBoxLab(box, grayscaleOnly = false, tuning = null) {
@@ -733,10 +782,77 @@ class LabMedianCut {
                 colors.sort((a, b) => a[splitChannel] - b[splitChannel]);
             }
 
-            // Split at median
-            const median = Math.floor(colors.length / 2);
-            const colors1 = colors.slice(0, median);
-            const colors2 = colors.slice(median);
+            // WU VARIANCE MODE: Find SSE-minimizing split point using prefix sums
+            const splitMode = tuning?.split?.splitMode || 'median';
+            let splitIdx;
+
+            if (splitMode === 'variance' && colors.length > 2) {
+                // Build prefix sums (count-weighted) for SSE computation
+                // SSE = sumSq - sum²/count for each half
+                const n = colors.length;
+                const prefSumL = new Float64Array(n + 1);
+                const prefSumA = new Float64Array(n + 1);
+                const prefSumB = new Float64Array(n + 1);
+                const prefSumSqL = new Float64Array(n + 1);
+                const prefSumSqA = new Float64Array(n + 1);
+                const prefSumSqB = new Float64Array(n + 1);
+                const prefCount = new Float64Array(n + 1);
+
+                for (let i = 0; i < n; i++) {
+                    const w = colors[i].count || 1;
+                    prefSumL[i + 1] = prefSumL[i] + colors[i].L * w;
+                    prefSumA[i + 1] = prefSumA[i] + colors[i].a * w;
+                    prefSumB[i + 1] = prefSumB[i] + colors[i].b * w;
+                    prefSumSqL[i + 1] = prefSumSqL[i] + colors[i].L * colors[i].L * w;
+                    prefSumSqA[i + 1] = prefSumSqA[i] + colors[i].a * colors[i].a * w;
+                    prefSumSqB[i + 1] = prefSumSqB[i] + colors[i].b * colors[i].b * w;
+                    prefCount[i + 1] = prefCount[i] + w;
+                }
+
+                const totalN = prefCount[n];
+
+                // Scan all candidate split points, pick the one minimizing total SSE
+                let bestSSE = Infinity;
+                splitIdx = Math.floor(n / 2); // fallback to median
+
+                for (let k = 1; k < n; k++) {
+                    const leftN = prefCount[k];
+                    const rightN = totalN - leftN;
+                    if (leftN === 0 || rightN === 0) continue;
+
+                    // Left SSE: sumSq - sum²/count (across L, a, b weighted)
+                    const sseLeftL = prefSumSqL[k] - (prefSumL[k] * prefSumL[k]) / leftN;
+                    const sseLeftA = prefSumSqA[k] - (prefSumA[k] * prefSumA[k]) / leftN;
+                    const sseLeftB = prefSumSqB[k] - (prefSumB[k] * prefSumB[k]) / leftN;
+
+                    // Right SSE
+                    const rSumL = prefSumL[n] - prefSumL[k];
+                    const rSumA = prefSumA[n] - prefSumA[k];
+                    const rSumB = prefSumB[n] - prefSumB[k];
+                    const rSumSqL = prefSumSqL[n] - prefSumSqL[k];
+                    const rSumSqA = prefSumSqA[n] - prefSumSqA[k];
+                    const rSumSqB = prefSumSqB[n] - prefSumSqB[k];
+
+                    const sseRightL = rSumSqL - (rSumL * rSumL) / rightN;
+                    const sseRightA = rSumSqA - (rSumA * rSumA) / rightN;
+                    const sseRightB = rSumSqB - (rSumB * rSumB) / rightN;
+
+                    // Total weighted SSE
+                    const totalSSE = lWeight * (sseLeftL + sseRightL)
+                                   + cWeight * (sseLeftA + sseRightA + sseLeftB + sseRightB);
+
+                    if (totalSSE < bestSSE) {
+                        bestSSE = totalSSE;
+                        splitIdx = k;
+                    }
+                }
+            } else {
+                // Default median split
+                splitIdx = Math.floor(colors.length / 2);
+            }
+
+            const colors1 = colors.slice(0, splitIdx);
+            const colors2 = colors.slice(splitIdx);
 
             return [
                 { colors: colors1, depth: box.depth + 1 },

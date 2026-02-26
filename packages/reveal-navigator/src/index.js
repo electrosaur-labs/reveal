@@ -153,7 +153,7 @@ function initPlugin() {
         // ─── Advanced Panel: Dropdowns & Checkboxes ───────────────
         // Wire all <select> dropdowns (change → updateParameter)
         const PICKER_DEFS = [
-            'engineType', 'distanceMetric', 'centroidStrategy', 'vibrancyMode',
+            'engineType', 'splitMode', 'distanceMetric', 'centroidStrategy', 'vibrancyMode',
             'substrateMode', 'ditherType', 'colorMode', 'preprocessingIntensity',
             'meshSize', 'maskProfile'
         ];

@@ -64,7 +64,9 @@ const STRUCTURAL_PARAMS = new Set([
     // Screen mesh
     'meshSize',
     // K-means refinement
-    'refinementPasses'
+    'refinementPasses',
+    // Starting palette mode (session-level, orthogonal to archetype)
+    'splitMode'
 ]);
 
 // Union of all user-facing knobs (for snapshot/restore/reset/dirty loops).
@@ -94,6 +96,7 @@ class SessionState extends EventEmitter {
 
             // Production-only (not in archetype config)
             trapSize: 0,  // 0=off, 1-10px trap expansion
+            splitMode: 'median',  // 'median' (hue-aware) or 'variance' (Wu SSE-minimizing)
 
             // Engine & preview state
             isProcessing: false,
