@@ -106,7 +106,7 @@ const KNOWN_UNIMPLEMENTED = new Set([
     'medianPass',                   // UI checkbox, no engine reads it
     'maskProfile',                  // UI dropdown, ProductionWorker doesn't use it yet
     'neutralCentroidClampThreshold', // UI slider, no engine reads it
-    'meshSize',                     // Passed as meshSize but SeparationEngine reads meshCount (name mismatch)
+    // meshSize — now correctly mapped to meshCount in toEngineOptions()
 ]);
 
 // ─── Metadata / Non-Engine Keys ──────────────────────────────────────
@@ -125,6 +125,7 @@ const METADATA_KEYS = new Set([
 const DERIVED_KEYS = new Set([
     'chromaGate',           // Multiplier applied to cWeight at generate time
     'saturationBoost',      // Legacy alias for vibrancyBoost
+    // meshSize — session-level, not in generate() output. Mapped to meshCount in toEngineOptions().
 ]);
 
 // ─── Keys Consumed Outside Core Engines ──────────────────────────────
@@ -193,14 +194,24 @@ describe('Parameter Flow Contracts', () => {
             opts = ParameterGenerator.toEngineOptions(config, { bitDepth: 16 });
         });
 
-        it('emits targetColorsSlider from config.targetColors', () => {
+        it('emits both targetColors and targetColorsSlider', () => {
+            expect(opts.targetColors).toBeDefined();
             expect(opts.targetColorsSlider).toBeDefined();
+            expect(opts.targetColors).toBe(opts.targetColorsSlider);
         });
 
-        it('passes meshSize through to engine options', () => {
-            // meshSize is passed through as-is (SeparationEngine reads meshCount,
-            // so this is currently a dead param — name mismatch to fix later)
-            expect(opts.meshSize).toBeDefined();
+        it('maps meshSize to meshCount (not meshSize)', () => {
+            const configWithMesh = { ...config, meshSize: 230 };
+            const optsWithMesh = ParameterGenerator.toEngineOptions(configWithMesh);
+            expect(optsWithMesh.meshCount).toBe(230);
+            expect(optsWithMesh.meshSize).toBeUndefined();
+        });
+
+        it('omits meshCount when meshSize is undefined', () => {
+            const configNoMesh = { ...config };
+            delete configNoMesh.meshSize;
+            const optsNoMesh = ParameterGenerator.toEngineOptions(configNoMesh);
+            expect(optsNoMesh.meshCount).toBeUndefined();
         });
 
         it('includes all PosterizationEngine keys that are in the config', () => {
@@ -302,11 +313,11 @@ describe('Parameter Flow Contracts', () => {
     describe('category exclusivity', () => {
         // These are the SessionState category sets (mirrored here for testing)
         const MECHANICAL = new Set(['minVolume', 'speckleRescue', 'shadowClamp']);
-        const PRODUCTION = new Set(['trapSize']);
+        const PRODUCTION = new Set(['trapSize', 'meshSize']);
         const STRUCTURAL = new Set([
             'targetColors', 'engineType', 'centroidStrategy', 'distanceMetric',
             'lWeight', 'cWeight', 'blackBias',
-            'vibrancyMode', 'vibrancyBoost', 'vibrancyThreshold',
+            'vibrancyMode', 'vibrancyBoost',
             'highlightThreshold', 'highlightBoost',
             'paletteReduction', 'enablePaletteReduction',
             'substrateMode', 'substrateTolerance',
@@ -314,10 +325,9 @@ describe('Parameter Flow Contracts', () => {
             'shadowPoint', 'colorMode',
             'preserveWhite', 'preserveBlack',
             'neutralCentroidClampThreshold', 'neutralSovereigntyThreshold',
-            'chromaGate', 'detailRescue', 'medianPass',
+            'chromaGate',
             'ditherType',
             'preprocessingIntensity', 'ignoreTransparent',
-            'maskProfile', 'meshSize',
             'refinementPasses', 'splitMode',
         ]);
 

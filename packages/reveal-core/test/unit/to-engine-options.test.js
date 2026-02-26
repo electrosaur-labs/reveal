@@ -46,10 +46,10 @@ describe('ParameterGenerator.toEngineOptions', () => {
         meshSize: 0
     };
 
-    it('maps targetColors to targetColorsSlider', () => {
+    it('emits both targetColors and targetColorsSlider', () => {
         const opts = ParameterGenerator.toEngineOptions(mockConfig);
         expect(opts.targetColorsSlider).toBe(8);
-        expect(opts.targetColors).toBeUndefined();
+        expect(opts.targetColors).toBe(8);
     });
 
     it('uses vibrancyBoost directly (not saturationBoost)', () => {
