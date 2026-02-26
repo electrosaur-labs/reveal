@@ -223,7 +223,7 @@ function initPlugin() {
                 if (revertBtn) {
                     const dflt = sessionState.getKnobDefault(key);
                     const cur = source[key];
-                    revertBtn.style.display = (dflt !== null && cur !== dflt) ? 'inline-block' : 'none';
+                    revertBtn.style.display = (dflt != null && cur !== dflt) ? 'inline-block' : 'none';
                 }
             }
         }

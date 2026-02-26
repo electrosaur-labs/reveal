@@ -640,6 +640,8 @@
         }
 
         /* ─── Palette Surgeon ─── */
+        /* Fixed height prevents layout reflow when color count or
+           suggested tray changes (e.g. switching split modes). */
         #palette-surgeon {
             flex-shrink: 0;
             display: none;
@@ -647,6 +649,8 @@
             border: 1px solid #3a3a3a;
             border-radius: 3px;
             background: #2a2a2a;
+            height: 90px;
+            overflow-y: auto;
         }
 
         .surgeon-header {
@@ -1242,8 +1246,8 @@
                         <button class="knob-revert" id="revert-splitMode">&#x21BA;</button>
                     </div>
                     <select id="picker-splitMode">
-                        <option value="median">Color Priority</option>
                         <option value="variance">Detail Priority</option>
+                        <option value="median">Color Priority</option>
                     </select>
                     <span class="knob-help">Color Priority preserves more distinct hues — Detail Priority minimizes overall error</span>
 

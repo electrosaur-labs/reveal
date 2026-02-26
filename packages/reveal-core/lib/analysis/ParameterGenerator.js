@@ -172,6 +172,9 @@ class ParameterGenerator {
             neutralCentroidClampThreshold: params.neutralCentroidClampThreshold || 0.5,
             neutralSovereigntyThreshold: params.neutralSovereigntyThreshold || 0,
 
+            // Median cut split strategy: 'variance' (Wu SSE-minimizing) or 'median' (hue-aware)
+            splitMode: params.splitMode || 'variance',
+
             // Chroma split axis + neutral isolation (median cut enhancements)
             chromaAxisWeight: params.chromaAxisWeight !== undefined ? params.chromaAxisWeight : 0,
             neutralIsolationThreshold: params.neutralIsolationThreshold !== undefined ? params.neutralIsolationThreshold : 0,
@@ -591,6 +594,9 @@ class ParameterGenerator {
 
             // K-means refinement
             refinementPasses: config.refinementPasses,
+
+            // Median cut split strategy
+            splitMode: config.splitMode || 'variance',
 
             // Screen mesh — passed through if caller provides it (session-level, not archetype).
             // Maps meshSize (config/UI name) → meshCount (SeparationEngine name).

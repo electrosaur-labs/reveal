@@ -311,7 +311,6 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 
     // 5. Prepare params via centralized config bridge
     const params = ParameterGenerator.toEngineOptions(config, {
-        targetColorsSlider: 8, // OVERRIDE: Force 8 colors for all images
         bitDepth: 8
     });
 

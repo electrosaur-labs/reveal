@@ -23,6 +23,10 @@ const MECHANICAL_KNOBS = new Set(['minVolume', 'speckleRescue', 'shadowClamp']);
 // Trap pixel sizes are resolution-dependent — meaningless at 512px proxy.
 const PRODUCTION_KNOBS = new Set(['trapSize', 'meshSize']);
 
+// Session-level equipment settings — survive archetype swaps and are NOT
+// cached/restored per archetype.  Physical equipment params only.
+const SESSION_KNOBS = new Set([...PRODUCTION_KNOBS]);
+
 // Initial defaults for production-only knobs (archetype configs don't define these).
 // Without explicit reset, stale values leak across archetype swaps.
 const PRODUCTION_KNOB_DEFAULTS = { trapSize: 0, meshSize: 230 };
@@ -61,7 +65,7 @@ const STRUCTURAL_PARAMS = new Set([
     'ignoreTransparent',
     // K-means refinement
     'refinementPasses',
-    // Starting palette mode (session-level, orthogonal to archetype)
+    // Median cut split strategy (archetype-driven, cached per archetype)
     'splitMode'
 ]);
 
@@ -104,7 +108,6 @@ class SessionState extends EventEmitter {
             // Session-level equipment settings (not archetype-driven)
             trapSize: 0,    // 0=off, 1-10px trap expansion
             meshSize: 230,  // Screen mesh TPI (physical equipment, survives archetype swaps)
-            splitMode: 'median',  // 'median' (hue-aware) or 'variance' (Wu SSE-minimizing)
 
             // Engine & preview state
             isProcessing: false,
@@ -191,8 +194,9 @@ class SessionState extends EventEmitter {
         this.state.isKnobsCustomized = false;
         this.state.highlightColorIndex = -1;
 
-        // Reset production-only knobs (archetype configs don't define these)
+        // Reset session-level knobs to defaults
         this.state.trapSize = 0;
+        this.state.meshSize = 230;
     }
 
     // ─── Lifecycle ───────────────────────────────────────────
@@ -1596,7 +1600,10 @@ class SessionState extends EventEmitter {
         if (!id) return;
 
         const knobs = {};
-        for (const key of ALL_KNOBS) knobs[key] = this.state[key];
+        for (const key of ALL_KNOBS) {
+            if (SESSION_KNOBS.has(key)) continue;  // session-level — don't cache per archetype
+            knobs[key] = this.state[key];
+        }
 
         // Deep-copy Maps and Sets to prevent cross-archetype mutation
         const paletteOverrides = new Map();

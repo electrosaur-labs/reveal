@@ -72,6 +72,9 @@ const POSTERIZATION_ENGINE_READS = new Set([
     'colorMode',            // Used via grayscaleOnly derivation
     'ignoreTransparent',
 
+    // Median cut split strategy
+    'splitMode',
+
     // Distance metric (for palette operations inside posterization)
     'distanceMetric',
 ]);
@@ -229,7 +232,7 @@ describe('Parameter Flow Contracts', () => {
                 'chromaAxisWeight', 'neutralIsolationThreshold', 'warmABoost',
                 'peakFinderMaxPeaks', 'peakFinderBlacklistedSectors',
                 'refinementPasses', 'shadowChromaGateL',
-                'ignoreTransparent', 'colorMode',
+                'ignoreTransparent', 'colorMode', 'splitMode',
             ];
 
             for (const key of posterizeKeys) {
