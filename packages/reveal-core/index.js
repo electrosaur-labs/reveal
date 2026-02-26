@@ -94,6 +94,9 @@ function generateConfigurationMk2(dna) {
     // Ensure engineType is set to reveal-mk2 so PosterizationEngine dispatches correctly
     config.engineType = 'reveal-mk2';
 
+    // Ensure splitMode has a default (Mk2 interpolator doesn't produce it)
+    if (config.splitMode === undefined) config.splitMode = 'variance';
+
     // Map minColors/maxColors to targetColors (use maxColors as the target)
     if (config.maxColors !== undefined) {
         config.targetColors = config.maxColors;

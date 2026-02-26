@@ -276,11 +276,19 @@ class ProxyEngine {
             this._restoreFromBaseline();
         }
 
-        // Apply palette override — swap ink colors without re-separating.
-        // In screen printing, "override" means "same plate, different ink."
-        // Plate assignments (colorIndices + masks) stay fixed from baseline;
-        // only the palette and rgbPalette update so the preview shows
-        // the new ink color on the existing plate coverage.
+        // Apply knobs FIRST on the baseline palette.
+        // minVolume classifies colors into hue sectors for rescue decisions —
+        // if we applied the palette override first, the overridden color's new
+        // hue sector could lose its sector rescue, causing the swatch to be
+        // pruned and disappear. Running knobs on the baseline preserves the
+        // same weak/strong/rescue classification the user saw before editing.
+        await this._applyKnobs(paramChanges);
+
+        // Apply palette override AFTER knobs — swap ink colors without
+        // re-separating. In screen printing, "override" means "same plate,
+        // different ink." Plate assignments (colorIndices + masks) stay fixed;
+        // only the palette and rgbPalette update so the preview shows the
+        // new ink color on the existing plate coverage.
         // DO NOT call _recomputeSeparation() — that would redistribute
         // every pixel to nearest color, causing cascade: swatches rearrange,
         // paper reassigns, coverage shifts, revert lands on wrong swatch.
@@ -290,9 +298,6 @@ class ProxyEngine {
                 lab => PosterizationEngine.labToRgb(lab)
             );
         }
-
-        // Apply knobs on top (may prune, despeckle, clamp)
-        await this._applyKnobs(paramChanges);
 
         // Generate preview from masks (reflects despeckle + shadowClamp).
         // Pixels where all masks are 0 (isolated speckles removed) show as white.

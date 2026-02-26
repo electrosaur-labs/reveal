@@ -610,9 +610,14 @@ class SessionState extends EventEmitter {
 
             if (this.state.isArchetypeDirty) {
                 // Slow path: structural param changed — full re-posterize
-                // Uses rePosterize to avoid redundant downsample.
-                // Clear palette overrides — old indices are meaningless
-                // against the new baseline from re-posterization.
+                logger.log(`[SessionState] *** SLOW PATH: re-posterize triggered, overrides=${this.paletteOverrides.size}`);
+
+                // Save user's manual color overrides — these are sacrosanct
+                // decisions that must survive re-posterization.
+                const savedOverrides = new Map();
+                for (const [idx, color] of this.paletteOverrides) {
+                    savedOverrides.set(idx, { ...color });
+                }
 
                 this._rebuildConfigFromState();
 
@@ -625,6 +630,32 @@ class SessionState extends EventEmitter {
                 result = await this.proxyEngine.rePosterize(this.currentConfig);
                 this.state.isArchetypeDirty = false;
                 logger.log(`[SessionState] Structural re-posterize: targetColors=${this.currentConfig.targetColors}, palette=${result.palette.length} colors`);
+
+                // Re-inject saved overrides: find closest new palette slot
+                // for each user-chosen color and re-establish the override.
+                if (savedOverrides.size > 0) {
+                    const newPalette = this.proxyEngine._baselineState.palette;
+                    const LabDistance = Reveal.LabDistance;
+                    const claimed = new Set();  // prevent two overrides claiming same slot
+
+                    for (const [, color] of savedOverrides) {
+                        let bestIdx = -1, bestDist = Infinity;
+                        for (let i = 0; i < newPalette.length; i++) {
+                            if (claimed.has(i)) continue;
+                            const d = LabDistance.cie76SquaredInline(
+                                color.L, color.a, color.b,
+                                newPalette[i].L, newPalette[i].a, newPalette[i].b
+                            );
+                            if (d < bestDist) { bestDist = d; bestIdx = i; }
+                        }
+                        if (bestIdx >= 0) {
+                            this.paletteOverrides.set(bestIdx, { ...color });
+                            claimed.add(bestIdx);
+                            logger.log(`[SessionState] Re-injected override Lab=(${color.L.toFixed(1)},${color.a.toFixed(1)},${color.b.toFixed(1)}) → slot ${bestIdx} (dist=${bestDist.toFixed(0)})`);
+                        }
+                    }
+                    this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+                }
             }
 
             // Build update params — always include palette overrides so they
@@ -638,16 +669,13 @@ class SessionState extends EventEmitter {
                 updateParams.paletteOverride = this._buildOverriddenPalette();
             }
 
-            logger.log(`[SessionState] triggerProxyUpdate: calling updateProxy...`);
             result = await this.proxyEngine.updateProxy(updateParams);
-            logger.log(`[SessionState] triggerProxyUpdate: updateProxy done, palette=${result.palette ? result.palette.length : '?'}`);
 
             this.previewBuffer = result.previewBuffer;
             this.state.isProcessing = false;
             this.state.proxyBufferReady = true;
 
             this._emitPreviewUpdated(result);
-            logger.log(`[SessionState] triggerProxyUpdate: previewUpdated emitted`);
 
             return result;
         } catch (err) {
@@ -869,7 +897,11 @@ class SessionState extends EventEmitter {
      * @returns {Promise<Object>} Updated preview data
      */
     async overridePaletteColor(colorIndex, newLabColor) {
-        logger.log(`[SessionState.override] idx=${colorIndex} Lab=(${newLabColor.L.toFixed(1)},${newLabColor.a.toFixed(1)},${newLabColor.b.toFixed(1)}) mapSize_before=${this.paletteOverrides.size}`);
+        // Cancel any in-flight background scoring — palette surgery takes priority
+        // and scoring data is stale after a palette edit.
+        this._scoringGeneration++;
+
+        logger.log(`[SessionState.override] idx=${colorIndex} Lab=(${newLabColor.L.toFixed(1)},${newLabColor.a.toFixed(1)},${newLabColor.b.toFixed(1)}) overrides=${this.paletteOverrides.size}`);
         this.paletteOverrides.set(colorIndex, { ...newLabColor });
 
         const overriddenPalette = this._buildOverriddenPalette();
@@ -903,6 +935,7 @@ class SessionState extends EventEmitter {
     async revertPaletteColor(colorIndex) {
         if (!this.paletteOverrides.has(colorIndex) && !this.deletedColors.has(colorIndex)) return null;
 
+        this._scoringGeneration++;
         this.paletteOverrides.delete(colorIndex);
         this.deletedColors.delete(colorIndex);
 
@@ -941,6 +974,7 @@ class SessionState extends EventEmitter {
      * @returns {Promise<Object>} Updated preview data
      */
     async deletePaletteColor(colorIndex) {
+        this._scoringGeneration++;
         const palette = this._buildOverriddenPalette();
         if (!palette || colorIndex >= palette.length) {
             throw new Error(`Invalid palette index: ${colorIndex}`);
@@ -997,6 +1031,7 @@ class SessionState extends EventEmitter {
             throw new Error('Proxy not initialized');
         }
 
+        this._scoringGeneration++;
         logger.log(`[SessionState.merge] source=${sourceIndex} target=${targetIndex} mapSize_before=${this.paletteOverrides.size} keys=[${[...this.paletteOverrides.keys()]}]`);
 
         // Read from baseline+overrides (the consistent visible state),
@@ -1049,6 +1084,8 @@ class SessionState extends EventEmitter {
             throw new Error('Proxy not initialized');
         }
 
+        this._scoringGeneration++;
+
         // Sanity cap at 20 screens (auto presses max ~14 stations)
         const palette = this.proxyEngine._baselineState.palette;
         if (palette.length >= 20) {
@@ -1087,6 +1124,7 @@ class SessionState extends EventEmitter {
             return null;
         }
 
+        this._scoringGeneration++;
         logger.log(`[SessionState.removeAddedColor] Removing added color at index ${colorIndex}`);
 
         // Remove from addedColors; shift tracked indices above the removed one

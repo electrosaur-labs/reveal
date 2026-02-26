@@ -220,29 +220,6 @@ class ProductionWorker {
                     allLayers[allLayers.length - 1].visible = false;
                 }
 
-                // ── Embed separation manifest as XMP ──
-                // Write inside suspendHistory so it collapses into the single
-                // "Reveal" undo step (no separate "File Info" history entry).
-                try {
-                    const elapsedMs = Date.now() - t0;
-                    const prodResult = { layerCount: layers.length, elapsedMs };
-                    const manifest = self._sessionState.buildManifest(prodResult);
-
-                    // Tier 1: IPTC fields (headline, instructions, author, keywords, caption JSON)
-                    await PhotoshopBridge.writeManifestXMP(manifest);
-                    logger.log(`[ProductionWorker] Tier 1: IPTC fields embedded`);
-
-                    // Tier 2: Structured XMP with custom reveal: namespace (experimental, non-fatal)
-                    try {
-                        await PhotoshopBridge.writeStructuredXMP(manifest);
-                        logger.log(`[ProductionWorker] Tier 2: Structured XMP written`);
-                    } catch (tier2Err) {
-                        logger.log(`[ProductionWorker] Tier 2: Structured XMP failed (non-fatal): ${tier2Err && tier2Err.message || String(tier2Err)}`);
-                    }
-                } catch (xmpErr) {
-                    logger.log(`[ProductionWorker] Manifest XMP failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
-                }
-
                 if (suspensionID !== null) {
                     await executionContext.hostControl.resumeHistory(suspensionID);
                 }
@@ -261,7 +238,33 @@ class ProductionWorker {
         const elapsedMs = Date.now() - t0;
         logger.log(`[ProductionWorker] Done: ${result.layerCount} layers in ${elapsedMs}ms`);
 
-        return { layerCount: result.layerCount, elapsedMs };
+        const productionResult = { layerCount: result.layerCount, elapsedMs };
+
+        // ── Embed separation manifest as XMP ──
+        // MUST be a separate executeAsModal from layer creation.
+        // UXP batchPlay `set fileInfo` inside suspendHistory does not persist —
+        // the metadata gets rolled into the suspended history state and silently
+        // dropped. A dedicated modal ensures the write survives.
+        try {
+            const manifest = this._sessionState.buildManifest(productionResult);
+            await core.executeAsModal(async () => {
+                // Tier 1: IPTC fields (headline, instructions, author, keywords, caption JSON)
+                await PhotoshopBridge.writeManifestXMP(manifest);
+                logger.log(`[ProductionWorker] Tier 1: IPTC fields embedded`);
+
+                // Tier 2: Structured XMP with custom reveal: namespace (experimental, non-fatal)
+                try {
+                    await PhotoshopBridge.writeStructuredXMP(manifest);
+                    logger.log(`[ProductionWorker] Tier 2: Structured XMP written`);
+                } catch (tier2Err) {
+                    logger.log(`[ProductionWorker] Tier 2: Structured XMP failed (non-fatal): ${tier2Err && tier2Err.message || String(tier2Err)}`);
+                }
+            }, { commandName: "Reveal: Write Manifest" });
+        } catch (xmpErr) {
+            logger.log(`[ProductionWorker] Manifest XMP failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
+        }
+
+        return productionResult;
     }
 
     // ─── Loupe Tile Rendering ─────────────────────────────────────
