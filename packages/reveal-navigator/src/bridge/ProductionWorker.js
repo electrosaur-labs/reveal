@@ -136,11 +136,10 @@ class ProductionWorker {
             if (metric === 'cie76' && ditherType === 'none') {
                 colorIndices = self._mapPixelsFast(labPixels, labPalette, pixelCount);
             } else {
-                const meshCount = prodConfig.meshSize || null;
-                logger.log(`[ProductionWorker] Using ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'} (via SeparationEngine)`);
+                logger.log(`[ProductionWorker] Using ${metric}, dither=${ditherType} (via SeparationEngine)`);
                 colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
                     labPixels, labPalette, null, actualWidth, actualHeight,
-                    { ditherType, distanceMetric: metric, meshCount }
+                    { ditherType, distanceMetric: metric }
                 );
             }
 

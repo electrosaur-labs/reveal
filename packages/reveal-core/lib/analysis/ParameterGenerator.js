@@ -200,9 +200,8 @@ class ParameterGenerator {
             // K-means refinement passes (0 = skip, 1 = default, 2+ = extra convergence)
             refinementPasses: params.refinementPasses !== undefined ? params.refinementPasses : 1,
 
-            // Screen mesh — NOT set here; meshSize is a session-level equipment
-            // setting (physical screen), not an archetype/image property.
-            // Default 230 TPI is applied in SessionState.
+            // Screen mesh (TPI for LPI-aware dithering; 0 = pixel-level)
+            meshSize: params.meshSize || 0,
 
             // Legacy fields
             rangeClamp: [dna.minL || 0, dna.maxL || 100],
@@ -512,9 +511,7 @@ class ParameterGenerator {
      */
     static toEngineOptions(config, overrides = {}) {
         return {
-            // Core (both names for compatibility — batch uses targetColorsSlider,
-            // ProxyEngine uses targetColors)
-            targetColors: config.targetColors,
+            // Core
             targetColorsSlider: config.targetColors,
             format: 'lab',
             engineType: config.engineType || 'reveal',
@@ -592,9 +589,8 @@ class ParameterGenerator {
             // K-means refinement
             refinementPasses: config.refinementPasses,
 
-            // Screen mesh — passed through if caller provides it (session-level, not archetype).
-            // Maps meshSize (config/UI name) → meshCount (SeparationEngine name).
-            ...(config.meshSize !== undefined ? { meshCount: config.meshSize } : {}),
+            // Screen mesh
+            meshSize: config.meshSize,
 
             // Caller-specific overrides (bitDepth, format, etc.)
             ...overrides

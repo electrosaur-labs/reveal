@@ -83,7 +83,7 @@ class SeparationEngine {
      */
     static async mapPixelsToPaletteAsync(rawBytes, labPalette, onProgress, width = null, height = null, options = {}) {
         const ditherType = options.ditherType || 'none';
-        const meshCount = options.meshCount || options.mesh || null;  // Accept both names
+        const meshCount = options.meshCount || null;
         const dpi = options.dpi || 300;
         const distanceConfig = normalizeDistanceConfig(options);
 
