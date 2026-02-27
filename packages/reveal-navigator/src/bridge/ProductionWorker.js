@@ -240,28 +240,22 @@ class ProductionWorker {
 
         const productionResult = { layerCount: result.layerCount, elapsedMs };
 
-        // ── Embed separation manifest as XMP ──
+        // ── Embed separation manifest ──
         // MUST be a separate executeAsModal from layer creation.
-        // UXP batchPlay `set fileInfo` inside suspendHistory does not persist —
-        // the metadata gets rolled into the suspended history state and silently
-        // dropped. A dedicated modal ensures the write survives.
+        // batchPlay `set fileInfo` inside suspendHistory silently drops.
         try {
             const manifest = this._sessionState.buildManifest(productionResult);
             await core.executeAsModal(async () => {
-                // Tier 1: IPTC fields (headline, instructions, author, keywords, caption JSON)
-                await PhotoshopBridge.writeManifestXMP(manifest);
-                logger.log(`[ProductionWorker] Tier 1: IPTC fields embedded`);
+                // IPTC: human-readable fields for File Info dialog
+                await PhotoshopBridge.writeManifestIPTC(manifest);
 
-                // Tier 2: Structured XMP with custom reveal: namespace (experimental, non-fatal)
-                try {
-                    await PhotoshopBridge.writeStructuredXMP(manifest);
-                    logger.log(`[ProductionWorker] Tier 2: Structured XMP written`);
-                } catch (tier2Err) {
-                    logger.log(`[ProductionWorker] Tier 2: Structured XMP failed (non-fatal): ${tier2Err && tier2Err.message || String(tier2Err)}`);
-                }
+                // XMP: structured reveal: namespace (machine-readable)
+                await PhotoshopBridge.writeStructuredXMP(manifest);
+
+                logger.log(`[ProductionWorker] Manifest embedded (IPTC + reveal: XMP)`);
             }, { commandName: "Reveal: Write Manifest" });
         } catch (xmpErr) {
-            logger.log(`[ProductionWorker] Manifest XMP failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
+            logger.log(`[ProductionWorker] Manifest write failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
         }
 
         return productionResult;

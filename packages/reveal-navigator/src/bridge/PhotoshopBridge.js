@@ -187,38 +187,37 @@ class PhotoshopBridge {
     }
 
     /**
-     * Embed a separation manifest into the active document's metadata.
+     * Write human-readable IPTC fields via batchPlay fileInfo.
+     * These show up in Photoshop's File > File Info dialog:
+     *   headline, instructions, author, keywords, caption.
      *
-     * Tier 1: Writes multiple IPTC fields via batchPlay fileInfo —
-     *   headline, instructions, author, keywords, caption (JSON payload).
-     *   These are human-readable in File > File Info.
+     * The structured machine-readable data lives in the reveal:
+     * XMP namespace (written by writeStructuredXMP). This method
+     * only writes the human-readable summary.
      *
      * Must be called inside executeAsModal.
      *
      * @param {Object} manifest - Manifest object from SessionState.buildManifest()
      */
-    static async writeManifestXMP(manifest) {
-        // ── Build human-readable IPTC fields ──
-
-        // Headline: archetype name + color count
+    static async writeManifestIPTC(manifest) {
         const archetypeName = (manifest.archetype && manifest.archetype.name) || 'Unknown';
         const layerCount = (manifest.metrics && manifest.metrics.layerCount) || 0;
+
+        // Headline: archetype name + color count
         const headline = `Reveal: ${archetypeName} — ${layerCount} colors`;
 
-        // Instructions: multi-line summary of archetype, palette, metric, knobs
-        const instrLines = [];
-        if (manifest.archetype) {
-            instrLines.push(`Archetype: ${archetypeName} (score: ${manifest.archetype.score})`);
-        }
+        // Caption: human-readable summary (replaces old JSON blob)
+        const captionLines = [];
+        captionLines.push(`Reveal Navigator v1.0.0 — Color Separation`);
+        captionLines.push(`Archetype: ${archetypeName} (score: ${manifest.archetype ? manifest.archetype.score : 'n/a'})`);
         if (manifest.palette && manifest.palette.length > 0) {
-            const hexList = manifest.palette.map(c => c.hex).join(', ');
-            instrLines.push(`Palette: ${hexList}`);
+            captionLines.push(`Palette: ${manifest.palette.map(c => c.hex).join(', ')}`);
         }
         if (manifest.config) {
-            instrLines.push(`Metric: ${manifest.config.distanceMetric || 'cie76'}, Dither: ${manifest.config.ditherType || 'none'}`);
+            captionLines.push(`Metric: ${manifest.config.distanceMetric || 'cie76'}, Dither: ${manifest.config.ditherType || 'none'}`);
         }
         if (manifest.metrics && manifest.metrics.avgDeltaE != null) {
-            instrLines.push(`Avg ΔE: ${manifest.metrics.avgDeltaE.toFixed(2)}`);
+            captionLines.push(`Avg ΔE: ${manifest.metrics.avgDeltaE.toFixed(2)}`);
         }
         if (manifest.knobs) {
             const k = manifest.knobs;
@@ -227,12 +226,9 @@ class PhotoshopBridge {
             if (k.speckleRescue != null) parts.push(`speckle=${k.speckleRescue}`);
             if (k.shadowClamp != null) parts.push(`shadow=${k.shadowClamp}`);
             if (k.trapSize != null) parts.push(`trap=${k.trapSize}`);
-            if (parts.length > 0) instrLines.push(`Knobs: ${parts.join(', ')}`);
+            if (parts.length > 0) captionLines.push(`Knobs: ${parts.join(', ')}`);
         }
-        const instructions = instrLines.join('\n');
-
-        // Author
-        const author = (manifest.meta && manifest.meta.generator) || 'Reveal Navigator v1.0.0';
+        captionLines.push(`Full metadata in reveal: XMP namespace.`);
 
         // Keywords: archetype name + hex codes
         const keywords = [archetypeName];
@@ -242,16 +238,13 @@ class PhotoshopBridge {
             }
         }
 
-        // Build the fileInfo descriptor
         const fileInfoDesc = {
             _obj: "fileInfo",
-            caption: "REVEAL:" + JSON.stringify(manifest),
+            caption: captionLines.join('\n'),
             headline: headline,
-            instructions: instructions,
-            byline: author
+            instructions: captionLines.slice(1, -1).join('\n'), // same content minus header/footer
+            byline: (manifest.meta && manifest.meta.generator) || 'Reveal Navigator v1.0.0'
         };
-
-        // Keywords need a special list descriptor format
         if (keywords.length > 0) {
             fileInfoDesc.keywords = keywords;
         }
@@ -268,7 +261,10 @@ class PhotoshopBridge {
 
     /**
      * Tier 2: Write structured XMP with custom reveal: namespace.
-     * Uses require('uxp').xmp for proper XMP serialization.
+     *
+     * Uses raw string injection into the existing XMP packet — avoids
+     * XMPMeta.serialize() which changes padding and causes UXP to
+     * reject the write with errors -1715/-25920.
      *
      * Experimental — may fail on some UXP versions. Caller should
      * wrap in try/catch and treat failure as non-fatal.
@@ -279,14 +275,9 @@ class PhotoshopBridge {
      * @returns {Promise<boolean>} true if structured XMP was written and verified
      */
     static async writeStructuredXMP(manifest) {
-        // ── Step 1: Load XMP module ──
-        const xmpModule = require('uxp').xmp;
-        if (!xmpModule || !xmpModule.XMPMeta) {
-            throw new Error('uxp.xmp module not available');
-        }
-        const { XMPMeta, XMPConst } = xmpModule;
+        const REVEAL_NS = 'http://electrosaur.org/reveal/1.0/';
 
-        // ── Step 2: Read existing XMP from document ──
+        // ── Step 1: Read existing XMP from document ──
         const getResult = await action.batchPlay([{
             _obj: "get",
             _target: [
@@ -298,91 +289,43 @@ class PhotoshopBridge {
         const existingXMP = (getResult && getResult[0] && getResult[0].XMPMetadataAsUTF8)
             ? getResult[0].XMPMetadataAsUTF8
             : '';
+        if (!existingXMP) throw new Error('No existing XMP packet to modify');
 
-        // ── Step 3: Parse and modify XMP ──
-        const xmp = existingXMP ? new XMPMeta(existingXMP) : new XMPMeta();
+        // ── Step 2: Build reveal XML block ──
+        const xml = PhotoshopBridge._buildRevealXML(manifest);
 
-        const NS = 'http://electrosaur.org/reveal/1.0/';
-        XMPMeta.registerNamespace(NS, 'reveal');
+        // ── Step 3: Inject into existing XMP via string surgery ──
+        let modified = existingXMP;
 
-        // Simple property helper
-        const setProp = (name, value) => {
-            if (value != null) {
-                xmp.setProperty(NS, name, String(value));
-            }
-        };
+        // Strip any previous reveal block (idempotent re-write)
+        modified = modified.replace(
+            /\n? *<!-- REVEAL:BEGIN -->[\s\S]*?<!-- REVEAL:END -->\n?/g, ''
+        );
 
-        // ── Step 4: Write structured properties ──
-        setProp('version', '2.0');
-
-        // Archetype info
-        if (manifest.archetype) {
-            setProp('archetype', manifest.archetype.id);
-            setProp('archetypeName', manifest.archetype.name);
-            setProp('archetypeScore', manifest.archetype.score);
+        // Add namespace declaration to rdf:Description if missing
+        if (!modified.includes('xmlns:reveal=')) {
+            modified = modified.replace(
+                /(<rdf:Description\b[^>]*?)(>)/,
+                `$1\n            xmlns:reveal="${REVEAL_NS}"$2`
+            );
         }
 
-        // Config
-        if (manifest.config) {
-            setProp('targetColors', manifest.config.targetColors);
-            setProp('distanceMetric', manifest.config.distanceMetric);
-            setProp('ditherType', manifest.config.ditherType);
+        // Insert our block before closing </rdf:Description>
+        // (handle both self-closing and normal closing forms)
+        if (modified.includes('</rdf:Description>')) {
+            modified = modified.replace(
+                '</rdf:Description>',
+                xml + '\n         </rdf:Description>'
+            );
+        } else {
+            // Self-closing <rdf:Description ... /> — open it
+            modified = modified.replace(
+                /(<rdf:Description\b[^>]*?)\s*\/>/,
+                `$1>\n${xml}\n         </rdf:Description>`
+            );
         }
 
-        // Metrics
-        if (manifest.metrics) {
-            setProp('avgDeltaE', manifest.metrics.avgDeltaE != null
-                ? manifest.metrics.avgDeltaE.toFixed(2) : null);
-            setProp('layerCount', manifest.metrics.layerCount);
-        }
-
-        // DNA signature values
-        if (manifest.dna && manifest.dna.signature) {
-            const sig = manifest.dna.signature;
-            setProp('dna_l', sig.meanL != null ? sig.meanL.toFixed(1) : null);
-            setProp('dna_c', sig.meanC != null ? sig.meanC.toFixed(1) : null);
-            setProp('dna_k', sig.blackness != null ? sig.blackness.toFixed(3) : null);
-            setProp('dna_entropy', sig.entropy != null ? sig.entropy.toFixed(2) : null);
-            setProp('dna_temperature', sig.temperature != null ? sig.temperature.toFixed(0) : null);
-        }
-        if (manifest.dna && manifest.dna.statistics) {
-            setProp('dominant_sector', manifest.dna.statistics.dominantSector);
-        }
-
-        // Knobs
-        if (manifest.knobs) {
-            setProp('speckleRescue', manifest.knobs.speckleRescue);
-            setProp('shadowClamp', manifest.knobs.shadowClamp);
-            setProp('minVolume', manifest.knobs.minVolume);
-            setProp('trapSize', manifest.knobs.trapSize);
-        }
-
-        // Palette as ordered array
-        if (manifest.palette && manifest.palette.length > 0) {
-            // Delete existing array if present
-            try { xmp.deleteProperty(NS, 'palette'); } catch (_) {}
-            xmp.setProperty(NS, 'palette', null, XMPConst.PROP_IS_ARRAY | XMPConst.ARRAY_IS_ORDERED);
-            for (let i = 0; i < manifest.palette.length; i++) {
-                const c = manifest.palette[i];
-                const entry = `${c.hex} L=${c.L} a=${c.a} b=${c.b} ${c.coverage}`;
-                xmp.appendArrayItem(NS, 'palette', entry);
-            }
-        }
-
-        // Rankings — top 5 archetype scores
-        if (manifest.archetype && manifest.archetype.rankings) {
-            try { xmp.deleteProperty(NS, 'rankings'); } catch (_) {}
-            xmp.setProperty(NS, 'rankings', null, XMPConst.PROP_IS_ARRAY | XMPConst.ARRAY_IS_ORDERED);
-            const top5 = manifest.archetype.rankings.slice(0, 5);
-            for (const r of top5) {
-                const entry = `${r.name}: ${r.score}`;
-                xmp.appendArrayItem(NS, 'rankings', entry);
-            }
-        }
-
-        // ── Step 5: Serialize and write back ──
-        const serialized = xmp.serialize(XMPConst.SERIALIZE_USE_COMPACT_FORMAT);
-
+        // ── Step 4: Write back ──
         await action.batchPlay([{
             _obj: "set",
             _target: [
@@ -391,11 +334,11 @@ class PhotoshopBridge {
             ],
             to: {
                 _obj: "document",
-                XMPMetadataAsUTF8: serialized
+                XMPMetadataAsUTF8: modified
             }
         }], {});
 
-        // ── Step 6: Verify round-trip ──
+        // ── Step 5: Verify round-trip ──
         const verifyResult = await action.batchPlay([{
             _obj: "get",
             _target: [
@@ -410,6 +353,137 @@ class PhotoshopBridge {
         }
 
         return true;
+    }
+
+    /**
+     * Build the reveal: namespace XML block from a manifest.
+     * Returns a string suitable for injection into an rdf:Description element.
+     *
+     * @param {Object} manifest
+     * @returns {string} XML fragment
+     */
+    static _buildRevealXML(manifest) {
+        const I = '         '; // 9-space indent to match Photoshop XMP formatting
+        const lines = [];
+        lines.push(`${I}<!-- REVEAL:BEGIN -->`);
+
+        const esc = (v) => String(v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+        // ── Meta ──
+        // reveal:version = plugin version; reveal:dnaVersion = DNA schema version
+        const pluginVersion = (manifest.meta && manifest.meta.generator)
+            ? manifest.meta.generator.replace(/.*v/i, '') : '1.0.0';
+        lines.push(`${I}<reveal:version>${esc(pluginVersion)}</reveal:version>`);
+        if (manifest.dna && manifest.dna.version) {
+            lines.push(`${I}<reveal:dnaVersion>${esc(manifest.dna.version)}</reveal:dnaVersion>`);
+        }
+        if (manifest.meta) {
+            lines.push(`${I}<reveal:generator>${esc(manifest.meta.generator)}</reveal:generator>`);
+            lines.push(`${I}<reveal:timestamp>${esc(manifest.meta.timestamp)}</reveal:timestamp>`);
+            lines.push(`${I}<reveal:filename>${esc(manifest.meta.filename)}</reveal:filename>`);
+            lines.push(`${I}<reveal:width>${manifest.meta.width}</reveal:width>`);
+            lines.push(`${I}<reveal:height>${manifest.meta.height}</reveal:height>`);
+            lines.push(`${I}<reveal:bitDepth>${manifest.meta.bitDepth}</reveal:bitDepth>`);
+        }
+
+        // ── Archetype ──
+        if (manifest.archetype) {
+            const a = manifest.archetype;
+            lines.push(`${I}<reveal:archetype>${esc(a.id)}</reveal:archetype>`);
+            lines.push(`${I}<reveal:archetypeName>${esc(a.name)}</reveal:archetypeName>`);
+            lines.push(`${I}<reveal:archetypeScore>${a.score}</reveal:archetypeScore>`);
+            if (a.breakdown) {
+                const b = a.breakdown;
+                lines.push(`${I}<reveal:scoreStructural>${b.structural || 0}</reveal:scoreStructural>`);
+                lines.push(`${I}<reveal:scoreSector>${b.sectorAffinity || 0}</reveal:scoreSector>`);
+                lines.push(`${I}<reveal:scorePattern>${b.pattern || 0}</reveal:scorePattern>`);
+            }
+        }
+
+        // ── Config ──
+        if (manifest.config) {
+            const c = manifest.config;
+            if (c.targetColors != null) lines.push(`${I}<reveal:targetColors>${c.targetColors}</reveal:targetColors>`);
+            if (c.distanceMetric) lines.push(`${I}<reveal:distanceMetric>${esc(c.distanceMetric)}</reveal:distanceMetric>`);
+            if (c.ditherType) lines.push(`${I}<reveal:ditherType>${esc(c.ditherType)}</reveal:ditherType>`);
+            if (c.engineType) lines.push(`${I}<reveal:engineType>${esc(c.engineType)}</reveal:engineType>`);
+        }
+
+        // ── Metrics ──
+        if (manifest.metrics) {
+            const m = manifest.metrics;
+            if (m.avgDeltaE != null) lines.push(`${I}<reveal:avgDeltaE>${m.avgDeltaE.toFixed(2)}</reveal:avgDeltaE>`);
+            lines.push(`${I}<reveal:layerCount>${m.layerCount || 0}</reveal:layerCount>`);
+            lines.push(`${I}<reveal:elapsedMs>${m.elapsedMs || 0}</reveal:elapsedMs>`);
+        }
+
+        // ── DNA ──
+        if (manifest.dna) {
+            const g = manifest.dna.global || manifest.dna.signature || {};
+            if (g.l != null || g.meanL != null) lines.push(`${I}<reveal:dnaL>${(g.l || g.meanL || 0).toFixed(1)}</reveal:dnaL>`);
+            if (g.c != null || g.meanC != null) lines.push(`${I}<reveal:dnaC>${(g.c || g.meanC || 0).toFixed(1)}</reveal:dnaC>`);
+            if (g.k != null || g.blackness != null) lines.push(`${I}<reveal:dnaK>${(g.k || g.blackness || 0).toFixed(3)}</reveal:dnaK>`);
+            if (g.hue_entropy != null || g.entropy != null) lines.push(`${I}<reveal:dnaEntropy>${(g.hue_entropy || g.entropy || 0).toFixed(2)}</reveal:dnaEntropy>`);
+            if (g.temperature_bias != null || g.temperature != null) lines.push(`${I}<reveal:dnaTemperature>${(g.temperature_bias || g.temperature || 0).toFixed(2)}</reveal:dnaTemperature>`);
+            const ds = manifest.dna.dominant_sector || (manifest.dna.statistics && manifest.dna.statistics.dominantSector);
+            if (ds) lines.push(`${I}<reveal:dominantSector>${esc(ds)}</reveal:dominantSector>`);
+        }
+
+        // ── Knobs ──
+        if (manifest.knobs) {
+            const k = manifest.knobs;
+            lines.push(`${I}<reveal:minVolume>${k.minVolume || 0}</reveal:minVolume>`);
+            lines.push(`${I}<reveal:speckleRescue>${k.speckleRescue || 0}</reveal:speckleRescue>`);
+            lines.push(`${I}<reveal:shadowClamp>${k.shadowClamp || 0}</reveal:shadowClamp>`);
+            lines.push(`${I}<reveal:trapSize>${k.trapSize || 0}</reveal:trapSize>`);
+            if (k.meshSize) lines.push(`${I}<reveal:meshSize>${k.meshSize}</reveal:meshSize>`);
+        }
+
+        // ── Palette (ordered list) ──
+        if (manifest.palette && manifest.palette.length > 0) {
+            lines.push(`${I}<reveal:palette>`);
+            lines.push(`${I} <rdf:Seq>`);
+            for (const c of manifest.palette) {
+                lines.push(`${I}  <rdf:li>${esc(c.hex)} L=${c.L} a=${c.a} b=${c.b} ${c.coverage}</rdf:li>`);
+            }
+            lines.push(`${I} </rdf:Seq>`);
+            lines.push(`${I}</reveal:palette>`);
+        }
+
+        // ── Rankings (top 5) ──
+        if (manifest.archetype && manifest.archetype.rankings) {
+            const top5 = manifest.archetype.rankings.slice(0, 5);
+            lines.push(`${I}<reveal:rankings>`);
+            lines.push(`${I} <rdf:Seq>`);
+            for (const r of top5) {
+                lines.push(`${I}  <rdf:li>${esc(r.name)}: ${r.score}</rdf:li>`);
+            }
+            lines.push(`${I} </rdf:Seq>`);
+            lines.push(`${I}</reveal:rankings>`);
+        }
+
+        // ── Surgery ──
+        if (manifest.surgery) {
+            const s = manifest.surgery;
+            const hasOverrides = s.overrides && Object.keys(s.overrides).length > 0;
+            const hasMerges = s.merges && Object.keys(s.merges).length > 0;
+            const hasDeletions = s.deletions && s.deletions.length > 0;
+            if (hasOverrides || hasMerges || hasDeletions) {
+                if (hasOverrides) {
+                    for (const [idx, lab] of Object.entries(s.overrides)) {
+                        lines.push(`${I}<reveal:override_${idx}>L=${lab.L} a=${lab.a} b=${lab.b}</reveal:override_${idx}>`);
+                    }
+                }
+                if (hasDeletions) {
+                    lines.push(`${I}<reveal:deletions>${s.deletions.join(',')}</reveal:deletions>`);
+                }
+            }
+        }
+
+        lines.push(`${I}<!-- REVEAL:END -->`);
+        return lines.join('\n');
     }
 
     /**
