@@ -17,7 +17,7 @@ The core engine is **100% pure JavaScript with zero external dependencies**, so 
   <tr>
     <td><img src="docs/images/horse-original.jpg" width="280" alt="Original photo"></td>
     <td><img src="docs/images/horse-warm-sovereign-flat.png" width="280" alt="6-color flat separation"></td>
-    <td><img src="docs/images/horse-warm-sovereign-dithered.png" width="280" alt="6-color dithered separation"></td>
+    <td><img src="docs/images/horse-punchy-commercial-dithered.png" width="280" alt="Punchy/Commercial dithered separation"></td>
   </tr>
 </table>
 
