@@ -57,8 +57,6 @@ const STRUCTURAL_PARAMS = new Set([
     'neutralCentroidClampThreshold', 'neutralSovereigntyThreshold',
     // Chroma gate (cWeight multiplier for high-chroma images)
     'chromaGate',
-    // Dither + separation
-    'ditherType',
     // Preprocessing
     'preprocessingIntensity',
     // Transparency
@@ -77,6 +75,7 @@ const UNIMPLEMENTED_KNOBS = new Set([
     'detailRescue',         // Stored but no engine reads it
     'medianPass',           // Stored but no engine reads it
     'maskProfile',          // Stored but ProductionWorker doesn't use it yet
+    'ditherType',           // Affects commit/separation only — not proxy posterization
 ]);
 
 // Union of all user-facing knobs (for snapshot/restore/reset/dirty loops).
