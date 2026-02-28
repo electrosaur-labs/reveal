@@ -148,6 +148,7 @@ class InterpolatorEngine {
         // 4. Defaults for parameters not stored in archetype JSONs
         //    (ParameterGenerator computes these dynamically; we provide safe defaults)
         if (result.centroidStrategy === undefined) result.centroidStrategy = 'SALIENCY';
+        if (result.ditherType === undefined) result.ditherType = 'blue-noise';
         if (result.medianPass === undefined) result.medianPass = false;
         if (result.bWeight === undefined) result.bWeight = 1.0;
         if (result.saturationBoost === undefined) result.saturationBoost = result.vibrancyBoost || 1.4;
