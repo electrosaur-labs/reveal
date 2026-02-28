@@ -234,6 +234,25 @@ class ProductionWorker {
                 throw err;
             }
 
+            // ── Embed separation manifest ──
+            // Written AFTER resumeHistory, still inside the same executeAsModal.
+            // This folds metadata into the single "Reveal" history entry.
+            // (set fileInfo inside suspendHistory silently drops — outside it works.)
+            const elapsedSoFar = Date.now() - t0;
+            try {
+                const manifest = self._sessionState.buildManifest({
+                    layerCount: layers.length,
+                    elapsedMs: elapsedSoFar
+                });
+                // IPTC: human-readable fields for File Info dialog
+                await PhotoshopBridge.writeManifestIPTC(manifest);
+                // XMP: structured reveal: namespace (machine-readable)
+                await PhotoshopBridge.writeStructuredXMP(manifest);
+                logger.log(`[ProductionWorker] Manifest embedded (IPTC + reveal: XMP)`);
+            } catch (xmpErr) {
+                logger.log(`[ProductionWorker] Manifest write failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
+            }
+
             return { layerCount: layers.length };
         }, {
             commandName: "Reveal"
@@ -242,27 +261,7 @@ class ProductionWorker {
         const elapsedMs = Date.now() - t0;
         logger.log(`[ProductionWorker] Done: ${result.layerCount} layers in ${elapsedMs}ms`);
 
-        const productionResult = { layerCount: result.layerCount, elapsedMs };
-
-        // ── Embed separation manifest ──
-        // MUST be a separate executeAsModal from layer creation.
-        // batchPlay `set fileInfo` inside suspendHistory silently drops.
-        try {
-            const manifest = this._sessionState.buildManifest(productionResult);
-            await core.executeAsModal(async () => {
-                // IPTC: human-readable fields for File Info dialog
-                await PhotoshopBridge.writeManifestIPTC(manifest);
-
-                // XMP: structured reveal: namespace (machine-readable)
-                await PhotoshopBridge.writeStructuredXMP(manifest);
-
-                logger.log(`[ProductionWorker] Manifest embedded (IPTC + reveal: XMP)`);
-            }, { commandName: "Reveal: Write Manifest" });
-        } catch (xmpErr) {
-            logger.log(`[ProductionWorker] Manifest write failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
-        }
-
-        return productionResult;
+        return { layerCount: result.layerCount, elapsedMs };
     }
 
     // ─── Loupe Tile Rendering ─────────────────────────────────────
