@@ -236,19 +236,19 @@ class ProductionWorker {
 
             // ── Embed separation manifest ──
             // Written AFTER resumeHistory, still inside the same executeAsModal.
-            // This folds metadata into the single "Reveal" history entry.
-            // (set fileInfo inside suspendHistory silently drops — outside it works.)
+            // Only writeStructuredXMP (set XMPMetadataAsUTF8) — NOT writeManifestIPTC.
+            // set fileInfo always creates a "File Info" history entry regardless of
+            // modal context, and silently drops inside suspendHistory. The structured
+            // reveal: XMP namespace contains all machine-readable data; IPTC is redundant.
             const elapsedSoFar = Date.now() - t0;
             try {
                 const manifest = self._sessionState.buildManifest({
                     layerCount: layers.length,
                     elapsedMs: elapsedSoFar
                 });
-                // IPTC: human-readable fields for File Info dialog
-                await PhotoshopBridge.writeManifestIPTC(manifest);
-                // XMP: structured reveal: namespace (machine-readable)
+                // XMP: structured reveal: namespace (machine-readable, no history entry)
                 await PhotoshopBridge.writeStructuredXMP(manifest);
-                logger.log(`[ProductionWorker] Manifest embedded (IPTC + reveal: XMP)`);
+                logger.log(`[ProductionWorker] Manifest embedded (reveal: XMP)`);
             } catch (xmpErr) {
                 logger.log(`[ProductionWorker] Manifest write failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
             }
