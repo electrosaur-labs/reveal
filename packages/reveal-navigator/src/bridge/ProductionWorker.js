@@ -45,7 +45,8 @@ class ProductionWorker {
 
         // Build production config BEFORE entering modal (no PS API needed)
         const prodConfig = this._sessionState.exportProductionConfig();
-        const labPalette = prodConfig.palette;
+        const labPalette = prodConfig.palette;          // overridden colours → layer fill
+        const separationPalette = prodConfig.separationPalette || labPalette; // baseline → NN search
         if (!labPalette || labPalette.length === 0) {
             throw new Error('No palette available — run navigation first');
         }
@@ -132,14 +133,17 @@ class ProductionWorker {
             const tSep = Date.now();
             const ditherType = prodConfig.ditherType || 'none';
 
+            // Separation uses BASELINE palette so palette overrides do not
+            // deflect the nearest-neighbour search. Override colours are layer
+            // fill colours only — they live in labPalette, not separationPalette.
             let colorIndices;
             if (metric === 'cie76' && ditherType === 'none') {
-                colorIndices = self._mapPixelsFast(labPixels, labPalette, pixelCount);
+                colorIndices = self._mapPixelsFast(labPixels, separationPalette, pixelCount);
             } else {
                 const meshCount = prodConfig.meshSize || null;
                 logger.log(`[ProductionWorker] Using ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'} (via SeparationEngine)`);
                 colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-                    labPixels, labPalette, null, actualWidth, actualHeight,
+                    labPixels, separationPalette, null, actualWidth, actualHeight,
                     { ditherType, distanceMetric: metric, meshCount }
                 );
             }

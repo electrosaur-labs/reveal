@@ -1342,6 +1342,21 @@ class SessionState extends EventEmitter {
             }
         }
 
+        // Baseline palette (pre-override) — used by ProductionWorker for
+        // nearest-neighbour separation so overridden slots still attract
+        // their original pixels. Overrides are applied to layer fill colours
+        // only, not to the separation distance calculation.
+        const baselinePalette = this.proxyEngine._baselineState
+            ? this.proxyEngine._baselineState.palette.map(c => ({ ...c }))
+            : palette;
+
+        // Separation palette: baseline for core slots + suggestions at end.
+        // Suggestions are new colours added by the user — their Lab value IS
+        // the separation target, so they use the override colour directly.
+        const separationPalette = this._checkedSuggestions.length > 0
+            ? [...baselinePalette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+            : baselinePalette;
+
         return {
             // Source metadata
             width: this.imageWidth,
@@ -1354,10 +1369,15 @@ class SessionState extends EventEmitter {
             // Archetype
             activeArchetypeId: this.state.activeArchetypeId,
 
-            // Palette (with overrides baked in + checked suggestions appended)
+            // Layer fill palette (overrides baked in + suggestions appended)
             palette: this._checkedSuggestions.length > 0
                 ? [...palette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
                 : palette,
+
+            // Separation palette (baseline colours — overrides do NOT deflect
+            // the nearest-neighbour search, only the fill colour changes)
+            separationPalette,
+
             paletteOverrides: Object.fromEntries(this.paletteOverrides),
 
             // Merge remap: source → target for collapsed colors
