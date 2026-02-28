@@ -2072,6 +2072,67 @@ class PosterizationEngine {
             enableHueGapAnalysis: false
         });
     }
+
+    // ========================================================================
+    // Distilled Posterization (over-quantize → furthest-point reduce)
+    // ========================================================================
+
+    /**
+     * Over-quantize to 3× targetColors (capped at 20), then reduce to
+     * targetColors using coverage-seeded furthest-point sampling.
+     *
+     * Solves the warm-image L*-dominance problem: with 18–20 buckets the
+     * median cut is forced into a-axis/b-axis hue splits, capturing golden yellow vs
+     * orange distinctions that direct 6-color quantization collapses.
+     *
+     * @param {Uint16Array} labPixels    - 16-bit Lab pixels (3 ch, L/a/b interleaved)
+     * @param {number}      width
+     * @param {number}      height
+     * @param {number}      targetColors - Desired final color count
+     * @param {Object}      [options]    - Same options as posterize().
+     * @returns {{ paletteLab, palette, assignments, metadata }}
+     */
+    static distilledPosterize(labPixels, width, height, targetColors, options = {}) {
+        const { PaletteDistiller } = require('./PaletteDistiller');
+        const overCount = PaletteDistiller.overQuantizeCount(targetColors);
+
+        // Over-quantize pass — disable all merging so we get full hue resolution.
+        const overResult = PosterizationEngine.posterize(labPixels, width, height, overCount, {
+            ...options,
+            enablePaletteReduction: false,
+            snapThreshold: 0,
+            densityFloor: 0
+        });
+
+        const largePalette = overResult.paletteLab;
+        const pixelCount   = width * height;
+
+        // Distill: select the best targetColors from the large palette.
+        const { palette: reducedPalette, remap, selected } = PaletteDistiller.distill(
+            largePalette, overResult.assignments, pixelCount, targetColors
+        );
+
+        // Remap assignments from over-quantized indices to reduced indices.
+        const remappedAssignments = new Uint8Array(pixelCount);
+        const src = overResult.assignments;
+        for (let i = 0; i < pixelCount; i++) {
+            remappedAssignments[i] = remap[src[i]];
+        }
+
+        return {
+            palette:     reducedPalette.map(c => PosterizationEngine.labToRgb(c)),
+            paletteLab:  reducedPalette,
+            assignments: remappedAssignments,
+            metadata: {
+                ...overResult.metadata,
+                engine:      'distilled',
+                targetColors,
+                overCount,
+                finalColors: reducedPalette.length,
+                keptIndices: selected
+            }
+        };
+    }
 }
 
 // Export for use in plugin

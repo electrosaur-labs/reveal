@@ -455,6 +455,9 @@ module.exports.engines = {
     DNAValidator,
     ImageHeuristicAnalyzer,
 
+    // Distilled posterization (over-quantize → furthest-point reduce)
+    PaletteDistiller: require('./lib/engines/PaletteDistiller').PaletteDistiller,
+
     // Modular components (v2.0)
     HueAnalysis: require('./lib/engines/HueAnalysis'),
     CentroidStrategies: require('./lib/engines/CentroidStrategies').CentroidStrategies,
