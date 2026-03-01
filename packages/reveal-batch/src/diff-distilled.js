@@ -24,7 +24,7 @@ for (const entry of baseline) baseMap[entry.basename] = entry;
 // Load distilled sidecar JSONs
 const distilledMap = {};
 const files = fs.readdirSync(DISTILLED_DIR)
-    .filter(f => f.endsWith('.json') && f !== 'batch-report.json');
+    .filter(f => f.endsWith('.json') && f !== 'batch-report.json' && f !== 'diff-vs-baseline.json');
 for (const f of files) {
     const data = JSON.parse(fs.readFileSync(path.join(DISTILLED_DIR, f), 'utf8'));
     distilledMap[data.meta.filename.replace('.psd', '')] = data;
