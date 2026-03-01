@@ -2109,7 +2109,7 @@ class PosterizationEngine {
 
         // Distill: select the best targetColors from the large palette.
         const { palette: reducedPalette, remap, selected, ghostsExcluded, coverageCounts } = PaletteDistiller.distill(
-            largePalette, overResult.assignments, pixelCount, targetColors
+            largePalette, overResult.assignments, pixelCount, targetColors, options.ghostFloor
         );
 
         // Remap assignments from over-quantized indices to reduced indices.

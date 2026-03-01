@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "name": "Jethro Monroe / Sovereign 10-Color Lock",
   "group": "vibrant",
+  "engine": "distilled",
   "description": "Hard-coded v1 physics with Mk 1.5 stability. 10-color partition.",
   "preferred_sectors": [
     "blue",

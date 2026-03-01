@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "name": "Pure Graphic / Vector",
   "group": "graphic",
+  "engine": "distilled",
   "description": "Ultra-flat colors, zero gradients. High hue-locking for surgical separation of spot colors.",
   "centroid": {
     "l": 50,

@@ -19,6 +19,12 @@
       "enum": ["natural", "soft", "graphic", "dramatic", "vibrant", "specialist"],
       "description": "Intent-based grouping for carousel filtering"
     },
+    "engine": {
+      "type": "string",
+      "enum": ["distilled", "direct"],
+      "default": "distilled",
+      "description": "Quantization strategy. 'distilled' = over-quantize to 3×K then furthest-point sample back to K (improves tonal separation, avg -1.42 ΔE on TESTIMAGES). 'direct' = standard posterization (better for single-dominant-hue images where chroma-weighted centroids outperform diversity sampling, e.g. vibrant_tonal). User can always override."
+    },
     "description": {
       "type": "string",
       "description": "Target image characteristics"
@@ -128,6 +134,12 @@
           "minimum": 0,
           "maximum": 10,
           "description": "Palette post-pruning: merge colors with pixel coverage below N%. Resource allocation - weak colors (<minVolume) are merged to nearest neighbors. Prevents outlier/noise colors from claiming screens."
+        },
+        "ghostFloor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.1,
+          "description": "Distilled-engine only. Minimum coverage fraction (0–0.1) for a color to enter FPS selection. Colors in the over-palette below this threshold are excluded before furthest-point sampling runs. Default 0.001 (0.1%). Raise to 0.01 (1%) for single-dominant-hue archetypes where FPS selects spectral outliers (stems, shadows) that have low coverage but high spectral distance from the dominant hue mass."
         },
         "refinementPasses": {
           "type": "integer",

@@ -46,12 +46,13 @@ class PaletteDistiller {
      * @param {Uint8Array|Uint16Array}  assignments - Pixel→palette-index map (length = pixelCount)
      * @param {number}                  pixelCount
      * @param {number}                  targetK     - Desired output color count
+     * @param {number}                  [ghostFloor] - Min coverage fraction to enter FPS (default MIN_COVERAGE = 0.1%)
      * @returns {{ palette: Array<{L,a,b}>, remap: Uint8Array, selected: number[] }}
      *   palette   – reduced K-color palette (copies of input colors)
      *   remap     – mapping from old index (0…N-1) to new index (0…K-1)
      *   selected  – which original indices were kept (for diagnostics)
      */
-    static distill(palette, assignments, pixelCount, targetK) {
+    static distill(palette, assignments, pixelCount, targetK, ghostFloor) {
         const N = palette.length;
         const K = Math.min(targetK, N);
 
@@ -86,7 +87,7 @@ class PaletteDistiller {
         const selected  = [seedIdx];
         PaletteDistiller._updateMinDist(minDistSq, palette, seedIdx, N);
 
-        const minCountThreshold = (pixelCount || 1) * MIN_COVERAGE;
+        const minCountThreshold = (pixelCount || 1) * (ghostFloor ?? MIN_COVERAGE);
         let ghostsExcluded = 0;
         for (let i = 0; i < N; i++) {
             if (i !== seedIdx && counts[i] < minCountThreshold) ghostsExcluded++;

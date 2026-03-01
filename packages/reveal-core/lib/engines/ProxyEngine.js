@@ -88,26 +88,32 @@ class ProxyEngine {
 
         const proxyConfig = { ...initialConfig, ...PROXY_SAFE_OVERRIDES };
 
-        const posterizeResult = await PosterizationEngine.posterize(
-            proxyBuffer,
-            proxyW,
-            proxyH,
-            proxyConfig.targetColors,
-            proxyConfig
-        );
+        // Route: distilledPosterize (over-quantize → furthest-point reduce) or standard
+        const useDistilled = proxyConfig.engineMode === 'distilled';
+        let posterizeResult, colorIndices;
 
-        // 3. Run separation - get color indices
-        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-            proxyBuffer,                // rawBytes
-            posterizeResult.paletteLab, // labPalette
-            null,                       // onProgress
-            proxyW,                     // width
-            proxyH,                     // height
-            {
-                ditherType: initialConfig.ditherType || 'none',
-                distanceMetric: initialConfig.distanceMetric || 'cie76'
-            }
-        );
+        if (useDistilled) {
+            posterizeResult = PosterizationEngine.distilledPosterize(
+                proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+            );
+            colorIndices = posterizeResult.assignments;
+        } else {
+            posterizeResult = await PosterizationEngine.posterize(
+                proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+            );
+            // 3. Run separation - get color indices
+            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+                proxyBuffer,                // rawBytes
+                posterizeResult.paletteLab, // labPalette
+                null,                       // onProgress
+                proxyW,                     // width
+                proxyH,                     // height
+                {
+                    ditherType: initialConfig.ditherType || 'none',
+                    distanceMetric: initialConfig.distanceMetric || 'cie76'
+                }
+            );
+        }
 
         // 4. Generate masks from color indices
         const masks = [];
@@ -182,26 +188,31 @@ class ProxyEngine {
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
-        const posterizeResult = await PosterizationEngine.posterize(
-            this.proxyBuffer,
-            proxyW,
-            proxyH,
-            proxyConfig.targetColors,
-            proxyConfig
-        );
+        const useDistilled = proxyConfig.engineMode === 'distilled';
+        let posterizeResult, colorIndices;
 
-        // 2. Separation
-        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-            this.proxyBuffer,
-            posterizeResult.paletteLab,
-            null,
-            proxyW,
-            proxyH,
-            {
-                ditherType: config.ditherType || 'none',
-                distanceMetric: config.distanceMetric || 'cie76'
-            }
-        );
+        if (useDistilled) {
+            posterizeResult = PosterizationEngine.distilledPosterize(
+                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+            );
+            colorIndices = posterizeResult.assignments;
+        } else {
+            posterizeResult = await PosterizationEngine.posterize(
+                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+            );
+            // 2. Separation
+            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+                this.proxyBuffer,
+                posterizeResult.paletteLab,
+                null,
+                proxyW,
+                proxyH,
+                {
+                    ditherType: config.ditherType || 'none',
+                    distanceMetric: config.distanceMetric || 'cie76'
+                }
+            );
+        }
 
         // 3. Masks
         const masks = [];
@@ -337,6 +348,13 @@ class ProxyEngine {
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
+        if (proxyConfig.engineMode === 'distilled') {
+            const result = PosterizationEngine.distilledPosterize(
+                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+            );
+            return { labPalette: result.paletteLab, rgbPalette: result.palette };
+        }
+
         const result = await PosterizationEngine.posterize(
             this.proxyBuffer,
             proxyW,
@@ -366,16 +384,23 @@ class ProxyEngine {
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
-        const result = await PosterizationEngine.posterize(
-            this.proxyBuffer, proxyW, proxyH,
-            proxyConfig.targetColors, proxyConfig
-        );
-
-        // Run separation to get colorIndices for fidelity calculation
-        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-            this.proxyBuffer, result.paletteLab, null, proxyW, proxyH,
-            { ditherType: 'none', distanceMetric: config.distanceMetric || 'cie76' }
-        );
+        let result, colorIndices;
+        if (proxyConfig.engineMode === 'distilled') {
+            result = PosterizationEngine.distilledPosterize(
+                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+            );
+            colorIndices = result.assignments;
+        } else {
+            result = await PosterizationEngine.posterize(
+                this.proxyBuffer, proxyW, proxyH,
+                proxyConfig.targetColors, proxyConfig
+            );
+            // Run separation to get colorIndices for fidelity calculation
+            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+                this.proxyBuffer, result.paletteLab, null, proxyW, proxyH,
+                { ditherType: 'none', distanceMetric: config.distanceMetric || 'cie76' }
+            );
+        }
 
         const fidelityResult = DNAFidelity.fromIndices(
             inputDNA, colorIndices, result.paletteLab, proxyW, proxyH
@@ -406,17 +431,24 @@ class ProxyEngine {
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
-        const result = await PosterizationEngine.posterize(
-            this.proxyBuffer, proxyW, proxyH,
-            proxyConfig.targetColors, proxyConfig
-        );
-
-        // Run nearest-neighbor separation (no dither) to get pixel assignments
-        // Use the config's distance metric to match actual posterization behavior
-        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-            this.proxyBuffer, result.paletteLab, null, proxyW, proxyH,
-            { ditherType: 'none', distanceMetric: config.distanceMetric || 'cie76' }
-        );
+        let result, colorIndices;
+        if (proxyConfig.engineMode === 'distilled') {
+            result = PosterizationEngine.distilledPosterize(
+                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+            );
+            colorIndices = result.assignments;
+        } else {
+            result = await PosterizationEngine.posterize(
+                this.proxyBuffer, proxyW, proxyH,
+                proxyConfig.targetColors, proxyConfig
+            );
+            // Run nearest-neighbor separation (no dither) to get pixel assignments
+            // Use the config's distance metric to match actual posterization behavior
+            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+                this.proxyBuffer, result.paletteLab, null, proxyW, proxyH,
+                { ditherType: 'none', distanceMetric: config.distanceMetric || 'cie76' }
+            );
+        }
 
         // Apply minVolume so ΔE matches the live post-knob state.
         // minVolume remaps pixels from weak colors → biggest ΔE impact.

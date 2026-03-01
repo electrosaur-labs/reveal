@@ -52,6 +52,35 @@ const OPTS = {
     densityFloor:           0,
 };
 
+/**
+ * CIE76 nearest-neighbor assignment in 16-bit Lab space.
+ * Used for the direct-engine path where posterize() doesn't return assignments.
+ */
+function buildAssignments(lab16, paletteLab, pixelCount) {
+    const K = paletteLab.length;
+    const palL = new Float64Array(K);
+    const palA = new Float64Array(K);
+    const palB = new Float64Array(K);
+    for (let j = 0; j < K; j++) {
+        palL[j] = (paletteLab[j].L / 100) * 32768;
+        palA[j] = (paletteLab[j].a / 128) * 16384 + 16384;
+        palB[j] = (paletteLab[j].b / 128) * 16384 + 16384;
+    }
+    const result = new Uint8Array(pixelCount);
+    for (let p = 0; p < pixelCount; p++) {
+        const off = p * 3;
+        const pL = lab16[off], pA = lab16[off + 1], pB = lab16[off + 2];
+        let best = 0, minDist = Infinity;
+        for (let c = 0; c < K; c++) {
+            const dL = pL - palL[c], dA = pA - palA[c], dB = pB - palB[c];
+            const d = dL * dL + dA * dA + dB * dB;
+            if (d < minDist) { minDist = d; best = c; }
+        }
+        result[p] = best;
+    }
+    return result;
+}
+
 function processFile(inputPath, outputDir) {
     const basename   = path.basename(inputPath, '.psd');
     const t0         = Date.now();
@@ -71,13 +100,40 @@ function processFile(inputPath, outputDir) {
         ? convertPsd16bitTo8bitLab(psdData, pixelCount)
         : new Uint8Array(psdData);
 
-    // ── DNA analysis (label only — not used for parameter generation) ─────────
-    const dna       = Reveal.analyzeImage(lab8, width, height);
-    const archetype = dna.presetId || dna.archetype || 'unknown';
+    // ── DNA v2.0 analysis + archetype matching ────────────────────────────────
+    const dna2           = Reveal.DNAGenerator.fromPixels(lab8, width, height);
+    const matchedArch    = Reveal.ArchetypeLoader.matchArchetype(dna2);
+    const archetypeId    = matchedArch.id;
+    const engineMode     = matchedArch.engine || 'distilled';
 
-    // ── Distilled posterize ───────────────────────────────────────────────────
-    const result = PosterizationEngine.distilledPosterize(lab16, width, height, TARGET_K, OPTS);
-    const { paletteLab, assignments, metadata: rMeta } = result;
+    // ── Route by archetype engine field ───────────────────────────────────────
+    let paletteLab, assignments, rMeta;
+
+    if (engineMode === 'direct') {
+        // Use archetype parameters with standard posterize (chroma-weighted centroids)
+        const directParams = {
+            ...matchedArch.parameters,
+            bitDepth:   16,
+            engineType: 'reveal-mk2',
+            format:     'lab',
+        };
+        const directResult = PosterizationEngine.posterize(lab16, width, height, TARGET_K, directParams);
+        paletteLab  = directResult.paletteLab;
+        assignments = buildAssignments(lab16, paletteLab, pixelCount);
+        rMeta       = { overCount: 0, ghostsExcluded: 0, keptIndices: [], overPaletteLab: [], overCoverageCounts: null };
+    } else {
+        // Distilled: over-quantize to 3×K then furthest-point reduce.
+        // ghostFloor from archetype raises the min-coverage threshold for FPS
+        // selection, preventing low-coverage outliers from consuming screen slots.
+        const distOpts = matchedArch.parameters.ghostFloor !== undefined
+            ? { ...OPTS, ghostFloor: matchedArch.parameters.ghostFloor }
+            : OPTS;
+        const distResult = PosterizationEngine.distilledPosterize(lab16, width, height, TARGET_K, distOpts);
+        paletteLab  = distResult.paletteLab;
+        assignments = distResult.assignments;
+        rMeta       = distResult.metadata;
+    }
+
     const K = paletteLab.length;
 
     // ── Coverage counts ───────────────────────────────────────────────────────
@@ -108,13 +164,8 @@ function processFile(inputPath, outputDir) {
     );
 
     // ── DNA fidelity ──────────────────────────────────────────────────────────
-    const inputDNA  = Reveal.DNAGenerator.fromPixels
-        ? Reveal.DNAGenerator.fromPixels(lab8, width, height)
-        : null;
-    const outputDNA = Reveal.DNAGenerator.fromIndices(assignments, paletteLab, width, height);
-    const dnaFidelity = inputDNA
-        ? Reveal.DNAFidelity.compare(inputDNA, outputDNA)
-        : null;
+    const outputDNA   = Reveal.DNAGenerator.fromIndices(assignments, paletteLab, width, height);
+    const dnaFidelity = Reveal.DNAFidelity.compare(dna2, outputDNA);
 
     // ── Write PSD ─────────────────────────────────────────────────────────────
     const lab8ref  = convertEngine16bitTo8bitLab(lab16, pixelCount);
@@ -173,7 +224,8 @@ function processFile(inputPath, outputDir) {
             targetK:      TARGET_K,
             actualColors: K,
             overCount:    rMeta.overCount,
-            archetype,
+            archetype:    archetypeId,
+            engine:       engineMode,
             ms:           Date.now() - t0,
         },
         deltaE: {
@@ -203,7 +255,7 @@ function processFile(inputPath, outputDir) {
     );
 
     return {
-        basename, width, height, colors: K, archetype,
+        basename, width, height, colors: K, archetype: archetypeId, engine: engineMode,
         avgDeltaE:    metrics.global_fidelity.avgDeltaE,
         revelation:   metrics.feature_preservation.revelationScore,
         integrity:    metrics.physical_feasibility.integrityScore,
@@ -222,7 +274,7 @@ async function main() {
     console.log(`Input:  ${INPUT_DIR}`);
     console.log(`Output: ${OUTPUT_DIR}`);
     console.log(`Images: ${files.length}\n`);
-    console.log(`${'Image'.padEnd(22)}  ${'Archetype'.padEnd(22)}  ${'ΔE avg'.padEnd(8)}  ${'Reveal'.padEnd(8)}  ms`);
+    console.log(`${'Image'.padEnd(22)}  ${'Archetype'.padEnd(22)}  ${'Engine'.padEnd(10)}  ${'ΔE avg'.padEnd(8)}  ${'Reveal'.padEnd(8)}  ms`);
     console.log('─'.repeat(80));
 
     const report  = [];
@@ -234,7 +286,7 @@ async function main() {
         try {
             const info = processFile(inputPath, OUTPUT_DIR);
             console.log(
-                `  ${info.basename.padEnd(20)}  ${info.archetype.padEnd(22)}` +
+                `  ${info.basename.padEnd(20)}  ${info.archetype.padEnd(22)}  ${(info.engine || '').padEnd(10)}` +
                 `  ${String(info.avgDeltaE).padEnd(8)}  ${String(info.revelation).padEnd(8)}  ${info.ms}ms`
             );
             report.push({ ...info, success: true });

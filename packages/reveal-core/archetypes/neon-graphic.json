@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "name": "Neon / Fluorescent Graphic",
   "group": "graphic",
+  "engine": "distilled",
   "description": "Aggressive hue-locking for saturated flat art. Prevents bleed between vibrant spot colors.",
   "preferred_sectors": [
     "yellow",

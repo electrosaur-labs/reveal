@@ -104,6 +104,7 @@ class ParameterGenerator {
             // Identity
             id: archetype.id,
             name: archetype.name,
+            engineMode: archetype.engine || 'distilled',
 
             // NOTE: bitDepth is intentionally NOT included here.
             // PosterizationEngine defaults to 8-bit thresholds (brown-dampener active,
