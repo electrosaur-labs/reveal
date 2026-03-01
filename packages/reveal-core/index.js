@@ -108,6 +108,10 @@ function generateConfigurationMk2(dna) {
     // Attach blend info for diagnostics
     config.meta = { blendInfo, engine: 'mk2-interpolator' };
 
+    // Default to distilled engine — consistent with ParameterGenerator's || 'distilled' fallback.
+    // Chameleon has no archetype opinion on engine mode; distilled outperforms direct on 25/26 archetypes.
+    config.engineMode = 'distilled';
+
     return config;
 }
 
