@@ -2108,7 +2108,7 @@ class PosterizationEngine {
         const pixelCount   = width * height;
 
         // Distill: select the best targetColors from the large palette.
-        const { palette: reducedPalette, remap, selected } = PaletteDistiller.distill(
+        const { palette: reducedPalette, remap, selected, ghostsExcluded, coverageCounts } = PaletteDistiller.distill(
             largePalette, overResult.assignments, pixelCount, targetColors
         );
 
@@ -2125,11 +2125,14 @@ class PosterizationEngine {
             assignments: remappedAssignments,
             metadata: {
                 ...overResult.metadata,
-                engine:      'distilled',
+                engine:        'distilled',
                 targetColors,
                 overCount,
-                finalColors: reducedPalette.length,
-                keptIndices: selected
+                finalColors:   reducedPalette.length,
+                keptIndices:   selected,
+                ghostsExcluded,
+                overPaletteLab:   largePalette,
+                overCoverageCounts: Array.from(coverageCounts),
             }
         };
     }

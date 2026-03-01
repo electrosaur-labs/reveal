@@ -87,6 +87,10 @@ class PaletteDistiller {
         PaletteDistiller._updateMinDist(minDistSq, palette, seedIdx, N);
 
         const minCountThreshold = (pixelCount || 1) * MIN_COVERAGE;
+        let ghostsExcluded = 0;
+        for (let i = 0; i < N; i++) {
+            if (i !== seedIdx && counts[i] < minCountThreshold) ghostsExcluded++;
+        }
 
         while (selected.length < K) {
             let bestScore = -1;
@@ -128,7 +132,7 @@ class PaletteDistiller {
             remap[i] = bestSlot;
         }
 
-        return { palette: reducedPalette, remap, selected };
+        return { palette: reducedPalette, remap, selected, ghostsExcluded, coverageCounts: counts };
     }
 
     // ── Private ───────────────────────────────────────────────────────────────

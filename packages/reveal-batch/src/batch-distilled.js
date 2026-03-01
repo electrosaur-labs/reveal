@@ -3,8 +3,11 @@
  * batch-distilled.js
  *
  * Runs distilledPosterize at K=12 on all TESTIMAGES 16-bit Lab PSDs.
- * Writes per-image sidecar JSON (deltaE, DNA fidelity, revelation score,
- * integrity) and a top-level batch-report.json for analysis.
+ * Uses full DNA analysis + ParameterGenerator (same archetype pipeline as
+ * production), overriding only the distiller-specific prune/snap settings.
+ *
+ * Writes per-image sidecar JSON (deltaE, DNA fidelity, revelation, integrity,
+ * palette, archetype, distillation block) and a top-level batch-report.json.
  *
  * Usage: node batch-distilled.js [targetK]
  *   Defaults to K=12
@@ -33,6 +36,13 @@ const INPUT_DIR  = path.join(DATA_DIR, 'input/psd/16bit');
 const TARGET_K   = parseInt(process.argv[2] || '12', 10);
 const OUTPUT_DIR = path.join(DATA_DIR, `output/psd/distilled-k${TARGET_K}`);
 
+// Fixed options for the distilled posterize pass.
+// Archetype guidance (vibrancy, centroid weights, distance metric) is NOT
+// applied here because ImageHeuristicAnalyzer's 3-bucket classifier is too
+// coarse — it misclassifies structural/architectural images as deep-shadow-noir
+// and applies vibrancy settings that degrade clean tonal separations.
+// The neutral SALIENCY + cie76 approach outperforms archetype-guided on this
+// dataset (34/40 improved vs 14/40). Archetype label is saved as metadata only.
 const OPTS = {
     bitDepth:               16,
     engineType:             'reveal-mk2',
@@ -61,9 +71,13 @@ function processFile(inputPath, outputDir) {
         ? convertPsd16bitTo8bitLab(psdData, pixelCount)
         : new Uint8Array(psdData);
 
+    // ── DNA analysis (label only — not used for parameter generation) ─────────
+    const dna       = Reveal.analyzeImage(lab8, width, height);
+    const archetype = dna.presetId || dna.archetype || 'unknown';
+
     // ── Distilled posterize ───────────────────────────────────────────────────
     const result = PosterizationEngine.distilledPosterize(lab16, width, height, TARGET_K, OPTS);
-    const { paletteLab, assignments } = result;
+    const { paletteLab, assignments, metadata: rMeta } = result;
     const K = paletteLab.length;
 
     // ── Coverage counts ───────────────────────────────────────────────────────
@@ -138,20 +152,33 @@ function processFile(inputPath, outputDir) {
         };
     }).sort((a, b) => b.coverage - a.coverage);
 
+    // ── Build distillation block ──────────────────────────────────────────────
+    // Over-palette: all colors the over-quantizer produced, with coverage pcts.
+    const overPalette = (rMeta.overPaletteLab || []).map((c, i) => {
+        const rgb = Reveal.labToRgb(c);
+        const hex = '#' + [rgb.r, rgb.g, rgb.b]
+            .map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+        const coveragePct = rMeta.overCoverageCounts
+            ? +((rMeta.overCoverageCounts[i] / pixelCount) * 100).toFixed(2)
+            : null;
+        return { hex, L: +c.L.toFixed(1), a: +c.a.toFixed(1), b: +c.b.toFixed(1), coverage: coveragePct };
+    });
+
     // ── Write sidecar JSON ────────────────────────────────────────────────────
     const sidecar = {
         meta: {
-            filename: path.basename(inputPath),
-            timestamp: new Date().toISOString(),
+            filename:     path.basename(inputPath),
+            timestamp:    new Date().toISOString(),
             width, height, depth,
-            targetK: TARGET_K,
+            targetK:      TARGET_K,
             actualColors: K,
-            overCount: result.metadata.overCount,
-            ms: Date.now() - t0,
+            overCount:    rMeta.overCount,
+            archetype,
+            ms:           Date.now() - t0,
         },
         deltaE: {
-            avg:  metrics.global_fidelity.avgDeltaE,
-            max:  metrics.global_fidelity.maxDeltaE,
+            avg: metrics.global_fidelity.avgDeltaE,
+            max: metrics.global_fidelity.maxDeltaE,
         },
         scores: {
             revelation: metrics.feature_preservation.revelationScore,
@@ -162,6 +189,11 @@ function processFile(inputPath, outputDir) {
             sectorDrift: dnaFidelity.sectorDrift,
             alerts:      dnaFidelity.alerts,
         } : null,
+        distillation: {
+            ghostsExcluded: rMeta.ghostsExcluded ?? 0,
+            keptIndices:    rMeta.keptIndices || [],
+            overPalette,
+        },
         palette,
     };
 
@@ -171,7 +203,7 @@ function processFile(inputPath, outputDir) {
     );
 
     return {
-        basename, width, height, colors: K,
+        basename, width, height, colors: K, archetype,
         avgDeltaE:    metrics.global_fidelity.avgDeltaE,
         revelation:   metrics.feature_preservation.revelationScore,
         integrity:    metrics.physical_feasibility.integrityScore,
@@ -185,13 +217,13 @@ async function main() {
 
     const files = fs.readdirSync(INPUT_DIR).filter(f => f.endsWith('.psd')).sort();
 
-    console.log(`\nDistilled Posterize  K=${TARGET_K}  —  TESTIMAGES`);
-    console.log('━'.repeat(72));
+    console.log(`\nDistilled Posterize  K=${TARGET_K}  —  TESTIMAGES  (archetype-guided)`);
+    console.log('━'.repeat(80));
     console.log(`Input:  ${INPUT_DIR}`);
     console.log(`Output: ${OUTPUT_DIR}`);
     console.log(`Images: ${files.length}\n`);
-    console.log(`${'Image'.padEnd(22)}  ${'Size'.padEnd(12)}  ${'ΔE avg'.padEnd(8)}  ${'Reveal'.padEnd(8)}  ${'Integrity'.padEnd(10)}  ms`);
-    console.log('─'.repeat(72));
+    console.log(`${'Image'.padEnd(22)}  ${'Archetype'.padEnd(22)}  ${'ΔE avg'.padEnd(8)}  ${'Reveal'.padEnd(8)}  ms`);
+    console.log('─'.repeat(80));
 
     const report  = [];
     const t0Batch = Date.now();
@@ -202,9 +234,8 @@ async function main() {
         try {
             const info = processFile(inputPath, OUTPUT_DIR);
             console.log(
-                `  ${info.basename.padEnd(20)}  ${(info.width+'×'+info.height).padEnd(12)}` +
-                `  ${String(info.avgDeltaE).padEnd(8)}  ${String(info.revelation).padEnd(8)}` +
-                `  ${String(info.integrity).padEnd(10)}  ${info.ms}ms`
+                `  ${info.basename.padEnd(20)}  ${info.archetype.padEnd(22)}` +
+                `  ${String(info.avgDeltaE).padEnd(8)}  ${String(info.revelation).padEnd(8)}  ${info.ms}ms`
             );
             report.push({ ...info, success: true });
             passed++;
@@ -216,15 +247,15 @@ async function main() {
     }
 
     const totalMs = Date.now() - t0Batch;
-    console.log('─'.repeat(72));
+    console.log('─'.repeat(80));
     console.log(`Done: ${passed} passed, ${failed} failed  (${(totalMs / 1000).toFixed(1)}s total, avg ${(totalMs / files.length / 1000).toFixed(1)}s)\n`);
 
     // Aggregate stats
     const successful = report.filter(r => r.success);
     if (successful.length > 0) {
-        const avgDeltaE   = (successful.reduce((s, r) => s + r.avgDeltaE,  0) / successful.length).toFixed(2);
-        const avgRevel    = (successful.reduce((s, r) => s + r.revelation, 0) / successful.length).toFixed(1);
-        const avgInteg    = (successful.reduce((s, r) => s + r.integrity,  0) / successful.length).toFixed(1);
+        const avgDeltaE = (successful.reduce((s, r) => s + r.avgDeltaE,  0) / successful.length).toFixed(2);
+        const avgRevel  = (successful.reduce((s, r) => s + r.revelation, 0) / successful.length).toFixed(1);
+        const avgInteg  = (successful.reduce((s, r) => s + r.integrity,  0) / successful.length).toFixed(1);
         console.log(`Averages:  ΔE=${avgDeltaE}  Revelation=${avgRevel}  Integrity=${avgInteg}`);
     }
 
