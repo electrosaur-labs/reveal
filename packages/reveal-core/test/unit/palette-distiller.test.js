@@ -8,7 +8,7 @@
 
 import { describe, test, expect, beforeAll } from 'vitest';
 
-const { PaletteDistiller, OVER_FACTOR, OVER_MAX } = require('../../lib/engines/PaletteDistiller');
+const { PaletteDistiller, OVER_FACTOR, OVER_MAX, MIN_COVERAGE } = require('../../lib/engines/PaletteDistiller');
 const PosterizationEngine = require('../../lib/engines/PosterizationEngine');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -182,5 +182,58 @@ describe('PosterizationEngine.distilledPosterize — warm image', () => {
     test('metadata includes overCount and keptIndices', () => {
         expect(distilledResult.metadata.overCount).toBeGreaterThan(TARGET_K);
         expect(distilledResult.metadata.keptIndices).toHaveLength(TARGET_K);
+    });
+});
+
+// ── Ghost-color exclusion ─────────────────────────────────────────────────────
+// Regression: the over-quantizer can produce near-zero-coverage buckets (stray
+// pixel artifacts). Because they sit far in Lab space from the warm palette,
+// the furthest-point algorithm would select them, wasting a color slot on a
+// phantom. Colors below MIN_COVERAGE must be excluded from selection.
+
+describe('PaletteDistiller.distill — ghost exclusion', () => {
+    // 8 warm orange/brown colors representing a carrots-like image.
+    // One stray blue color with just 2 pixels out of 10000 (0.02% — well below
+    // the 0.1% MIN_COVERAGE threshold). It is maximally far in Lab space and
+    // would normally be chosen first by furthest-point without the guard.
+    const PIXEL_COUNT = 10_000;
+    const GHOST_PIXELS = 2; // 0.02% — below MIN_COVERAGE threshold
+    const palette = [
+        { L: 55, a: 25, b: 50 }, // dominant orange
+        { L: 65, a: 20, b: 55 }, // mid orange
+        { L: 45, a: 30, b: 45 }, // dark orange
+        { L: 75, a: 15, b: 60 }, // light orange
+        { L: 35, a: 10, b: 30 }, // brown shadow
+        { L: 85, a:  5, b: 25 }, // warm highlight
+        { L: 50, a: 22, b: 40 }, // mid brown
+        { L: 60, a: 18, b: 48 }, // warm mid
+        { L: 65, a: 15, b: -42 }, // GHOST — stray blue, maximally distant
+    ];
+    const N = palette.length;
+    const ghostIdx = 8;
+
+    // Build assignments: GHOST_PIXELS → index 8, rest spread evenly over 0-7
+    const assignments = new Uint8Array(PIXEL_COUNT);
+    const warmPixels = PIXEL_COUNT - GHOST_PIXELS;
+    for (let i = 0; i < warmPixels; i++) assignments[i] = i % 8;
+    for (let i = warmPixels; i < PIXEL_COUNT; i++) assignments[i] = ghostIdx;
+
+    test('ghost color (< MIN_COVERAGE) is excluded from selection', () => {
+        const { selected } = PaletteDistiller.distill(palette, assignments, PIXEL_COUNT, 5);
+        expect(selected).not.toContain(ghostIdx);
+    });
+
+    test('all selected colors are warm (non-ghost)', () => {
+        const { palette: out } = PaletteDistiller.distill(palette, assignments, PIXEL_COUNT, 5);
+        for (const c of out) {
+            // No selected color should have negative b* (the ghost blue)
+            expect(c.b).toBeGreaterThan(0);
+        }
+    });
+
+    test('MIN_COVERAGE threshold is documented and exportable', () => {
+        expect(typeof MIN_COVERAGE).toBe('number');
+        expect(MIN_COVERAGE).toBeGreaterThan(0);
+        expect(MIN_COVERAGE).toBeLessThan(0.01); // sanity: below 1%
     });
 });

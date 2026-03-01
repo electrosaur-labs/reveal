@@ -23,8 +23,9 @@
  *      collapsing near-duplicates (three shades of brown → one).
  */
 
-const OVER_FACTOR = 3;  // multiplier for over-quantize count
-const OVER_MAX    = 20; // hard cap on over-quantize count
+const OVER_FACTOR    = 3;     // multiplier for over-quantize count
+const OVER_MAX       = 20;    // hard cap on over-quantize count
+const MIN_COVERAGE   = 0.001; // 0.1% — exclude ghost colors from selection
 
 class PaletteDistiller {
 
@@ -85,12 +86,19 @@ class PaletteDistiller {
         const selected  = [seedIdx];
         PaletteDistiller._updateMinDist(minDistSq, palette, seedIdx, N);
 
+        const minCountThreshold = (pixelCount || 1) * MIN_COVERAGE;
+
         while (selected.length < K) {
             let bestScore = -1;
             let bestIdx   = -1;
 
             for (let i = 0; i < N; i++) {
                 if (minDistSq[i] === 0) continue; // already selected
+                // Skip ghost colors (stray pixel clusters below minimum coverage).
+                // These are artifact buckets from over-quantization; their extreme
+                // Lab distance makes them look maximally distinctive but they
+                // represent no meaningful image content.
+                if (counts[i] < minCountThreshold) continue;
                 // Primary: maximize distance to nearest selected (most distinctive).
                 // Tiebreak: slight boost for higher-coverage colors so we don't
                 // select a single noise pixel over a color used by 5% of the image.
@@ -140,4 +148,4 @@ class PaletteDistiller {
     }
 }
 
-module.exports = { PaletteDistiller, OVER_FACTOR, OVER_MAX };
+module.exports = { PaletteDistiller, OVER_FACTOR, OVER_MAX, MIN_COVERAGE };
