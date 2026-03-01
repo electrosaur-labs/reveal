@@ -151,6 +151,29 @@ class DNAGenerator {
     }
 
     /**
+     * Generate DNA v2.0 directly from a raw Lab pixel buffer.
+     * Mirrors fromIndices() but skips the palette-reconstruction step.
+     *
+     * Bit depth is auto-detected from the array type:
+     *   Uint16Array → engine 16-bit (L: 0-32768, a/b: 0-32768, 16384=neutral)
+     *   Uint8Array / Uint8ClampedArray → 8-bit (L: 0-255, a/b: 0-255, 128=neutral)
+     * Override with options.bitDepth if needed.
+     *
+     * @param {Uint8Array|Uint8ClampedArray|Uint16Array} labPixels - Raw Lab pixel buffer
+     * @param {number} width
+     * @param {number} height
+     * @param {Object} [options]
+     * @param {number} [options.bitDepth] - Force bit depth (8 or 16)
+     * @returns {Object} DNA v2.0 structure
+     */
+    static fromPixels(labPixels, width, height, options = {}) {
+        const bitDepth = options.bitDepth ||
+            (labPixels instanceof Uint16Array ? 16 : 8);
+        const gen = new DNAGenerator();
+        return gen.generate(labPixels, width, height, { bitDepth });
+    }
+
+    /**
      * Generate DNA from posterization output (palette + color indices).
      * Reconstructs perceptual Lab from palette entries and runs generate().
      *
