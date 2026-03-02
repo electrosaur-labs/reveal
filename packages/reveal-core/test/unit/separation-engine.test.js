@@ -589,20 +589,17 @@ describe('SeparationEngine - Dithering', () => {
             expect(result[0]).toBe(0);
         });
 
-        test('should handle empty palette gracefully', async () => {
+        test('should reject empty palette with descriptive error', async () => {
             const rawBytes = createLab16Pixels([{ L: 50, a: 0, b: 0 }]);
 
-            // Empty palette should not crash
-            const result = await SeparationEngine.mapPixelsToPaletteAsync(
+            await expect(SeparationEngine.mapPixelsToPaletteAsync(
                 rawBytes,
                 [],
                 null,
                 1,
                 1,
                 { ditherType: 'floyd-steinberg' }
-            );
-
-            expect(result.length).toBe(1);
+            )).rejects.toThrow('labPalette must be a non-empty array');
         });
 
         test('should handle single-pixel image', async () => {

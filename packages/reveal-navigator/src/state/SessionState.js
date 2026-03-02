@@ -16,12 +16,15 @@ const Reveal = require('@reveal/core');
 
 const logger = Reveal.logger;
 
+// Import canonical config categories from core (single source of truth).
+const { CONFIG_CATEGORIES } = Reveal.engines.ParameterGenerator;
+
 // Parameters that only need mask/preview re-render (fast path via ProxyEngine.updateProxy)
-const MECHANICAL_KNOBS = new Set(['minVolume', 'speckleRescue', 'shadowClamp']);
+const MECHANICAL_KNOBS = new Set(CONFIG_CATEGORIES.MECHANICAL);
 
 // Parameters that only affect production render (not proxy preview).
 // Trap pixel sizes are resolution-dependent — meaningless at 512px proxy.
-const PRODUCTION_KNOBS = new Set(['trapSize', 'meshSize']);
+const PRODUCTION_KNOBS = new Set(CONFIG_CATEGORIES.PRODUCTION);
 
 // Session-level equipment settings — survive archetype swaps and are NOT
 // cached/restored per archetype.  Physical equipment params only.
@@ -33,51 +36,12 @@ const MECHANICAL_KNOB_DEFAULTS = { minVolume: 0, speckleRescue: 0, shadowClamp: 
 const PRODUCTION_KNOB_DEFAULTS = { trapSize: 0, meshSize: 230 };
 
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
-// This is the complete set from ParameterGenerator output — any change triggers rePosterize.
-const STRUCTURAL_PARAMS = new Set([
-    'targetColors', 'engineType', 'centroidStrategy', 'distanceMetric',
-    // Saliency weights
-    'lWeight', 'cWeight', 'blackBias',
-    // Vibrancy
-    'vibrancyMode', 'vibrancyBoost',
-    // Highlights
-    'highlightThreshold', 'highlightBoost',
-    // Palette merging
-    'paletteReduction', 'enablePaletteReduction',
-    // Substrate
-    'substrateMode', 'substrateTolerance',
-    // Hue analysis
-    'enableHueGapAnalysis', 'hueLockAngle',
-    // Shadow/tone
-    'shadowPoint',
-    // Color mode
-    'colorMode',
-    // Preservation
-    'preserveWhite', 'preserveBlack',
-    // Neutral clamping
-    'neutralCentroidClampThreshold', 'neutralSovereigntyThreshold',
-    // Chroma gate (cWeight multiplier for high-chroma images)
-    'chromaGate',
-    // Preprocessing
-    'preprocessingIntensity',
-    // Transparency
-    'ignoreTransparent',
-    // K-means refinement
-    'refinementPasses',
-    // Median cut split strategy (archetype-driven, cached per archetype)
-    'splitMode'
-]);
+const STRUCTURAL_PARAMS = new Set(CONFIG_CATEGORIES.STRUCTURAL);
 
 // Parameters with UI controls that don't yet affect any engine.
 // Keep in ALL_KNOBS for config sync and dirty detection, but NOT in
 // STRUCTURAL_PARAMS — changing them should not trigger re-posterize.
-const UNIMPLEMENTED_KNOBS = new Set([
-    'vibrancyThreshold',    // Stored but no engine reads it
-    'detailRescue',         // Stored but no engine reads it
-    'medianPass',           // Stored but no engine reads it
-    'maskProfile',          // Stored but ProductionWorker doesn't use it yet
-    'ditherType',           // Affects commit/separation only — not proxy posterization
-]);
+const UNIMPLEMENTED_KNOBS = new Set(CONFIG_CATEGORIES.UNIMPLEMENTED);
 
 // Union of all user-facing knobs (for snapshot/restore/reset/dirty loops).
 // Includes mechanical, production, structural, and unimplemented params.

@@ -31,6 +31,53 @@ const HueGapRecovery = require('./HueGapRecovery');
 const RgbMedianCut = require('./RgbMedianCut');
 const PixelAssignment = require('./PixelAssignment');
 
+/**
+ * @typedef {Object} PosterizeOptions
+ * @property {string} [engineType='reveal'] - 'reveal'|'reveal-mk1.5'|'balanced'|'classic'|'stencil'
+ * @property {string} [centroidStrategy] - 'SALIENCY'|'ROBUST_SALIENCY'|'VOLUMETRIC' (default: SALIENCY for reveal, VOLUMETRIC for others)
+ * @property {string} [distanceMetric='cie76'] - 'cie76'|'cie94'|'cie2000'
+ * @property {string} [format='lab'] - Input format ('lab')
+ * @property {number|string} [bitDepth=8] - 8 or 16
+ * @property {number} [lWeight=1.1] - Lightness weight for centroid strategy
+ * @property {number} [cWeight=2.0] - Chroma weight for centroid strategy
+ * @property {number} [blackBias=5.0] - Black pixel boost in saliency
+ * @property {string} [vibrancyMode='aggressive'] - 'subtle'|'moderate'|'aggressive'|'exponential'
+ * @property {number} [vibrancyBoost=2.2] - Vibrancy multiplier
+ * @property {number} [highlightThreshold=85] - L-value floor for white detection
+ * @property {number} [highlightBoost=2.2] - Highlight saliency boost
+ * @property {number} [paletteReduction=9.0] - ΔE merge threshold for pruning
+ * @property {boolean} [enablePaletteReduction=true] - Enable ΔE-based palette pruning
+ * @property {number} [snapThreshold=8.0] - ΔE threshold for snapping similar colors
+ * @property {boolean} [enableHueGapAnalysis=false] - Inject missing hue sectors
+ * @property {number} [hueLockAngle=18] - Hue protection zone in degrees
+ * @property {boolean} [preserveWhite=true] - Force white into palette
+ * @property {boolean} [preserveBlack=true] - Force black into palette
+ * @property {number} [densityFloor=0] - Minimum pixel density for palette entry
+ * @property {string} [splitMode='median'] - 'median'|'variance'
+ * @property {number} [chromaAxisWeight=0] - Enables C* as virtual split axis when >0
+ * @property {number} [neutralIsolationThreshold=0] - Pre-isolates neutrals (C* < threshold) when >0
+ * @property {number} [warmABoost=1.0] - Warm a* boost multiplier
+ * @property {number} [shadowPoint=15] - L-value ceiling for shadow protection
+ * @property {string} [preprocessingIntensity='auto'] - 'off'|'auto'|'heavy'
+ * @property {boolean} [enableGridOptimization=true] - Grid sampling for performance
+ * @property {Object} [tuning] - Override entire tuning object (advanced — bypasses flat field mapping)
+ */
+
+/**
+ * @typedef {Object} PosterizeResult
+ * @property {Array<{r:number,g:number,b:number}>} palette - RGB palette
+ * @property {Array<{L:number,a:number,b:number}>} paletteLab - Lab palette (perceptual ranges)
+ * @property {Uint8Array} assignments - Palette index per pixel
+ * @property {Uint16Array|Uint8Array} labPixels - Input pixels (passed through)
+ * @property {{L:number,a:number,b:number}|null} substrateLab - Substrate color if detected
+ * @property {number|null} substrateIndex - Index of substrate in palette
+ * @property {Object} metadata - Engine statistics
+ * @property {number} metadata.targetColors - Requested color count
+ * @property {number} metadata.finalColors - Actual palette size after pruning
+ * @property {number} metadata.snapThreshold - Snap threshold used
+ * @property {number} metadata.duration - Processing time in ms
+ */
+
 class PosterizationEngine {
     /**
      * MINIMUM VIABILITY THRESHOLDS
@@ -92,6 +139,46 @@ class PosterizationEngine {
         return 8; // Default
     }
 
+    /**
+     * Build the nested tuning object from flat config fields.
+     *
+     * ParameterGenerator outputs flat fields (vibrancyBoost, highlightBoost, etc.)
+     * but the internal median-cut code expects nested tuning.split/prune/centroid.
+     * This helper centralizes that mapping so callers don't reconstruct it manually.
+     *
+     * @param {PosterizeOptions} options - Flat config from ParameterGenerator or user
+     * @returns {Object} Nested tuning object {split, prune, centroid}
+     */
+    static _buildTuningFromConfig(options) {
+        return {
+            split: {
+                highlightBoost: options.highlightBoost !== undefined ? options.highlightBoost : this.TUNING.split.highlightBoost,
+                vibrancyBoost: options.vibrancyBoost !== undefined ? options.vibrancyBoost : this.TUNING.split.vibrancyBoost,
+                minVariance: this.TUNING.split.minVariance,
+                chromaAxisWeight: options.chromaAxisWeight !== undefined ? options.chromaAxisWeight : this.TUNING.split.chromaAxisWeight,
+                neutralIsolationThreshold: options.neutralIsolationThreshold !== undefined ? options.neutralIsolationThreshold : this.TUNING.split.neutralIsolationThreshold,
+                warmABoost: options.warmABoost !== undefined ? options.warmABoost : 1.0,
+                splitMode: options.splitMode || 'median'
+            },
+            prune: {
+                threshold: options.paletteReduction !== undefined ? options.paletteReduction : this.TUNING.prune.threshold,
+                hueLockAngle: options.hueLockAngle !== undefined ? options.hueLockAngle : this.TUNING.prune.hueLockAngle,
+                whitePoint: options.highlightThreshold !== undefined ? options.highlightThreshold : this.TUNING.prune.whitePoint,
+                shadowPoint: options.shadowPoint !== undefined ? options.shadowPoint : this.TUNING.prune.shadowPoint,
+                isolationThreshold: options.isolationThreshold !== undefined ? options.isolationThreshold : 0.0
+            },
+            centroid: {
+                lWeight: options.lWeight !== undefined ? options.lWeight : this.TUNING.centroid.lWeight,
+                cWeight: options.cWeight !== undefined ? options.cWeight : this.TUNING.centroid.cWeight,
+                bWeight: options.bWeight !== undefined ? options.bWeight : 1.0,
+                blackBias: options.blackBias !== undefined ? options.blackBias : this.TUNING.centroid.blackBias,
+                bitDepth: this._normalizeBitDepth(options.bitDepth),
+                vibrancyMode: options.vibrancyMode || 'aggressive',
+                vibrancyBoost: options.vibrancyBoost !== undefined ? options.vibrancyBoost : 2.2
+            }
+        };
+    }
+
     // ========================================================================
     // Public API: Engine Dispatcher
     // ========================================================================
@@ -121,6 +208,20 @@ class PosterizationEngine {
      * @returns {Object} - {palette, paletteLab, assignments, labPixels, metadata}
      */
     static posterize(pixels, width, height, targetColors, options = {}) {
+        // --- Input validation ---
+        if (!pixels || !(pixels instanceof Uint16Array || pixels instanceof Uint8Array || pixels instanceof Uint8ClampedArray)) {
+            throw new Error('posterize: pixels must be a Uint8Array, Uint8ClampedArray, or Uint16Array');
+        }
+        if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+            throw new Error(`posterize: width and height must be positive integers (got ${width}x${height})`);
+        }
+        if (pixels.length < width * height * 3) {
+            throw new Error(`posterize: pixel array too short (${pixels.length}) for ${width}x${height}x3 = ${width * height * 3}`);
+        }
+        if (!Number.isInteger(targetColors) || targetColors < 1 || targetColors > 20) {
+            throw new Error(`posterize: targetColors must be an integer 1-20 (got ${targetColors})`);
+        }
+
         // Default values
         const engineType = options.engineType || 'reveal';
         const enableGridOptimization = options.enableGridOptimization !== undefined
@@ -145,37 +246,9 @@ class PosterizationEngine {
         }
 
 
-        // Build tuning object from options if not provided
-        // This allows presets to pass individual parameters (vibrancyBoost, highlightBoost, etc.)
-        // without manually constructing the full tuning object
-        const tuning = options.tuning || {
-            split: {
-                highlightBoost: options.highlightBoost !== undefined ? options.highlightBoost : this.TUNING.split.highlightBoost,
-                vibrancyBoost: options.vibrancyBoost !== undefined ? options.vibrancyBoost : this.TUNING.split.vibrancyBoost,
-                minVariance: this.TUNING.split.minVariance,
-                chromaAxisWeight: options.chromaAxisWeight !== undefined ? options.chromaAxisWeight : this.TUNING.split.chromaAxisWeight,
-                neutralIsolationThreshold: options.neutralIsolationThreshold !== undefined ? options.neutralIsolationThreshold : this.TUNING.split.neutralIsolationThreshold,
-                warmABoost: options.warmABoost !== undefined ? options.warmABoost : 1.0,
-                splitMode: options.splitMode || 'median'  // 'median' (default) or 'variance' (Wu SSE-minimizing)
-            },
-            prune: {
-                threshold: options.paletteReduction !== undefined ? options.paletteReduction : this.TUNING.prune.threshold,
-                hueLockAngle: options.hueLockAngle !== undefined ? options.hueLockAngle : this.TUNING.prune.hueLockAngle,
-                whitePoint: options.highlightThreshold !== undefined ? options.highlightThreshold : this.TUNING.prune.whitePoint,
-                shadowPoint: options.shadowPoint !== undefined ? options.shadowPoint : this.TUNING.prune.shadowPoint,
-                isolationThreshold: options.isolationThreshold !== undefined ? options.isolationThreshold : 0.0
-            },
-            centroid: {
-                lWeight: options.lWeight !== undefined ? options.lWeight : this.TUNING.centroid.lWeight,
-                cWeight: options.cWeight !== undefined ? options.cWeight : this.TUNING.centroid.cWeight,
-                bWeight: options.bWeight !== undefined ? options.bWeight : 1.0,
-                blackBias: options.blackBias !== undefined ? options.blackBias : this.TUNING.centroid.blackBias,
-                // Normalize bitDepth: handle "bitDepth16" string or number 16
-                bitDepth: this._normalizeBitDepth(options.bitDepth),
-                vibrancyMode: options.vibrancyMode || 'aggressive',  // 'aggressive', 'linear', 'exponential'
-                vibrancyBoost: options.vibrancyBoost !== undefined ? options.vibrancyBoost : 2.2  // Exponential transform exponent
-            }
-        };
+        // Build tuning object from flat options fields if not provided directly.
+        // See _buildTuningFromConfig() for the flat→nested field mapping.
+        const tuning = options.tuning || this._buildTuningFromConfig(options);
 
         // Log bitDepth source - either from passed tuning object or normalized from options
         const bitDepthSource = options.tuning ? 'tuning.centroid.bitDepth' : '_normalizeBitDepth(options.bitDepth)';

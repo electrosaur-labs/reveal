@@ -44,6 +44,22 @@ const PROXY_SAFE_OVERRIDES = Object.freeze({
     preservedUnifyThreshold: 0.5,
 });
 
+/**
+ * @typedef {Object} ProxyInitResult
+ * @property {Uint8Array} previewBuffer - RGBA preview pixels (4 bytes per pixel)
+ * @property {Array<{L:number,a:number,b:number}>} palette - Lab palette (perceptual ranges)
+ * @property {{width:number,height:number}} dimensions - Proxy dimensions
+ * @property {Object} metadata - Engine statistics from posterization
+ * @property {number} elapsedMs - Total processing time in ms
+ */
+
+/**
+ * @typedef {Object} ProxyUpdateResult
+ * @property {Uint8Array} previewBuffer - Updated RGBA preview pixels
+ * @property {Array<{L:number,a:number,b:number}>} palette - Current Lab palette
+ * @property {Object} metadata - Engine statistics
+ */
+
 class ProxyEngine {
     static PROXY_TARGET_SIZE = 1000; // Target long edge in pixels
 
@@ -65,6 +81,20 @@ class ProxyEngine {
      * @returns {Promise<Object>} Proxy state
      */
     async initializeProxy(labPixels, width, height, initialConfig) {
+        // --- Input validation ---
+        if (!labPixels || !(labPixels instanceof Uint16Array)) {
+            throw new Error('initializeProxy: labPixels must be a Uint16Array');
+        }
+        if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+            throw new Error(`initializeProxy: width and height must be positive integers (got ${width}x${height})`);
+        }
+        if (labPixels.length < width * height * 3) {
+            throw new Error(`initializeProxy: labPixels too short (${labPixels.length}) for ${width}x${height}x3 = ${width * height * 3}`);
+        }
+        if (!initialConfig || typeof initialConfig !== 'object') {
+            throw new Error('initializeProxy: initialConfig is required and must be an object');
+        }
+
         const startTime = performance.now();
 
         // 1. Stride-3 subsample — picks every 3rd pixel, no blending.

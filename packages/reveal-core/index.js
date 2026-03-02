@@ -477,100 +477,90 @@ module.exports = {
     logger
 };
 
-// Also export raw engines for advanced use
+// ============================================================================
+// Tier 2: Raw Engines & Components
+//
+// Access via Reveal.engines.* for internal/modular use.
+// Also aliased at top level (Reveal.LabDistance etc.) for consumer convenience.
+// ============================================================================
+
+const CropEngine = require('./lib/engines/CropEngine');
+const LabConverter = require('./lib/utils/LabConverter');
+const MedianFilter = require('./lib/preprocessing/MedianFilter');
+const PaletteOps = require('./lib/engines/PaletteOps');
+
 module.exports.engines = {
+    // Core engines
     PosterizationEngine,
     SeparationEngine,
     PreviewEngine,
     ProxyEngine,
-    DocumentValidator,
-    DNAValidator,
-    ImageHeuristicAnalyzer,
 
     // Distilled posterization (over-quantize → furthest-point reduce)
     PaletteDistiller: require('./lib/engines/PaletteDistiller').PaletteDistiller,
 
-    // Modular components (v2.0)
+    // Modular components
     HueAnalysis: require('./lib/engines/HueAnalysis'),
     CentroidStrategies: require('./lib/engines/CentroidStrategies').CentroidStrategies,
     DitheringStrategies: require('./lib/engines/DitheringStrategies').DitheringStrategies,
 
-    // Lab color distance calculations (v2.1)
-    LabDistance: LabDistance,
+    // Color math
+    LabDistance,
+    LabEncoding,
 
-    // Centralized Lab encoding conversions (v2.5)
-    LabEncoding: LabEncoding,
+    // Analysis & DNA
+    ImageHeuristicAnalyzer,
+    ParameterGenerator,
+    DNAGenerator,
+    ArchetypeMapper,
+    ArchetypeLoader,
+    PeakFinder,
+    InterpolatorEngine,
 
-    // Preprocessing (v2.0)
-    BilateralFilter: BilateralFilter,
-    ParameterGenerator: ParameterGenerator,
+    // Validation
+    DocumentValidator,
+    DNAValidator,
 
-    // DNA v2.0 Archetype System (v2.2)
-    DNAGenerator: DNAGenerator,
-    ArchetypeMapper: ArchetypeMapper,
-    ArchetypeLoader: ArchetypeLoader,
+    // Preprocessing
+    BilateralFilter,
+    MedianFilter,
 
-    // Reveal Mk 1.5 - Identity Peak Detection
-    PeakFinder: PeakFinder,
+    // Post-processing & production
+    MechanicalKnobs,
+    TrapEngine,
+    CropEngine,
+    PaletteOps,
+    SuggestedColorAnalyzer,
 
-    // Suggested Color Analysis - Surface rejected candidate colors
-    SuggestedColorAnalyzer: SuggestedColorAnalyzer,
+    // Metrics
+    RevelationError,
+    DNAFidelity,
 
-    // Mechanical Knobs - Shared post-separation mask processing (v2.3)
-    MechanicalKnobs: MechanicalKnobs,
-
-    // Trapping - Color trap expansion for press registration (v2.4)
-    TrapEngine: TrapEngine,
-
-    // Reveal Mk II - Cluster-then-interpolate parameter generation
-    InterpolatorEngine: InterpolatorEngine
+    // Utilities
+    LabConverter,
 };
 
-// Export LabDistance at top level for convenient access
-module.exports.LabDistance = LabDistance;
-
-// Export LabEncoding at top level for centralized Lab encoding conversions
-module.exports.LabEncoding = LabEncoding;
-
-// Export BilateralFilter at top level for convenient access
-module.exports.BilateralFilter = BilateralFilter;
-
-// Export ParameterGenerator at top level for convenient access
-module.exports.ParameterGenerator = ParameterGenerator;
-
-// Export DNA v2.0 components at top level for convenient access
-module.exports.DNAGenerator = DNAGenerator;
-module.exports.ArchetypeMapper = ArchetypeMapper;
-module.exports.ArchetypeLoader = ArchetypeLoader;
-module.exports.DNAValidator = DNAValidator;
-
-// Export ProxyEngine at top level for event-driven UI (Sovereign Foundation)
-module.exports.ProxyEngine = ProxyEngine;
-
-// Export CropEngine at top level for viewport/crop operations
-module.exports.CropEngine = require('./lib/engines/CropEngine');
-
-// Export LabConverter at top level for RGB↔Lab I/O boundary conversions
-module.exports.LabConverter = require('./lib/utils/LabConverter');
-
-// Export MedianFilter at top level for salt-and-pepper noise removal
-module.exports.MedianFilter = require('./lib/preprocessing/MedianFilter');
-
-
-// Export MechanicalKnobs at top level for shared knob processing
-module.exports.MechanicalKnobs = MechanicalKnobs;
-
-// Export TrapEngine at top level for color trapping
-module.exports.TrapEngine = TrapEngine;
-
-// Export RevelationError at top level for E_rev computation
-module.exports.RevelationError = RevelationError;
-
-// Export DNAFidelity at top level for closed-loop posterization audit
-module.exports.DNAFidelity = DNAFidelity;
-
-// Export SuggestedColorAnalyzer at top level for palette suggestions
-module.exports.SuggestedColorAnalyzer = SuggestedColorAnalyzer;
-
-// Export PaletteOps for palette consolidation at commit time
-module.exports.PaletteOps = require('./lib/engines/PaletteOps');
+// ============================================================================
+// Top-level aliases — consumed by navigator, adobe, and batch packages.
+// Kept for backward compatibility (all are verified in use).
+// ============================================================================
+Object.assign(module.exports, {
+    LabDistance,
+    LabEncoding,
+    BilateralFilter,
+    ParameterGenerator,
+    DNAGenerator,
+    ArchetypeMapper,
+    ArchetypeLoader,
+    DNAValidator,
+    ProxyEngine,
+    CropEngine,
+    LabConverter,
+    MedianFilter,
+    MechanicalKnobs,
+    TrapEngine,
+    RevelationError,
+    DNAFidelity,
+    SuggestedColorAnalyzer,
+    PaletteOps,
+});

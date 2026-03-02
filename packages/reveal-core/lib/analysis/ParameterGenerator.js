@@ -26,6 +26,35 @@ const BilateralFilter = require('../preprocessing/BilateralFilter');
 class ParameterGenerator {
 
     /**
+     * Canonical groupings of config fields by how they affect the pipeline.
+     * Used by SessionState (navigator) to route parameter changes to the correct
+     * update path (re-posterize vs re-render vs commit-only).
+     */
+    static CONFIG_CATEGORIES = {
+        /** Fields that change quantization — require full re-posterization */
+        STRUCTURAL: [
+            'targetColors', 'engineType', 'centroidStrategy', 'distanceMetric',
+            'lWeight', 'cWeight', 'blackBias',
+            'vibrancyMode', 'vibrancyBoost',
+            'highlightThreshold', 'highlightBoost',
+            'paletteReduction', 'enablePaletteReduction',
+            'substrateMode', 'substrateTolerance',
+            'enableHueGapAnalysis', 'hueLockAngle',
+            'shadowPoint', 'colorMode',
+            'preserveWhite', 'preserveBlack', 'ignoreTransparent',
+            'neutralCentroidClampThreshold', 'neutralSovereigntyThreshold',
+            'chromaGate', 'preprocessingIntensity',
+            'refinementPasses', 'splitMode',
+        ],
+        /** Post-separation knobs — mask/preview re-render only (fast path) */
+        MECHANICAL: ['minVolume', 'speckleRescue', 'shadowClamp'],
+        /** Affect production render only — meaningless at proxy resolution */
+        PRODUCTION: ['trapSize', 'meshSize'],
+        /** Stored but no engine reads them yet */
+        UNIMPLEMENTED: ['vibrancyThreshold', 'detailRescue', 'medianPass', 'maskProfile', 'ditherType'],
+    };
+
+    /**
      * Generate configuration from DNA analysis using data-driven archetypes
      *
      * @param {Object} dna - DNA analysis result
@@ -132,7 +161,6 @@ class ParameterGenerator {
             vibrancyMode: params.vibrancyMode || 'moderate',
             vibrancyBoost: params.vibrancyBoost || 1.4,
             vibrancyThreshold: params.vibrancyThreshold || 10,
-            saturationBoost: params.vibrancyBoost || 1.4,  // Legacy alias
 
             // Highlights
             highlightThreshold: params.highlightThreshold || 90,

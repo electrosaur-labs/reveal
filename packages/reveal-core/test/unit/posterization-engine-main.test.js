@@ -79,6 +79,67 @@ function createSaturatedGradient(width, height) {
 
 describe('PosterizationEngine - posterize() Entry Point', () => {
 
+    describe('Input Validation', () => {
+        test('should throw on null pixels', () => {
+            expect(() => PosterizationEngine.posterize(null, 10, 10, 4))
+                .toThrow('pixels must be a Uint8Array');
+        });
+
+        test('should throw on plain array pixels', () => {
+            expect(() => PosterizationEngine.posterize([1, 2, 3], 1, 1, 4))
+                .toThrow('pixels must be a Uint8Array');
+        });
+
+        test('should throw on invalid dimensions', () => {
+            const pixels = new Uint16Array(300);
+            expect(() => PosterizationEngine.posterize(pixels, 0, 10, 4))
+                .toThrow('width and height must be positive integers');
+            expect(() => PosterizationEngine.posterize(pixels, 10, -1, 4))
+                .toThrow('width and height must be positive integers');
+            expect(() => PosterizationEngine.posterize(pixels, 10.5, 10, 4))
+                .toThrow('width and height must be positive integers');
+        });
+
+        test('should throw on pixel array too short for dimensions', () => {
+            const pixels = new Uint16Array(30); // only 10 pixels
+            expect(() => PosterizationEngine.posterize(pixels, 10, 10, 4))
+                .toThrow('pixel array too short');
+        });
+
+        test('should throw on targetColors out of range', () => {
+            const pixels = new Uint16Array(300);
+            expect(() => PosterizationEngine.posterize(pixels, 10, 10, 0))
+                .toThrow('targetColors must be an integer 1-20');
+            expect(() => PosterizationEngine.posterize(pixels, 10, 10, 25))
+                .toThrow('targetColors must be an integer 1-20');
+            expect(() => PosterizationEngine.posterize(pixels, 10, 10, 3.5))
+                .toThrow('targetColors must be an integer 1-20');
+        });
+
+        test('should accept Uint8Array pixels', () => {
+            const pixels = new Uint8Array(300);
+            // Fill with valid Lab data
+            for (let i = 0; i < 300; i += 3) {
+                pixels[i] = 128; // L
+                pixels[i + 1] = 128; // a
+                pixels[i + 2] = 128; // b
+            }
+            const result = PosterizationEngine.posterize(pixels, 10, 10, 2, { bitDepth: 8, format: 'lab' });
+            expect(result.palette).toBeDefined();
+        });
+
+        test('should accept Uint8ClampedArray pixels', () => {
+            const pixels = new Uint8ClampedArray(300);
+            for (let i = 0; i < 300; i += 3) {
+                pixels[i] = 128;
+                pixels[i + 1] = 128;
+                pixels[i + 2] = 128;
+            }
+            const result = PosterizationEngine.posterize(pixels, 10, 10, 2, { bitDepth: 8, format: 'lab' });
+            expect(result.palette).toBeDefined();
+        });
+    });
+
     describe('Basic Functionality', () => {
         test('should posterize small image with default parameters', () => {
             const width = 10;

@@ -21,6 +21,17 @@ const ImageHeuristicAnalyzer = {
      * @returns {Object} Analysis result with label, presetId, and timing
      */
     analyze: function(pixels, width, height, options = {}) {
+        // --- Input validation ---
+        if (!pixels || !(pixels instanceof Uint16Array || pixels instanceof Uint8Array || pixels instanceof Uint8ClampedArray || Array.isArray(pixels))) {
+            throw new Error('analyze: pixels must be a typed array or array');
+        }
+        if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+            throw new Error(`analyze: width and height must be positive integers (got ${width}x${height})`);
+        }
+        if (pixels.length < width * height * 3) {
+            throw new Error(`analyze: pixel array too short (${pixels.length}) for ${width}x${height}x3 = ${width * height * 3}`);
+        }
+
         const startTime = performance.now();
 
         // AUTO-DETECT BIT DEPTH from array type or explicit option

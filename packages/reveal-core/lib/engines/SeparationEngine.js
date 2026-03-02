@@ -43,6 +43,15 @@ const {
     engine16ToPerceptual
 } = require("../color/LabEncoding");
 
+/**
+ * @typedef {Object} SeparateOptions
+ * @property {string} [ditherType='none'] - 'none'|'floyd-steinberg'|'blue-noise'|'bayer'|'atkinson'|'stucki'
+ * @property {string} [distanceMetric='cie76'] - 'cie76'|'cie94'|'cie2000'
+ * @property {number} [meshCount] - Screen mesh TPI (e.g., 230, 305) for LPI-aware Macro-Cell dithering
+ * @property {number} [dpi=300] - Image DPI for dither scale calculation
+ * @property {Object} [cie94Params] - CIE94 custom parameters {kL, k1, k2}
+ */
+
 class SeparationEngine {
     /**
      * REFACTORED: mapPixelsToPaletteAsync
@@ -82,6 +91,17 @@ class SeparationEngine {
      * @returns {Promise<Uint8Array>} - Array of palette indices per pixel
      */
     static async mapPixelsToPaletteAsync(rawBytes, labPalette, onProgress, width = null, height = null, options = {}) {
+        // --- Input validation ---
+        if (!rawBytes || !(rawBytes instanceof Uint16Array || rawBytes instanceof Uint8Array || rawBytes instanceof Uint8ClampedArray)) {
+            throw new Error('mapPixelsToPaletteAsync: rawBytes must be a typed array (Uint8Array, Uint8ClampedArray, or Uint16Array)');
+        }
+        if (rawBytes.length < 3) {
+            throw new Error('mapPixelsToPaletteAsync: rawBytes must contain at least one pixel (3 values)');
+        }
+        if (!labPalette || !Array.isArray(labPalette) || labPalette.length === 0) {
+            throw new Error('mapPixelsToPaletteAsync: labPalette must be a non-empty array of {L, a, b} objects');
+        }
+
         const ditherType = options.ditherType || 'none';
         const meshCount = options.meshCount || options.mesh || null;  // Accept both names
         const dpi = options.dpi || 300;
