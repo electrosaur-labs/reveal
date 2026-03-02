@@ -293,6 +293,21 @@ class SessionState extends EventEmitter {
             this._archetypeDeltaE.set('distilled', distilledAccuracy);
         }
 
+        // Score Salamander at startup (read-only, like Distilled)
+        this._salamanderConfig = Reveal.generateConfigurationSalamander(this.imageDNA);
+        const salamanderKnobs = {
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp
+        };
+        const salamanderQuality = await this.proxyEngine.getPaletteWithQuality(
+            this._salamanderConfig, salamanderKnobs
+        );
+        const salamanderAccuracy = salamanderQuality.meanDeltaE;
+        if (salamanderAccuracy != null) {
+            this._archetypeDeltaE.set('salamander', salamanderAccuracy);
+        }
+
         this.emit('previewUpdated', {
             previewBuffer: knobResult.previewBuffer,
             palette: knobResult.palette,
@@ -329,6 +344,16 @@ class SessionState extends EventEmitter {
             distilledEntry.targetColors = 12;
             distilledEntry.sortScore = distilledAccuracy != null
                 ? this._computeSortScore(distilledAccuracy, 12) : null;
+        }
+
+        // Inject Salamander's ΔE (scored above)
+        const salamanderEntry = allScores.find(s => s.id === 'salamander');
+        if (salamanderEntry) {
+            const salamanderColors = salamanderQuality.rgbPalette ? salamanderQuality.rgbPalette.length : 0;
+            salamanderEntry.meanDeltaE = salamanderAccuracy;
+            salamanderEntry.targetColors = salamanderColors;
+            salamanderEntry.sortScore = salamanderAccuracy != null
+                ? this._computeSortScore(salamanderAccuracy, salamanderColors) : null;
         }
 
         this.emit('carouselReady', { scores: allScores, topMatchId: 'dynamic_interpolator' });
@@ -388,7 +413,7 @@ class SessionState extends EventEmitter {
         // The rest get scored on-demand when the user clicks their card.
         // Skip Chameleon and Distilled — both already scored during Phase 2.
         const eagerSlice = allScores
-            .filter(s => s.id !== 'dynamic_interpolator' && s.id !== 'distilled')
+            .filter(s => s.id !== 'dynamic_interpolator' && s.id !== 'distilled' && s.id !== 'salamander')
             .slice(0, EAGER_SCORE_COUNT);
         const total = eagerSlice.length;
         let computed = 0;
@@ -413,6 +438,8 @@ class SessionState extends EventEmitter {
                 // the active separationState, so the Chameleon preview stays intact.
                 const config = match.id === 'distilled'
                     ? Reveal.generateConfigurationDistilled(this.imageDNA)
+                    : match.id === 'salamander'
+                    ? Reveal.generateConfigurationSalamander(this.imageDNA)
                     : Reveal.generateConfiguration(this.imageDNA, { manualArchetypeId: match.id });
 
                 const quality = await this.proxyEngine.getPaletteWithQuality(config, knobs);
@@ -728,6 +755,8 @@ class SessionState extends EventEmitter {
                 this.currentConfig = Reveal.generateConfigurationMk2(this.imageDNA);
             } else if (archetypeId === 'distilled') {
                 this.currentConfig = Reveal.generateConfigurationDistilled(this.imageDNA);
+            } else if (archetypeId === 'salamander') {
+                this.currentConfig = Reveal.generateConfigurationSalamander(this.imageDNA);
             } else {
                 this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
                     manualArchetypeId: archetypeId
@@ -835,6 +864,7 @@ class SessionState extends EventEmitter {
 
         this._injectChameleon(scores);
         this._injectDistilled(scores);
+        this._injectSalamander(scores);
         return scores;
     }
 
@@ -1882,6 +1912,34 @@ class SessionState extends EventEmitter {
     }
 
     /**
+     * Inject the Salamander pseudo-archetype entry into a sorted score array.
+     * DNA-driven distillation: Chameleon's adaptive parameters with Distilled's
+     * no-pruning guarantee. Placed right after Distilled.
+     * @private
+     */
+    _injectSalamander(scores) {
+        const chameleon = scores.find(s => s.id === 'dynamic_interpolator');
+        const salamanderScore = chameleon ? Math.max(0, chameleon.score - 2) : 48;
+
+        const entry = {
+            id: 'salamander',
+            score: salamanderScore,
+            _synthetic: {
+                name: 'Salamander',
+                description: 'DNA-driven distillation. Adaptive color count and centroid tuning from image DNA, with no palette reduction — every distilled color survives.',
+                preferred_sectors: [],
+                parameters: {}
+            }
+        };
+
+        // Place right after Distilled
+        const distilled = scores.find(s => s.id === 'distilled');
+        const distilledIdx = distilled ? scores.indexOf(distilled) : -1;
+        scores.splice(distilledIdx + 1, 0, entry);
+        return scores;
+    }
+
+    /**
      * Apply config parameters to the reactive state object.
      * @private
      */
@@ -1892,8 +1950,11 @@ class SessionState extends EventEmitter {
         // Also inject into config so MechanicalKnobs._syncFromConfig() can
         // sync sliders — generateConfiguration() never includes these.
         for (const [key, val] of Object.entries(MECHANICAL_KNOB_DEFAULTS)) {
-            this.state[key] = val;
-            config[key] = val;
+            // Respect config-provided mechanical knob values (e.g. pseudo-archetypes
+            // set speckleRescue: 5 for print-ready masks). Fall back to default.
+            const effective = config[key] !== undefined ? config[key] : val;
+            this.state[key] = effective;
+            config[key] = effective;
         }
         for (const [key, val] of Object.entries(PRODUCTION_KNOB_DEFAULTS)) {
             this.state[key] = val;

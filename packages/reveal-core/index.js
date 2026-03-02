@@ -105,6 +105,9 @@ function generateConfigurationMk2(dna) {
         config.targetColorsSlider = config.targetColors;
     }
 
+    // Pseudo-archetype default: despeckle masks for print-ready output
+    config.speckleRescue = 5;
+
     // Attach blend info for diagnostics
     config.meta = { blendInfo, engine: 'mk2-interpolator' };
 
@@ -137,7 +140,43 @@ function generateConfigurationDistilled(dna) {
         peakFinderMaxPeaks: 1,
         splitMode: 'median',
         preprocessingIntensity: 'off', // no bilateral filter — matches batch pipeline exactly
+        speckleRescue: 5, // despeckle masks for print-ready output
     };
+}
+
+/**
+ * Generate configuration for the Salamander pseudo-archetype.
+ * Code-only (no JSON archetype file), like Chameleon and Distilled.
+ *
+ * Merges Chameleon's DNA-adaptive parameters (interpolated target colors,
+ * SALIENCY centroid, weight tuning) with Distilled's "no pruning" guarantee
+ * and raw signal preservation. DNA tells you HOW MANY colors and WHAT
+ * centroid strategy; the distilled engine picks WHICH colors; no palette
+ * reduction ensures they all survive intact.
+ *
+ * @param {Object} dna - Image DNA from DNAGenerator (7D vector)
+ * @returns {Object} Posterization config
+ */
+function generateConfigurationSalamander(dna) {
+    const config = generateConfigurationMk2(dna);
+
+    // Fixed 12 colors with unbiased centroid (like Distilled)
+    config.targetColors = 12;
+    config.targetColorsSlider = 12;
+    config.centroidStrategy = 'VOLUMETRIC';
+
+    // Disable palette reduction — all distilled colors survive
+    config.enablePaletteReduction = false;
+    config.snapThreshold = 0;
+    config.densityFloor = 0;
+
+    // Raw signal preservation — no bilateral filter (like Distilled)
+    config.preprocessingIntensity = 'off';
+
+    // Tag metadata
+    config.meta = { ...config.meta, engine: 'salamander' };
+
+    return config;
 }
 
 /**
@@ -450,6 +489,7 @@ module.exports = {
     generateConfiguration,
     generateConfigurationMk2,
     generateConfigurationDistilled,
+    generateConfigurationSalamander,
     preprocessImage,
     calculateEntropy,
 

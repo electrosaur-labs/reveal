@@ -135,7 +135,7 @@ class ArchetypeCarousel {
         const asc = this._sortAscending;
 
         // Pin order for meta-archetypes (always at top regardless of sort axis)
-        const PIN_ORDER = { 'dynamic_interpolator': 0, 'distilled': 1 };
+        const PIN_ORDER = { 'dynamic_interpolator': 0, 'distilled': 1, 'salamander': 2 };
 
         cards.sort((a, b) => {
             const aPin = PIN_ORDER[a.dataset.id];
