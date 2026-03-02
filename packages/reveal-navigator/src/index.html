@@ -22,36 +22,20 @@
             overflow: hidden;
         }
 
-        /* ─── Splash Screen ─── */
-        #progress-overlay {
+        /* ─── Ingest Progress Bar ─── */
+        #ingest-progress {
+            display: none;
             position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: #1e1e1e;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            opacity: 1;
-            transition: opacity 0.3s ease;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: #444;
+            z-index: 50;
         }
-        #progress-overlay.fade-out { opacity: 0; }
-
-        #splash-img {
-            width: 100%;
+        #ingest-progress-fill {
             height: 100%;
-            object-fit: contain;
-        }
-
-        #splash-status {
-            position: absolute;
-            bottom: 8px;
-            left: 0; right: 0;
-            text-align: center;
-            color: #888; font-size: 11px;
-            letter-spacing: 0.5px; min-height: 14px;
-            z-index: 101;
-            pointer-events: none;
+            width: 0%;
+            background: #4a9eff;
+            transition: width 0.3s ease;
         }
 
         /* ─── Dialog fills its allocation ─── */
@@ -1068,11 +1052,7 @@
 </head>
 <body>
     <dialog id="navigatorDialog">
-    <!-- Splash Screen -->
-    <div id="progress-overlay" style="display:none;">
-        <img id="splash-img" src="squeegee.gif" width="512" height="320" />
-    </div>
-    <div id="splash-status" style="display:none;"></div>
+    <div id="ingest-progress"><div id="ingest-progress-fill"></div></div>
     <div id="root">
         <!-- Left Panel: Full workflow -->
         <div id="main-panel">

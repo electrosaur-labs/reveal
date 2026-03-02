@@ -526,8 +526,10 @@ class PaletteSurgeon {
     _renderSuggestedColors() {
         const cachedSuggestions = this._session.getSuggestedColors();
 
-        // Filter against CURRENT palette (which may include added/overridden colors)
-        const suggestions = (cachedSuggestions || []).filter(s => !this._isTooCloseToCurrentPalette(s));
+        // Filter against CURRENT palette — but never filter out checked (added) suggestions
+        const suggestions = (cachedSuggestions || []).filter(s =>
+            this._isSuggestionAdded(s) || !this._isTooCloseToCurrentPalette(s)
+        );
 
         if (suggestions.length === 0) {
             this._suggestedTray.style.display = 'none';

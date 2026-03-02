@@ -28,7 +28,7 @@ let radar = null;
 let knobs = null;
 let surgeon = null;
 let loupe = null;
-let splashShownAt = 0;    // timestamp when splash was shown
+// splashShownAt removed — splash screen eliminated
 let isIngesting = false;
 let isProductionRunning = false;
 let currentDocId = null;    // Track which document we've ingested
@@ -245,15 +245,12 @@ function initPlugin() {
             _showProgress(data.label, data.percent);
         });
 
-        // Carousel cards built during splash (root hidden) — no splash interaction.
+        // Carousel cards built during ingest — user sees them populate in real time.
         sessionState.on('carouselReady', () => {
             // Cards are built by ArchetypeCarousel._rebuild().
-            // Splash stays up — scoring hasn't finished yet.
         });
 
         // Background scoring progress — update stats panel ΔE for active archetype.
-        // No progress bar / card highlight / scroll — all happens under hidden root
-        // during splash, and the scoring loop is only 3 archetypes (~1s).
         sessionState.on('archetypeScored', (data) => {
             const state = sessionState.getState();
             if (data.id === state.activeArchetypeId) {
@@ -516,8 +513,8 @@ async function ingestActiveDocument(showDialog) {
     const btnSync = document.getElementById('btn-sync');
     if (btnSync) btnSync.disabled = true;
 
-    // Show boot screen immediately — user sees feedback within 1 frame
     _showProgress('Preparing\u2026', 0);
+    await new Promise(r => setTimeout(r, 20)); // yield so progress bar paints
 
     try {
         const validation = validateDocument();
@@ -526,6 +523,7 @@ async function ingestActiveDocument(showDialog) {
                 showErrorDialog(validation.title, validation.message);
             }
             setStatus(validation.title);
+            _hideProgress();
             currentDocId = null;
             return;
         }
@@ -541,7 +539,7 @@ async function ingestActiveDocument(showDialog) {
 
         // ── Phase 1: INGEST — the slow bridge call (2-3s for large docs) ──
         _showProgress('Acquiring 16-bit Lab data\u2026', 10);
-        await new Promise(r => setTimeout(r, 20)); // yield so boot screen paints
+        await new Promise(r => setTimeout(r, 20)); // yield so progress bar paints
 
         // Read full-res pixels — ProxyEngine handles downsampling internally.
         // PS GPU downsampling (targetSize) was tested but loses minority color
@@ -553,7 +551,7 @@ async function ingestActiveDocument(showDialog) {
         logger.log(`[Navigator] Ingested ${width}x${height} from ${validation.info.name}`);
 
         // ── Phases 2-3 are driven by SessionState.loadImage progress events ──
-        // Splash hides when preview is ready. Background ΔE scoring continues asynchronously.
+        // Progress bar hides when preview is ready. Background ΔE scoring continues asynchronously.
         await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
         _hideProgress();
 
@@ -630,48 +628,23 @@ function setStatus(text) {
     if (el) el.textContent = text;
 }
 
-function _showProgress(label) {
-    const overlay = document.getElementById('progress-overlay');
-    const isAlreadyVisible = overlay && overlay.style.display === 'flex';
-
-    // Hide root content — UXP <select> elements render above z-index layers
-    const root = document.getElementById('root');
-    if (root) root.style.display = 'none';
-    if (overlay) overlay.setAttribute('style', 'display: flex');
-    // Status is a separate element — updating it doesn't reflow the splash GIF
-    const status = document.getElementById('splash-status');
-    if (status) {
-        status.textContent = label;
-        status.setAttribute('style', 'display: block;');
-    }
-
-    // Only reset GIF + timestamp on the first show.
-    // Subsequent calls just update the status text — no blink.
-    if (!isAlreadyVisible) {
-        const img = document.getElementById('splash-img');
-        if (img) {
-            const src = img.getAttribute('src');
-            img.setAttribute('src', '');
-            img.setAttribute('src', src);
-        }
-        splashShownAt = Date.now();
-    }
+function _showProgress(label, percent) {
+    const bar = document.getElementById('ingest-progress');
+    const fill = document.getElementById('ingest-progress-fill');
+    if (bar) bar.style.display = 'block';
+    if (fill && percent != null) fill.style.width = percent + '%';
+    setStatus(label);
 }
 
 function _hideProgress() {
-    const overlay = document.getElementById('progress-overlay');
-    if (!overlay) return;
-
-    // Dismiss immediately — Chameleon preview is ready, show it now.
-    const root = document.getElementById('root');
-    if (root) root.style.display = '';
-    overlay.classList.add('fade-out');
-    const status = document.getElementById('splash-status');
-    if (status) status.setAttribute('style', 'display: none;');
+    const bar = document.getElementById('ingest-progress');
+    const fill = document.getElementById('ingest-progress-fill');
+    if (fill) fill.style.width = '100%';
     setTimeout(() => {
-        overlay.setAttribute('style', 'display: none');
-        overlay.classList.remove('fade-out');
-    }, 350);
+        if (bar) bar.style.display = 'none';
+        if (fill) fill.style.width = '0%';
+    }, 300);
+    setStatus('');
 }
 
 // ─── Finalize ────────────────────────────────────────────
@@ -864,10 +837,8 @@ async function showDialog() {
             return;
         }
 
-        // Auto-ingest the active document
-        ingestActiveDocument(false);
-
-        // Show non-modal dialog (allows Photoshop Color Panel access)
+        // Show dialog immediately — user sees empty Navigator with status text.
+        // Ingest runs inside the visible dialog; UI populates when ready.
         dialog.show({
             resize: "both",
             size: {
@@ -879,6 +850,8 @@ async function showDialog() {
                 maxHeight: 3000
             }
         });
+
+        await ingestActiveDocument(false);
 
         logger.log('[Navigator] Dialog shown');
 
