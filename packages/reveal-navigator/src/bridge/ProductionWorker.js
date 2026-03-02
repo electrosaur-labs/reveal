@@ -183,11 +183,15 @@ class ProductionWorker {
             // ── Step 3: Build masks ──
             self._onProgress(3, 4, 'Building masks...');
 
+            const knobs = {
+                minVolume: prodConfig.minVolume,
+                speckleRescue: prodConfig.speckleRescue,
+                shadowClamp: prodConfig.shadowClamp,
+                trapSize: prodConfig.trapSize || 0,
+            };
             const layers = self._buildLayers(
                 colorIndices, labPalette, hexColors,
-                actualWidth, actualHeight,
-                prodConfig.minVolume, prodConfig.shadowClamp, prodConfig.speckleRescue,
-                prodConfig.trapSize || 0
+                actualWidth, actualHeight, knobs
             );
 
             logger.log(`[ProductionWorker] Separation complete: ${layers.length} layers`);
@@ -342,28 +346,28 @@ class ProductionWorker {
         }
 
         // Apply knobs using shared MechanicalKnobs (same as _buildLayers and ProxyEngine)
-        const state = this._sessionState.getState();
+        const knobs = this._sessionState.getMechanicalKnobs();
 
-        if (state.minVolume > 0) {
-            MechanicalKnobs.applyMinVolume(colorIndices, labPalette, pixelCount, state.minVolume);
+        if (knobs.minVolume > 0) {
+            MechanicalKnobs.applyMinVolume(colorIndices, labPalette, pixelCount, knobs.minVolume);
         }
 
         // Build masks from (possibly remapped) color indices
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, labPalette.length, pixelCount);
 
         // Loupe tiles are native resolution — no originalWidth scaling needed
-        if (state.speckleRescue > 0) {
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, state.speckleRescue);
+        if (knobs.speckleRescue > 0) {
+            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, knobs.speckleRescue);
         }
 
-        if (state.shadowClamp > 0) {
-            MechanicalKnobs.applyShadowClamp(masks, colorIndices, labPalette, width, height, state.shadowClamp);
+        if (knobs.shadowClamp > 0) {
+            MechanicalKnobs.applyShadowClamp(masks, colorIndices, labPalette, width, height, knobs.shadowClamp);
         }
 
         // Apply trapping — loupe is native resolution so trap pixels are correct
-        if (state.trapSize > 0) {
+        if (knobs.trapSize > 0) {
             const TrapEngine = Reveal.TrapEngine;
-            TrapEngine.applyTrapping(masks, labPalette, width, height, state.trapSize);
+            TrapEngine.applyTrapping(masks, labPalette, width, height, knobs.trapSize);
         }
 
         // Compute E_rev (Revelation Error) for this tile
@@ -451,7 +455,18 @@ class ProductionWorker {
     // ─── Build Layer Objects ─────────────────────────────────────
     // Generates masks, applies knobs, skips empty layers.
 
-    _buildLayers(colorIndices, labPalette, hexColors, width, height, minVolume, shadowClamp, speckleRescue, trapSize) {
+    /**
+     * Generate layer masks with mechanical knobs applied.
+     * @param {Uint8Array} colorIndices - Palette index per pixel
+     * @param {Array<{L,a,b}>} labPalette - Lab palette
+     * @param {string[]} hexColors - Hex color strings for naming
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @param {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number}} knobs
+     * @returns {Array<{labColor, hex, mask, width, height, name}>} Layer objects
+     */
+    _buildLayers(colorIndices, labPalette, hexColors, width, height, knobs) {
+        const { minVolume, speckleRescue, shadowClamp, trapSize } = knobs;
         const layers = [];
         const pixelCount = width * height;
         // ── Apply minVolume (shared with ProxyEngine) ──

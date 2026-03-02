@@ -653,11 +653,7 @@ class SessionState extends EventEmitter {
 
             // Build update params — always include palette overrides so they
             // survive the baseline restore inside updateProxy
-            const updateParams = {
-                minVolume: this.state.minVolume,
-                speckleRescue: this.state.speckleRescue,
-                shadowClamp: this.state.shadowClamp
-            };
+            const updateParams = { ...this.getMechanicalKnobs() };
             if (this.paletteOverrides.size > 0) {
                 updateParams.paletteOverride = this._buildOverriddenPalette();
             }
@@ -1295,19 +1291,16 @@ class SessionState extends EventEmitter {
         });
 
         // ── Engine config (ParameterGenerator output) ──
-        // Captures the full computed config including adaptive color count
-        const configSection = {};
+        // Spread all config fields except internal/transient metadata.
+        // New params added to ParameterGenerator automatically appear in manifests.
+        let configSection = {};
         if (this.currentConfig) {
-            const cfg = this.currentConfig;
-            configSection.targetColors = cfg.targetColors;
-            configSection.distanceMetric = cfg.distanceMetric;
-            configSection.ditherType = cfg.ditherType;
-            configSection.engineType = cfg.engineType;
-            configSection.preprocessingIntensity = cfg.preprocessingIntensity;
-            // Archetype color bounds (drives adaptive count clamping)
-            if (cfg.meta) {
-                configSection.archetypeId = cfg.meta.archetypeId;
-                configSection.matchScore = cfg.meta.matchScore;
+            const { meta, preprocessing, rangeClamp, ...rest } = this.currentConfig;
+            configSection = rest;
+            // Promote key metadata fields to top level for readability
+            if (meta) {
+                configSection.archetypeId = meta.archetypeId;
+                configSection.matchScore = meta.matchScore;
             }
         }
 
@@ -1353,13 +1346,9 @@ class SessionState extends EventEmitter {
     exportProductionConfig() {
         const palette = this._buildOverriddenPalette();
 
-        // Start with all knob values from state
-        const config = {};
-        for (const key of ALL_KNOBS) {
-            if (this.state[key] !== undefined) {
-                config[key] = this.state[key];
-            }
-        }
+        // Sync latest state → currentConfig, then snapshot all params
+        this._rebuildConfigFromState();
+        const config = { ...this.currentConfig };
 
         // Build merge remap: sourceIndex → targetIndex (inverted from mergeHistory)
         // Production render uses this to collapse duplicate palette entries
@@ -1503,6 +1492,20 @@ class SessionState extends EventEmitter {
     /** Returns a frozen copy of the reactive state. */
     getState() {
         return Object.freeze({ ...this.state });
+    }
+
+    /**
+     * Returns the current mechanical + production knobs as a single object.
+     * Canonical source for knob values — use instead of picking from state.
+     * @returns {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number}}
+     */
+    getMechanicalKnobs() {
+        return {
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp,
+            trapSize: this.state.trapSize || 0,
+        };
     }
 
     /** Returns the DNA v2.0 snapshot for the loaded image. */
