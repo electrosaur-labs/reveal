@@ -25,6 +25,7 @@
 const jpeg = require('jpeg-js');
 const Reveal = require('@reveal/core');
 const { uint8ToBase64 } = require('../utils/base64');
+const { BG_COLOR } = require('../utils/pixelProcessing');
 
 const AXES = [
     { key: 'l',                     label: 'L',       max: 100 },
@@ -56,7 +57,7 @@ const LABEL_RADIUS = RADIUS + 24;
 const HANDLE_SIZE = 14;         // Drag handle diameter in pixels
 
 // Background matches panel: #323232
-const BG_R = 0x32, BG_G = 0x32, BG_B = 0x32;
+const BG_R = BG_COLOR, BG_G = BG_COLOR, BG_B = BG_COLOR;
 
 class RadarHUD {
 

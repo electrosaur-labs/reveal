@@ -305,6 +305,8 @@ class PaletteSurgeon {
             const source = this._selectedIndex;
             const target = i;
             logger.log(`[Surgeon] MERGE ${source}→${target} (shift+click)`);
+            const prevState = this._state;
+            const prevIndex = this._selectedIndex;
             this._state = 'IDLE';
             this._selectedIndex = -1;
             this._session.clearHighlight();
@@ -312,6 +314,10 @@ class PaletteSurgeon {
             this._updateSelectionCSS();
             this._session.mergePaletteColors(source, target).catch(err => {
                 logger.log(`[PaletteSurgeon] Merge failed: ${err.message}`);
+                this._state = prevState;
+                this._selectedIndex = prevIndex;
+                this._header.textContent = 'Merge failed — try again';
+                this._updateSelectionCSS();
             });
             return;
         }
@@ -338,6 +344,8 @@ class PaletteSurgeon {
 
     _onDeleteSwatch(i) {
         // Reset selection state
+        const prevState = this._state;
+        const prevIndex = this._selectedIndex;
         this._state = 'IDLE';
         this._selectedIndex = -1;
         this._session.clearHighlight();
@@ -347,6 +355,10 @@ class PaletteSurgeon {
         logger.log(`[Surgeon] DELETE swatch ${i} (alt+click)`);
         this._session.deletePaletteColor(i).catch(err => {
             logger.log(`[PaletteSurgeon] Delete failed: ${err.message}`);
+            this._state = prevState;
+            this._selectedIndex = prevIndex;
+            this._header.textContent = 'Delete failed — try again';
+            this._updateSelectionCSS();
         });
     }
 
@@ -511,13 +523,14 @@ class PaletteSurgeon {
         return Reveal.LabDistance.cie76(c1, c2);
     }
 
-    /** Check if a suggestion is too close to any current palette entry (ΔE < 15) */
+    /** Check if a suggestion is too close to any current palette entry (linear ΔE < 15) */
     _isTooCloseToCurrentPalette(suggestion) {
         const sep = this._session.getSeparationState();
         if (!sep || !sep.palette) return false;
-        const EXCLUSION_DE = 15;
+        // Linear ΔE threshold for "too similar to existing palette color" exclusion
+        const PALETTE_EXCLUSION_DE = 15;
         for (const pal of sep.palette) {
-            if (this._deltaE(suggestion, pal) < EXCLUSION_DE) return true;
+            if (this._deltaE(suggestion, pal) < PALETTE_EXCLUSION_DE) return true;
         }
         return false;
     }

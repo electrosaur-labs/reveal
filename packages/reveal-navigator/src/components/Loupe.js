@@ -22,6 +22,7 @@ const jpeg = require("jpeg-js");
 const Reveal = require("@reveal/core");
 const ProductionWorker = require("../bridge/ProductionWorker");
 const { uint8ToBase64 } = require("../utils/base64");
+const { DIM_COLOR, applySuggestionGhost } = require("../utils/pixelProcessing");
 const logger = Reveal.logger;
 
 const JPEG_QUALITY = 92;
@@ -252,8 +253,8 @@ class Loupe {
             const highlightIdx = this._session.state.highlightColorIndex;
             if (highlightIdx >= 0) {
                 this._applyHighlight(buffer, width, height, highlightIdx);
-            } else if (highlightIdx === -2 && this._session._ghostLabColor) {
-                this._applySuggestionGhost(buffer, width, height, this._session._ghostLabColor, result, this._session._ghostMode);
+            } else if (highlightIdx === -2 && this._session.ghostLabColor) {
+                this._applySuggestionGhost(buffer, width, height, this._session.ghostLabColor, result, this._session.ghostMode);
             }
 
             this._renderBuffer(buffer, width, height);
@@ -301,76 +302,35 @@ class Loupe {
             : palette[highlightIdx];
         if (!targetColor) return;
 
-        const DIM = 0x28;
         const pixelCount = width * height;
+        // Tolerance ±2 per channel to absorb JPEG compression artifacts
+        // (loupe tile is JPEG-encoded at quality 92 before display)
+        const TOL = 2;
 
         for (let i = 0; i < pixelCount; i++) {
             const off = i * 4;
             const r = rgba[off], g = rgba[off + 1], b = rgba[off + 2];
 
-            // Check if this pixel matches the highlight color (exact match since
-            // the buffer was rendered from the palette — colors are quantized)
-            if (r !== targetColor.r || g !== targetColor.g || b !== targetColor.b) {
-                rgba[off] = DIM;
-                rgba[off + 1] = DIM;
-                rgba[off + 2] = DIM;
+            if (Math.abs(r - targetColor.r) > TOL ||
+                Math.abs(g - targetColor.g) > TOL ||
+                Math.abs(b - targetColor.b) > TOL) {
+                rgba[off] = DIM_COLOR;
+                rgba[off + 1] = DIM_COLOR;
+                rgba[off + 2] = DIM_COLOR;
             }
         }
     }
 
     /**
      * Apply suggestion ghost to RGBA buffer in-place.
-     * Pixels closer to the suggested color than their current palette assignment
-     * are recolored to the suggestion's RGB. Others keep their palette color.
-     * Matches SessionState.generateSuggestionGhostPreview() behavior.
+     * Delegates to shared applySuggestionGhost() utility.
      */
     _applySuggestionGhost(rgba, width, height, ghostLab, tileResult, mode) {
         if (!tileResult || !tileResult.labPixels || !tileResult.colorIndices || !tileResult.labPalette) return;
 
         const { labPixels, colorIndices, labPalette } = tileResult;
         const sugRgb = Reveal.labToRgbD50(ghostLab);
-        const pixelCount = width * height;
-        const solo = (mode === 'solo');
-
-        // 16-bit Lab encoding constants
-        const L_SCALE = 327.68;
-        const AB_NEUTRAL = 16384;
-        const AB_SCALE = 128;
-
-        for (let i = 0; i < pixelCount; i++) {
-            const off3 = i * 3;
-            const off4 = i * 4;
-
-            const pL = labPixels[off3] / L_SCALE;
-            const pa = (labPixels[off3 + 1] - AB_NEUTRAL) / AB_SCALE;
-            const pb = (labPixels[off3 + 2] - AB_NEUTRAL) / AB_SCALE;
-
-            // Distance to suggestion
-            const dSL = pL - ghostLab.L;
-            const dSA = pa - ghostLab.a;
-            const dSB = pb - ghostLab.b;
-            const distSug = dSL * dSL + dSA * dSA + dSB * dSB;
-
-            // Distance to current palette assignment
-            const ci = colorIndices[i];
-            const assigned = labPalette[ci];
-            if (!assigned) continue;
-            const dAL = pL - assigned.L;
-            const dAA = pa - assigned.a;
-            const dAB = pb - assigned.b;
-            const distPal = dAL * dAL + dAA * dAA + dAB * dAB;
-
-            if (distSug < distPal) {
-                rgba[off4]     = sugRgb.r;
-                rgba[off4 + 1] = sugRgb.g;
-                rgba[off4 + 2] = sugRgb.b;
-            } else if (solo) {
-                rgba[off4]     = 0x28;
-                rgba[off4 + 1] = 0x28;
-                rgba[off4 + 2] = 0x28;
-            }
-            // else: keep existing palette RGB (already in buffer)
-        }
+        applySuggestionGhost(rgba, width * height, labPixels, colorIndices, labPalette, ghostLab, sugRgb, mode === 'solo');
     }
 
     /**

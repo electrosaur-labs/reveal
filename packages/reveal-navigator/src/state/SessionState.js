@@ -13,6 +13,7 @@
 
 const EventEmitter = require('./EventEmitter');
 const Reveal = require('@reveal/core');
+const { DIM_COLOR, applySuggestionGhost } = require('../utils/pixelProcessing');
 
 const logger = Reveal.logger;
 
@@ -121,6 +122,12 @@ class SessionState extends EventEmitter {
         this._archetypeDeltaE = new Map();
     }
 
+    /** Current suggestion ghost Lab color, or null if no ghost active. */
+    get ghostLabColor() { return this._ghostLabColor || null; }
+
+    /** Current suggestion ghost rendering mode ('integrated' or 'solo'), or null. */
+    get ghostMode() { return this._ghostMode || null; }
+
     /**
      * Reset all session-specific state. Called when the dialog closes
      * so no stale overrides/merges persist into the next invocation.
@@ -191,7 +198,7 @@ class SessionState extends EventEmitter {
     async loadImage(labPixels, width, height, originalWidth, originalHeight) {
         if (this._loadInFlight) {
             logger.log('[SessionState] loadImage rejected — already in flight');
-            return null;
+            throw new Error('Image load already in progress');
         }
         this._loadInFlight = true;
 
@@ -857,8 +864,6 @@ class SessionState extends EventEmitter {
         const pixelCount = width * height;
         const rgba = new Uint8ClampedArray(pixelCount * 4);
 
-        const DIM_R = 0x28, DIM_G = 0x28, DIM_B = 0x28;
-
         for (let i = 0; i < pixelCount; i++) {
             const ci = colorIndices[i];
             const off = i * 4;
@@ -869,9 +874,9 @@ class SessionState extends EventEmitter {
                 rgba[off + 1] = c.g;
                 rgba[off + 2] = c.b;
             } else {
-                rgba[off]     = DIM_R;
-                rgba[off + 1] = DIM_G;
-                rgba[off + 2] = DIM_B;
+                rgba[off]     = DIM_COLOR;
+                rgba[off + 1] = DIM_COLOR;
+                rgba[off + 2] = DIM_COLOR;
             }
             rgba[off + 3] = 255;
         }
@@ -1547,11 +1552,12 @@ class SessionState extends EventEmitter {
 
     /** Remove a checked suggestion by proximity (ΔE < 4). */
     removeCheckedSuggestion(labColor) {
-        const DE_SQ = 16; // 4²
+        // ΔE² threshold for "same suggestion" identity matching (4² = 16)
+        const SUGGESTION_MATCH_DE_SQ = 16;
         for (let i = 0; i < this._checkedSuggestions.length; i++) {
             const c = this._checkedSuggestions[i];
             const dL = labColor.L - c.L, da = labColor.a - c.a, db = labColor.b - c.b;
-            if (dL * dL + da * da + db * db < DE_SQ) {
+            if (dL * dL + da * da + db * db < SUGGESTION_MATCH_DE_SQ) {
                 this._checkedSuggestions.splice(i, 1);
                 return;
             }
@@ -1560,10 +1566,11 @@ class SessionState extends EventEmitter {
 
     /** Check if a suggestion is already checked (ΔE < 4). */
     isSuggestionChecked(labColor) {
-        const DE_SQ = 16;
+        // ΔE² threshold for "same suggestion" identity matching (4² = 16)
+        const SUGGESTION_MATCH_DE_SQ = 16;
         for (const c of this._checkedSuggestions) {
             const dL = labColor.L - c.L, da = labColor.a - c.a, db = labColor.b - c.b;
-            if (dL * dL + da * da + db * db < DE_SQ) return true;
+            if (dL * dL + da * da + db * db < SUGGESTION_MATCH_DE_SQ) return true;
         }
         return false;
     }
@@ -1590,58 +1597,28 @@ class SessionState extends EventEmitter {
 
         const pixelCount = width * height;
         const rgba = new Uint8ClampedArray(pixelCount * 4);
-
-        // Pre-compute the suggested color's RGB for captured pixels
         const sugRgb = Reveal.labToRgbD50({ L: labColor.L, a: labColor.a, b: labColor.b });
         const solo = (mode === 'solo');
 
-        // 16-bit Lab encoding constants
-        const L_SCALE = 327.68;
-        const AB_NEUTRAL = 16384;
-        const AB_SCALE = 128;
-
-        for (let i = 0; i < pixelCount; i++) {
-            const off3 = i * 3;
-            const off4 = i * 4;
-
-            // Decode pixel Lab from 16-bit proxy buffer
-            const pL = proxyBuffer[off3] / L_SCALE;
-            const pa = (proxyBuffer[off3 + 1] - AB_NEUTRAL) / AB_SCALE;
-            const pb = (proxyBuffer[off3 + 2] - AB_NEUTRAL) / AB_SCALE;
-
-            // Distance from pixel to suggested color
-            const dSL = pL - labColor.L;
-            const dSA = pa - labColor.a;
-            const dSB = pb - labColor.b;
-            const distToSuggestion = dSL * dSL + dSA * dSA + dSB * dSB;
-
-            // Distance from pixel to its current palette assignment
-            const ci = colorIndices[i];
-            const assigned = palette[ci];
-            const dAL = pL - assigned.L;
-            const dAA = pa - assigned.a;
-            const dAB = pb - assigned.b;
-            const distToAssigned = dAL * dAL + dAA * dAA + dAB * dAB;
-
-            if (distToSuggestion < distToAssigned) {
-                // This pixel would be captured by the suggested color
-                rgba[off4]     = sugRgb.r;
-                rgba[off4 + 1] = sugRgb.g;
-                rgba[off4 + 2] = sugRgb.b;
-            } else if (solo) {
-                // Solo mode: dim non-captured pixels
-                rgba[off4]     = 0x28;
-                rgba[off4 + 1] = 0x28;
-                rgba[off4 + 2] = 0x28;
-            } else {
-                // Integrated mode: keep normal palette color
+        // Pre-fill integrated mode with palette colors + alpha (ghost loop only overwrites captured pixels)
+        if (!solo) {
+            for (let i = 0; i < pixelCount; i++) {
+                const ci = colorIndices[i];
                 const c = rgbPalette[ci];
+                const off4 = i * 4;
                 rgba[off4]     = c.r;
                 rgba[off4 + 1] = c.g;
                 rgba[off4 + 2] = c.b;
+                rgba[off4 + 3] = 255;
             }
-            rgba[off4 + 3] = 255;
+        } else {
+            // Solo mode: set alpha for all pixels
+            for (let i = 0; i < pixelCount; i++) {
+                rgba[i * 4 + 3] = 255;
+            }
         }
+
+        applySuggestionGhost(rgba, pixelCount, proxyBuffer, colorIndices, palette, labColor, sugRgb, solo);
 
         return rgba;
     }

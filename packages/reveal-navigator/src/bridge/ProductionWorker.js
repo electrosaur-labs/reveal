@@ -248,6 +248,7 @@ class ProductionWorker {
             // modal context, and silently drops inside suspendHistory. The structured
             // reveal: XMP namespace contains all machine-readable data; IPTC is redundant.
             const elapsedSoFar = Date.now() - t0;
+            let xmpError = null;
             try {
                 const manifest = self._sessionState.buildManifest({
                     layerCount: layers.length,
@@ -257,10 +258,11 @@ class ProductionWorker {
                 await PhotoshopBridge.writeStructuredXMP(manifest);
                 logger.log(`[ProductionWorker] Manifest embedded (reveal: XMP)`);
             } catch (xmpErr) {
+                xmpError = xmpErr;
                 logger.log(`[ProductionWorker] Manifest write failed (non-fatal): ${xmpErr && xmpErr.message || String(xmpErr)}`);
             }
 
-            return { layerCount: layers.length };
+            return { layerCount: layers.length, xmpError };
         }, {
             commandName: "Reveal"
         });
@@ -268,7 +270,7 @@ class ProductionWorker {
         const elapsedMs = Date.now() - t0;
         logger.log(`[ProductionWorker] Done: ${result.layerCount} layers in ${elapsedMs}ms`);
 
-        return { layerCount: result.layerCount, elapsedMs };
+        return { layerCount: result.layerCount, elapsedMs, xmpError: result.xmpError || null };
     }
 
     // ─── Loupe Tile Rendering ─────────────────────────────────────
