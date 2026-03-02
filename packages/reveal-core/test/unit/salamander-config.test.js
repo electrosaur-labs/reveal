@@ -74,13 +74,18 @@ describe('generateConfigurationSalamander', () => {
     });
 
     describe('DNA-driven params (from Chameleon)', () => {
-        it('has fixed 12 targetColors', () => {
-            const config = Reveal.generateConfigurationSalamander(PHOTO_DNA);
-            expect(config.targetColors).toBe(12);
-            expect(config.targetColorsSlider).toBe(12);
+        it('inherits DNA-driven targetColors from interpolator (not fixed)', () => {
+            const chameleon = Reveal.generateConfigurationMk2(PHOTO_DNA);
+            const salamander = Reveal.generateConfigurationSalamander(PHOTO_DNA);
+            // Salamander inherits Chameleon's DNA-driven color count
+            expect(salamander.targetColors).toBe(chameleon.targetColors);
+            expect(salamander.targetColorsSlider).toBe(chameleon.targetColorsSlider);
+            // Color count is DNA-driven, in a reasonable range
+            expect(salamander.targetColors).toBeGreaterThanOrEqual(4);
+            expect(salamander.targetColors).toBeLessThanOrEqual(14);
         });
 
-        it('uses VOLUMETRIC centroid strategy', () => {
+        it('uses VOLUMETRIC centroid strategy (unlike Chameleon SALIENCY)', () => {
             const config = Reveal.generateConfigurationSalamander(PHOTO_DNA);
             expect(config.centroidStrategy).toBe('VOLUMETRIC');
         });
@@ -101,6 +106,14 @@ describe('generateConfigurationSalamander', () => {
             const graphicDist = graphicConfig.meta.blendInfo.neighbors[0].distance;
             expect(photoDist).not.toBe(graphicDist);
         });
+
+        it('inherits DNA-interpolated weights (lWeight, cWeight)', () => {
+            const chameleon = Reveal.generateConfigurationMk2(PHOTO_DNA);
+            const salamander = Reveal.generateConfigurationSalamander(PHOTO_DNA);
+            // Weights come from the same interpolator
+            expect(salamander.lWeight).toBe(chameleon.lWeight);
+            expect(salamander.cWeight).toBe(chameleon.cWeight);
+        });
     });
 
     describe('metadata', () => {
@@ -111,7 +124,7 @@ describe('generateConfigurationSalamander', () => {
     });
 
     describe('comparison with Chameleon and Distilled', () => {
-        it('differs from Chameleon in palette reduction', () => {
+        it('differs from Chameleon in palette reduction and centroid', () => {
             const chameleon = Reveal.generateConfigurationMk2(PHOTO_DNA);
             const salamander = Reveal.generateConfigurationSalamander(PHOTO_DNA);
 
@@ -120,16 +133,19 @@ describe('generateConfigurationSalamander', () => {
             expect(salamander.snapThreshold).toBe(0);
             expect(salamander.densityFloor).toBe(0);
             expect(salamander.preprocessingIntensity).toBe('off');
+            // VOLUMETRIC vs SALIENCY
+            expect(salamander.centroidStrategy).toBe('VOLUMETRIC');
         });
 
-        it('differs from Distilled in DNA-derived weights', () => {
+        it('differs from Distilled in DNA-derived weights and color count', () => {
             const distilled = Reveal.generateConfigurationDistilled(PHOTO_DNA);
             const salamander = Reveal.generateConfigurationSalamander(PHOTO_DNA);
 
-            // Both use 12 colors and VOLUMETRIC, but Salamander inherits
-            // DNA-interpolated weights (lWeight, cWeight, etc.) from Chameleon
+            // Distilled always 12; Salamander is DNA-driven
             expect(distilled.targetColors).toBe(12);
-            expect(salamander.targetColors).toBe(12);
+            // Both use VOLUMETRIC centroid
+            expect(distilled.centroidStrategy).toBeUndefined(); // Distilled uses engine default
+            expect(salamander.centroidStrategy).toBe('VOLUMETRIC');
             expect(salamander.meta.engine).toBe('salamander');
             expect(salamander.meta.blendInfo).toBeDefined();
             // Distilled has no blendInfo (no DNA interpolation)

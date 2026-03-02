@@ -142,8 +142,14 @@ class ArchetypeCarousel {
             const bPin = PIN_ORDER[b.dataset.id];
             const aPinned = aPin !== undefined;
             const bPinned = bPin !== undefined;
-            // Pinned cards always sort to top, in their fixed order
-            if (aPinned && bPinned) return aPin - bPin;
+            // Pinned cards always sort to top; among themselves sort by
+            // sortScore (best quality first) once ΔE scores are available
+            if (aPinned && bPinned) {
+                const aSort = parseFloat(a.dataset.sortScore);
+                const bSort = parseFloat(b.dataset.sortScore);
+                if (!isNaN(aSort) && !isNaN(bSort)) return aSort - bSort;
+                return aPin - bPin; // fallback to static order before scoring
+            }
             if (aPinned) return -1;
             if (bPinned) return 1;
 
@@ -372,7 +378,7 @@ class ArchetypeCarousel {
      * gets real swatches via _refreshActiveSwatches after posterization.
      */
     _createCard(match, archetype, sortIndex) {
-        const isSynthetic = match.id === 'dynamic_interpolator' || match.id === 'distilled';
+        const isSynthetic = match.id === 'dynamic_interpolator' || match.id === 'distilled' || match.id === 'salamander';
         const isActive = match.id === this._activeId;
         const card = document.createElement('div');
         card.className = 'carousel-card' + (isActive ? ' active' : '');

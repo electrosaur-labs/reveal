@@ -42,9 +42,10 @@ describe('Salamander posterization — horse regression', () => {
         expect(pixels.length).toBe(350 * 512 * 3);
     });
 
-    test('Salamander config has fixed 12 colors with VOLUMETRIC centroid', () => {
+    test('Salamander config has DNA-driven colors with VOLUMETRIC centroid', () => {
         const config = Reveal.generateConfigurationSalamander(dna);
-        expect(config.targetColors).toBe(12);
+        expect(config.targetColors).toBeGreaterThanOrEqual(4);
+        expect(config.targetColors).toBeLessThanOrEqual(14);
         expect(config.centroidStrategy).toBe('VOLUMETRIC');
         expect(config.engineType).toBe('distilled');
         expect(config.enablePaletteReduction).toBe(false);
@@ -63,8 +64,9 @@ describe('Salamander posterization — horse regression', () => {
 
         expect(result).toBeDefined();
         expect(result.paletteLab).toBeDefined();
-        // All colors survive (no pruning) — palette length equals target
+        // All colors survive (no pruning) — palette length equals DNA-driven target
         expect(result.paletteLab.length).toBe(config.targetColors);
+        expect(result.paletteLab.length).toBeGreaterThanOrEqual(4);
         expect(result.assignments.length).toBe(width * height);
     });
 
@@ -104,13 +106,16 @@ describe('Salamander posterization — horse regression', () => {
         expect(result.dimensions.height).toBeLessThanOrEqual(800);
     });
 
-    test('Salamander inherits DNA weights but uses fixed 12 colors', () => {
+    test('Salamander inherits DNA weights and DNA-driven color count', () => {
         const salamanderConfig = Reveal.generateConfigurationSalamander(dna);
+        const chameleonConfig = Reveal.generateConfigurationMk2(dna);
         const distilledConfig = Reveal.generateConfigurationDistilled(dna);
 
-        // Both use 12 colors, but Salamander has DNA-interpolated weights
-        expect(salamanderConfig.targetColors).toBe(12);
+        // Salamander inherits Chameleon's DNA-driven color count
+        expect(salamanderConfig.targetColors).toBe(chameleonConfig.targetColors);
+        // Distilled always uses 12
         expect(distilledConfig.targetColors).toBe(12);
+        // Salamander has DNA-interpolated weights via blendInfo
         expect(salamanderConfig.meta.engine).toBe('salamander');
         expect(salamanderConfig.meta.blendInfo).toBeDefined();
     });

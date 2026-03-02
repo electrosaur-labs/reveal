@@ -1926,7 +1926,7 @@ class SessionState extends EventEmitter {
             score: salamanderScore,
             _synthetic: {
                 name: 'Salamander',
-                description: 'DNA-driven distillation. Adaptive color count and centroid tuning from image DNA, with no palette reduction — every distilled color survives.',
+                description: 'DNA-driven distillation. Adaptive color count from image DNA with VOLUMETRIC centroid — no palette reduction, every distilled color survives.',
                 preferred_sectors: [],
                 parameters: {}
             }
