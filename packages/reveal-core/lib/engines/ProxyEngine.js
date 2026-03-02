@@ -24,22 +24,33 @@ const LabEncoding = require('../color/LabEncoding');
 const SuggestedColorAnalyzer = require('../analysis/SuggestedColorAnalyzer');
 
 // Proxy-safe overrides for resolution-dependent thresholds.
-// snapThreshold & densityFloor are calibrated for full-res pixel counts
-// and must be zeroed at proxy resolution to prevent palette collapse.
+// snapThreshold, densityFloor, and ghostFloor are all calibrated for full-res
+// pixel counts and must be reset at proxy resolution to prevent palette collapse.
+// ghostFloor=0.01 (1%) requires 4,800+ pixels/color at 800px proxy — too
+// aggressive for tonal gradations; reset to default 0.1% (PaletteDistiller MIN_COVERAGE).
 // paletteReduction is ΔE-based (resolution-independent) — passed through
 // from the archetype config so preview matches production.
+//
+// bitDepth:16 — ProxyEngine always receives true 16-bit Lab from PhotoshopBridge
+// (componentSize:16 confirmed working 2026-02-16). Without this, ParameterGenerator
+// omits bitDepth (it has no opinion on bit depth), causing the engine to use 8-bit
+// thresholds: brown-dampener activates and mangles warm centroid placement, causing
+// oranges/yellows to be missed. Force 16-bit here so engine thresholds match the data.
 const PROXY_SAFE_OVERRIDES = Object.freeze({
     format: 'lab',
+    bitDepth: 16,
     snapThreshold: 0,
     densityFloor: 0,
-    preservedUnifyThreshold: 0.5
+    preservedUnifyThreshold: 0.5,
 });
 
 class ProxyEngine {
-    static PROXY_SIZE = 800; // Fixed resolution for long edge
+    static PROXY_TARGET_SIZE = 1000; // Target long edge in pixels
 
     constructor() {
-        this.proxyBuffer = null;        // 512px 16-bit LAB buffer
+        this.proxyBuffer = null;        // 512px 16-bit LAB buffer (may be bilaterally filtered)
+        this._rawProxyBuffer = null;    // 512px unfiltered stride-3 buffer — canonical source for re-filtering
+        this._proxyPreprocessingIntensity = null; // intensity applied to current proxyBuffer
         this.separationState = null;    // Cached palette + indices + masks (may be mutated by knobs)
         this._baselineState = null;     // Clean snapshot from last posterize (never mutated by knobs)
         this.sourceMetadata = null;     // Original dimensions, DNA
@@ -56,32 +67,32 @@ class ProxyEngine {
     async initializeProxy(labPixels, width, height, initialConfig) {
         const startTime = performance.now();
 
-        // 1. Downsample to 800px (long edge) — skip if input already at proxy size
-        //    When Photoshop GPU handles downsampling via targetSize, the input
-        //    arrives pre-sized and redundant bilinear is wasteful.
-        let proxyBuffer, proxyW, proxyH;
-        const longEdge = Math.max(width, height);
-        if (longEdge <= ProxyEngine.PROXY_SIZE) {
-            // Already at or below proxy size — use input directly
-            proxyBuffer = labPixels;
-            proxyW = width;
-            proxyH = height;
-        } else {
-            const result = this._downsampleBilinear(labPixels, width, height);
-            proxyBuffer = result.buffer;
-            proxyW = result.width;
-            proxyH = result.height;
-        }
+        // 1. Stride-3 subsample — picks every 3rd pixel, no blending.
+        //    Matches the batch pipeline exactly, preserving rare color clusters
+        //    that bilinear averaging would blend away.
+        const result = this._strideSubsample(labPixels, width, height);
+        const rawBuffer = result.buffer;  // unfiltered, canonical source for per-archetype re-filtering
+        const proxyW = result.width;
+        const proxyH = result.height;
 
-        // 2. Bilateral filter preprocessing (matches reveal-adobe pipeline)
+        // Store raw buffer BEFORE bilateral filtering.
+        // rePosterize calls derive per-archetype buffers from _rawProxyBuffer so
+        // preprocessingIntensity changes (e.g. 'auto' Chameleon → 'off' warm_sovereign)
+        // take effect immediately without requiring a full re-ingest.
+        this._rawProxyBuffer = rawBuffer;
+
+        // 2. Bilateral filter preprocessing — applied to a COPY so _rawProxyBuffer stays clean.
         const preprocessingIntensity = initialConfig.preprocessingIntensity || 'auto';
+        let proxyBuffer;
         if (preprocessingIntensity !== 'off') {
-            const is16Bit = true; // ProxyEngine always uses 16-bit Lab
+            proxyBuffer = new Uint16Array(rawBuffer); // copy — never mutate the raw source
             const isHeavy = preprocessingIntensity === 'heavy';
             const radius = isHeavy ? 5 : 3;
-            const sigmaR = is16Bit ? 5000 : 3000;
-            BilateralFilter.applyBilateralFilterLab(proxyBuffer, proxyW, proxyH, radius, sigmaR);
+            BilateralFilter.applyBilateralFilterLab(proxyBuffer, proxyW, proxyH, radius, 5000);
+        } else {
+            proxyBuffer = rawBuffer; // no filtering — use raw directly (same reference is fine)
         }
+        this._proxyPreprocessingIntensity = preprocessingIntensity;
 
         this.proxyBuffer = proxyBuffer;
         this._originalRGBA = null;  // Invalidate cached original preview
@@ -90,30 +101,20 @@ class ProxyEngine {
 
         // Route: distilledPosterize (over-quantize → furthest-point reduce) or standard
         const useDistilled = proxyConfig.engineMode === 'distilled';
-        let posterizeResult, colorIndices;
+        let posterizeResult;
 
         if (useDistilled) {
             posterizeResult = PosterizationEngine.distilledPosterize(
                 proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
-            colorIndices = posterizeResult.assignments;
         } else {
             posterizeResult = await PosterizationEngine.posterize(
                 proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
-            // 3. Run separation - get color indices
-            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-                proxyBuffer,                // rawBytes
-                posterizeResult.paletteLab, // labPalette
-                null,                       // onProgress
-                proxyW,                     // width
-                proxyH,                     // height
-                {
-                    ditherType: initialConfig.ditherType || 'none',
-                    distanceMetric: initialConfig.distanceMetric || 'cie76'
-                }
-            );
         }
+        // Use posterize's built-in assignments (box membership) directly.
+        // Skips the expensive mapPixelsToPaletteAsync nearest-neighbor pass.
+        const colorIndices = posterizeResult.assignments;
 
         // 4. Generate masks from color indices
         const masks = [];
@@ -125,7 +126,7 @@ class ProxyEngine {
         // 5. Cache separation state
         this.separationState = {
             palette: posterizeResult.paletteLab,
-            rgbPalette: posterizeResult.palette,
+            rgbPalette: posterizeResult.paletteLab.map(c => LabEncoding.labToRgbD50(c)),
             colorIndices: colorIndices,
             masks: masks,
             width: proxyW,
@@ -186,6 +187,26 @@ class ProxyEngine {
         const proxyW = this.separationState.width;
         const proxyH = this.separationState.height;
 
+        // Regenerate proxyBuffer if preprocessing intensity changed between archetypes.
+        // Chameleon uses 'auto' (bilateral filter applied); warm_sovereign and similar use 'off'
+        // (raw pixels). Without this, an 'off' archetype runs on Chameleon's filtered buffer,
+        // causing ~9% chroma reduction (bilateral averaging compresses extreme chroma).
+        const newIntensity = config.preprocessingIntensity !== undefined
+            ? config.preprocessingIntensity
+            : 'auto'; // undefined → 'auto' (matches initializeProxy default)
+        if (newIntensity !== this._proxyPreprocessingIntensity && this._rawProxyBuffer) {
+            if (newIntensity !== 'off') {
+                const buf = new Uint16Array(this._rawProxyBuffer); // copy raw, then filter
+                const isHeavy = newIntensity === 'heavy';
+                const radius = isHeavy ? 5 : 3;
+                BilateralFilter.applyBilateralFilterLab(buf, proxyW, proxyH, radius, 5000);
+                this.proxyBuffer = buf;
+            } else {
+                this.proxyBuffer = this._rawProxyBuffer; // use raw (no filter)
+            }
+            this._proxyPreprocessingIntensity = newIntensity;
+        }
+
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
         const useDistilled = proxyConfig.engineMode === 'distilled';
@@ -195,24 +216,14 @@ class ProxyEngine {
             posterizeResult = PosterizationEngine.distilledPosterize(
                 this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
-            colorIndices = posterizeResult.assignments;
         } else {
             posterizeResult = await PosterizationEngine.posterize(
                 this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
-            // 2. Separation
-            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-                this.proxyBuffer,
-                posterizeResult.paletteLab,
-                null,
-                proxyW,
-                proxyH,
-                {
-                    ditherType: config.ditherType || 'none',
-                    distanceMetric: config.distanceMetric || 'cie76'
-                }
-            );
         }
+        // Use posterize's built-in assignments (box membership) directly.
+        // Skips the expensive mapPixelsToPaletteAsync nearest-neighbor pass.
+        colorIndices = posterizeResult.assignments;
 
         // 3. Masks
         const masks = [];
@@ -223,7 +234,7 @@ class ProxyEngine {
         // 4. Update cached state (proxyBuffer unchanged)
         this.separationState = {
             palette: posterizeResult.paletteLab,
-            rgbPalette: posterizeResult.palette,
+            rgbPalette: posterizeResult.paletteLab.map(c => LabEncoding.labToRgbD50(c)),
             colorIndices,
             masks,
             width: proxyW,
@@ -306,7 +317,7 @@ class ProxyEngine {
         if ('paletteOverride' in paramChanges) {
             this.separationState.palette = paramChanges.paletteOverride;
             this.separationState.rgbPalette = paramChanges.paletteOverride.map(
-                lab => PosterizationEngine.labToRgb(lab)
+                lab => LabEncoding.labToRgbD50(lab)
             );
         }
 
@@ -347,20 +358,17 @@ class ProxyEngine {
         const proxyH = this.separationState.height;
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
+        const buf = this._bufferForConfig(proxyConfig);
 
         if (proxyConfig.engineMode === 'distilled') {
             const result = PosterizationEngine.distilledPosterize(
-                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
             return { labPalette: result.paletteLab, rgbPalette: result.palette };
         }
 
         const result = await PosterizationEngine.posterize(
-            this.proxyBuffer,
-            proxyW,
-            proxyH,
-            proxyConfig.targetColors,
-            proxyConfig
+            buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
         );
 
         return { labPalette: result.paletteLab, rgbPalette: result.palette };
@@ -383,24 +391,20 @@ class ProxyEngine {
         const proxyH = this.separationState.height;
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
+        const buf = this._bufferForConfig(proxyConfig);
 
-        let result, colorIndices;
+        let result;
         if (proxyConfig.engineMode === 'distilled') {
             result = PosterizationEngine.distilledPosterize(
-                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
-            colorIndices = result.assignments;
         } else {
             result = await PosterizationEngine.posterize(
-                this.proxyBuffer, proxyW, proxyH,
-                proxyConfig.targetColors, proxyConfig
-            );
-            // Run separation to get colorIndices for fidelity calculation
-            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-                this.proxyBuffer, result.paletteLab, null, proxyW, proxyH,
-                { ditherType: 'none', distanceMetric: config.distanceMetric || 'cie76' }
+                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
         }
+        // Use posterize's built-in assignments for fidelity calculation
+        const colorIndices = result.assignments;
 
         const fidelityResult = DNAFidelity.fromIndices(
             inputDNA, colorIndices, result.paletteLab, proxyW, proxyH
@@ -430,24 +434,22 @@ class ProxyEngine {
         const pixelCount = proxyW * proxyH;
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
+        const buf = this._bufferForConfig(proxyConfig);
 
         let result, colorIndices;
         if (proxyConfig.engineMode === 'distilled') {
             result = PosterizationEngine.distilledPosterize(
-                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
             colorIndices = result.assignments;
         } else {
             result = await PosterizationEngine.posterize(
-                this.proxyBuffer, proxyW, proxyH,
-                proxyConfig.targetColors, proxyConfig
+                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
-            // Run nearest-neighbor separation (no dither) to get pixel assignments
-            // Use the config's distance metric to match actual posterization behavior
-            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-                this.proxyBuffer, result.paletteLab, null, proxyW, proxyH,
-                { ditherType: 'none', distanceMetric: config.distanceMetric || 'cie76' }
-            );
+            // Use posterize's built-in assignments (box membership) for scoring.
+            // Skips the expensive mapPixelsToPaletteAsync nearest-neighbor pass —
+            // box membership ΔE is close enough for carousel ranking.
+            colorIndices = result.assignments;
         }
 
         // Apply minVolume so ΔE matches the live post-knob state.
@@ -488,7 +490,7 @@ class ProxyEngine {
 
         // Append to current separation state palette
         this.separationState.palette.push({ ...labColor });
-        this.separationState.rgbPalette.push(PosterizationEngine.labToRgb(labColor));
+        this.separationState.rgbPalette.push(LabEncoding.labToRgbD50(labColor));
 
         // Full nearest-neighbor re-separation with expanded palette
         await this._recomputeSeparation();
@@ -629,6 +631,22 @@ class ProxyEngine {
     }
 
     /**
+     * Return the appropriate pixel buffer for a given config's preprocessingIntensity.
+     * Configs with 'off' preprocessing must use the raw (unfiltered) buffer so their
+     * palette centroids are not compressed by the bilateral filter. All read-only
+     * methods (getPaletteForConfig, getPaletteWithFidelity, getPaletteWithQuality)
+     * use this so background scoring always reflects the config's true output.
+     * @private
+     */
+    _bufferForConfig(config) {
+        const intensity = config.preprocessingIntensity;
+        if (intensity === 'off' && this._rawProxyBuffer) {
+            return this._rawProxyBuffer;
+        }
+        return this.proxyBuffer;
+    }
+
+    /**
      * Deep-copy current separationState as the clean baseline.
      * Called after initializeProxy and rePosterize — never after knob application.
      * @private
@@ -670,46 +688,25 @@ class ProxyEngine {
     }
 
     /**
-     * Bilinear downsample to 800px (long edge)
+     * Stride subsample — picks every Nth pixel, no interpolation.
+     * Stride computed dynamically to target PROXY_TARGET_SIZE (800px long edge).
+     * For small images already under target, stride=1 (no downsampling).
      * @private
      */
-    _downsampleBilinear(labPixels, srcWidth, srcHeight) {
-        // Calculate target dimensions (800px on long edge)
+    _strideSubsample(labPixels, srcWidth, srcHeight) {
         const longEdge = Math.max(srcWidth, srcHeight);
-        const scale = ProxyEngine.PROXY_SIZE / longEdge;
-
-        const dstWidth = Math.round(srcWidth * scale);
-        const dstHeight = Math.round(srcHeight * scale);
-
+        const s = Math.max(1, Math.ceil(longEdge / ProxyEngine.PROXY_TARGET_SIZE));
+        const dstWidth = Math.ceil(srcWidth / s);
+        const dstHeight = Math.ceil(srcHeight / s);
         const dstBuffer = new Uint16Array(dstWidth * dstHeight * 3);
 
-        // Bilinear interpolation
-        for (let y = 0; y < dstHeight; y++) {
-            for (let x = 0; x < dstWidth; x++) {
-                const srcX = x / scale;
-                const srcY = y / scale;
-
-                const x0 = Math.floor(srcX);
-                const y0 = Math.floor(srcY);
-                const x1 = Math.min(x0 + 1, srcWidth - 1);
-                const y1 = Math.min(y0 + 1, srcHeight - 1);
-
-                const fx = srcX - x0;
-                const fy = srcY - y0;
-
-                // Interpolate L, a, b channels
-                for (let c = 0; c < 3; c++) {
-                    const v00 = labPixels[(y0 * srcWidth + x0) * 3 + c];
-                    const v10 = labPixels[(y0 * srcWidth + x1) * 3 + c];
-                    const v01 = labPixels[(y1 * srcWidth + x0) * 3 + c];
-                    const v11 = labPixels[(y1 * srcWidth + x1) * 3 + c];
-
-                    const v0 = v00 * (1 - fx) + v10 * fx;
-                    const v1 = v01 * (1 - fx) + v11 * fx;
-                    const v = v0 * (1 - fy) + v1 * fy;
-
-                    dstBuffer[(y * dstWidth + x) * 3 + c] = Math.round(v);
-                }
+        let dp = 0;
+        for (let y = 0; y < srcHeight; y += s) {
+            for (let x = 0; x < srcWidth; x += s) {
+                const sp = (y * srcWidth + x) * 3;
+                dstBuffer[dp++] = labPixels[sp];
+                dstBuffer[dp++] = labPixels[sp + 1];
+                dstBuffer[dp++] = labPixels[sp + 2];
             }
         }
 

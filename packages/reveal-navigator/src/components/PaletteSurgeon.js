@@ -111,13 +111,20 @@ class PaletteSurgeon {
         this._grid.innerHTML = '';
         this._swatchElements.clear();
 
+        // Lab palette for D50 swatch rendering and gamut badges
+        const labPalette = sep.palette;
+
         for (let i = 0; i < rgbPalette.length; i++) {
             const isDeleted = this._session.deletedColors.has(i);
             if (counts[i] === 0 && !isDeleted) continue;   // skip truly empty, keep deleted
 
-            const c = rgbPalette[i];
             const pct = isDeleted ? '—' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
             const isOverridden = this._session.paletteOverrides.has(i);
+
+            // ── Compute swatch color using D50 (matches Photoshop rendering) ──
+            const c = (labPalette && labPalette[i])
+                ? Reveal.labToRgbD50(labPalette[i])
+                : rgbPalette[i];
 
             // ── Swatch container with HARD-BOUND index ──
             const swatch = document.createElement('div');
@@ -153,6 +160,19 @@ class PaletteSurgeon {
                 addBadge.className = 'surgeon-add-badge';
                 addBadge.textContent = '+';
                 colorBlock.appendChild(addBadge);
+            }
+
+            // ── Gamut clip badge — flags swatches where D50 rendering still lost chroma ──
+            if (labPalette && labPalette[i]) {
+                const gamut = Reveal.labGamutInfo(labPalette[i]);
+                if (!gamut.inGamut) {
+                    const clipBadge = document.createElement('span');
+                    clipBadge.className = 'surgeon-clip-badge';
+                    clipBadge.textContent = '\u26A0';  // ⚠
+                    const lab = labPalette[i];
+                    clipBadge.title = `Print-only color: exceeds monitor gamut\n${gamut.chromaLoss.toFixed(0)}% chroma lost (${gamut.iterations} iterations)\nTrue Lab: L=${lab.L.toFixed(1)} a=${lab.a.toFixed(1)} b=${lab.b.toFixed(1)}\nThe printed separation will be more vibrant than this swatch.`;
+                    colorBlock.appendChild(clipBadge);
+                }
             }
 
             // ── Merge badge ("+N" on target swatches that absorbed others) ──
@@ -527,7 +547,7 @@ class PaletteSurgeon {
 
         for (let si = 0; si < suggestions.length; si++) {
             const suggestion = suggestions[si];
-            const rgb = Reveal.labToRgb(suggestion.L, suggestion.a, suggestion.b);
+            const rgb = Reveal.labToRgbD50({ L: suggestion.L, a: suggestion.a, b: suggestion.b });
             const swatch = document.createElement('div');
             swatch.className = 'surgeon-suggested-swatch';
             swatch.style.background = `rgb(${rgb.r},${rgb.g},${rgb.b})`;

@@ -65,6 +65,7 @@ async function main() {
         enablePaletteReduction: false,
         snapThreshold: 0,
         densityFloor: 0,
+        peakFinderMaxPeaks: 1,
     };
 
     // 4. Run distilledPosterize

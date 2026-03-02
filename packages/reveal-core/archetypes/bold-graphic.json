@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Bold Graphic / Political Poster",
   "group": "graphic",
-  "engine": "distilled",
+  "engine": "direct",
   "description": "High-contrast graphic art with near-maximum black and strong tonal structure. Political posters, Art Nouveau lithographs, editorial graphics.",
   "preferred_sectors": ["chartreuse", "orange", "yellow", "green", "red"],
   "centroid": {

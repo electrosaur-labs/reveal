@@ -326,12 +326,12 @@ class ArchetypeCarousel {
      * gets real swatches via _refreshActiveSwatches after posterization.
      */
     _createCard(match, archetype, sortIndex) {
-        const isChameleon = match.id === 'dynamic_interpolator';
+        const isSynthetic = match.id === 'dynamic_interpolator' || match.id === 'distilled';
         const isActive = match.id === this._activeId;
         const card = document.createElement('div');
         card.className = 'carousel-card' + (isActive ? ' active' : '');
         card.dataset.id = match.id;
-        card.dataset.group = isChameleon ? 'specialist' : (archetype.group || 'all');
+        card.dataset.group = isSynthetic ? 'specialist' : (archetype.group || 'all');
 
         // Score bar — ΔE drives the bar when available, otherwise DNA score
         const hasDE = match.meanDeltaE != null;

@@ -104,16 +104,15 @@ class ParameterGenerator {
             // Identity
             id: archetype.id,
             name: archetype.name,
-            engineMode: archetype.engine || 'distilled',
+            engineMode: archetype.engine || 'direct',
 
             // NOTE: bitDepth is intentionally NOT included here.
-            // PosterizationEngine defaults to 8-bit thresholds (brown-dampener active,
-            // neutrality gate at 5.0). The Navigator reads PS pixels at componentSize:8
-            // (UXP limitation) and upconverts to 16-bit encoding, but the data has 8-bit
-            // precision. Passing bitDepth:16 disables the brown-dampener and causes
-            // 8-bit quantization noise to contaminate centroids (green→yellow regression).
-            // Callers with true 16-bit source data (e.g. reveal-batch reading PSD files)
-            // should pass bitDepth explicitly in options.
+            // ParameterGenerator has no opinion on bit depth — the caller knows their data.
+            // ProxyEngine sets bitDepth:16 in PROXY_SAFE_OVERRIDES (Navigator reads true
+            // 16-bit Lab via componentSize:16, confirmed working 2026-02-16).
+            // Batch callers pass bitDepth:16 explicitly in their opts.
+            // Without bitDepth:16, the engine uses 8-bit thresholds (brown-dampener active),
+            // which mangles warm centroid placement on 16-bit data.
 
             // Core parameters — DNA-driven adaptive color count is the primary driver.
             // Archetype provides min/max bounds; targetColorsSlider is fallback only
@@ -173,8 +172,8 @@ class ParameterGenerator {
             neutralCentroidClampThreshold: params.neutralCentroidClampThreshold || 0.5,
             neutralSovereigntyThreshold: params.neutralSovereigntyThreshold || 0,
 
-            // Median cut split strategy: 'variance' (Wu SSE-minimizing) or 'median' (hue-aware)
-            splitMode: params.splitMode || 'variance',
+            // Median cut split strategy: 'variance' (Wu SSE-minimizing) or 'median' (standard)
+            splitMode: params.splitMode || 'median',
 
             // Chroma split axis + neutral isolation (median cut enhancements)
             chromaAxisWeight: params.chromaAxisWeight !== undefined ? params.chromaAxisWeight : 0,
@@ -597,7 +596,7 @@ class ParameterGenerator {
             refinementPasses: config.refinementPasses,
 
             // Median cut split strategy
-            splitMode: config.splitMode || 'variance',
+            splitMode: config.splitMode || 'median',
 
             // Screen mesh — passed through if caller provides it (session-level, not archetype).
             // Maps meshSize (config/UI name) → meshCount (SeparationEngine name).

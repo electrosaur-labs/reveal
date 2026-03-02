@@ -440,6 +440,107 @@ function labToRgb(lab) {
 }
 
 // ============================================================================
+// D50 Single-Color Conversion (matches Photoshop rendering)
+// ============================================================================
+//
+// Photoshop renders Lab colors using D50 illuminant (printing industry standard).
+// labToRgb (above) uses D65 illuminant which forces severe gamut mapping on
+// warm/yellow Lab colors — up to 64% chroma loss for high-chroma yellows.
+//
+// labToRgbD50 uses D50+Bradford (same pipeline as lab8bitToRgb) to match
+// how Photoshop displays the same Lab values. Use this for swatch display.
+
+/**
+ * Convert CIELAB color to sRGB using D50 illuminant + Bradford adaptation.
+ *
+ * Pipeline: CIELAB → XYZ (D50) → sRGB (Bradford D50→D65 baked into matrix)
+ * Matches Photoshop's Lab rendering and lab8bitToRgb's bulk path.
+ *
+ * Uses simple clamping (not iterative chroma reduction) for out-of-gamut
+ * colors — same behavior as lab8bitToRgb and Photoshop's display pipeline.
+ * This preserves vibrancy for high-chroma warm/yellow Lab colors that the
+ * D65 gamut mapper would otherwise desaturate by 60%+.
+ *
+ * @param {{L: number, a: number, b: number}} lab - Perceptual Lab
+ * @returns {{r: number, g: number, b: number}} sRGB color (0-255)
+ */
+function labToRgbD50(lab) {
+    // Lab → XYZ (D50 illuminant: Xn=96.422, Yn=100.0, Zn=82.521)
+    const fy = (lab.L + 16) / 116;
+    const fx = lab.a / 500 + fy;
+    const fz = fy - lab.b / 200;
+
+    const xr = fx > 0.206893 ? fx * fx * fx : (fx - 16 / 116) / 7.787;
+    const yr = fy > 0.206893 ? fy * fy * fy : (fy - 16 / 116) / 7.787;
+    const zr = fz > 0.206893 ? fz * fz * fz : (fz - 16 / 116) / 7.787;
+
+    const X = xr * 96.422;
+    const Y = yr * 100.0;
+    const Z = zr * 82.521;
+
+    // XYZ → sRGB with D50→D65 Bradford adaptation baked into matrix
+    let R = ( 3.1338561 * X - 1.6168667 * Y - 0.4906146 * Z) / 100;
+    let G = (-0.9787684 * X + 1.9161415 * Y + 0.0334540 * Z) / 100;
+    let B = ( 0.0719453 * X - 0.2289914 * Y + 1.4052427 * Z) / 100;
+
+    // sRGB gamma
+    R = R > 0.0031308 ? 1.055 * Math.pow(Math.max(0, R), 1 / 2.4) - 0.055 : 12.92 * R;
+    G = G > 0.0031308 ? 1.055 * Math.pow(Math.max(0, G), 1 / 2.4) - 0.055 : 12.92 * G;
+    B = B > 0.0031308 ? 1.055 * Math.pow(Math.max(0, B), 1 / 2.4) - 0.055 : 12.92 * B;
+
+    return {
+        r: Math.max(0, Math.min(255, Math.round(R * 255))),
+        g: Math.max(0, Math.min(255, Math.round(G * 255))),
+        b: Math.max(0, Math.min(255, Math.round(B * 255)))
+    };
+}
+
+/**
+ * Check how much gamut clipping D50-based swatch rendering applies.
+ *
+ * Uses D50 illuminant + Bradford (matching labToRgbD50 and Photoshop).
+ * Returns the number of chroma-reduction iterations needed to bring the
+ * color into sRGB gamut, plus the percentage of chroma lost.
+ *
+ * @param {{L: number, a: number, b: number}} lab - Perceptual Lab
+ * @returns {{inGamut: boolean, iterations: number, chromaLoss: number}}
+ *   chromaLoss is 0-100 (percentage of original chroma that was discarded)
+ */
+function labGamutInfo(lab) {
+    const MAX_ITERATIONS = 20;
+    let currentLab = { L: lab.L, a: lab.a, b: lab.b };
+
+    for (let i = 0; i <= MAX_ITERATIONS; i++) {
+        const fy = (currentLab.L + 16) / 116;
+        const fx = currentLab.a / 500 + fy;
+        const fz = fy - currentLab.b / 200;
+
+        const xr = fx > 0.206893 ? fx * fx * fx : (fx - 16 / 116) / 7.787;
+        const yr = fy > 0.206893 ? fy * fy * fy : (fy - 16 / 116) / 7.787;
+        const zr = fz > 0.206893 ? fz * fz * fz : (fz - 16 / 116) / 7.787;
+
+        // D50 illuminant + Bradford adaptation matrix (matching labToRgbD50)
+        let r = ( 3.1338561 * xr * 96.422 - 1.6168667 * yr * 100 - 0.4906146 * zr * 82.521) / 100;
+        let g = (-0.9787684 * xr * 96.422 + 1.9161415 * yr * 100 + 0.0334540 * zr * 82.521) / 100;
+        let b = ( 0.0719453 * xr * 96.422 - 0.2289914 * yr * 100 + 1.4052427 * zr * 82.521) / 100;
+
+        r = _linearToGamma(r);
+        g = _linearToGamma(g);
+        b = _linearToGamma(b);
+
+        if (r >= 0 && r <= 1 && g >= 0 && g <= 1 && b >= 0 && b <= 1) {
+            const chromaLoss = (1 - Math.pow(0.95, i)) * 100;
+            return { inGamut: i === 0, iterations: i, chromaLoss };
+        }
+
+        currentLab.a *= 0.95;
+        currentLab.b *= 0.95;
+    }
+
+    return { inGamut: false, iterations: MAX_ITERATIONS, chromaLoss: (1 - Math.pow(0.95, MAX_ITERATIONS)) * 100 };
+}
+
+// ============================================================================
 // Exports
 // ============================================================================
 
@@ -472,5 +573,11 @@ module.exports = {
 
     // Single-color sRGB ↔ Lab (D65, gamut-mapped)
     rgbToLab,
-    labToRgb
+    labToRgb,
+
+    // Single-color Lab → sRGB (D50+Bradford, matches Photoshop rendering)
+    labToRgbD50,
+
+    // Gamut analysis (D50-based, matching labToRgbD50)
+    labGamutInfo
 };

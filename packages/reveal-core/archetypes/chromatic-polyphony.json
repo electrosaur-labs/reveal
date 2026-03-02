@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Chromatic Polyphony",
   "group": "natural",
-  "engine": "distilled",
+  "engine": "direct",
   "description": "High-entropy images with color spread across many sectors. No dominant hue — treats all colors with equal structural respect. Balanced weights prevent any single channel from hijacking separation.",
   "preferred_sectors": [],
   "centroid": {

@@ -111,6 +111,34 @@ class PhotoshopBridge {
             );
         }
 
+        // DEBUG: probe encoding — compare raw values to expected Engine 16-bit
+        const _bufType = rawPixels && rawPixels.constructor ? rawPixels.constructor.name : 'unknown';
+        const _p0L = rawPixels[0], _p0a = rawPixels[1], _p0b = rawPixels[2];
+        // Sample pixel at ~10% into image (likely non-white)
+        const _off = Math.floor(actualWidth * actualHeight * 0.1) * 3;
+        const _p1L = rawPixels[_off], _p1a = rawPixels[_off+1], _p1b = rawPixels[_off+2];
+        // Decode using Engine 16-bit formula
+        const _dec = (L16, a16, b16) => ({
+            L: (L16/32768*100).toFixed(1),
+            a: ((a16-16384)/128).toFixed(1),
+            b: ((b16-16384)/128).toFixed(1)
+        });
+        const _d0 = _dec(_p0L, _p0a, _p0b);
+        const _d1 = _dec(_p1L, _p1a, _p1b);
+        // Also sample 50% through image (more likely to hit a colored pixel)
+        const _off2 = Math.floor(actualWidth * actualHeight * 0.5) * 3;
+        const _p2L = rawPixels[_off2], _p2a = rawPixels[_off2+1], _p2b = rawPixels[_off2+2];
+        const _d2 = _dec(_p2L, _p2a, _p2b);
+        console.log('[PhotoshopBridge] bufType=' + _bufType
+            + ' len=' + rawPixels.length + ' expected=' + (actualWidth*actualHeight*3)
+            + ' w=' + actualWidth + ' h=' + actualHeight);
+        console.log('[PhotoshopBridge] px[0]   raw=(' + _p0L + ',' + _p0a + ',' + _p0b
+            + ') → Lab(' + _d0.L + ',' + _d0.a + ',' + _d0.b + ')');
+        console.log('[PhotoshopBridge] px[10%] raw=(' + _p1L + ',' + _p1a + ',' + _p1b
+            + ') → Lab(' + _d1.L + ',' + _d1.a + ',' + _d1.b + ')');
+        console.log('[PhotoshopBridge] px[50%] raw=(' + _p2L + ',' + _p2a + ',' + _p2b
+            + ') → Lab(' + _d2.L + ',' + _d2.a + ',' + _d2.b + ')');
+
         // rawPixels is already native 16-bit Lab (Uint16Array, 0-32768 encoding)
         return {
             labPixels: rawPixels,

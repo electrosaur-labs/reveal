@@ -22,8 +22,8 @@
     "engine": {
       "type": "string",
       "enum": ["distilled", "direct"],
-      "default": "distilled",
-      "description": "Quantization strategy. 'distilled' = over-quantize to 3×K then furthest-point sample back to K (improves tonal separation, avg -1.42 ΔE on TESTIMAGES). 'direct' = standard posterization (better for single-dominant-hue images where chroma-weighted centroids outperform diversity sampling, e.g. vibrant_tonal). User can always override."
+      "default": "direct",
+      "description": "Quantization strategy. 'direct' = standard MK 1.5 posterization (default for all named archetypes). 'distilled' = over-quantize to 3×K then furthest-point sample back to K (used only by the Distilled pseudo-archetype for max tonal diversity at the cost of performance). User can always override."
     },
     "description": {
       "type": "string",

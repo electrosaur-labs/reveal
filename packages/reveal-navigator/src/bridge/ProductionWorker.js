@@ -64,10 +64,9 @@ class ProductionWorker {
             logger.log(`[ProductionWorker]   palette[${i}]: L=${c.L.toFixed(1)} a=${c.a.toFixed(1)} b=${c.b.toFixed(1)}`);
         }
 
-        // Convert Lab→RGB for hex naming
-        const PosterizationEngine = Reveal.engines.PosterizationEngine;
+        // Convert Lab→RGB for hex naming (D50 to match Photoshop rendering)
         const hexColors = labPalette.map(c => {
-            const rgb = PosterizationEngine.labToRgb({ L: c.L, a: c.a, b: c.b });
+            const rgb = Reveal.labToRgbD50({ L: c.L, a: c.a, b: c.b });
             const toHex = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
             return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`.toUpperCase();
         });
@@ -90,11 +89,14 @@ class ProductionWorker {
             const docHeight = doc.height;
 
             // Read pixels directly (no nested executeAsModal)
+            // componentSize:16 — native Photoshop 16-bit Lab encoding (confirmed working 2026-02-16).
+            // sourceBounds — guards against smart object pixel shift (UXP known pitfall).
             const pixelData = await imaging.getPixels({
                 documentID: doc.id,
-                componentSize: 8,
+                componentSize: 16,
                 targetComponentCount: 3,
-                colorSpace: "Lab"
+                colorSpace: "Lab",
+                sourceBounds: { left: 0, top: 0, right: docWidth, bottom: docHeight }
             });
 
             let rawPixels, actualWidth, actualHeight;
@@ -110,8 +112,9 @@ class ProductionWorker {
                 throw new Error('Unexpected pixel data format');
             }
 
-            // Upconvert 8-bit Lab → 16-bit
-            const labPixels = PhotoshopBridge.lab8to16(rawPixels);
+            // rawPixels is already native 16-bit Lab (Uint16Array, 0-32768 encoding)
+            // No upconversion needed — matches ProxyEngine's read path exactly.
+            const labPixels = rawPixels;
             const pixelCount = actualWidth * actualHeight;
 
             logger.log(`[ProductionWorker] Got ${actualWidth}x${actualHeight} (${pixelCount} pixels)`);
@@ -371,9 +374,8 @@ class ProductionWorker {
             eRev = result.eRev;
         }
 
-        // Generate RGBA preview from masks + colorIndices
-        const PosterizationEngine = Reveal.engines.PosterizationEngine;
-        const rgbPalette = labPalette.map(c => PosterizationEngine.labToRgb(c));
+        // Generate RGBA preview from masks + colorIndices (D50 matches proxy preview)
+        const rgbPalette = labPalette.map(c => Reveal.labToRgbD50(c));
         const buffer = new Uint8ClampedArray(pixelCount * 4);
         for (let i = 0; i < pixelCount; i++) {
             const idx = i * 4;

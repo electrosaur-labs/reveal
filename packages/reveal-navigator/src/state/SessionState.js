@@ -34,7 +34,7 @@ const PRODUCTION_KNOB_DEFAULTS = { trapSize: 0, meshSize: 230 };
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
 // This is the complete set from ParameterGenerator output — any change triggers rePosterize.
 const STRUCTURAL_PARAMS = new Set([
-    'targetColors', 'engineType', 'centroidStrategy', 'distanceMetric',
+    'targetColors', 'engineMode', 'engineType', 'centroidStrategy', 'distanceMetric',
     // Saliency weights
     'lWeight', 'cWeight', 'blackBias',
     // Vibrancy
@@ -305,6 +305,21 @@ class SessionState extends EventEmitter {
             this._archetypeDeltaE.set('dynamic_interpolator', initialAccuracy);
         }
 
+        // Score Distilled at startup (read-only, uses existing proxy buffer)
+        this._distilledConfig = Reveal.generateConfigurationDistilled(this.imageDNA);
+        const distilledKnobs = {
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp
+        };
+        const distilledQuality = await this.proxyEngine.getPaletteWithQuality(
+            this._distilledConfig, distilledKnobs
+        );
+        const distilledAccuracy = distilledQuality.meanDeltaE;
+        if (distilledAccuracy != null) {
+            this._archetypeDeltaE.set('distilled', distilledAccuracy);
+        }
+
         this.emit('previewUpdated', {
             previewBuffer: knobResult.previewBuffer,
             palette: knobResult.palette,
@@ -322,6 +337,7 @@ class SessionState extends EventEmitter {
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
         const allScores = this.getAllArchetypeScores(); // instant DNA ranking
+
         // Inject Chameleon's ΔE and screen count (already computed above)
         const chameleonEntry = allScores.find(s => s.id === 'dynamic_interpolator');
         if (chameleonEntry) {
@@ -331,6 +347,15 @@ class SessionState extends EventEmitter {
             chameleonEntry.targetColors = chameleonColors;
             chameleonEntry.sortScore = initialAccuracy != null
                 ? this._computeSortScore(initialAccuracy, chameleonColors) : null;
+        }
+
+        // Inject Distilled's ΔE (scored above)
+        const distilledEntry = allScores.find(s => s.id === 'distilled');
+        if (distilledEntry) {
+            distilledEntry.meanDeltaE = distilledAccuracy;
+            distilledEntry.targetColors = 12;
+            distilledEntry.sortScore = distilledAccuracy != null
+                ? this._computeSortScore(distilledAccuracy, 12) : null;
         }
 
         this.emit('carouselReady', { scores: allScores, topMatchId: 'dynamic_interpolator' });
@@ -389,6 +414,7 @@ class SessionState extends EventEmitter {
         // Only eagerly score the top N archetypes by DNA score.
         // The rest get scored on-demand when the user clicks their card.
         // Skip Chameleon — already scored during Phase 2.
+        // Distilled is included: it's scored at startup but re-scoring is deterministic and cheap.
         const eagerSlice = allScores
             .filter(s => s.id !== 'dynamic_interpolator')
             .slice(0, EAGER_SCORE_COUNT);
@@ -413,9 +439,9 @@ class SessionState extends EventEmitter {
             try {
                 // Read-only scoring via getPaletteWithQuality — does NOT mutate
                 // the active separationState, so the Chameleon preview stays intact.
-                const config = Reveal.generateConfiguration(this.imageDNA, {
-                    manualArchetypeId: match.id
-                });
+                const config = match.id === 'distilled'
+                    ? Reveal.generateConfigurationDistilled(this.imageDNA)
+                    : Reveal.generateConfiguration(this.imageDNA, { manualArchetypeId: match.id });
 
                 const quality = await this.proxyEngine.getPaletteWithQuality(config, knobs);
                 const deltaE = quality.meanDeltaE;
@@ -724,8 +750,11 @@ class SessionState extends EventEmitter {
 
             // 2. Generate fresh config (clean slate).
             // Chameleon uses Mk2 interpolation from DNA.
+            // Distilled uses minimal batch-like settings (no archetype overrides).
             if (archetypeId === 'dynamic_interpolator') {
                 this.currentConfig = Reveal.generateConfigurationMk2(this.imageDNA);
+            } else if (archetypeId === 'distilled') {
+                this.currentConfig = Reveal.generateConfigurationDistilled(this.imageDNA);
             } else {
                 this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
                     manualArchetypeId: archetypeId
@@ -823,7 +852,9 @@ class SessionState extends EventEmitter {
         const mapper = new Reveal.ArchetypeMapper(archetypes);
         const scores = mapper.getTopMatches(this.imageDNA, archetypes.length);
 
-        return this._injectChameleon(scores);
+        this._injectChameleon(scores);
+        this._injectDistilled(scores);
+        return scores;
     }
 
     // ─── Highlight / Isolation ─────────────────────────────────
@@ -1250,7 +1281,7 @@ class SessionState extends EventEmitter {
         }
         const totalPixels = sep ? sep.width * sep.height : 1;
         const paletteSection = (palette || []).map((c, i) => {
-            const rgb = PosterizationEngine.labToRgb({ L: c.L, a: c.a, b: c.b });
+            const rgb = Reveal.labToRgbD50({ L: c.L, a: c.a, b: c.b });
             const toHex = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
             const hex = `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`.toUpperCase();
             const coverage = pixelCounts
@@ -1546,7 +1577,7 @@ class SessionState extends EventEmitter {
         const rgba = new Uint8ClampedArray(pixelCount * 4);
 
         // Pre-compute the suggested color's RGB for captured pixels
-        const sugRgb = Reveal.labToRgb(labColor.L, labColor.a, labColor.b);
+        const sugRgb = Reveal.labToRgbD50({ L: labColor.L, a: labColor.a, b: labColor.b });
         const solo = (mode === 'solo');
 
         // 16-bit Lab encoding constants
@@ -1816,6 +1847,29 @@ class SessionState extends EventEmitter {
             if (chameleonScore >= scores[i].score) { idx = i; break; }
         }
         scores.splice(idx, 0, entry);
+        return scores;
+    }
+
+    /**
+     * Inject the Distilled pseudo-archetype entry into a sorted score array.
+     * Always placed immediately after Chameleon (score = Chameleon score - 1,
+     * or at position 1 if Chameleon is first).
+     * @private
+     */
+    _injectDistilled(scores) {
+        const entry = {
+            id: 'distilled',
+            score: null, // ΔE-scored on demand like any other archetype
+            _synthetic: {
+                name: 'Distilled',
+                description: 'Minimal batch-pipeline posterization. No archetype overrides — pure color extraction with 20→12 distillation.',
+                preferred_sectors: [],
+                parameters: {}
+            }
+        };
+
+        // Place before Chameleon (position 0) — both are always scored at startup
+        scores.splice(0, 0, entry);
         return scores;
     }
 

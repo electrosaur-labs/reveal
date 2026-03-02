@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Pastel / High-Key",
   "group": "soft",
-  "engine": "distilled",
+  "engine": "direct",
   "description": "Very bright, soft colors. Protects gradients in high-key photography.",
   "centroid": {
     "l": 85,

@@ -95,7 +95,7 @@ function generateConfigurationMk2(dna) {
     config.engineType = 'reveal-mk2';
 
     // Ensure splitMode has a default (Mk2 interpolator doesn't produce it)
-    if (config.splitMode === undefined) config.splitMode = 'variance';
+    if (config.splitMode === undefined) config.splitMode = 'median';
 
     // Map minColors/maxColors to targetColors (use maxColors as the target)
     if (config.maxColors !== undefined) {
@@ -113,6 +113,36 @@ function generateConfigurationMk2(dna) {
     config.engineMode = 'distilled';
 
     return config;
+}
+
+/**
+ * Generate configuration for the Distilled pseudo-archetype.
+ * Code-only (no JSON archetype file), like Chameleon.
+ *
+ * Uses the same minimal settings as the batch command-line pipeline:
+ * no archetype-specific centroid strategy, no preprocessing override,
+ * no preserveWhite/Black forcing. ProxyEngine defaults preprocessingIntensity
+ * to 'auto' (bilateral filter) for clean proxy display.
+ *
+ * Over-quantizes to 20 colors → reduces to 12 via furthest-point sampling.
+ * (PaletteDistiller.overQuantizeCount(12) = min(12×3, 20) = 20 automatically.)
+ *
+ * @param {Object} dna - Image DNA from DNAGenerator (reserved for future use)
+ * @returns {Object} Posterization config
+ */
+function generateConfigurationDistilled(dna) {
+    return {
+        engineType: 'reveal-mk2',
+        engineMode: 'distilled',
+        targetColors: 12,
+        targetColorsSlider: 12,
+        enablePaletteReduction: false,
+        snapThreshold: 0,
+        densityFloor: 0,
+        peakFinderMaxPeaks: 1,
+        splitMode: 'median',
+        preprocessingIntensity: 'off', // no bilateral filter — matches batch pipeline exactly
+    };
 }
 
 /**
@@ -424,6 +454,7 @@ module.exports = {
     // Configuration generation (new in v2.0)
     generateConfiguration,
     generateConfigurationMk2,
+    generateConfigurationDistilled,
     preprocessImage,
     calculateEntropy,
 
@@ -440,6 +471,8 @@ module.exports = {
     getPresetParameters,
     rgbToLab,
     labToRgb,
+    labToRgbD50: LabEncoding.labToRgbD50,
+    labGamutInfo: LabEncoding.labGamutInfo,
 
     // DNA validation (v2.2)
     validateDNA: DNAValidator.validate.bind(DNAValidator),

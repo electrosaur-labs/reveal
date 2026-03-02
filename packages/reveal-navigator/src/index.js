@@ -58,7 +58,9 @@ function initPlugin() {
             const badge = document.getElementById('archetype-badge');
             if (badge) {
                 const activeId = sessionState.getState().activeArchetypeId;
-                const label = activeId === 'dynamic_interpolator' ? 'Chameleon' : (config.id || activeId || '');
+                const label = activeId === 'dynamic_interpolator' ? 'Chameleon'
+                    : activeId === 'distilled' ? 'Distilled'
+                    : (config.id || activeId || '');
                 if (label) {
                     badge.textContent = label;
                     badge.style.display = 'block';
@@ -153,7 +155,7 @@ function initPlugin() {
         // ─── Advanced Panel: Dropdowns & Checkboxes ───────────────
         // Wire all <select> dropdowns (change → updateParameter)
         const PICKER_DEFS = [
-            'engineType', 'splitMode', 'distanceMetric', 'centroidStrategy', 'vibrancyMode',
+            'engineMode', 'splitMode', 'distanceMetric', 'centroidStrategy', 'vibrancyMode',
             'substrateMode', 'ditherType', 'colorMode', 'preprocessingIntensity',
             'meshSize', 'maskProfile'
         ];
@@ -607,6 +609,8 @@ function updateMatchScore() {
     if (nameEl) {
         if (activeId === 'dynamic_interpolator') {
             nameEl.textContent = 'Chameleon';
+        } else if (activeId === 'distilled') {
+            nameEl.textContent = 'Distilled';
         } else {
             const Reveal = require('@reveal/core');
             const archetypes = Reveal.ArchetypeLoader.loadArchetypes();

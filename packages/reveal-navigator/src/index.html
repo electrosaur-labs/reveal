@@ -741,6 +741,16 @@
             display: inline;
         }
 
+        .surgeon-clip-badge {
+            position: absolute;
+            top: 0px;
+            right: 0px;
+            font-size: 10px;
+            color: #ff8800;
+            pointer-events: none;
+            text-shadow: 0 0 2px #000;
+        }
+
         .surgeon-merge-badge {
             position: absolute;
             bottom: -2px;
@@ -1231,17 +1241,13 @@
 
                     <div class="knob-row">
                         <span class="knob-label">Separation Method</span>
-                        <button class="knob-revert" id="revert-engineType">&#x21BA;</button>
+                        <button class="knob-revert" id="revert-engineMode">&#x21BA;</button>
                     </div>
-                    <select id="picker-engineType">
-                        <option value="reveal-mk2">Adaptive</option>
-                        <option value="reveal-mk1.5">Standard</option>
-                        <option value="reveal">Hue-Aware</option>
-                        <option value="balanced">Fast</option>
-                        <option value="classic">Classic</option>
-                        <option value="stencil">Stencil</option>
+                    <select id="picker-engineMode">
+                        <option value="distilled">Adaptive</option>
+                        <option value="direct">Standard</option>
                     </select>
-                    <span class="knob-help">Separation algorithm — Standard is best for most images</span>
+                    <span class="knob-help">Adaptive: over-quantize then distil to best K colors. Standard: direct posterization.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Starting Palette</span>

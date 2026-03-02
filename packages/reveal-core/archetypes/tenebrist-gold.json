@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Tenebrist Gold",
   "group": "dramatic",
-  "engine": "distilled",
+  "engine": "direct",
   "description": "Very dark warm paintings with golden tonality and compressed dynamic range. Rembrandt portraits, Caravaggio, candlelit old masters where most pixels live in deep shadow with warm yellow-orange bias.",
   "preferred_sectors": ["yellow", "orange", "red", "chartreuse"],
   "centroid": {

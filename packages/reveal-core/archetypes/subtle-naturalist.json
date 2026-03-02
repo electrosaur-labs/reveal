@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Subtle Naturalist / Architectural",
   "group": "natural",
-  "engine": "distilled",
+  "engine": "direct",
   "description": "Baseline for 16-bit photographic scans. High entropy target protects clinical color diversity.",
   "preferred_sectors": [
     "cyan",
