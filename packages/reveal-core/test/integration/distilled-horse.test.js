@@ -89,6 +89,48 @@ describe('Distilled posterization — horse regression', () => {
 
         expect(direct.paletteLab.length).toBe(switched.paletteLab.length);
     });
+
+    test('distilled palette matches golden snapshot (ΔE < 2 per color)', () => {
+        const result = PosterizationEngine.posterize(pixels, width, height, 12, {
+            engineType: 'distilled',
+            format: 'lab',
+            bitDepth: 16,
+            enablePaletteReduction: false,
+            snapThreshold: 0,
+            densityFloor: 0,
+        });
+
+        // Golden palette captured from horse-350x512-lab16 fixture.
+        // Each entry must have a best-match ΔE < 2 in the actual palette.
+        // Order may vary — matching is by nearest neighbor, not positional.
+        const golden = [
+            { L: 99.8, a:  0.0, b:   0.0 },  // near-white
+            { L: 78.0, a: 59.5, b: 116.9 },  // bright orange
+            { L: 16.5, a:  3.0, b:   1.7 },  // near-black
+            { L: 70.8, a:-27.0, b:  60.9 },  // green/olive
+            { L: 53.8, a: 42.4, b:  62.0 },  // warm brown
+            { L: 55.0, a:-12.9, b: -34.1 },  // slate blue
+            { L: 90.1, a: 21.5, b:  76.4 },  // golden yellow
+            { L: 63.8, a: 19.5, b:  26.0 },  // muted earth
+            { L: 47.3, a:  0.7, b:  -4.5 },  // neutral gray
+            { L: 91.9, a: 30.6, b: 114.7 },  // vivid yellow
+            { L: 68.9, a: 51.4, b:  84.6 },  // deep orange
+            { L: 21.8, a: 17.5, b:  23.6 },  // dark brown
+        ];
+
+        const palette = result.paletteLab;
+        expect(palette.length).toBe(golden.length);
+
+        for (const g of golden) {
+            let bestDE = Infinity;
+            for (const p of palette) {
+                const dL = g.L - p.L, da = g.a - p.a, db = g.b - p.b;
+                const de = Math.sqrt(dL * dL + da * da + db * db);
+                if (de < bestDE) bestDE = de;
+            }
+            expect(bestDE).toBeLessThan(2.0);
+        }
+    });
 });
 
 // ═══════════════════════════════════════════════════════════
