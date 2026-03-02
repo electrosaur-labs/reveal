@@ -422,4 +422,26 @@ describe('Parameter Flow Contracts', () => {
             }
         });
     });
+
+    // ─── 9. bitDepth override passthrough ──────────────────────────────
+    describe('bitDepth override passthrough', () => {
+        it('passes bitDepth:16 through to engine options', () => {
+            const config = generateTestConfig();
+            const opts = ParameterGenerator.toEngineOptions(config, { bitDepth: 16 });
+            expect(opts.bitDepth).toBe(16);
+        });
+
+        it('passes bitDepth:8 through to engine options', () => {
+            const config = generateTestConfig();
+            const opts = ParameterGenerator.toEngineOptions(config, { bitDepth: 8 });
+            expect(opts.bitDepth).toBe(8);
+        });
+
+        it('has no bitDepth when override is omitted', () => {
+            const config = generateTestConfig();
+            const opts = ParameterGenerator.toEngineOptions(config);
+            // bitDepth only comes from caller overrides, never from generate()
+            expect(opts.bitDepth).toBeUndefined();
+        });
+    });
 });

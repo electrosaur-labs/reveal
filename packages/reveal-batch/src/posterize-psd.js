@@ -311,7 +311,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 
     // 5. Prepare params via centralized config bridge
     const params = ParameterGenerator.toEngineOptions(config, {
-        bitDepth: 8
+        bitDepth: depth
     });
 
     // 6. Posterize

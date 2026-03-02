@@ -23,6 +23,7 @@ const { CentroidStrategies } = require('./CentroidStrategies');
 const PeakFinder = require('../analysis/PeakFinder');
 const LabDistance = require('../color/LabDistance');
 const LabEncoding = require('../color/LabEncoding');
+const { LAB16_L_MAX, LAB16_AB_NEUTRAL, L_SCALE, AB_SCALE } = LabEncoding;
 
 // Import extracted modules
 const LabMedianCut = require('./LabMedianCut');
@@ -360,15 +361,11 @@ class PosterizationEngine {
         const SAMPLE_SIZE = 10;
         let sumL = 0, sumA = 0, sumB = 0, count = 0;
 
-        const maxValue = 32768;
-        const neutralAB = 16384;
-        const abScale = 128 / 16384;
-
         const sample = (x, y) => {
             const i = (y * width + x) * 3;
-            sumL += (labBytes[i] / maxValue) * 100;
-            sumA += (labBytes[i + 1] - neutralAB) * abScale;
-            sumB += (labBytes[i + 2] - neutralAB) * abScale;
+            sumL += labBytes[i] / L_SCALE;
+            sumA += (labBytes[i + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
+            sumB += (labBytes[i + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
             count++;
         };
 
@@ -708,10 +705,6 @@ class PosterizationEngine {
             const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
             const highlightThreshold = isEightBitSource ? 97.5 : 98.0;
 
-            const maxValue = 32768;
-            const neutralAB = 16384;
-            const abScale = 128 / 16384;
-
             let minLRaw = Infinity, maxLRaw = -Infinity;
             let minARaw = Infinity, maxARaw = -Infinity;
             let minBRaw = Infinity, maxBRaw = -Infinity;
@@ -727,9 +720,9 @@ class PosterizationEngine {
                 minBRaw = Math.min(minBRaw, pixels[i + 2]);
                 maxBRaw = Math.max(maxBRaw, pixels[i + 2]);
 
-                labPixels[i] = (pixels[i] / maxValue) * 100;
-                labPixels[i + 1] = (pixels[i + 1] - neutralAB) * abScale;
-                labPixels[i + 2] = (pixels[i + 2] - neutralAB) * abScale;
+                labPixels[i] = pixels[i] / L_SCALE;
+                labPixels[i + 1] = (pixels[i + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
+                labPixels[i + 2] = (pixels[i + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
 
                 if (labPixels[i] < shadowThreshold) {
                     labPixels[i] = 0;
@@ -1337,16 +1330,12 @@ class PosterizationEngine {
         const shadowThreshold = isEightBitSource ? 7.5 : 6.0;
         const highlightThresholdGate = isEightBitSource ? 97.5 : 98.0;
 
-        const maxValue = 32768;
-        const neutralAB = 16384;
-        const abScale = 128 / 16384;
-
         if (typeof localStorage !== 'undefined') localStorage.setItem('reveal_checkpoint', 'mk15_before_pixel_loop');
 
         for (let i = 0; i < pixels.length; i += 3) {
-            labPixels[i] = (pixels[i] / maxValue) * 100;
-            labPixels[i + 1] = (pixels[i + 1] - neutralAB) * abScale;
-            labPixels[i + 2] = (pixels[i + 2] - neutralAB) * abScale;
+            labPixels[i] = pixels[i] / L_SCALE;
+            labPixels[i + 1] = (pixels[i + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
+            labPixels[i + 2] = (pixels[i + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
 
             if (labPixels[i] < shadowThreshold) {
                 labPixels[i] = 0;
@@ -2047,14 +2036,10 @@ class PosterizationEngine {
         if (isLabInput) {
             rgbPixels = new Uint8ClampedArray((pixels.length / 3) * 4);
 
-            const maxValue = 32768;
-            const neutralAB = 16384;
-            const abScale = 128 / 16384;
-
             for (let i = 0, j = 0; i < pixels.length; i += 3, j += 4) {
-                const L = (pixels[i] / maxValue) * 100;
-                const a = (pixels[i + 1] - neutralAB) * abScale;
-                const b = (pixels[i + 2] - neutralAB) * abScale;
+                const L = pixels[i] / L_SCALE;
+                const a = (pixels[i + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
+                const b = (pixels[i + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
                 const rgb = this.labToRgb({ L, a, b });
                 rgbPixels[j] = rgb.r;
                 rgbPixels[j + 1] = rgb.g;

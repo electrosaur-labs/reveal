@@ -113,6 +113,7 @@ class SessionState extends EventEmitter {
         this._updateQueued = false;
         this._loadInFlight = false;
         this._swapInFlight = false;
+        this._swapQueued = null;
 
         // Generation counter for background scoring cancellation
         this._scoringGeneration = 0;
@@ -155,6 +156,7 @@ class SessionState extends EventEmitter {
         this._updateQueued = false;
         this._loadInFlight = false;
         this._swapInFlight = false;
+        this._swapQueued = null;
         this._scoringGeneration++;
         this.state.activeArchetypeId = null;
         this.state.isArchetypeDirty = false;
@@ -706,7 +708,8 @@ class SessionState extends EventEmitter {
             throw new Error('Proxy not initialized — call loadImage() first');
         }
         if (this._swapInFlight) {
-            logger.log(`[SessionState] swapArchetype(${archetypeId}) rejected — swap already in flight`);
+            this._swapQueued = archetypeId;
+            logger.log(`[SessionState] swapArchetype(${archetypeId}) queued — swap already in flight`);
             return null;
         }
         this._swapInFlight = true;
@@ -806,6 +809,14 @@ class SessionState extends EventEmitter {
             return result;
         } finally {
             this._swapInFlight = false;
+
+            // If another swap was queued while we were running, run it now
+            if (this._swapQueued !== null) {
+                const queuedId = this._swapQueued;
+                this._swapQueued = null;
+                logger.log(`[SessionState] swapArchetype: draining queued swap → ${queuedId}`);
+                this.swapArchetype(queuedId);
+            }
         }
     }
 

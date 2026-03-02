@@ -23,6 +23,72 @@
 const ArchetypeLoader = require('./ArchetypeLoader');
 const BilateralFilter = require('../preprocessing/BilateralFilter');
 
+/**
+ * @typedef {Object} RevealConfig
+ * Complete configuration output from ParameterGenerator.generate().
+ * Fields are grouped by CONFIG_CATEGORIES for pipeline routing.
+ *
+ * STRUCTURAL — changes require full re-posterization:
+ * @property {number} targetColors - Target palette size (3-10)
+ * @property {string} engineType - 'reveal'|'reveal-mk1.5'|'balanced'|'classic'|'stencil'|'distilled'
+ * @property {string} centroidStrategy - 'SALIENCY'|'ROBUST_SALIENCY'|'VOLUMETRIC'
+ * @property {string} distanceMetric - 'cie76'|'cie94'|'cie2000'
+ * @property {number} lWeight - Lightness weight for centroid saliency (default 1.2)
+ * @property {number} cWeight - Chroma weight for centroid saliency (default 2.0)
+ * @property {number} bWeight - Blue axis weight (default 1.0)
+ * @property {number} blackBias - Black pixel boost in saliency (default 3.0)
+ * @property {string} vibrancyMode - 'subtle'|'moderate'|'aggressive'|'exponential'
+ * @property {number} vibrancyBoost - Vibrancy multiplier (default 1.4)
+ * @property {number} highlightThreshold - L-value floor for white detection (default 90)
+ * @property {number} highlightBoost - Highlight saliency boost (default 1.5)
+ * @property {number} paletteReduction - ΔE merge threshold for pruning (default 6.0)
+ * @property {boolean} enablePaletteReduction - Enable ΔE-based palette pruning
+ * @property {string} substrateMode - 'auto'|'force'|'off'
+ * @property {number} substrateTolerance - Substrate detection tolerance (default 2.0)
+ * @property {boolean} enableHueGapAnalysis - Inject missing hue sectors
+ * @property {number} hueLockAngle - Hue protection zone in degrees (default 20)
+ * @property {number} shadowPoint - L-value ceiling for shadow protection (default 15)
+ * @property {string} colorMode - 'color'|'grayscale'
+ * @property {boolean} preserveWhite - Force white into palette
+ * @property {boolean} preserveBlack - Force black into palette
+ * @property {boolean} ignoreTransparent - Skip transparent pixels
+ * @property {number} neutralCentroidClampThreshold - Neutral centroid clamping (default 0.5)
+ * @property {number} neutralSovereigntyThreshold - Neutral sovereignty pixel threshold
+ * @property {number} chromaGate - cWeight multiplier for high-chroma images (default 1.0)
+ * @property {string} preprocessingIntensity - 'off'|'auto'|'light'|'heavy'
+ * @property {number} refinementPasses - K-means refinement passes (0=skip, default 1)
+ * @property {string} splitMode - 'median'|'variance'
+ * @property {number} chromaAxisWeight - Chroma as virtual split axis (0=off)
+ * @property {number} neutralIsolationThreshold - Pre-isolate neutrals below this C*
+ * @property {number} warmABoost - Warm a* boost multiplier (default 1.0)
+ * @property {number} peakFinderMaxPeaks - Max identity peaks (default 1)
+ * @property {Array<number>} peakFinderBlacklistedSectors - Sectors excluded from peak detection
+ * @property {number} shadowChromaGateL - Shadow chroma gate L ceiling (0=off)
+ *
+ * MECHANICAL — mask/preview re-render only (fast path):
+ * @property {number} minVolume - Ghost plate removal threshold (0-5%)
+ * @property {number} speckleRescue - Morphological despeckle radius (0-10px)
+ * @property {number} shadowClamp - Minimum mask density clamp (0-20%)
+ *
+ * PRODUCTION — affects production render only:
+ * @property {number} [trapSize] - Trap size (set at session level, not by archetype)
+ * @property {number} [meshSize] - Screen mesh TPI (set at session level, default 230)
+ *
+ * UNIMPLEMENTED — stored but no engine reads them:
+ * @property {number} vibrancyThreshold - (unimplemented)
+ * @property {number} detailRescue - (unimplemented)
+ * @property {boolean} medianPass - (unimplemented)
+ * @property {string} maskProfile - (unimplemented)
+ * @property {string} ditherType - Dither algorithm ('blue-noise'|'floyd-steinberg'|'atkinson'|'bayer'|'none')
+ *
+ * METADATA:
+ * @property {string} id - Matched archetype ID
+ * @property {string} name - Matched archetype name
+ * @property {Array<number>} rangeClamp - [minL, maxL] from DNA
+ * @property {Object} meta - Archetype matching metadata
+ * @property {Object} preprocessing - BilateralFilter configuration
+ */
+
 class ParameterGenerator {
 
     /**

@@ -34,10 +34,36 @@ class ArchetypeCarousel {
         this._activeSort = 'score'; // Current sort axis
         this._sortAscending = true; // Sort direction
 
+        // Listener bookkeeping for destroy() cleanup
+        this._chipListeners = [];   // [{element, event, handler}]
+        this._sessionListeners = []; // [{event, handler}]
+
         this._initFilterChips();
         this._initSortChips();
         this._initTooltip();
         this._bindEvents();
+    }
+
+    /**
+     * Clean up all event listeners and DOM content.
+     * Call before discarding the carousel instance.
+     */
+    destroy() {
+        // Remove DOM chip listeners
+        for (const { element, event, handler } of this._chipListeners) {
+            element.removeEventListener(event, handler);
+        }
+        this._chipListeners = [];
+
+        // Remove session event listeners
+        for (const { event, handler } of this._sessionListeners) {
+            this._session.off(event, handler);
+        }
+        this._sessionListeners = [];
+
+        // Clear card DOM (implicitly removes card-level listeners)
+        this._container.innerHTML = '';
+        this._cards = [];
     }
 
     /**
@@ -49,9 +75,9 @@ class ArchetypeCarousel {
 
         const chips = this._filtersContainer.querySelectorAll('.filter-chip');
         chips.forEach(chip => {
-            chip.addEventListener('pointerup', () => {
-                this._setFilter(chip.dataset.group);
-            });
+            const handler = () => this._setFilter(chip.dataset.group);
+            chip.addEventListener('pointerup', handler);
+            this._chipListeners.push({ element: chip, event: 'pointerup', handler });
         });
     }
 
@@ -64,7 +90,7 @@ class ArchetypeCarousel {
 
         const chips = this._sortContainer.querySelectorAll('.sort-chip');
         chips.forEach(chip => {
-            chip.addEventListener('pointerup', () => {
+            const handler = () => {
                 const axis = chip.dataset.sort;
                 if (axis === this._activeSort) {
                     // Same chip: toggle direction
@@ -77,7 +103,9 @@ class ArchetypeCarousel {
                 }
                 this._applySortChipState();
                 this._sortCards();
-            });
+            };
+            chip.addEventListener('pointerup', handler);
+            this._chipListeners.push({ element: chip, event: 'pointerup', handler });
         });
     }
 
@@ -252,36 +280,41 @@ class ArchetypeCarousel {
     }
 
     _bindEvents() {
+        const on = (event, handler) => {
+            this._session.on(event, handler);
+            this._sessionListeners.push({ event, handler });
+        };
+
         // Build carousel immediately when top-match preview is ready (DNA scores only).
-        this._session.on('carouselReady', (data) => {
+        on('carouselReady', (data) => {
             this._rebuild(data.scores);
         });
         // Update individual card ΔE as each archetype is scored in the background.
-        this._session.on('archetypeScored', (data) => {
+        on('archetypeScored', (data) => {
             this._updateCardDeltaE(data.id, data.meanDeltaE, data.targetColors, data.sortScore);
         });
         // All scored — sort by displayed ΔE (includes live values from clicked cards).
-        this._session.on('scoringComplete', () => {
+        on('scoringComplete', () => {
             this.sortByDisplayedDeltaE();
         });
-        this._session.on('archetypeChanged', (data) => {
+        on('archetypeChanged', (data) => {
             this._activeId = data.archetypeId;
             this._updateActiveCard();
         });
-        this._session.on('configChanged', (config) => {
+        on('configChanged', (config) => {
             if (config.id && config.id !== this._activeId) {
                 this._activeId = config.id;
                 this._updateActiveCard();
             }
         });
         // Rebuild swatches AFTER posterization completes (not before)
-        this._session.on('previewUpdated', (data) => this._refreshActiveSwatches(data));
+        on('previewUpdated', (data) => this._refreshActiveSwatches(data));
 
         // Dirty indicator — orange dot when knobs OR palette surgery is customized
-        this._session.on('knobsCustomizedChanged', () => {
+        on('knobsCustomizedChanged', () => {
             this._updateCustomizedBadge(this._session.isCustomized());
         });
-        this._session.on('paletteChanged', () => {
+        on('paletteChanged', () => {
             this._updateCustomizedBadge(this._session.isCustomized());
         });
     }
@@ -392,7 +425,8 @@ class ArchetypeCarousel {
         // the first click for focus, requiring a double-click to activate.
         card.addEventListener('pointerup', (e) => {
             if (match.id !== this._activeId) {
-                this._session.swapArchetype(match.id);
+                this._session.swapArchetype(match.id)
+                    .catch(err => console.error(`[ArchetypeCarousel] swapArchetype failed: ${err.message}`));
             }
         });
 
