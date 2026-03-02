@@ -4,6 +4,8 @@ const path = require('path');
 const zlib = require('zlib');
 
 const { PosterizationEngine } = require('../../index').engines;
+const ProxyEngine = require('../../lib/engines/ProxyEngine');
+const { generateConfigurationDistilled } = require('../../index');
 
 /**
  * Load the 350×512 16-bit Lab horse fixture.
@@ -78,4 +80,83 @@ describe('Distilled posterization — horse regression', () => {
 
         expect(direct.paletteLab.length).toBe(switched.paletteLab.length);
     });
+});
+
+// ═══════════════════════════════════════════════════════════
+// ProxyEngine (UI simulator) path — the bug was here
+// ═══════════════════════════════════════════════════════════
+
+describe('Distilled horse — ProxyEngine (UI simulator) path', () => {
+    const { pixels, width, height } = loadHorseFixture();
+
+    test('ProxyEngine with distilled config produces 12 colors', async () => {
+        // Simulate SessionState.swapArchetype('distilled'):
+        // 1. generateConfigurationDistilled() creates config
+        // 2. ProxyEngine.rePosterize() applies PROXY_SAFE_OVERRIDES
+        const config = generateConfigurationDistilled(/* dna not used */);
+
+        const proxyEngine = new ProxyEngine();
+        const result = await proxyEngine.initializeProxy(pixels, width, height, config);
+
+        expect(result.palette.length).toBe(12);
+    }, 30000);
+
+    test('ProxyEngine distilled palette matches direct PosterizationEngine count', async () => {
+        const config = generateConfigurationDistilled();
+
+        // Path A: direct PosterizationEngine (batch path)
+        const direct = PosterizationEngine.posterize(pixels, width, height, 12, {
+            engineType: 'distilled',
+            format: 'lab',
+            bitDepth: 16,
+            enablePaletteReduction: false,
+            snapThreshold: 0,
+            densityFloor: 0,
+        });
+
+        // Path B: ProxyEngine (UI simulator path)
+        const proxyEngine = new ProxyEngine();
+        const proxyResult = await proxyEngine.initializeProxy(pixels, width, height, config);
+
+        // Both paths must produce 12 colors
+        expect(direct.paletteLab.length).toBe(12);
+        expect(proxyResult.palette.length).toBe(12);
+    }, 30000);
+
+    test('ProxyEngine rePosterize preserves 12 colors after archetype swap', async () => {
+        const config = generateConfigurationDistilled();
+
+        const proxyEngine = new ProxyEngine();
+        await proxyEngine.initializeProxy(pixels, width, height, config);
+
+        // Swap away and back (simulates user clicking Distilled → other → Distilled)
+        const reResult = await proxyEngine.rePosterize(config);
+
+        expect(reResult.palette.length).toBe(12);
+    }, 30000);
+
+    test('leaked mechanical knobs collapse palette below 12 (regression guard)', async () => {
+        // This is the exact bug: Chameleon's minVolume leaked into Distilled
+        // because _applyConfigToState() didn't reset mechanical knobs.
+        // With minVolume > 0, low-coverage colors get pruned at proxy resolution.
+        const config = generateConfigurationDistilled();
+
+        const proxyEngine = new ProxyEngine();
+        const cleanResult = await proxyEngine.initializeProxy(pixels, width, height, config);
+        expect(cleanResult.palette.length).toBe(12);
+
+        // Now apply knobs with leaked minVolume (simulates the bug)
+        const knobResult = await proxyEngine.updateProxy({
+            paletteOverride: cleanResult.palette,
+            minVolume: 1.5,    // leaked from Chameleon
+            speckleRescue: 4,  // leaked from Chameleon
+            shadowClamp: 5,    // leaked from Chameleon
+        });
+
+        // minVolume prunes low-coverage colors — count distinct colors in assignments
+        const seen = new Set();
+        const indices = proxyEngine.separationState.colorIndices;
+        for (let i = 0; i < indices.length; i++) seen.add(indices[i]);
+        expect(seen.size).toBeLessThan(12);
+    }, 30000);
 });
