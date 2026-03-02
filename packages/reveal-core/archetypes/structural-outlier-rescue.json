@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Subtle Naturalist / Structural Rescue",
   "group": "specialist",
-  "engine": "direct",
+  "engine": "reveal-mk1.5",
   "description": "Surgical recovery for monochromatic, high-detail images. Prevents saliency shadow.",
   "centroid": {
     "l": 60,

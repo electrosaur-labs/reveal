@@ -91,8 +91,8 @@ function generateConfigurationMk2(dna) {
     // that ParameterGenerator.generate() produces.
     const config = { ...parameters };
 
-    // Ensure engineType is set to reveal-mk2 so PosterizationEngine dispatches correctly
-    config.engineType = 'reveal-mk2';
+    // Chameleon uses distilled engine (over-quantize + furthest-point reduce)
+    config.engine = 'distilled';
 
     // Ensure splitMode has a default (Mk2 interpolator doesn't produce it)
     if (config.splitMode === undefined) config.splitMode = 'median';
@@ -107,10 +107,6 @@ function generateConfigurationMk2(dna) {
 
     // Attach blend info for diagnostics
     config.meta = { blendInfo, engine: 'mk2-interpolator' };
-
-    // Default to distilled engine — consistent with ParameterGenerator's || 'distilled' fallback.
-    // Chameleon has no archetype opinion on engine mode; distilled outperforms direct on 25/26 archetypes.
-    config.engineMode = 'distilled';
 
     return config;
 }
@@ -132,8 +128,7 @@ function generateConfigurationMk2(dna) {
  */
 function generateConfigurationDistilled(dna) {
     return {
-        engineType: 'reveal-mk2',
-        engineMode: 'distilled',
+        engine: 'distilled',
         targetColors: 12,
         targetColorsSlider: 12,
         enablePaletteReduction: false,

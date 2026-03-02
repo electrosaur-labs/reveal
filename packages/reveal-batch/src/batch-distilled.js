@@ -104,17 +104,17 @@ function processFile(inputPath, outputDir) {
     const dna2           = Reveal.DNAGenerator.fromPixels(lab8, width, height);
     const matchedArch    = Reveal.ArchetypeLoader.matchArchetype(dna2);
     const archetypeId    = matchedArch.id;
-    const engineMode     = matchedArch.engine || 'distilled';
+    const engine          = matchedArch.engine || 'reveal-mk1.5';
 
     // ── Route by archetype engine field ───────────────────────────────────────
     let paletteLab, assignments, rMeta;
 
-    if (engineMode === 'direct') {
-        // Use archetype parameters with standard posterize (chroma-weighted centroids)
+    if (engine !== 'distilled') {
+        // Use archetype parameters with standard posterize
         const directParams = {
             ...matchedArch.parameters,
             bitDepth:   16,
-            engineType: 'reveal-mk2',
+            engine:     engine,
             format:     'lab',
         };
         const directResult = PosterizationEngine.posterize(lab16, width, height, TARGET_K, directParams);
@@ -225,7 +225,7 @@ function processFile(inputPath, outputDir) {
             actualColors: K,
             overCount:    rMeta.overCount,
             archetype:    archetypeId,
-            engine:       engineMode,
+            engine:       engine,
             ms:           Date.now() - t0,
         },
         deltaE: {

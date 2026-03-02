@@ -104,7 +104,7 @@ class ParameterGenerator {
             // Identity
             id: archetype.id,
             name: archetype.name,
-            engineMode: archetype.engine || 'direct',
+            engine: archetype.engine || 'reveal-mk1.5',
 
             // NOTE: bitDepth is intentionally NOT included here.
             // ParameterGenerator has no opinion on bit depth — the caller knows their data.
@@ -164,8 +164,7 @@ class ParameterGenerator {
             // Mask profile
             maskProfile: params.maskProfile || 'Gray Gamma 2.2',
 
-            // Engine selection
-            engineType: params.engineType || 'reveal-mk1.5',
+            // Engine selection (engine field replaces legacy engineType + engineMode)
             centroidStrategy: params.centroidStrategy || 'SALIENCY',
 
             // Neutral clamping (DNA v2.0 feature)
@@ -520,7 +519,7 @@ class ParameterGenerator {
             targetColors: config.targetColors,
             targetColorsSlider: config.targetColors,
             format: 'lab',
-            engineType: config.engineType || 'reveal',
+            engine: config.engine || config.engineType || 'reveal',
             centroidStrategy: config.centroidStrategy || 'SALIENCY',
 
             // Distance metric

@@ -34,7 +34,7 @@ const PRODUCTION_KNOB_DEFAULTS = { trapSize: 0, meshSize: 230 };
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
 // This is the complete set from ParameterGenerator output — any change triggers rePosterize.
 const STRUCTURAL_PARAMS = new Set([
-    'targetColors', 'engineMode', 'engineType', 'centroidStrategy', 'distanceMetric',
+    'targetColors', 'engine', 'centroidStrategy', 'distanceMetric',
     // Saliency weights
     'lWeight', 'cWeight', 'blackBias',
     // Vibrancy
@@ -270,8 +270,8 @@ class SessionState extends EventEmitter {
         this.currentConfig = this._chameleonConfig;
         this._applyConfigToState(this.currentConfig);
         this.state.activeArchetypeId = 'dynamic_interpolator';
-        if (!this.currentConfig.engineType) {
-            this.currentConfig.engineType = this.state.engineType;
+        if (!this.currentConfig.engine) {
+            this.currentConfig.engine = this.state.engine;
         }
 
         this.emit('imageLoaded', { width, height, dna: this.imageDNA });
@@ -760,8 +760,8 @@ class SessionState extends EventEmitter {
                 });
             }
             this._applyConfigToState(this.currentConfig);
-            if (!this.currentConfig.engineType) {
-                this.currentConfig.engineType = this.state.engineType;
+            if (!this.currentConfig.engine) {
+                this.currentConfig.engine = this.state.engine;
             }
 
             this.state.activeArchetypeId = archetypeId;
@@ -1303,7 +1303,7 @@ class SessionState extends EventEmitter {
             configSection.targetColors = cfg.targetColors;
             configSection.distanceMetric = cfg.distanceMetric;
             configSection.ditherType = cfg.ditherType;
-            configSection.engineType = cfg.engineType;
+            configSection.engine = cfg.engine;
             configSection.preprocessingIntensity = cfg.preprocessingIntensity;
             // Archetype color bounds (drives adaptive count clamping)
             if (cfg.meta) {

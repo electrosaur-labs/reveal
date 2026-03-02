@@ -100,7 +100,7 @@ class ProxyEngine {
         const proxyConfig = { ...initialConfig, ...PROXY_SAFE_OVERRIDES };
 
         // Route: distilledPosterize (over-quantize → furthest-point reduce) or standard
-        const useDistilled = proxyConfig.engineMode === 'distilled';
+        const useDistilled = proxyConfig.engine === 'distilled';
         let posterizeResult;
 
         if (useDistilled) {
@@ -209,7 +209,7 @@ class ProxyEngine {
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
-        const useDistilled = proxyConfig.engineMode === 'distilled';
+        const useDistilled = proxyConfig.engine === 'distilled';
         let posterizeResult, colorIndices;
 
         if (useDistilled) {
@@ -360,7 +360,7 @@ class ProxyEngine {
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
         const buf = this._bufferForConfig(proxyConfig);
 
-        if (proxyConfig.engineMode === 'distilled') {
+        if (proxyConfig.engine === 'distilled') {
             const result = PosterizationEngine.distilledPosterize(
                 buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
@@ -394,7 +394,7 @@ class ProxyEngine {
         const buf = this._bufferForConfig(proxyConfig);
 
         let result;
-        if (proxyConfig.engineMode === 'distilled') {
+        if (proxyConfig.engine === 'distilled') {
             result = PosterizationEngine.distilledPosterize(
                 buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );
@@ -437,7 +437,7 @@ class ProxyEngine {
         const buf = this._bufferForConfig(proxyConfig);
 
         let result, colorIndices;
-        if (proxyConfig.engineMode === 'distilled') {
+        if (proxyConfig.engine === 'distilled') {
             result = PosterizationEngine.distilledPosterize(
                 buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
             );

@@ -122,7 +122,7 @@ class PosterizationEngine {
      */
     static posterize(pixels, width, height, targetColors, options = {}) {
         // Default values
-        const engineType = options.engineType || 'reveal';
+        const engineType = options.engine || options.engineType || 'reveal';
         const enableGridOptimization = options.enableGridOptimization !== undefined
             ? options.enableGridOptimization
             : true; // DEFAULT TO ON (Architect's requirement)

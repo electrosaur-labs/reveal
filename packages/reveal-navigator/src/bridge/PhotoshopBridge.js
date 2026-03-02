@@ -436,7 +436,7 @@ class PhotoshopBridge {
             if (c.targetColors != null) lines.push(`${I}<reveal:targetColors>${c.targetColors}</reveal:targetColors>`);
             if (c.distanceMetric) lines.push(`${I}<reveal:distanceMetric>${esc(c.distanceMetric)}</reveal:distanceMetric>`);
             if (c.ditherType) lines.push(`${I}<reveal:ditherType>${esc(c.ditherType)}</reveal:ditherType>`);
-            if (c.engineType) lines.push(`${I}<reveal:engineType>${esc(c.engineType)}</reveal:engineType>`);
+            if (c.engine) lines.push(`${I}<reveal:engine>${esc(c.engine)}</reveal:engine>`);
         }
 
         // ── Metrics ──

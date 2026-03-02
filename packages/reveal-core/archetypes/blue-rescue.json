@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Blue Rescue / Outlier Recovery",
   "group": "specialist",
-  "engine": "direct",
+  "engine": "reveal-mk1.5",
   "description": "Forces engine to find cool-spectrum outliers in warm or neutral images.",
   "preferred_sectors": [
     "blue",

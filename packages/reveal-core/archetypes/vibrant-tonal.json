@@ -3,7 +3,7 @@
   "version": "1.2.0",
   "name": "Vibrant Tonal / Neon-High-Chroma",
   "group": "vibrant",
-  "engine": "direct",
+  "engine": "reveal-mk1.5",
   "description": "Finds vibrant details without crushing luminance. Balanced c-weight preserves form while boosting chroma.",
   "centroid": {
     "l": 50,

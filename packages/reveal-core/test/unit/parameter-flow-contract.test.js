@@ -24,7 +24,8 @@ const ProxyEngine = require('../../lib/engines/ProxyEngine');
 /** Keys read by PosterizationEngine.posterize() and its sub-engines */
 const POSTERIZATION_ENGINE_READS = new Set([
     // Dispatch-level (posterize method)
-    'engineType',
+    'engine',               // Unified engine field (replaces legacy engineType + engineMode)
+    'engineType',           // Legacy alias (backward compat)
     'enableGridOptimization',
     'snapThreshold',
     'enableHueGapAnalysis',
@@ -90,6 +91,7 @@ const SEPARATION_ENGINE_READS = new Set([
 
 /** Keys read by ProxyEngine from its config arguments */
 const PROXY_ENGINE_READS = new Set([
+    'engine',               // Routing: distilled vs standard posterize
     'preprocessingIntensity',
     'targetColors',
     'targetColorsSlider',   // Legacy alias
@@ -220,7 +222,7 @@ describe('Parameter Flow Contracts', () => {
         it('includes all PosterizationEngine keys that are in the config', () => {
             // These keys should pass through from config → toEngineOptions
             const posterizeKeys = [
-                'engineType', 'centroidStrategy', 'distanceMetric',
+                'engine', 'centroidStrategy', 'distanceMetric',
                 'lWeight', 'cWeight', 'bWeight', 'blackBias',
                 'vibrancyMode', 'vibrancyBoost',
                 'highlightThreshold', 'highlightBoost',
@@ -318,7 +320,7 @@ describe('Parameter Flow Contracts', () => {
         const MECHANICAL = new Set(['minVolume', 'speckleRescue', 'shadowClamp']);
         const PRODUCTION = new Set(['trapSize', 'meshSize']);
         const STRUCTURAL = new Set([
-            'targetColors', 'engineType', 'centroidStrategy', 'distanceMetric',
+            'targetColors', 'engine', 'centroidStrategy', 'distanceMetric',
             'lWeight', 'cWeight', 'blackBias',
             'vibrancyMode', 'vibrancyBoost',
             'highlightThreshold', 'highlightBoost',
@@ -399,7 +401,7 @@ describe('Parameter Flow Contracts', () => {
             const opts = ParameterGenerator.toEngineOptions(config);
 
             const stringKeys = [
-                'engineType', 'centroidStrategy', 'distanceMetric',
+                'engine', 'centroidStrategy', 'distanceMetric',
                 'ditherType', 'vibrancyMode', 'substrateMode', 'colorMode',
             ];
 

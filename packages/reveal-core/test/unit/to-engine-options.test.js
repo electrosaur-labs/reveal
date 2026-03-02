@@ -9,7 +9,7 @@ describe('ParameterGenerator.toEngineOptions', () => {
         targetColors: 8,
         ditherType: 'blue-noise',
         distanceMetric: 'cie94',
-        engineType: 'reveal-mk1.5',
+        engine: 'reveal-mk1.5',
         centroidStrategy: 'SALIENCY',
         lWeight: 1.2,
         cWeight: 2.0,
@@ -68,7 +68,7 @@ describe('ParameterGenerator.toEngineOptions', () => {
         expect(opts.blackBias).toBe(3.0);
         expect(opts.speckleRescue).toBe(4);
         expect(opts.minVolume).toBe(1.5);
-        expect(opts.engineType).toBe('reveal-mk1.5');
+        expect(opts.engine).toBe('reveal-mk1.5');
     });
 
     it('overrides win over config values', () => {
@@ -88,9 +88,9 @@ describe('ParameterGenerator.toEngineOptions', () => {
         expect(opts.format).toBe('lab');
     });
 
-    it('defaults engineType to reveal when config has none', () => {
-        const configNoEngine = { ...mockConfig, engineType: undefined };
+    it('defaults engine to reveal when config has none', () => {
+        const configNoEngine = { ...mockConfig, engine: undefined };
         const opts = ParameterGenerator.toEngineOptions(configNoEngine);
-        expect(opts.engineType).toBe('reveal');
+        expect(opts.engine).toBe('reveal');
     });
 });

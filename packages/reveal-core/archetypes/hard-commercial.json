@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Punchy / Commercial",
   "group": "graphic",
-  "engine": "direct",
+  "engine": "reveal-mk1.5",
   "description": "High contrast, saturated commercial photography. Optimized for edge-sharpness and vibrant results.",
   "centroid": {
     "l": 50,
