@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "name": "Warm Naturalist",
   "group": "natural",
-  "engine": "reveal-mk1.5",
+  "engine": "direct",
   "description": "Warm multi-hue subjects (food, toys, wildlife). Orange/red dominant with moderate chroma spread. Requires high entropy (diverse hues) and strong warm temperature bias. Yellow-dominant images belong to thermonuclear_yellow instead.",
   "preferred_sectors": [
     "orange",

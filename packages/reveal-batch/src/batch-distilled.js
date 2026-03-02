@@ -45,7 +45,7 @@ const OUTPUT_DIR = path.join(DATA_DIR, `output/psd/distilled-k${TARGET_K}`);
 // dataset (34/40 improved vs 14/40). Archetype label is saved as metadata only.
 const OPTS = {
     bitDepth:               16,
-    engineType:             'reveal-mk2',
+    engineType:             'distilled',
     format:                 'lab',
     enablePaletteReduction: false,
     snapThreshold:          0,
@@ -104,17 +104,17 @@ function processFile(inputPath, outputDir) {
     const dna2           = Reveal.DNAGenerator.fromPixels(lab8, width, height);
     const matchedArch    = Reveal.ArchetypeLoader.matchArchetype(dna2);
     const archetypeId    = matchedArch.id;
-    const engine          = matchedArch.engine || 'reveal-mk1.5';
+    const engine         = matchedArch.engine || 'distilled';
 
     // ── Route by archetype engine field ───────────────────────────────────────
     let paletteLab, assignments, rMeta;
 
-    if (engine !== 'distilled') {
-        // Use archetype parameters with standard posterize
+    if (engine === 'direct') {
+        // Use archetype parameters with standard posterize (chroma-weighted centroids)
         const directParams = {
             ...matchedArch.parameters,
             bitDepth:   16,
-            engine:     engine,
+            engineType: 'reveal-mk1.5',
             format:     'lab',
         };
         const directResult = PosterizationEngine.posterize(lab16, width, height, TARGET_K, directParams);
@@ -128,7 +128,7 @@ function processFile(inputPath, outputDir) {
         const distOpts = matchedArch.parameters.ghostFloor !== undefined
             ? { ...OPTS, ghostFloor: matchedArch.parameters.ghostFloor }
             : OPTS;
-        const distResult = PosterizationEngine.distilledPosterize(lab16, width, height, TARGET_K, distOpts);
+        const distResult = PosterizationEngine.posterize(lab16, width, height, TARGET_K, distOpts);
         paletteLab  = distResult.paletteLab;
         assignments = distResult.assignments;
         rMeta       = distResult.metadata;
@@ -255,7 +255,7 @@ function processFile(inputPath, outputDir) {
     );
 
     return {
-        basename, width, height, colors: K, archetype: archetypeId, engine: engineMode,
+        basename, width, height, colors: K, archetype: archetypeId, engine,
         avgDeltaE:    metrics.global_fidelity.avgDeltaE,
         revelation:   metrics.feature_preservation.revelationScore,
         integrity:    metrics.physical_feasibility.integrityScore,

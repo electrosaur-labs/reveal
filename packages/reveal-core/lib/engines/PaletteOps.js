@@ -696,6 +696,41 @@ class PaletteOps {
 
         return Math.sqrt((dL * lWeight) ** 2 + da ** 2 + db ** 2);
     }
+
+    /**
+     * Consolidate near-duplicate palette entries created by user edits.
+     *
+     * When a user manually edits a swatch to a color very close to another
+     * palette entry, this merges the edited slot into its near-duplicate
+     * neighbor. Only edited slots (identified by editedIndices) are candidates
+     * for merging — engine-produced close colors are intentional.
+     *
+     * @param {Array<{L: number, a: number, b: number}>} palette - Lab palette
+     * @param {Set<number>} editedIndices - Indices of user-edited slots
+     * @param {number} [threshold=3.0] - CIE76 ΔE merge threshold
+     * @returns {Object} mergeMap - { editedIndex: targetIndex } for each merged slot
+     */
+    static consolidateNearDuplicates(palette, editedIndices, threshold = 3.0) {
+        if (!palette || palette.length <= 1 || !editedIndices || editedIndices.size === 0) return {};
+        const mergeMap = {};
+        const dead = new Set();
+        const thSq = threshold * threshold;
+        for (const ed of editedIndices) {
+            if (dead.has(ed) || ed >= palette.length) continue;
+            for (let j = 0; j < palette.length; j++) {
+                if (j === ed || dead.has(j)) continue;
+                const dL = palette[ed].L - palette[j].L;
+                const da = palette[ed].a - palette[j].a;
+                const db = palette[ed].b - palette[j].b;
+                if (dL * dL + da * da + db * db < thSq) {
+                    mergeMap[ed] = j;
+                    dead.add(ed);
+                    break;
+                }
+            }
+        }
+        return mergeMap;
+    }
 }
 
 module.exports = PaletteOps;

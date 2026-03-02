@@ -99,19 +99,9 @@ class ProxyEngine {
 
         const proxyConfig = { ...initialConfig, ...PROXY_SAFE_OVERRIDES };
 
-        // Route: distilledPosterize (over-quantize → furthest-point reduce) or standard
-        const useDistilled = proxyConfig.engine === 'distilled';
-        let posterizeResult;
-
-        if (useDistilled) {
-            posterizeResult = PosterizationEngine.distilledPosterize(
-                proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-            );
-        } else {
-            posterizeResult = await PosterizationEngine.posterize(
-                proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-            );
-        }
+        const posterizeResult = PosterizationEngine.posterize(
+            proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+        );
         // Use posterize's built-in assignments (box membership) directly.
         // Skips the expensive mapPixelsToPaletteAsync nearest-neighbor pass.
         const colorIndices = posterizeResult.assignments;
@@ -209,21 +199,10 @@ class ProxyEngine {
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
-        const useDistilled = proxyConfig.engine === 'distilled';
-        let posterizeResult, colorIndices;
-
-        if (useDistilled) {
-            posterizeResult = PosterizationEngine.distilledPosterize(
-                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-            );
-        } else {
-            posterizeResult = await PosterizationEngine.posterize(
-                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-            );
-        }
-        // Use posterize's built-in assignments (box membership) directly.
-        // Skips the expensive mapPixelsToPaletteAsync nearest-neighbor pass.
-        colorIndices = posterizeResult.assignments;
+        const posterizeResult = PosterizationEngine.posterize(
+            this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+        );
+        const colorIndices = posterizeResult.assignments;
 
         // 3. Masks
         const masks = [];
@@ -360,14 +339,7 @@ class ProxyEngine {
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
         const buf = this._bufferForConfig(proxyConfig);
 
-        if (proxyConfig.engine === 'distilled') {
-            const result = PosterizationEngine.distilledPosterize(
-                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-            );
-            return { labPalette: result.paletteLab, rgbPalette: result.palette };
-        }
-
-        const result = await PosterizationEngine.posterize(
+        const result = PosterizationEngine.posterize(
             buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
         );
 
@@ -393,16 +365,9 @@ class ProxyEngine {
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
         const buf = this._bufferForConfig(proxyConfig);
 
-        let result;
-        if (proxyConfig.engine === 'distilled') {
-            result = PosterizationEngine.distilledPosterize(
-                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-            );
-        } else {
-            result = await PosterizationEngine.posterize(
-                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-            );
-        }
+        const result = PosterizationEngine.posterize(
+            buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+        );
         // Use posterize's built-in assignments for fidelity calculation
         const colorIndices = result.assignments;
 
@@ -436,21 +401,10 @@ class ProxyEngine {
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
         const buf = this._bufferForConfig(proxyConfig);
 
-        let result, colorIndices;
-        if (proxyConfig.engine === 'distilled') {
-            result = PosterizationEngine.distilledPosterize(
-                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-            );
-            colorIndices = result.assignments;
-        } else {
-            result = await PosterizationEngine.posterize(
-                buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-            );
-            // Use posterize's built-in assignments (box membership) for scoring.
-            // Skips the expensive mapPixelsToPaletteAsync nearest-neighbor pass —
-            // box membership ΔE is close enough for carousel ranking.
-            colorIndices = result.assignments;
-        }
+        const result = PosterizationEngine.posterize(
+            buf, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+        );
+        const colorIndices = result.assignments;
 
         // Apply minVolume so ΔE matches the live post-knob state.
         // minVolume remaps pixels from weak colors → biggest ΔE impact.

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Silver Gelatin / Tonal B&W",
   "group": "soft",
-  "engine": "reveal-mk1.5",
+  "engine": "direct",
   "description": "Pure grayscale master. Hard-locks neutral centroids to prevent chromatic noise.",
   "centroid": {
     "l": 50,

@@ -1240,20 +1240,14 @@
                     <div class="knob-group-label">Method</div>
 
                     <div class="knob-row">
-                        <span class="knob-label">Engine</span>
-                        <button class="knob-revert" id="revert-engine">&#x21BA;</button>
+                        <span class="knob-label">Separation Method</span>
+                        <button class="knob-revert" id="revert-engineType">&#x21BA;</button>
                     </div>
-                    <select id="picker-engine">
-                        <option value="reveal-mk1.5">MK 1.5</option>
-                        <option value="distilled">Distilled</option>
-                        <option value="reveal">MK 1.0</option>
-                        <option value="balanced">Balanced</option>
-                        <option value="lab-native">Lab Native</option>
-                        <option value="stencil">Stencil</option>
-                        <option value="forced-centroid">Forced Centroid</option>
-                        <option value="classic">Classic</option>
+                    <select id="picker-engineType">
+                        <option value="distilled">Adaptive</option>
+                        <option value="reveal-mk1.5">Standard</option>
                     </select>
-                    <span class="knob-help">Posterization engine. MK 1.5 is the standard. Distilled over-quantizes then reduces to best K.</span>
+                    <span class="knob-help">Adaptive: over-quantize then distil to best K colors. Standard: direct posterization.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Starting Palette</span>

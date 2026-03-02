@@ -91,8 +91,8 @@ function generateConfigurationMk2(dna) {
     // that ParameterGenerator.generate() produces.
     const config = { ...parameters };
 
-    // Chameleon uses distilled engine (over-quantize + furthest-point reduce)
-    config.engine = 'distilled';
+    // Chameleon always uses distilled (outperforms direct on 25/26 archetypes)
+    config.engineType = 'distilled';
 
     // Ensure splitMode has a default (Mk2 interpolator doesn't produce it)
     if (config.splitMode === undefined) config.splitMode = 'median';
@@ -128,7 +128,7 @@ function generateConfigurationMk2(dna) {
  */
 function generateConfigurationDistilled(dna) {
     return {
-        engine: 'distilled',
+        engineType: 'distilled',
         targetColors: 12,
         targetColorsSlider: 12,
         enablePaletteReduction: false,
@@ -571,3 +571,6 @@ module.exports.DNAFidelity = DNAFidelity;
 
 // Export SuggestedColorAnalyzer at top level for palette suggestions
 module.exports.SuggestedColorAnalyzer = SuggestedColorAnalyzer;
+
+// Export PaletteOps for palette consolidation at commit time
+module.exports.PaletteOps = require('./lib/engines/PaletteOps');

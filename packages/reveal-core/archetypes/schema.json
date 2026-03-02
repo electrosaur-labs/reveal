@@ -21,9 +21,9 @@
     },
     "engine": {
       "type": "string",
-      "enum": ["reveal", "reveal-mk1.5", "balanced", "classic", "stencil", "lab-native", "forced-centroid", "distilled"],
-      "default": "reveal-mk1.5",
-      "description": "Posterization engine. 'reveal-mk1.5' = standard MK 1.5 (default). 'reveal' = original MK 1.0. 'balanced' = balanced mode. 'classic' = legacy RGB median cut. 'stencil' = L-only grayscale. 'lab-native' = Lab-native quantization. 'forced-centroid' = clinical mode with anchor colors. 'distilled' = over-quantize to 3×K then furthest-point reduce (Distilled pseudo-archetype only). User can override in UI."
+      "enum": ["distilled", "direct"],
+      "default": "direct",
+      "description": "Quantization strategy. 'direct' = standard MK 1.5 posterization (default for all named archetypes). 'distilled' = over-quantize to 3×K then furthest-point sample back to K (used only by the Distilled pseudo-archetype for max tonal diversity at the cost of performance). User can always override."
     },
     "description": {
       "type": "string",

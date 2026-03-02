@@ -18,9 +18,9 @@ describe('generateConfigurationMk2', () => {
     };
 
     describe('output structure', () => {
-        test('returns a config object with engine distilled', () => {
+        test('returns a config object with engineType distilled', () => {
             const config = Reveal.generateConfigurationMk2(FLAT_DNA);
-            expect(config.engine).toBe('distilled');
+            expect(config.engineType).toBe('distilled');
         });
 
         test('returns meta with blendInfo and engine identifier', () => {
@@ -130,9 +130,9 @@ describe('generateConfigurationMk2', () => {
     });
 
     describe('config is compatible with PosterizationEngine', () => {
-        test('engine is distilled for correct dispatch', () => {
+        test('engineType is distilled for correct dispatch', () => {
             const config = Reveal.generateConfigurationMk2(FLAT_DNA);
-            expect(config.engine).toBe('distilled');
+            expect(config.engineType).toBe('distilled');
         });
 
         test('targetColors is a valid positive integer', () => {

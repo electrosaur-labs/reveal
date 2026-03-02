@@ -122,7 +122,7 @@ class PosterizationEngine {
      */
     static posterize(pixels, width, height, targetColors, options = {}) {
         // Default values
-        const engineType = options.engine || options.engineType || 'reveal';
+        const engineType = options.engineType || 'reveal';
         const enableGridOptimization = options.enableGridOptimization !== undefined
             ? options.enableGridOptimization
             : true; // DEFAULT TO ON (Architect's requirement)
@@ -244,6 +244,9 @@ class PosterizationEngine {
                     strategyName,
                     tuning
                 });
+
+            case 'distilled':
+                return this.distilledPosterize(pixels, width, height, targetColors, options);
 
             default:
                 logger.warn(`⚠️ Unknown engine type '${engineType}', falling back to 'reveal'`);
@@ -2097,8 +2100,11 @@ class PosterizationEngine {
         const overCount = PaletteDistiller.overQuantizeCount(targetColors);
 
         // Over-quantize pass — disable all merging so we get full hue resolution.
+        // Force engineType to reveal-mk1.5 for the inner call; 'distilled' is the
+        // outer wrapper, not a posterize algorithm — without this we'd recurse.
         const overResult = PosterizationEngine.posterize(labPixels, width, height, overCount, {
             ...options,
+            engineType: 'reveal-mk1.5',
             enablePaletteReduction: false,
             snapThreshold: 0,
             densityFloor: 0

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Standard / Balanced",
   "group": "natural",
-  "engine": "reveal-mk1.5",
+  "engine": "direct",
   "description": "Baseline metrics for standard photographic scenes.",
   "centroid": {
     "l": 50,

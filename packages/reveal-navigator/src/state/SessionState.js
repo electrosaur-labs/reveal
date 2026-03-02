@@ -29,12 +29,13 @@ const SESSION_KNOBS = new Set([...PRODUCTION_KNOBS]);
 
 // Initial defaults for production-only knobs (archetype configs don't define these).
 // Without explicit reset, stale values leak across archetype swaps.
+const MECHANICAL_KNOB_DEFAULTS = { minVolume: 0, speckleRescue: 0, shadowClamp: 0 };
 const PRODUCTION_KNOB_DEFAULTS = { trapSize: 0, meshSize: 230 };
 
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
 // This is the complete set from ParameterGenerator output — any change triggers rePosterize.
 const STRUCTURAL_PARAMS = new Set([
-    'targetColors', 'engine', 'centroidStrategy', 'distanceMetric',
+    'targetColors', 'engineType', 'centroidStrategy', 'distanceMetric',
     // Saliency weights
     'lWeight', 'cWeight', 'blackBias',
     // Vibrancy
@@ -270,8 +271,8 @@ class SessionState extends EventEmitter {
         this.currentConfig = this._chameleonConfig;
         this._applyConfigToState(this.currentConfig);
         this.state.activeArchetypeId = 'dynamic_interpolator';
-        if (!this.currentConfig.engine) {
-            this.currentConfig.engine = this.state.engine;
+        if (!this.currentConfig.engineType) {
+            this.currentConfig.engineType = this.state.engineType;
         }
 
         this.emit('imageLoaded', { width, height, dna: this.imageDNA });
@@ -513,6 +514,10 @@ class SessionState extends EventEmitter {
         this.deletedColors.clear();
         const hadAddedColors = this.addedColors.size > 0;
         this.addedColors.clear();
+
+        // Clear suggested color selections
+        this._cachedSuggestions = null;
+        this._checkedSuggestions = [];
 
         // Delete cache entry so re-entering doesn't restore stale state
         const id = this.state.activeArchetypeId;
@@ -760,8 +765,8 @@ class SessionState extends EventEmitter {
                 });
             }
             this._applyConfigToState(this.currentConfig);
-            if (!this.currentConfig.engine) {
-                this.currentConfig.engine = this.state.engine;
+            if (!this.currentConfig.engineType) {
+                this.currentConfig.engineType = this.state.engineType;
             }
 
             this.state.activeArchetypeId = archetypeId;
@@ -1004,10 +1009,16 @@ class SessionState extends EventEmitter {
      */
     async deletePaletteColor(colorIndex) {
         this._scoringGeneration++;
-        const palette = this._buildOverriddenPalette();
-        if (!palette || colorIndex >= palette.length) {
+        const basePalette = this._buildOverriddenPalette();
+        if (!basePalette || colorIndex >= basePalette.length) {
             throw new Error(`Invalid palette index: ${colorIndex}`);
         }
+
+        // Include checked suggestions as candidates — they are part of the
+        // effective palette at commit time, appended after the base palette.
+        const palette = this._checkedSuggestions.length > 0
+            ? [...basePalette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+            : basePalette;
 
         // Collect dead indices (merge sources + already deleted) to skip
         const dead = new Set(this.deletedColors);
@@ -1044,6 +1055,30 @@ class SessionState extends EventEmitter {
         logger.log(`[SessionState.delete] idx=${colorIndex} → nearest=${bestIdx} (dE²=${bestDist.toFixed(1)})`);
 
         this.deletedColors.add(colorIndex);
+
+        // If best match is a checked suggestion (index beyond base palette),
+        // override the deleted slot directly with the suggestion's Lab color
+        // instead of going through mergePaletteColors which only knows base indices.
+        if (bestIdx >= basePalette.length) {
+            const suggestionColor = palette[bestIdx];
+            this.paletteOverrides.set(colorIndex, { ...suggestionColor });
+
+            this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+
+            if (!this.proxyEngine) return null;
+            const overriddenPalette = this._buildOverriddenPalette();
+            const result = await this.proxyEngine.updateProxy({
+                paletteOverride: overriddenPalette,
+                minVolume: this.state.minVolume,
+                speckleRescue: this.state.speckleRescue,
+                shadowClamp: this.state.shadowClamp
+            });
+            this.previewBuffer = result.previewBuffer;
+            this.state.proxyBufferReady = true;
+            this._emitPreviewUpdated(result);
+            return result;
+        }
+
         return this.mergePaletteColors(colorIndex, bestIdx);
     }
 
@@ -1303,7 +1338,7 @@ class SessionState extends EventEmitter {
             configSection.targetColors = cfg.targetColors;
             configSection.distanceMetric = cfg.distanceMetric;
             configSection.ditherType = cfg.ditherType;
-            configSection.engine = cfg.engine;
+            configSection.engineType = cfg.engineType;
             configSection.preprocessingIntensity = cfg.preprocessingIntensity;
             // Archetype color bounds (drives adaptive count clamping)
             if (cfg.meta) {
@@ -1387,6 +1422,23 @@ class SessionState extends EventEmitter {
             ? [...baselinePalette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
             : baselinePalette;
 
+        // Consolidate near-duplicate palette entries created by user edits.
+        // Only runs when user has manually edited swatches — engine-produced
+        // close colors are intentional and left alone.
+        let consolidationMerges = null;
+        if (this.paletteOverrides.size > 0) {
+            const editedIndices = new Set(this.paletteOverrides.keys());
+            const PaletteOps = Reveal.PaletteOps;
+            const merges = PaletteOps.consolidateNearDuplicates(palette, editedIndices);
+            if (Object.keys(merges).length > 0) {
+                consolidationMerges = merges;
+                // Fold consolidation merges into the main mergeRemap
+                for (const [src, tgt] of Object.entries(merges)) {
+                    mergeRemap[parseInt(src)] = tgt;
+                }
+            }
+        }
+
         return {
             // Source metadata
             width: this.imageWidth,
@@ -1412,6 +1464,9 @@ class SessionState extends EventEmitter {
 
             // Merge remap: source → target for collapsed colors
             mergeRemap: Object.keys(mergeRemap).length > 0 ? mergeRemap : null,
+
+            // Consolidation info (for diagnostics)
+            consolidationMerges,
 
             // Full config snapshot (for reference)
             generatedConfig: this.currentConfig
@@ -1887,6 +1942,10 @@ class SessionState extends EventEmitter {
         // stale values from the previous archetype leak through.
         // Also inject into config so MechanicalKnobs._syncFromConfig() can
         // sync sliders — generateConfiguration() never includes these.
+        for (const [key, val] of Object.entries(MECHANICAL_KNOB_DEFAULTS)) {
+            this.state[key] = val;
+            config[key] = val;
+        }
         for (const [key, val] of Object.entries(PRODUCTION_KNOB_DEFAULTS)) {
             this.state[key] = val;
             config[key] = val;

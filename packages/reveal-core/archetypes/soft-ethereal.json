@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Soft / Ethereal",
   "group": "soft",
-  "engine": "reveal-mk1.5",
+  "engine": "direct",
   "description": "Mid-bright, low contrast. Protects soft gradients in high-key photography.",
   "centroid": {
     "l": 65,

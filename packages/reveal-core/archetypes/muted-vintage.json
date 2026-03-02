@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Muted / Vintage",
   "group": "soft",
-  "engine": "reveal-mk1.5",
+  "engine": "direct",
   "description": "Mid-bright, desaturated. Ideal for faded posters and WPA aesthetics.",
   "preferred_sectors": [
     "orange",

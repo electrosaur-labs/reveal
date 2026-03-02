@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "name": "Warm Sovereign",
   "group": "dramatic",
-  "engine": "reveal-mk1.5",
+  "engine": "direct",
   "description": "Single warm hue dominates a neutral canvas. High temperature, concentrated orange-yellow sector, low overall chroma from neutral majority. Golden hour scenes, chestnut horses, amber-lit interiors, autumn foliage against dark backgrounds.",
   "preferred_sectors": ["orange", "yellow", "chartreuse"],
   "centroid": {

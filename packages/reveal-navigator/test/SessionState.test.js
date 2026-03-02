@@ -87,13 +87,16 @@ describe('_snapshotArchetypeState', () => {
         expect(cached.knobs.speckleRescue).toBe(7);
     });
 
-    it('saves trapSize (production-only knob)', () => {
+    it('excludes session-level knobs (trapSize, meshSize) from per-archetype cache', () => {
         const s = setupSession();
         s.state.trapSize = 5;
+        s.state.meshSize = 305;
 
         s._snapshotArchetypeState(ARCHETYPE_A);
 
-        expect(s._archetypeStateCache.get(ARCHETYPE_A).knobs.trapSize).toBe(5);
+        const cached = s._archetypeStateCache.get(ARCHETYPE_A);
+        expect(cached.knobs.trapSize).toBeUndefined();
+        expect(cached.knobs.meshSize).toBeUndefined();
     });
 
     it('deep-copies paletteOverrides (no shared references)', () => {
@@ -153,7 +156,7 @@ describe('_restoreArchetypeState', () => {
         expect(s.state.speckleRescue).toBe(9);
     });
 
-    it('restores trapSize from cache', () => {
+    it('does not restore session-level trapSize from cache', () => {
         const s = setupSession();
         s.state.trapSize = 5;
         s._snapshotArchetypeState(ARCHETYPE_A);
@@ -161,7 +164,8 @@ describe('_restoreArchetypeState', () => {
         s.state.trapSize = 0;
 
         s._restoreArchetypeState(ARCHETYPE_A);
-        expect(s.state.trapSize).toBe(5);
+        // trapSize is session-level (SESSION_KNOBS) — survives archetype swaps, not cached
+        expect(s.state.trapSize).toBe(0);
     });
 
     it('restores palette surgery from cache', () => {
@@ -282,6 +286,17 @@ describe('resetToDefaults', () => {
         expect(s.deletedColors.size).toBe(0);
     });
 
+    it('clears suggested color selections', () => {
+        const s = setupSession();
+        s._checkedSuggestions = [{ L: 50, a: 10, b: -5 }];
+        s._cachedSuggestions = [{ L: 50, a: 10, b: -5, source: 'test', reason: 'test' }];
+
+        s.resetToDefaults();
+
+        expect(s._checkedSuggestions).toEqual([]);
+        expect(s._cachedSuggestions).toBeNull();
+    });
+
     it('deletes cache entry for current archetype', () => {
         const s = setupSession();
         s._snapshotArchetypeState(ARCHETYPE_A);
@@ -345,15 +360,18 @@ describe('swapArchetype auto-restore', () => {
         expect(s.paletteOverrides.get(0).L).toBe(75);
     });
 
-    it('restores trapSize per-archetype', async () => {
+    it('trapSize persists across archetype swaps (session-level, not per-archetype)', async () => {
         const s = setupSession(ARCHETYPE_A);
         s.state.trapSize = 5;
 
         await s.swapArchetype(ARCHETYPE_B);
-        expect(s.state.trapSize).toBe(0); // fresh default
+        // trapSize is session-level — survives swap, reset to default by _applyConfigToState
+        expect(s.state.trapSize).toBe(0);
 
+        // Set again and swap back — trapSize resets each swap (not restored from cache)
+        s.state.trapSize = 7;
         await s.swapArchetype(ARCHETYPE_A);
-        expect(s.state.trapSize).toBe(5); // restored
+        expect(s.state.trapSize).toBe(0); // reset by _applyConfigToState, not cached
     });
 
     it('passes paletteOverride to updateProxy when restoring cached surgery', async () => {
@@ -460,7 +478,7 @@ describe('_applyConfigToState injects production knob defaults into config', () 
         expect(configs[configs.length - 1].trapSize).toBe(0);
     });
 
-    it('swapArchetype emits configChanged with restored trapSize for cached archetypes', async () => {
+    it('swapArchetype emits configChanged with default trapSize (session-level, not cached)', async () => {
         const s = setupSession(ARCHETYPE_A);
         s.state.trapSize = 5;
 
@@ -471,9 +489,9 @@ describe('_applyConfigToState injects production knob defaults into config', () 
 
         await s.swapArchetype(ARCHETYPE_A);
 
-        // configChanged should include trapSize=5 (restored from A's cache)
+        // trapSize is session-level — _applyConfigToState resets it to default (0), not restored from cache
         expect(configs.length).toBeGreaterThan(0);
-        expect(configs[configs.length - 1].trapSize).toBe(5);
+        expect(configs[configs.length - 1].trapSize).toBe(0);
     });
 });
 
