@@ -10,6 +10,7 @@
  */
 
 const Reveal = require("@reveal/core");
+const logger = require('@reveal/core').logger;
 
 // Sector → approximate hue for visual indicator
 const SECTOR_HUES = {
@@ -426,7 +427,7 @@ class ArchetypeCarousel {
         card.addEventListener('pointerup', (e) => {
             if (match.id !== this._activeId) {
                 this._session.swapArchetype(match.id)
-                    .catch(err => console.error(`[ArchetypeCarousel] swapArchetype failed: ${err.message}`));
+                    .catch(err => logger.error(`[ArchetypeCarousel] swapArchetype failed: ${err.message}`));
             }
         });
 

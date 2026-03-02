@@ -12,13 +12,11 @@
  * - PixelAssignment.js: Stride-based pixel assignment
  * - CentroidStrategies.js: Centroid selection strategies
  * - HueAnalysis.js: Hue analysis (legacy, superseded by HueGapRecovery)
- * - HueAnalysis.js: Hue analysis (legacy, unused by engine)
  */
 
 const logger = require("../utils/logger");
 
 // Import modular components
-const HueAnalysis = require('./HueAnalysis');
 const { CentroidStrategies } = require('./CentroidStrategies');
 const PeakFinder = require('../analysis/PeakFinder');
 const LabDistance = require('../color/LabDistance');
@@ -100,22 +98,22 @@ class PosterizationEngine {
      */
     static TUNING = {
         split: {
-            highlightBoost: 2.2,    // Balanced multiplier for facial highlights
-            vibrancyBoost: 1.6,     // Weights chroma-rich pixels (Greens/Skin)
-            minVariance: 10,        // Minimum variance to consider splitting
+            highlightBoost: 2.2,    // Facial highlight rescue — 2.2× lifts L>85 variance so bright skin isn't merged with white substrate. Tuned on CQ100 portraits.
+            vibrancyBoost: 1.6,     // Chroma-rich pixel boost — 1.6× up-weights saturated greens/skin. Below 1.4 loses minority greens; above 1.8 over-splits warm tones.
+            minVariance: 10,        // Minimum box variance to split further — prevents over-splitting near-uniform patches. CQ100-derived; lower causes 1-pixel boxes.
             chromaAxisWeight: 0,    // 0=disabled; >0 enables C* (chroma magnitude) as virtual split axis
             neutralIsolationThreshold: 0  // 0=disabled; >0 pre-isolates neutrals (C* < threshold) into separate box
         },
         prune: {
-            threshold: 9.0,         // Delta-E distance for merging
-            hueLockAngle: 18,       // Degrees (Protects Green from Beige washout)
-            whitePoint: 85,         // L-value protection floor for white layer
-            shadowPoint: 15         // L-value ceiling for shadow protection (prevents merging L<15 with lighter colors)
+            threshold: 9.0,         // ΔE merge distance — 9.0 balances duplicate removal vs distinct hue preservation. <7 merges skin variants; >12 leaves near-duplicate plates.
+            hueLockAngle: 18,       // Hue protection zone in degrees — prevents merging colors within 18° of each other. Protects green from beige washout (CQ100 foliage tests).
+            whitePoint: 85,         // L-value floor for white detection — colors with L>85 treated as highlights for pruning protection.
+            shadowPoint: 15         // L-value ceiling for shadow protection — prevents merging very dark colors (L<15) with lighter neighbors.
         },
         centroid: {
-            lWeight: 1.1,           // Saliency Lightness priority
-            cWeight: 2.0,           // Saliency Chroma priority
-            blackBias: 5.0          // Black boost multiplier (high priority for absolute black in halftones)
+            lWeight: 1.1,           // Saliency lightness priority — slight L emphasis (1.1×) preserves tonal structure without washing out chroma.
+            cWeight: 2.0,           // Saliency chroma priority — 2.0× strongly favors saturated pixels as bucket representatives. Key for vivid screen print separations.
+            blackBias: 5.0          // Black pixel boost — 5.0× ensures absolute blacks (L<10) snap to true black in halftone originals. Critical for screen print registration marks.
         }
     };
 

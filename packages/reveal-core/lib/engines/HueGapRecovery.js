@@ -48,6 +48,7 @@ class HueGapRecovery {
      * @returns {Array<number>} - 12 element array with pixel counts per sector
      */
     static _analyzeImageHueSectors(labPixels, chromaThreshold = 5) {
+        if (!labPixels || labPixels.length === 0) return new Array(12).fill(0);
         // MUTED IMAGE RESCUE: For archives with lowChromaDensity > 0.6, use threshold 1.0
         // to detect desaturated greens (chroma 2-4) that would otherwise be ignored
         const CHROMA_THRESHOLD = chromaThreshold;
@@ -94,6 +95,7 @@ class HueGapRecovery {
      * @returns {Set<number>} - Set of sector indices (0-11) covered by palette
      */
     static _analyzePaletteHueCoverage(palette, chromaThreshold = 5) {
+        if (!palette || palette.length === 0) return { coveredSectors: new Set(), colorCountsBySector: new Array(12).fill(0) };
         const CHROMA_THRESHOLD = chromaThreshold; // Match image analysis threshold
         const coveredSectors = new Set();
         const colorCountsBySector = new Array(12).fill(0); // Count colors per sector

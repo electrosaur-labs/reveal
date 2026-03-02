@@ -13,6 +13,8 @@
  * @module ProxyEngine
  */
 
+const logger = require('../utils/logger');
+
 const PosterizationEngine = require('./PosterizationEngine');
 const SeparationEngine = require('./SeparationEngine');
 const PreviewEngine = require('./PreviewEngine');
@@ -832,14 +834,14 @@ class ProxyEngine {
             const colorIdx = colorIndices[i];
 
             if (colorIdx >= rgbPalette.length) {
-                console.error(`[ProxyEngine] Color index ${colorIdx} out of bounds (palette size: ${rgbPalette.length})`);
+                logger.error(`[ProxyEngine] Color index ${colorIdx} out of bounds (palette size: ${rgbPalette.length})`);
                 continue;
             }
 
             const colorEntry = rgbPalette[colorIdx];
 
             if (!colorEntry) {
-                console.error(`[ProxyEngine] Undefined color at index ${colorIdx}`);
+                logger.error(`[ProxyEngine] Undefined color at index ${colorIdx}`);
                 continue;
             }
 

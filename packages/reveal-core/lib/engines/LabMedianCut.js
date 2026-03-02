@@ -20,7 +20,10 @@ const HueGapRecovery = require('./HueGapRecovery');
 const PaletteOps = require('./PaletteOps');
 
 /**
- * Default tuning parameters (mirrors PosterizationEngine.TUNING)
+ * Safety-net fallback tuning — must mirror PosterizationEngine.TUNING.
+ * Not imported directly to avoid circular dependency (PosterizationEngine → LabMedianCut).
+ * In practice, callers always pass tuning explicitly; this only fires if tuning is null.
+ * See PosterizationEngine.TUNING for rationale on each value.
  */
 const DEFAULT_TUNING = {
     split: { highlightBoost: 2.2, vibrancyBoost: 1.6, minVariance: 10 },
@@ -46,6 +49,9 @@ class LabMedianCut {
      * @returns {Object} { meanL, meanA, meanB, sector, variance }
      */
     static _calculateBoxMetadata(box, grayscaleOnly = false, vibrancyMode = 'aggressive', vibrancyMultiplier = 2.0, highlightThreshold = 92, highlightBoost = 3.0, tuning = null) {
+        if (!box || !box.colors) {
+            return { meanL: 0, meanA: 0, meanB: 0, sector: -1, variance: 0 };
+        }
         const { colors } = box;
 
         if (colors.length === 0) {

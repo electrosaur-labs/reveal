@@ -11,6 +11,7 @@
  */
 
 const ArchetypeMapper = require('./ArchetypeMapper');
+const logger = require('../utils/logger');
 
 // Conditional imports for Node.js environment only
 // Note: webpack fallback { fs: false } provides an empty object {}, not false,
@@ -66,7 +67,7 @@ class ArchetypeLoader {
             const archetypesDir = path.join(__dirname, '../../archetypes');
 
             if (!fs.existsSync(archetypesDir)) {
-                console.warn(`⚠️ Archetypes directory not found: ${archetypesDir}`);
+                logger.warn(`Archetypes directory not found: ${archetypesDir}`);
                 return this.getFallbackArchetype();
             }
 
@@ -83,14 +84,14 @@ class ArchetypeLoader {
                 this._applyDefaults(archetypeContext(key))
             );
         } else {
-            console.warn('⚠️ No archetype discovery method available, using fallback');
+            logger.warn('No archetype discovery method available, using fallback');
             return [this.getFallbackArchetype()];
         }
 
         // Sort alphabetically by ID for deterministic ordering
         this.archetypes.sort((a, b) => a.id.localeCompare(b.id));
 
-        console.log(`✓ Loaded ${this.archetypes.length} archetypes` +
+        logger.log(`Loaded ${this.archetypes.length} archetypes` +
             (fs ? ` from ${path.join(__dirname, '../../archetypes')}` : ' (bundled)'));
 
         return this.archetypes;
@@ -107,7 +108,7 @@ class ArchetypeLoader {
         const archetypes = this.loadArchetypes();
 
         if (archetypes.length === 0) {
-            console.warn('⚠️ No archetypes loaded, using fallback');
+            logger.warn('No archetypes loaded, using fallback');
             return this.getFallbackArchetype();
         }
 
@@ -117,7 +118,7 @@ class ArchetypeLoader {
             if (manualArchetype) {
                 return manualArchetype;
             } else {
-                console.warn(`⚠️ Manual archetype not found: ${manualArchetypeId}, falling back to DNA matching`);
+                logger.warn(`Manual archetype not found: ${manualArchetypeId}, falling back to DNA matching`);
             }
         }
 
@@ -145,14 +146,14 @@ class ArchetypeLoader {
         const archetype = archetypes.find(a => a.id === result.id);
 
         // Enhanced logging for DNA v2.0
-        console.log(`🎯 Matched archetype: ${archetype.name} (score: ${result.score})`);
-        console.log(`   DNA v2.0 Breakdown:`);
-        console.log(`   • Structural:     ${result.breakdown.structural.toFixed(1)}/100 (40% weight)`);
-        console.log(`   • Sector Affinity: ${result.breakdown.sectorAffinity.toFixed(1)}/100 (45% weight)`);
-        console.log(`   • Pattern Match:   ${result.breakdown.pattern.toFixed(1)}/100 (15% weight)`);
-        console.log(`   DNA Signature: L=${dna.global.l.toFixed(1)} C=${dna.global.c.toFixed(1)} ` +
+        logger.log(`Matched archetype: ${archetype.name} (score: ${result.score})`);
+        logger.log(`   DNA v2.0 Breakdown:`);
+        logger.log(`   • Structural:     ${result.breakdown.structural.toFixed(1)}/100 (40% weight)`);
+        logger.log(`   • Sector Affinity: ${result.breakdown.sectorAffinity.toFixed(1)}/100 (45% weight)`);
+        logger.log(`   • Pattern Match:   ${result.breakdown.pattern.toFixed(1)}/100 (15% weight)`);
+        logger.log(`   DNA Signature: L=${dna.global.l.toFixed(1)} C=${dna.global.c.toFixed(1)} ` +
                     `K=${dna.global.k.toFixed(1)} σL=${dna.global.l_std_dev.toFixed(1)}`);
-        console.log(`   Entropy=${dna.global.hue_entropy.toFixed(3)} ` +
+        logger.log(`   Entropy=${dna.global.hue_entropy.toFixed(3)} ` +
                     `Temp=${dna.global.temperature_bias.toFixed(2)} ` +
                     `Dominant=${dna.dominant_sector || 'none'}`);
 
@@ -197,7 +198,7 @@ class ArchetypeLoader {
             }
         }
 
-        console.log(`🎯 Matched archetype: ${bestMatch.name} (DNA v1.0, distance: ${minDistance.toFixed(2)})`);
+        logger.log(`Matched archetype: ${bestMatch.name} (DNA v1.0, distance: ${minDistance.toFixed(2)})`);
 
         // Attach matching details to archetype for validation JSON
         bestMatch.matchDistance = minDistance;

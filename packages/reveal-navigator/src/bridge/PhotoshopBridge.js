@@ -16,6 +16,7 @@
 
 const { app, core, action } = require("photoshop");
 const { imaging } = require("photoshop");
+const logger = require('@reveal/core').logger;
 
 class PhotoshopBridge {
 
@@ -129,14 +130,14 @@ class PhotoshopBridge {
         const _off2 = Math.floor(actualWidth * actualHeight * 0.5) * 3;
         const _p2L = rawPixels[_off2], _p2a = rawPixels[_off2+1], _p2b = rawPixels[_off2+2];
         const _d2 = _dec(_p2L, _p2a, _p2b);
-        console.log('[PhotoshopBridge] bufType=' + _bufType
+        logger.log('[PhotoshopBridge] bufType=' + _bufType
             + ' len=' + rawPixels.length + ' expected=' + (actualWidth*actualHeight*3)
             + ' w=' + actualWidth + ' h=' + actualHeight);
-        console.log('[PhotoshopBridge] px[0]   raw=(' + _p0L + ',' + _p0a + ',' + _p0b
+        logger.log('[PhotoshopBridge] px[0]   raw=(' + _p0L + ',' + _p0a + ',' + _p0b
             + ') → Lab(' + _d0.L + ',' + _d0.a + ',' + _d0.b + ')');
-        console.log('[PhotoshopBridge] px[10%] raw=(' + _p1L + ',' + _p1a + ',' + _p1b
+        logger.log('[PhotoshopBridge] px[10%] raw=(' + _p1L + ',' + _p1a + ',' + _p1b
             + ') → Lab(' + _d1.L + ',' + _d1.a + ',' + _d1.b + ')');
-        console.log('[PhotoshopBridge] px[50%] raw=(' + _p2L + ',' + _p2a + ',' + _p2b
+        logger.log('[PhotoshopBridge] px[50%] raw=(' + _p2L + ',' + _p2a + ',' + _p2b
             + ') → Lab(' + _d2.L + ',' + _d2.a + ',' + _d2.b + ')');
 
         // rawPixels is already native 16-bit Lab (Uint16Array, 0-32768 encoding)

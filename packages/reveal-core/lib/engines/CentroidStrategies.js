@@ -49,6 +49,7 @@
 function SALIENCY(bucket, weights) {
     // Data is ALWAYS in perceptual space (neutral a/b = 0)
     if (!bucket || bucket.length === 0) return { L: 50, a: 0, b: 0 };
+    if (!weights) weights = {};
 
     const blackBias = weights.blackBias || 5.0;  // Configurable black boost multiplier
     const is16Bit = weights.bitDepth === 16;
