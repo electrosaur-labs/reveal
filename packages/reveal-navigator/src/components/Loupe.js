@@ -328,9 +328,7 @@ class Loupe {
         if (!tileResult || !tileResult.labPixels || !tileResult.colorIndices || !tileResult.labPalette) return;
 
         const { labPixels, colorIndices, labPalette } = tileResult;
-        const sugRgb = Reveal.labToRgbD50
-            ? Reveal.labToRgbD50({ L: ghostLab.L, a: ghostLab.a, b: ghostLab.b })
-            : Reveal.engines.PosterizationEngine.labToRgb(ghostLab);
+        const sugRgb = Reveal.labToRgbD50(ghostLab);
         const pixelCount = width * height;
         const solo = (mode === 'solo');
 

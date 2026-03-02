@@ -508,8 +508,7 @@ class PaletteSurgeon {
 
     /** ΔE between two Lab colors */
     _deltaE(c1, c2) {
-        const dL = c1.L - c2.L, da = c1.a - c2.a, db = c1.b - c2.b;
-        return Math.sqrt(dL * dL + da * da + db * db);
+        return Reveal.LabDistance.cie76(c1, c2);
     }
 
     /** Check if a suggestion is too close to any current palette entry (ΔE < 15) */

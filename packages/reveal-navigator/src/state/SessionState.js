@@ -16,8 +16,8 @@ const Reveal = require('@reveal/core');
 
 const logger = Reveal.logger;
 
-// Import canonical config categories from core (single source of truth).
-const { CONFIG_CATEGORIES } = Reveal.engines.ParameterGenerator;
+// Import canonical config categories and knob defaults from core (single source of truth).
+const { CONFIG_CATEGORIES, KNOB_DEFAULTS } = Reveal.engines.ParameterGenerator;
 
 // Parameters that only need mask/preview re-render (fast path via ProxyEngine.updateProxy)
 const MECHANICAL_KNOBS = new Set(CONFIG_CATEGORIES.MECHANICAL);
@@ -30,10 +30,9 @@ const PRODUCTION_KNOBS = new Set(CONFIG_CATEGORIES.PRODUCTION);
 // cached/restored per archetype.  Physical equipment params only.
 const SESSION_KNOBS = new Set([...PRODUCTION_KNOBS]);
 
-// Initial defaults for production-only knobs (archetype configs don't define these).
-// Without explicit reset, stale values leak across archetype swaps.
-const MECHANICAL_KNOB_DEFAULTS = { minVolume: 0, speckleRescue: 0, shadowClamp: 0 };
-const PRODUCTION_KNOB_DEFAULTS = { trapSize: 0, meshSize: 230 };
+// Knob defaults from core — archetype configs don't define these.
+const MECHANICAL_KNOB_DEFAULTS = KNOB_DEFAULTS.MECHANICAL;
+const PRODUCTION_KNOB_DEFAULTS = KNOB_DEFAULTS.PRODUCTION;
 
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
 const STRUCTURAL_PARAMS = new Set(CONFIG_CATEGORIES.STRUCTURAL);
@@ -1496,16 +1495,11 @@ class SessionState extends EventEmitter {
 
     /**
      * Returns the current mechanical + production knobs as a single object.
-     * Canonical source for knob values — use instead of picking from state.
+     * Delegates to core's extractMechanicalKnobs() for consistent field selection.
      * @returns {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number}}
      */
     getMechanicalKnobs() {
-        return {
-            minVolume: this.state.minVolume,
-            speckleRescue: this.state.speckleRescue,
-            shadowClamp: this.state.shadowClamp,
-            trapSize: this.state.trapSize || 0,
-        };
+        return Reveal.engines.ParameterGenerator.extractMechanicalKnobs(this.state);
     }
 
     /** Returns the DNA v2.0 snapshot for the loaded image. */

@@ -55,6 +55,32 @@ class ParameterGenerator {
     };
 
     /**
+     * Default values for knobs not driven by archetypes.
+     * Archetype configs don't define mechanical/production knobs —
+     * these defaults prevent stale values from leaking across swaps.
+     */
+    static KNOB_DEFAULTS = {
+        MECHANICAL: { minVolume: 0, speckleRescue: 0, shadowClamp: 0 },
+        PRODUCTION: { trapSize: 0, meshSize: 230 },
+    };
+
+    /**
+     * Extract the mechanical + production knobs from a config or state object.
+     * Canonical helper — use instead of cherry-picking individual fields.
+     *
+     * @param {Object} source - Config object or reactive state
+     * @returns {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number}}
+     */
+    static extractMechanicalKnobs(source) {
+        return {
+            minVolume: source.minVolume || 0,
+            speckleRescue: source.speckleRescue || 0,
+            shadowClamp: source.shadowClamp || 0,
+            trapSize: source.trapSize || 0,
+        };
+    }
+
+    /**
      * Generate configuration from DNA analysis using data-driven archetypes
      *
      * @param {Object} dna - DNA analysis result
