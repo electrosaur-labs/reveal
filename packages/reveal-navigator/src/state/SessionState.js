@@ -413,10 +413,9 @@ class SessionState extends EventEmitter {
     async _scoreAllArchetypes(allScores, topId, generation) {
         // Only eagerly score the top N archetypes by DNA score.
         // The rest get scored on-demand when the user clicks their card.
-        // Skip Chameleon — already scored during Phase 2.
-        // Distilled is included: it's scored at startup but re-scoring is deterministic and cheap.
+        // Skip Chameleon and Distilled — both already scored during Phase 2.
         const eagerSlice = allScores
-            .filter(s => s.id !== 'dynamic_interpolator')
+            .filter(s => s.id !== 'dynamic_interpolator' && s.id !== 'distilled')
             .slice(0, EAGER_SCORE_COUNT);
         const total = eagerSlice.length;
         let computed = 0;
@@ -1852,14 +1851,18 @@ class SessionState extends EventEmitter {
 
     /**
      * Inject the Distilled pseudo-archetype entry into a sorted score array.
-     * Always placed immediately after Chameleon (score = Chameleon score - 1,
-     * or at position 1 if Chameleon is first).
+     * Gets a synthetic DNA score derived from Chameleon's score (both are
+     * meta-archetypes that adapt to the image). Placed right after Chameleon.
      * @private
      */
     _injectDistilled(scores) {
+        // Derive synthetic DNA score from Chameleon's score (peer meta-archetype)
+        const chameleon = scores.find(s => s.id === 'dynamic_interpolator');
+        const distilledScore = chameleon ? Math.max(0, chameleon.score - 1) : 50;
+
         const entry = {
             id: 'distilled',
-            score: null, // ΔE-scored on demand like any other archetype
+            score: distilledScore,
             _synthetic: {
                 name: 'Distilled',
                 description: 'Minimal batch-pipeline posterization. No archetype overrides — pure color extraction with 20→12 distillation.',
@@ -1868,8 +1871,9 @@ class SessionState extends EventEmitter {
             }
         };
 
-        // Place before Chameleon (position 0) — both are always scored at startup
-        scores.splice(0, 0, entry);
+        // Place right after Chameleon
+        const chameleonIdx = chameleon ? scores.indexOf(chameleon) : -1;
+        scores.splice(chameleonIdx + 1, 0, entry);
         return scores;
     }
 
