@@ -46,7 +46,7 @@ describe('Distilled posterization — horse regression', () => {
         expect(result.assignments.length).toBe(width * height);
     });
 
-    test('distilled palette contains warm tones (positive b*)', () => {
+    test('distilled palette has blue, green, and warm tones (content regression)', () => {
         const result = PosterizationEngine.posterize(pixels, width, height, 12, {
             engineType: 'distilled',
             format: 'lab',
@@ -56,8 +56,17 @@ describe('Distilled posterization — horse regression', () => {
             densityFloor: 0,
         });
 
-        // Horse image is warm — at least one colour should have b > 10
-        const hasWarm = result.paletteLab.some(c => c.b > 10);
+        const palette = result.paletteLab;
+
+        // Horse image contains sky blue, foliage green, and warm earth tones.
+        // Regression: when SALIENCY centroid (a* × 1.6) leaked into distilled path,
+        // blue and green disappeared and everything shifted redward.
+        const hasBlue  = palette.some(c => c.a < -5 && c.b < -20);
+        const hasGreen = palette.some(c => c.a < -10 && c.b > 30);
+        const hasWarm  = palette.some(c => c.b > 30 && c.a > 10);
+
+        expect(hasBlue).toBe(true);
+        expect(hasGreen).toBe(true);
         expect(hasWarm).toBe(true);
     });
 

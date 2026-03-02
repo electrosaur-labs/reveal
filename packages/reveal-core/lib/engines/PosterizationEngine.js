@@ -2102,9 +2102,17 @@ class PosterizationEngine {
         // Over-quantize pass — disable all merging so we get full hue resolution.
         // Force engineType to reveal-mk1.5 for the inner call; 'distilled' is the
         // outer wrapper, not a posterize algorithm — without this we'd recurse.
+        // Preserve the centroid strategy that the ORIGINAL engineType would select —
+        // reveal-mk1.5 defaults to SALIENCY (a* × 1.6 vibrancy), but the caller's
+        // engineType (e.g. 'reveal-mk2') may default to VOLUMETRIC. Without this
+        // the strategy override causes a massive redward centroid shift.
+        const originalEngineType = options.engineType || 'reveal';
+        const impliedStrategy = (originalEngineType === 'reveal' || originalEngineType === 'reveal-mk1.5')
+            ? 'SALIENCY' : 'VOLUMETRIC';
         const overResult = PosterizationEngine.posterize(labPixels, width, height, overCount, {
             ...options,
             engineType: 'reveal-mk1.5',
+            centroidStrategy: options.centroidStrategy || impliedStrategy,
             enablePaletteReduction: false,
             snapThreshold: 0,
             densityFloor: 0
