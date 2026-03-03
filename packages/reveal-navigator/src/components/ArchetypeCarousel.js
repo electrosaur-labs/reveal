@@ -34,6 +34,7 @@ class ArchetypeCarousel {
         this._activeFilter = 'all'; // Current group filter
         this._activeSort = 'score'; // Current sort axis
         this._sortAscending = true; // Sort direction
+        this._eagerSet = null;      // Set of tier-1 archetype IDs (scored eagerly)
 
         // Listener bookkeeping for destroy() cleanup
         this._chipListeners = [];   // [{element, event, handler}]
@@ -142,6 +143,19 @@ class ArchetypeCarousel {
             const bPin = PIN_ORDER[b.dataset.id];
             const aPinned = aPin !== undefined;
             const bPinned = bPin !== undefined;
+
+            // Unscored (grayed) cards sink to bottom, preserving DNA order among themselves
+            const aUnscored = a.classList.contains('unscored');
+            const bUnscored = b.classList.contains('unscored');
+            if (aUnscored && !bUnscored) return 1;
+            if (!aUnscored && bUnscored) return -1;
+            if (aUnscored && bUnscored) {
+                // Both unscored — keep original DNA order via dnaScore descending
+                const aDna = parseFloat(a.dataset.dnaScore) || 0;
+                const bDna = parseFloat(b.dataset.dnaScore) || 0;
+                return bDna - aDna;
+            }
+
             // Pinned cards always sort to top; among themselves sort by
             // sortScore (best quality first) once ΔE scores are available
             if (aPinned && bPinned) {
@@ -294,7 +308,7 @@ class ArchetypeCarousel {
 
         // Build carousel immediately when top-match preview is ready (DNA scores only).
         on('carouselReady', (data) => {
-            this._rebuild(data.scores);
+            this._rebuild(data.scores, data.eagerSet);
         });
         // Update individual card ΔE + edge survival as each archetype is scored in the background.
         on('archetypeScored', (data) => {
@@ -328,9 +342,13 @@ class ArchetypeCarousel {
 
     /**
      * Rebuild the full card strip from scored archetypes.
+     * All cards are created and visible. Tier-1 (eager) cards get background-
+     * scored with ΔE/edge data; tier-2 cards are grayed out until clicked.
+     *
      * @param {Array} [scores] - Pre-sorted scores (by DNA or ΔE).
+     * @param {Set<string>} [eagerSet] - Tier-1 IDs that will be eager-scored
      */
-    _rebuild(scores) {
+    _rebuild(scores, eagerSet) {
         if (!scores) scores = this._session.getAllArchetypeScores();
         if (!scores || scores.length === 0) return;
 
@@ -342,6 +360,7 @@ class ArchetypeCarousel {
         this._activeId = state.activeArchetypeId;
 
         this._cards = scores;
+        this._eagerSet = eagerSet || null;
 
         this._container.innerHTML = '';
 
@@ -351,7 +370,15 @@ class ArchetypeCarousel {
             const archetype = archetypeMap.get(match.id) || match._synthetic;
             if (!archetype) continue;
 
+            const isTier1 = !eagerSet || eagerSet.has(match.id);
             const card = this._createCard(match, archetype, i);
+            card.dataset.tier = isTier1 ? '1' : '2';
+
+            // Tier-2 cards start grayed out — scored on-demand when clicked
+            if (!isTier1) {
+                card.classList.add('unscored');
+            }
+
             this._container.appendChild(card);
         }
 
@@ -494,6 +521,9 @@ class ArchetypeCarousel {
         const card = this._container.querySelector(`.carousel-card[data-id="${id}"]`);
         if (!card) return;
 
+        // Card has been scored — remove grayed-out state
+        card.classList.remove('unscored');
+
         const de = meanDeltaE.toFixed(1);
         const edgeStr = edgeSurvival != null ? (edgeSurvival * 100).toFixed(0) + '%' : '-';
         const colorsStr = targetColors ? `${targetColors}c` : '';
@@ -550,6 +580,9 @@ class ArchetypeCarousel {
             const isActive = card.classList.contains('active');
 
             if (isActive) {
+                // Active card has been posterized — no longer unscored
+                card.classList.remove('unscored');
+
                 // Active card: show real palette swatches
                 const rgbPalette = this._getActiveRgbPalette();
                 if (!rgbPalette || rgbPalette.length === 0) return;

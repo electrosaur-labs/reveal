@@ -52,7 +52,8 @@ const ALL_KNOBS = new Set([
 
 // All archetypes get ΔE-scored in the background after splash.
 // Scoring is async/non-blocking — carousel updates progressively.
-const EAGER_SCORE_COUNT = Infinity;
+// Tier-1 eager set: 3 pseudo-archetypes + top-1 per group (see _selectEagerSet)
+// Tier-2 remaining: scored on-demand when "Show All" is clicked
 
 const DEBOUNCE_MS = 50;
 
@@ -360,12 +361,17 @@ class SessionState extends EventEmitter {
                 ? this._computeSortScore(salamanderAccuracy, salamanderColors, salamanderQuality.edgeSurvival) : null;
         }
 
-        this.emit('carouselReady', { scores: allScores, topMatchId: 'dynamic_interpolator' });
-        logger.log(`[SessionState] Carousel ready — ${allScores.length} archetypes sorted by DNA, Chameleon ΔE=${initialAccuracy != null ? initialAccuracy.toFixed(1) : '?'}`);
+        // Select tier-1 eager set: 3 pseudo + top-1 per group
+        const eagerSet = this._selectEagerSet(allScores);
+        this._eagerSet = eagerSet;
+        this._allScores = allScores;
 
-        // Launch background ΔE scoring for top N (read-only, no state mutation)
+        this.emit('carouselReady', { scores: allScores, eagerSet, topMatchId: 'dynamic_interpolator' });
+        logger.log(`[SessionState] Carousel ready — ${allScores.length} archetypes, ${eagerSet.size} eager (tier-1), Chameleon ΔE=${initialAccuracy != null ? initialAccuracy.toFixed(1) : '?'}`);
+
+        // Launch background ΔE scoring for eager set only (tier-1)
         const generation = this._scoringGeneration;
-        this._scoreAllArchetypes(allScores, 'dynamic_interpolator', generation);
+        this._scoreAllArchetypes(allScores, 'dynamic_interpolator', generation, eagerSet);
 
         return proxyResult;
     }
@@ -430,15 +436,15 @@ class SessionState extends EventEmitter {
      * @param {Array} allScores - Score array (mutated in place with meanDeltaE)
      * @param {string} topId - Already-scored top match ID (skip it)
      * @param {number} generation - Generation counter at time of launch
+     * @param {Set<string>} [eagerSet] - If provided, only score IDs in this set
      * @private
      */
-    async _scoreAllArchetypes(allScores, topId, generation) {
-        // Only eagerly score the top N archetypes by DNA score.
-        // The rest get scored on-demand when the user clicks their card.
-        // Skip Chameleon and Distilled — both already scored during Phase 2.
+    async _scoreAllArchetypes(allScores, topId, generation, eagerSet) {
+        // Skip pseudo-archetypes already scored during Phase 2.
+        // If eagerSet provided, only score IDs in the eager set (tier-1).
+        const PHASE2_IDS = new Set(['dynamic_interpolator', 'distilled', 'salamander']);
         const eagerSlice = allScores
-            .filter(s => s.id !== 'dynamic_interpolator' && s.id !== 'distilled' && s.id !== 'salamander')
-            .slice(0, EAGER_SCORE_COUNT);
+            .filter(s => !PHASE2_IDS.has(s.id) && (!eagerSet || eagerSet.has(s.id)));
         const total = eagerSlice.length;
         let computed = 0;
         let cancelled = false;
@@ -506,7 +512,7 @@ class SessionState extends EventEmitter {
 
         const sorted = this._sortByDeltaE(allScores);
         logger.log(`[SessionState] Background scoring ${cancelled ? 'cancelled' : 'complete'}: ${computed}/${total} archetypes scored`);
-        this.emit('scoringComplete', { scores: sorted, topMatchId: topId });
+        this.emit('scoringComplete', { scores: sorted, topMatchId: topId, eagerOnly: !!eagerSet });
     }
 
     // ─── Knob Reset ─────────────────────────────────────────
@@ -915,6 +921,13 @@ class SessionState extends EventEmitter {
         const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
         const mapper = new Reveal.ArchetypeMapper(archetypes);
         const scores = mapper.getTopMatches(this.imageDNA, archetypes.length);
+
+        // Inject group field from archetype metadata so carousel can tier/filter
+        const archMap = new Map(archetypes.map(a => [a.id, a]));
+        for (const s of scores) {
+            const arch = archMap.get(s.id);
+            s._group = arch ? (arch.group || 'all') : 'all';
+        }
 
         this._injectChameleon(scores);
         this._injectDistilled(scores);
@@ -2006,6 +2019,28 @@ class SessionState extends EventEmitter {
         const distilledIdx = distilled ? scores.indexOf(distilled) : -1;
         scores.splice(distilledIdx + 1, 0, entry);
         return scores;
+    }
+
+    /**
+     * Select the eager-scored tier-1 set: 3 pseudo-archetypes + top-1 per group.
+     * Scores array must already be DNA-ranked descending with _group injected.
+     *
+     * @param {Array} scores - DNA-ranked score array
+     * @returns {Set<string>} IDs to eager-score during startup
+     * @private
+     */
+    _selectEagerSet(scores) {
+        const eager = new Set(['dynamic_interpolator', 'distilled', 'salamander']);
+        const seenGroups = new Set();
+        for (const s of scores) {
+            if (eager.has(s.id)) continue;
+            const group = s._group || 'all';
+            if (!seenGroups.has(group)) {
+                seenGroups.add(group);
+                eager.add(s.id);
+            }
+        }
+        return eager;
     }
 
     /**
