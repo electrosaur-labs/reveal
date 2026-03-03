@@ -126,6 +126,14 @@ function generateConfigurationMk2(dna) {
  * Over-quantizes to 20 colors → reduces to 12 via furthest-point sampling.
  * (PaletteDistiller.overQuantizeCount(12) = min(12×3, 20) = 20 automatically.)
  *
+ * IMPORTANT: This config must set ALL params that appear as slider controls
+ * in MechanicalKnobs (KNOB_DEFS). Unlike Chameleon which gets a complete
+ * config from the Mk2 interpolator, Distilled must explicitly list every
+ * param. Without this, _applyConfigToState() leaves stale values from the
+ * previous archetype, and _archetypeDefaults snapshots those stale values.
+ * On return visits, cached state from a different source archetype causes
+ * false dirty badges on slider controls.
+ *
  * @param {Object} dna - Image DNA from DNAGenerator (reserved for future use)
  * @returns {Object} Posterization config
  */
@@ -142,7 +150,36 @@ function generateConfigurationDistilled(dna) {
         preprocessingIntensity: 'off', // no bilateral filter — matches batch pipeline exactly
         distanceMetric: 'cie76',       // explicit — prevents state leakage from previous archetype
         ditherType: 'none',            // explicit — blue-noise causes speckles on colorful images
-        speckleRescue: 5, // despeckle masks for print-ready output
+        speckleRescue: 5,              // despeckle masks for print-ready output
+
+        // Saliency weights (ParameterGenerator defaults)
+        lWeight: 1.2,
+        cWeight: 2.0,
+        blackBias: 3.0,
+
+        // Vibrancy
+        vibrancyBoost: 1.4,
+        vibrancyThreshold: 10,
+
+        // Highlights / shadows
+        highlightThreshold: 90,
+        highlightBoost: 1.5,
+        shadowPoint: 15,
+
+        // Palette / hue
+        paletteReduction: 6.0,
+        hueLockAngle: 20,
+        chromaGate: 1.0,
+
+        // Substrate
+        substrateTolerance: 2.0,
+
+        // Noise
+        detailRescue: 0,
+
+        // Neutral thresholds
+        neutralCentroidClampThreshold: 0.5,
+        neutralSovereigntyThreshold: 0,
     };
 }
 
