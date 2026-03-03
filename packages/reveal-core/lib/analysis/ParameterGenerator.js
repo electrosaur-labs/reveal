@@ -664,6 +664,8 @@ class ParameterGenerator {
             // Palette reduction
             enablePaletteReduction: config.enablePaletteReduction,
             paletteReduction: config.paletteReduction,
+            snapThreshold: config.snapThreshold,
+            densityFloor: config.densityFloor,
 
             // Substrate
             substrateMode: config.substrateMode,

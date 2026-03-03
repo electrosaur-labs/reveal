@@ -326,21 +326,27 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
     console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias || 'n/a'}, Dither: ${config.ditherType || 'none'}`);
 
     // 4a. Bilateral prefilter (edge-preserving noise reduction)
+    // Honor config.preprocessingIntensity: 'off' skips entirely (e.g. Salamander)
     const BilateralFilter = Reveal.BilateralFilter;
     const is16Bit = depth === 16;
-    const entropyScore = BilateralFilter.calculateEntropyScoreLab(lab16bit, width, height);
-    const preprocessDecision = BilateralFilter.shouldPreprocess(dna, entropyScore, is16Bit);
 
-    if (preprocessDecision.shouldProcess) {
-        console.log(chalk.yellow(`  ⚡ Bilateral filter: entropy=${entropyScore.toFixed(1)}, radius=${preprocessDecision.radius}, sigmaR=${preprocessDecision.sigmaR}`));
-        console.log(chalk.yellow(`     Reason: ${preprocessDecision.reason}`));
-        BilateralFilter.applyBilateralFilterLab(
-            lab16bit, width, height,
-            preprocessDecision.radius,
-            preprocessDecision.sigmaR
-        );
+    if (config.preprocessingIntensity === 'off') {
+        console.log(`  [Preprocess] Skipped — config says preprocessingIntensity='off'`);
     } else {
-        console.log(`  [Preprocess] Skipped — entropy=${entropyScore.toFixed(1)}, reason=${preprocessDecision.reason}`);
+        const entropyScore = BilateralFilter.calculateEntropyScoreLab(lab16bit, width, height);
+        const preprocessDecision = BilateralFilter.shouldPreprocess(dna, entropyScore, is16Bit);
+
+        if (preprocessDecision.shouldProcess) {
+            console.log(chalk.yellow(`  ⚡ Bilateral filter: entropy=${entropyScore.toFixed(1)}, radius=${preprocessDecision.radius}, sigmaR=${preprocessDecision.sigmaR}`));
+            console.log(chalk.yellow(`     Reason: ${preprocessDecision.reason}`));
+            BilateralFilter.applyBilateralFilterLab(
+                lab16bit, width, height,
+                preprocessDecision.radius,
+                preprocessDecision.sigmaR
+            );
+        } else {
+            console.log(`  [Preprocess] Skipped — entropy=${entropyScore.toFixed(1)}, reason=${preprocessDecision.reason}`);
+        }
     }
 
     // 4b. Pre-posterization median filter (salt & pepper noise removal)
