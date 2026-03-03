@@ -13,7 +13,10 @@
 
 const EventEmitter = require('./EventEmitter');
 const Reveal = require('@reveal/core');
-const { DIM_COLOR, applySuggestionGhost } = require('../utils/pixelProcessing');
+const PaletteSurgeryManager = require('./PaletteSurgeryManager');
+const ScoringManager = require('./ScoringManager');
+const SuggestionManager = require('./SuggestionManager');
+const { DIM_COLOR } = require('../utils/pixelProcessing');
 
 const logger = Reveal.logger;
 
@@ -52,8 +55,8 @@ const ALL_KNOBS = new Set([
 
 // All archetypes get ΔE-scored in the background after splash.
 // Scoring is async/non-blocking — carousel updates progressively.
-// Tier-1 eager set: 3 pseudo-archetypes + top-1 per group (see _selectEagerSet)
-// Tier-2 remaining: scored on-demand when "Show All" is clicked
+// Tier-1 eager set: 3 pseudo-archetypes + top-1 per group (see ScoringManager.selectEagerSet)
+// Tier-2 remaining: scored on-demand when user clicks their card
 
 const DEBOUNCE_MS = 50;
 
@@ -84,13 +87,19 @@ class SessionState extends EventEmitter {
             highlightColorIndex: -1     // -1 = no highlight, 0+ = isolated color
         };
 
-        // Separate from reactive state
-        this.paletteOverrides = new Map();  // colorIndex → {L, a, b}
-        this.mergeHistory = new Map();      // targetIndex → Set<sourceIndex>
-        this.deletedColors = new Set();     // colorIndex values deleted via Alt+click
-        this.addedColors = new Set();       // palette indices added by user (via "+" button)
-        this._checkedSuggestions = [];       // suggested colors marked "must be in final palette"
-        this.proxyEngine = null;
+        // Palette surgery — extracted to PaletteSurgeryManager
+        this._paletteSurgery = new PaletteSurgeryManager();
+        // Archetype scoring — extracted to ScoringManager
+        this._scoring = new ScoringManager();
+        this._scoring.on('archetypeScored', data => this.emit('archetypeScored', data));
+        this._scoring.on('scoringComplete', data => this.emit('scoringComplete', data));
+        // Suggestions & ghost preview — extracted to SuggestionManager
+        this._suggestions = new SuggestionManager();
+        this._suggestions.on('ghostChanged', data => {
+            this.state.highlightColorIndex = -2;
+            this.emit('highlightChanged', data);
+        });
+        this._proxyEngine = null;
         this.currentConfig = null;          // Full config from ParameterGenerator
         this.previewBuffer = null;          // Current RGBA preview
         this.imageDNA = null;               // DNA v2.0 snapshot
@@ -115,20 +124,31 @@ class SessionState extends EventEmitter {
         this._loadInFlight = false;
         this._swapInFlight = false;
         this._swapQueued = null;
-
-        // Generation counter for background scoring cancellation
-        this._scoringGeneration = 0;
-
-        // Single source of truth: ΔE per archetype, computed once by background scoring.
-        // Everything reads from here — cards, stats panel, sort.
-        this._archetypeDeltaE = new Map();
     }
 
+    // ─── Proxy Engine ──────────────────────────────────────
+    get proxyEngine() { return this._proxyEngine; }
+    set proxyEngine(v) {
+        this._proxyEngine = v;
+        this._paletteSurgery.initialize(v);
+        this._suggestions.initialize(v);
+    }
+
+    // ─── Palette Surgery Delegation ─────────────────────────
+    get paletteOverrides() { return this._paletteSurgery.paletteOverrides; }
+    set paletteOverrides(v) { this._paletteSurgery.paletteOverrides = v; }
+    get mergeHistory() { return this._paletteSurgery.mergeHistory; }
+    set mergeHistory(v) { this._paletteSurgery.mergeHistory = v; }
+    get deletedColors() { return this._paletteSurgery.deletedColors; }
+    set deletedColors(v) { this._paletteSurgery.deletedColors = v; }
+    get addedColors() { return this._paletteSurgery.addedColors; }
+    set addedColors(v) { this._paletteSurgery.addedColors = v; }
+
     /** Current suggestion ghost Lab color, or null if no ghost active. */
-    get ghostLabColor() { return this._ghostLabColor || null; }
+    get ghostLabColor() { return this._suggestions.ghostLabColor; }
 
     /** Current suggestion ghost rendering mode ('integrated' or 'solo'), or null. */
-    get ghostMode() { return this._ghostMode || null; }
+    get ghostMode() { return this._suggestions.ghostMode; }
 
     /**
      * Reset all session-specific state. Called when the dialog closes
@@ -139,10 +159,9 @@ class SessionState extends EventEmitter {
             clearTimeout(this._debounceTimer);
             this._debounceTimer = null;
         }
-        this.paletteOverrides.clear();
-        this.mergeHistory.clear();
-        this.deletedColors.clear();
-        this.addedColors.clear();
+        this._paletteSurgery.reset();
+        this._scoring.reset();
+        this._suggestions.reset();
         this._archetypeStateCache.clear();
         this.proxyEngine = null;
         this.currentConfig = null;
@@ -158,7 +177,6 @@ class SessionState extends EventEmitter {
         this._loadInFlight = false;
         this._swapInFlight = false;
         this._swapQueued = null;
-        this._scoringGeneration++;
         this.state.activeArchetypeId = null;
         this.state.isArchetypeDirty = false;
         this.state.isProcessing = false;
@@ -275,9 +293,12 @@ class SessionState extends EventEmitter {
         const initialEdgeSurvival = this.calculateCurrentEdgeSurvival();
         const initialFidelity = this.calculateDNAFidelity();
 
+        // Initialize ScoringManager for this image
+        this._scoring.initialize(this.proxyEngine, this.imageDNA, this._chameleonConfig, this._salamanderConfig);
+
         // Store Chameleon's ΔE and edge survival
         if (initialAccuracy != null) {
-            this._archetypeDeltaE.set('dynamic_interpolator', initialAccuracy);
+            this._scoring.setArchetypeDeltaE('dynamic_interpolator', initialAccuracy);
         }
 
         // Score Distilled at startup (read-only, uses existing proxy buffer)
@@ -292,7 +313,7 @@ class SessionState extends EventEmitter {
         );
         const distilledAccuracy = distilledQuality.meanDeltaE;
         if (distilledAccuracy != null) {
-            this._archetypeDeltaE.set('distilled', distilledAccuracy);
+            this._scoring.setArchetypeDeltaE('distilled', distilledAccuracy);
         }
 
         // Score Salamander at startup (read-only, like Distilled)
@@ -307,7 +328,7 @@ class SessionState extends EventEmitter {
         );
         const salamanderAccuracy = salamanderQuality.meanDeltaE;
         if (salamanderAccuracy != null) {
-            this._archetypeDeltaE.set('salamander', salamanderAccuracy);
+            this._scoring.setArchetypeDeltaE('salamander', salamanderAccuracy);
         }
 
         this.emit('previewUpdated', {
@@ -326,7 +347,7 @@ class SessionState extends EventEmitter {
         this.emit('progress', { phase: 'visual', label: 'Scoring archetypes\u2026', percent: 90 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        const allScores = this.getAllArchetypeScores(); // instant DNA ranking
+        const allScores = this._scoring.getAllArchetypeScores(); // instant DNA ranking
 
         // Inject Chameleon's ΔE, edge survival, and screen count (already computed above)
         const chameleonEntry = allScores.find(s => s.id === 'dynamic_interpolator');
@@ -337,7 +358,7 @@ class SessionState extends EventEmitter {
             chameleonEntry.edgeSurvival = initialEdgeSurvival;
             chameleonEntry.targetColors = chameleonColors;
             chameleonEntry.sortScore = initialAccuracy != null
-                ? this._computeSortScore(initialAccuracy, chameleonColors, initialEdgeSurvival) : null;
+                ? this._scoring.computeSortScore(initialAccuracy, chameleonColors, initialEdgeSurvival) : null;
         }
 
         // Inject Distilled's ΔE and edge survival (scored above)
@@ -347,7 +368,7 @@ class SessionState extends EventEmitter {
             distilledEntry.edgeSurvival = distilledQuality.edgeSurvival;
             distilledEntry.targetColors = 12;
             distilledEntry.sortScore = distilledAccuracy != null
-                ? this._computeSortScore(distilledAccuracy, 12, distilledQuality.edgeSurvival) : null;
+                ? this._scoring.computeSortScore(distilledAccuracy, 12, distilledQuality.edgeSurvival) : null;
         }
 
         // Inject Salamander's ΔE and edge survival (scored above)
@@ -358,161 +379,21 @@ class SessionState extends EventEmitter {
             salamanderEntry.edgeSurvival = salamanderQuality.edgeSurvival;
             salamanderEntry.targetColors = salamanderColors;
             salamanderEntry.sortScore = salamanderAccuracy != null
-                ? this._computeSortScore(salamanderAccuracy, salamanderColors, salamanderQuality.edgeSurvival) : null;
+                ? this._scoring.computeSortScore(salamanderAccuracy, salamanderColors, salamanderQuality.edgeSurvival) : null;
         }
 
         // Select tier-1 eager set: 3 pseudo + top-1 per group
-        const eagerSet = this._selectEagerSet(allScores);
-        this._eagerSet = eagerSet;
-        this._allScores = allScores;
+        const eagerSet = this._scoring.selectEagerSet(allScores);
 
         this.emit('carouselReady', { scores: allScores, eagerSet, topMatchId: 'dynamic_interpolator' });
         logger.log(`[SessionState] Carousel ready — ${allScores.length} archetypes, ${eagerSet.size} eager (tier-1), Chameleon ΔE=${initialAccuracy != null ? initialAccuracy.toFixed(1) : '?'}`);
 
         // Launch background ΔE scoring for eager set only (tier-1)
-        const generation = this._scoringGeneration;
-        this._scoreAllArchetypes(allScores, 'dynamic_interpolator', generation, eagerSet);
+        const generation = this._scoring.scoringGeneration;
+        const knobs = this.getMechanicalKnobs();
+        this._scoring.scoreArchetypes(allScores, 'dynamic_interpolator', generation, eagerSet, knobs);
 
         return proxyResult;
-    }
-
-    /**
-     * Compute sort score: structural fidelity loss + screen count penalty.
-     *
-     * Primary signal: edge survival (what fraction of major color boundaries
-     * in the original are preserved). This captures "detail loss" that meanΔE
-     * misses — e.g., palette reduction merging visually distinct regions.
-     *
-     * Secondary signal: screen count penalty (exponential above 8).
-     * Screen economy matters for print production cost.
-     *
-     * Lower = better.
-     *
-     * @param {number} meanDeltaE - Mean color error (unused in v2, kept for API compat)
-     * @param {number} targetColors - Number of palette colors (screens)
-     * @param {number} [edgeSurvival] - Fraction of significant edges preserved (0-1)
-     * @private
-     */
-    _computeSortScore(meanDeltaE, targetColors, edgeSurvival) {
-        // Structural fidelity loss: (1 - edgeSurvival) × 50
-        // At 70% survival → 15, at 60% → 20, at 50% → 25
-        // Falls back to ΔE-based estimate when edge survival not yet computed
-        const structuralLoss = edgeSurvival != null
-            ? (1 - edgeSurvival) * 50
-            : meanDeltaE;  // fallback before edge data available
-
-        // Screen economy penalty: exponential above 8 screens
-        const excess = Math.max(0, (targetColors || 0) - 8);
-        const screenPenalty = excess > 0 ? 0.5 * Math.pow(1.6, excess - 1) : 0;
-
-        return structuralLoss + screenPenalty;
-    }
-
-    /**
-     * Sort scores by sortScore ascending (best adjusted quality first).
-     * Entries without ΔE are appended in their original order.
-     * @private
-     */
-    _sortByDeltaE(scores) {
-        const copy = scores.slice();
-        copy.sort((a, b) => {
-            const aS = a.sortScore;
-            const bS = b.sortScore;
-            const aNull = aS == null || aS !== aS;
-            const bNull = bS == null || bS !== bS;
-            if (aNull && bNull) return 0;
-            if (aNull) return 1;
-            if (bNull) return -1;
-            return aS - bS;
-        });
-        return copy;
-    }
-
-    /**
-     * Background ΔE scoring loop. Scores archetypes one by one and emits
-     * `archetypeScored` events so the carousel can update cards progressively.
-     * Cancels if `_scoringGeneration` changes (new image or archetype swap).
-     *
-     * @param {Array} allScores - Score array (mutated in place with meanDeltaE)
-     * @param {string} topId - Already-scored top match ID (skip it)
-     * @param {number} generation - Generation counter at time of launch
-     * @param {Set<string>} [eagerSet] - If provided, only score IDs in this set
-     * @private
-     */
-    async _scoreAllArchetypes(allScores, topId, generation, eagerSet) {
-        // Skip pseudo-archetypes already scored during Phase 2.
-        // If eagerSet provided, only score IDs in the eager set (tier-1).
-        const PHASE2_IDS = new Set(['dynamic_interpolator', 'distilled', 'salamander']);
-        const eagerSlice = allScores
-            .filter(s => !PHASE2_IDS.has(s.id) && (!eagerSet || eagerSet.has(s.id)));
-        const total = eagerSlice.length;
-        let computed = 0;
-        let cancelled = false;
-
-        // Knobs — same for all archetypes in this scoring run
-        const knobs = {
-            minVolume: this.state.minVolume,
-            speckleRescue: this.state.speckleRescue,
-            shadowClamp: this.state.shadowClamp
-        };
-
-        for (const match of eagerSlice) {
-            if (this._scoringGeneration !== generation) {
-                logger.log(`[SessionState] Background scoring cancelled (gen ${generation} → ${this._scoringGeneration})`);
-                cancelled = true;
-                break;
-            }
-
-            try {
-                // Read-only scoring via getPaletteWithQuality — does NOT mutate
-                // the active separationState, so the Chameleon preview stays intact.
-                const config = match.id === 'distilled'
-                    ? Reveal.generateConfigurationDistilled(this.imageDNA)
-                    : match.id === 'salamander'
-                    ? Reveal.generateConfigurationSalamander(this.imageDNA)
-                    : Reveal.generateConfiguration(this.imageDNA, { manualArchetypeId: match.id });
-
-                const quality = await this.proxyEngine.getPaletteWithQuality(config, knobs);
-                const deltaE = quality.meanDeltaE;
-                const colors = quality.rgbPalette ? quality.rgbPalette.length : 0;
-                const edgeSurvival = quality.edgeSurvival;
-
-                if (this._scoringGeneration !== generation) {
-                    logger.log(`[SessionState] Background scoring cancelled after await (gen ${generation} → ${this._scoringGeneration})`);
-                    cancelled = true;
-                    break;
-                }
-
-                match.meanDeltaE = deltaE;
-                match.edgeSurvival = edgeSurvival;
-                match.targetColors = colors;
-                match.sortScore = this._computeSortScore(deltaE, colors, edgeSurvival);
-                this._archetypeDeltaE.set(match.id, deltaE);
-                computed++;
-
-                this.emit('archetypeScored', {
-                    id: match.id,
-                    meanDeltaE: deltaE,
-                    edgeSurvival,
-                    targetColors: colors,
-                    sortScore: match.sortScore,
-                    computed,
-                    total
-                });
-
-                // Yield to let carousel update the card
-                await new Promise(r => setTimeout(r, 5));
-            } catch (err) {
-                computed++;
-                logger.log(`[SessionState] Background scoring failed for ${match.id}: ${err.message}`);
-            }
-        }
-
-        // No restore needed — getPaletteWithQuality is read-only.
-
-        const sorted = this._sortByDeltaE(allScores);
-        logger.log(`[SessionState] Background scoring ${cancelled ? 'cancelled' : 'complete'}: ${computed}/${total} archetypes scored`);
-        this.emit('scoringComplete', { scores: sorted, topMatchId: topId, eagerOnly: !!eagerSet });
     }
 
     // ─── Knob Reset ─────────────────────────────────────────
@@ -548,8 +429,7 @@ class SessionState extends EventEmitter {
         this.addedColors.clear();
 
         // Clear suggested color selections
-        this._cachedSuggestions = null;
-        this._checkedSuggestions = [];
+        this._suggestions.clearForSwap();
 
         // Delete cache entry so re-entering doesn't restore stale state
         const id = this.state.activeArchetypeId;
@@ -685,8 +565,7 @@ class SessionState extends EventEmitter {
                 this.paletteOverrides.clear();
                 this.mergeHistory.clear();
                 this.deletedColors.clear();
-                this._cachedSuggestions = null;
-                this._checkedSuggestions = [];
+                this._suggestions.clearForSwap();
                 this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
                 result = await this.proxyEngine.rePosterize(this.currentConfig);
                 this.state.isArchetypeDirty = false;
@@ -723,7 +602,7 @@ class SessionState extends EventEmitter {
             // survive the baseline restore inside updateProxy
             const updateParams = { ...this.getMechanicalKnobs() };
             if (this.paletteOverrides.size > 0) {
-                updateParams.paletteOverride = this._buildOverriddenPalette();
+                updateParams.paletteOverride = this._paletteSurgery.buildOverriddenPalette();
             }
 
             result = await this.proxyEngine.updateProxy(updateParams);
@@ -775,7 +654,7 @@ class SessionState extends EventEmitter {
         this._swapInFlight = true;
 
         // Cancel any in-flight background scoring
-        this._scoringGeneration++;
+        this._scoring.cancelScoring();
 
         try {
             // 1. Snapshot outgoing archetype state (always — no gate)
@@ -807,8 +686,7 @@ class SessionState extends EventEmitter {
             this.paletteOverrides.clear();
             this.mergeHistory.clear();
             this.deletedColors.clear();
-            this._cachedSuggestions = null;
-            this._checkedSuggestions = [];
+            this._suggestions.clearForSwap();
 
             // Reset decision support state
             this.state.highlightColorIndex = -1;
@@ -859,7 +737,7 @@ class SessionState extends EventEmitter {
                 shadowClamp: this.state.shadowClamp
             };
             if (this.paletteOverrides.size > 0) {
-                updateParams.paletteOverride = this._buildOverriddenPalette();
+                updateParams.paletteOverride = this._paletteSurgery.buildOverriddenPalette();
             }
 
             const knobResult = await this.proxyEngine.updateProxy(updateParams);
@@ -872,10 +750,10 @@ class SessionState extends EventEmitter {
             const swapEdgeSurvival = this.calculateCurrentEdgeSurvival();
             // Store ΔE + edge survival so on-demand clicked cards update their display
             if (swapAccuracy != null) {
-                this._archetypeDeltaE.set(archetypeId, swapAccuracy);
+                this._scoring.setArchetypeDeltaE(archetypeId, swapAccuracy);
                 const sep = this.proxyEngine.separationState;
                 const swapColors = sep && sep.palette ? sep.palette.length : 0;
-                const swapSortScore = this._computeSortScore(swapAccuracy, swapColors, swapEdgeSurvival);
+                const swapSortScore = this._scoring.computeSortScore(swapAccuracy, swapColors, swapEdgeSurvival);
                 this.emit('archetypeScored', {
                     id: archetypeId,
                     meanDeltaE: swapAccuracy,
@@ -909,30 +787,9 @@ class SessionState extends EventEmitter {
         }
     }
 
-    /**
-     * Get ranked archetype scores for the current image DNA.
-     * Used for archetype carousel / picker UI.
-     *
-     * @returns {Array<{id, score, breakdown}>} All archetypes ranked by score
-     */
+    /** Get ranked archetype scores for the current image DNA. */
     getAllArchetypeScores() {
-        if (!this.imageDNA) return [];
-
-        const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
-        const mapper = new Reveal.ArchetypeMapper(archetypes);
-        const scores = mapper.getTopMatches(this.imageDNA, archetypes.length);
-
-        // Inject group field from archetype metadata so carousel can tier/filter
-        const archMap = new Map(archetypes.map(a => [a.id, a]));
-        for (const s of scores) {
-            const arch = archMap.get(s.id);
-            s._group = arch ? (arch.group || 'all') : 'all';
-        }
-
-        this._injectChameleon(scores);
-        this._injectDistilled(scores);
-        this._injectSalamander(scores);
-        return scores;
+        return this._scoring.getAllArchetypeScores();
     }
 
     // ─── Highlight / Isolation ─────────────────────────────────
@@ -942,16 +799,14 @@ class SessionState extends EventEmitter {
      * @param {number} colorIndex - 0+ to highlight, -1 to clear
      */
     setHighlight(colorIndex) {
-        this._ghostLabColor = null;
-        this._ghostMode = null;
+        this._suggestions.clearGhost();
         this.state.highlightColorIndex = colorIndex;
         this.emit('highlightChanged', { colorIndex });
     }
 
     /** Clear highlight — restore normal preview. */
     clearHighlight() {
-        this._ghostLabColor = null;
-        this._ghostMode = null;
+        this._suggestions.clearGhost();
         this.setHighlight(-1);
     }
 
@@ -1005,12 +860,12 @@ class SessionState extends EventEmitter {
     async overridePaletteColor(colorIndex, newLabColor) {
         // Cancel any in-flight background scoring — palette surgery takes priority
         // and scoring data is stale after a palette edit.
-        this._scoringGeneration++;
+        this._scoring.cancelScoring();
 
         logger.log(`[SessionState.override] idx=${colorIndex} Lab=(${newLabColor.L.toFixed(1)},${newLabColor.a.toFixed(1)},${newLabColor.b.toFixed(1)}) overrides=${this.paletteOverrides.size}`);
         this.paletteOverrides.set(colorIndex, { ...newLabColor });
 
-        const overriddenPalette = this._buildOverriddenPalette();
+        const overriddenPalette = this._paletteSurgery.buildOverriddenPalette();
 
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
 
@@ -1041,7 +896,7 @@ class SessionState extends EventEmitter {
     async revertPaletteColor(colorIndex) {
         if (!this.paletteOverrides.has(colorIndex) && !this.deletedColors.has(colorIndex)) return null;
 
-        this._scoringGeneration++;
+        this._scoring.cancelScoring();
         this.paletteOverrides.delete(colorIndex);
         this.deletedColors.delete(colorIndex);
 
@@ -1051,7 +906,7 @@ class SessionState extends EventEmitter {
             if (sources.size === 0) this.mergeHistory.delete(target);
         }
 
-        const overriddenPalette = this._buildOverriddenPalette();
+        const overriddenPalette = this._paletteSurgery.buildOverriddenPalette();
 
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
 
@@ -1080,16 +935,16 @@ class SessionState extends EventEmitter {
      * @returns {Promise<Object>} Updated preview data
      */
     async deletePaletteColor(colorIndex) {
-        this._scoringGeneration++;
-        const basePalette = this._buildOverriddenPalette();
+        this._scoring.cancelScoring();
+        const basePalette = this._paletteSurgery.buildOverriddenPalette();
         if (!basePalette || colorIndex >= basePalette.length) {
             throw new Error(`Invalid palette index: ${colorIndex}`);
         }
 
         // Include checked suggestions as candidates — they are part of the
         // effective palette at commit time, appended after the base palette.
-        const palette = this._checkedSuggestions.length > 0
-            ? [...basePalette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+        const palette = this._suggestions.checkedSuggestions.length > 0
+            ? [...basePalette, ...this._suggestions.checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
             : basePalette;
 
         // Collect dead indices (merge sources + already deleted) to skip
@@ -1138,7 +993,7 @@ class SessionState extends EventEmitter {
             this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
 
             if (!this.proxyEngine) return null;
-            const overriddenPalette = this._buildOverriddenPalette();
+            const overriddenPalette = this._paletteSurgery.buildOverriddenPalette();
             const result = await this.proxyEngine.updateProxy({
                 paletteOverride: overriddenPalette,
                 minVolume: this.state.minVolume,
@@ -1167,12 +1022,12 @@ class SessionState extends EventEmitter {
             throw new Error('Proxy not initialized');
         }
 
-        this._scoringGeneration++;
+        this._scoring.cancelScoring();
         logger.log(`[SessionState.merge] source=${sourceIndex} target=${targetIndex} mapSize_before=${this.paletteOverrides.size} keys=[${[...this.paletteOverrides.keys()]}]`);
 
         // Read from baseline+overrides (the consistent visible state),
         // not separationState.palette which is mutable post-knob state.
-        const palette = this._buildOverriddenPalette();
+        const palette = this._paletteSurgery.buildOverriddenPalette();
         if (!palette || sourceIndex >= palette.length || targetIndex >= palette.length) {
             throw new Error(`Invalid palette index: source=${sourceIndex}, target=${targetIndex}, size=${palette ? palette.length : 0}`);
         }
@@ -1185,7 +1040,7 @@ class SessionState extends EventEmitter {
         }
         this.mergeHistory.get(targetIndex).add(sourceIndex);
 
-        const overriddenPalette = this._buildOverriddenPalette();
+        const overriddenPalette = this._paletteSurgery.buildOverriddenPalette();
 
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
 
@@ -1220,7 +1075,7 @@ class SessionState extends EventEmitter {
             throw new Error('Proxy not initialized');
         }
 
-        this._scoringGeneration++;
+        this._scoring.cancelScoring();
 
         // Sanity cap at 20 screens (auto presses max ~14 stations)
         const palette = this.proxyEngine._baselineState.palette;
@@ -1260,7 +1115,7 @@ class SessionState extends EventEmitter {
             return null;
         }
 
-        this._scoringGeneration++;
+        this._scoring.cancelScoring();
         logger.log(`[SessionState.removeAddedColor] Removing added color at index ${colorIndex}`);
 
         // Remove from addedColors; shift tracked indices above the removed one
@@ -1373,9 +1228,9 @@ class SessionState extends EventEmitter {
         }
 
         // ── Palette with hex + coverage (includes checked suggestions for commit) ──
-        const basePalette = this._buildOverriddenPalette();
-        const palette = this._checkedSuggestions.length > 0
-            ? [...basePalette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+        const basePalette = this._paletteSurgery.buildOverriddenPalette();
+        const palette = this._suggestions.checkedSuggestions.length > 0
+            ? [...basePalette, ...this._suggestions.checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
             : basePalette;
         const PosterizationEngine = Reveal.engines.PosterizationEngine;
         const sep = this.proxyEngine && this.proxyEngine.separationState;
@@ -1456,7 +1311,7 @@ class SessionState extends EventEmitter {
      * @returns {Object} Collapsed production configuration
      */
     exportProductionConfig() {
-        const palette = this._buildOverriddenPalette();
+        const palette = this._paletteSurgery.buildOverriddenPalette();
 
         // Sync latest state → currentConfig, then snapshot all params
         this._rebuildConfigFromState();
@@ -1483,8 +1338,8 @@ class SessionState extends EventEmitter {
         // Separation palette: baseline for core slots + suggestions at end.
         // Suggestions are new colours added by the user — their Lab value IS
         // the separation target, so they use the override colour directly.
-        const separationPalette = this._checkedSuggestions.length > 0
-            ? [...baselinePalette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+        const separationPalette = this._suggestions.checkedSuggestions.length > 0
+            ? [...baselinePalette, ...this._suggestions.checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
             : baselinePalette;
 
         // Consolidate near-duplicate palette entries created by user edits.
@@ -1517,8 +1372,8 @@ class SessionState extends EventEmitter {
             activeArchetypeId: this.state.activeArchetypeId,
 
             // Layer fill palette (overrides baked in + suggestions appended)
-            palette: this._checkedSuggestions.length > 0
-                ? [...palette, ...this._checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+            palette: this._suggestions.checkedSuggestions.length > 0
+                ? [...palette, ...this._suggestions.checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
                 : palette,
 
             // Separation palette (baseline colours — overrides do NOT deflect
@@ -1602,7 +1457,7 @@ class SessionState extends EventEmitter {
      */
     getArchetypeDeltaE(archetypeId) {
         const id = archetypeId || this.state.activeArchetypeId;
-        return this._archetypeDeltaE.get(id) || null;
+        return this._scoring.getArchetypeDeltaE(id) || null;
     }
 
     // ─── State Access ────────────────────────────────────────
@@ -1650,117 +1505,39 @@ class SessionState extends EventEmitter {
         return this.proxyEngine.getOriginalPreviewRGBA();
     }
 
-    /**
-     * Get suggested colors that the engine found but couldn't include.
-     * Surfaces underrepresented sectors, unmatched peaks, and chroma outliers.
-     * @returns {Array<{L, a, b, source, reason, impactScore}>}
-     */
+    /** Get suggested colors that the engine found but couldn't include. */
     getSuggestedColors() {
-        if (!this.proxyEngine) return [];
-        // Return cached suggestions — computed once per archetype, stable across palette surgery
-        if (this._cachedSuggestions) return this._cachedSuggestions;
-        this._cachedSuggestions = this.proxyEngine.getSuggestedColors();
-        return this._cachedSuggestions;
+        return this._suggestions.getSuggestedColors();
     }
 
     /** Suggested colors the user marked "must be in final palette". */
     get checkedSuggestions() {
-        return this._checkedSuggestions;
+        return this._suggestions.checkedSuggestions;
     }
 
     /** Mark a suggested color as "must be in final palette". */
     addCheckedSuggestion(labColor) {
-        this._checkedSuggestions.push({ L: labColor.L, a: labColor.a, b: labColor.b });
+        this._suggestions.addCheckedSuggestion(labColor);
     }
 
     /** Remove a checked suggestion by proximity (ΔE < 4). */
     removeCheckedSuggestion(labColor) {
-        // ΔE² threshold for "same suggestion" identity matching (4² = 16)
-        const SUGGESTION_MATCH_DE_SQ = 16;
-        for (let i = 0; i < this._checkedSuggestions.length; i++) {
-            const c = this._checkedSuggestions[i];
-            const dL = labColor.L - c.L, da = labColor.a - c.a, db = labColor.b - c.b;
-            if (dL * dL + da * da + db * db < SUGGESTION_MATCH_DE_SQ) {
-                this._checkedSuggestions.splice(i, 1);
-                return;
-            }
-        }
+        this._suggestions.removeCheckedSuggestion(labColor);
     }
 
     /** Check if a suggestion is already checked (ΔE < 4). */
     isSuggestionChecked(labColor) {
-        // ΔE² threshold for "same suggestion" identity matching (4² = 16)
-        const SUGGESTION_MATCH_DE_SQ = 16;
-        for (const c of this._checkedSuggestions) {
-            const dL = labColor.L - c.L, da = labColor.a - c.a, db = labColor.b - c.b;
-            if (dL * dL + da * da + db * db < SUGGESTION_MATCH_DE_SQ) return true;
-        }
-        return false;
+        return this._suggestions.isSuggestionChecked(labColor);
     }
 
-    /**
-     * Generate ghost preview: show which pixels a suggested color would capture.
-     * For each pixel, checks if labColor is closer than the pixel's current assignment.
-     * Pixels that would be captured → shown in labColor's RGB at full brightness.
-     * Non-captured pixels: 'integrated' mode keeps palette color, 'solo' mode dims to #282828.
-     *
-     * @param {{L: number, a: number, b: number}} labColor - The suggested Lab color
-     * @param {'integrated'|'solo'} [mode='integrated'] - Rendering mode
-     * @returns {Uint8ClampedArray|null} RGBA buffer, or null if not ready
-     */
+    /** Generate ghost preview for a suggested color. */
     generateSuggestionGhostPreview(labColor, mode = 'integrated') {
-        if (!this.proxyEngine || !this.proxyEngine.separationState) return null;
-
-        const state = this.proxyEngine.separationState;
-        const { colorIndices, palette, rgbPalette, width, height } = state;
-        if (!colorIndices || !palette || !rgbPalette) return null;
-
-        const proxyBuffer = this.proxyEngine.proxyBuffer;
-        if (!proxyBuffer) return null;
-
-        const pixelCount = width * height;
-        const rgba = new Uint8ClampedArray(pixelCount * 4);
-        const sugRgb = Reveal.labToRgbD50({ L: labColor.L, a: labColor.a, b: labColor.b });
-        const solo = (mode === 'solo');
-
-        // Pre-fill integrated mode with palette colors + alpha (ghost loop only overwrites captured pixels)
-        if (!solo) {
-            for (let i = 0; i < pixelCount; i++) {
-                const ci = colorIndices[i];
-                const c = rgbPalette[ci];
-                const off4 = i * 4;
-                rgba[off4]     = c.r;
-                rgba[off4 + 1] = c.g;
-                rgba[off4 + 2] = c.b;
-                rgba[off4 + 3] = 255;
-            }
-        } else {
-            // Solo mode: set alpha for all pixels
-            for (let i = 0; i < pixelCount; i++) {
-                rgba[i * 4 + 3] = 255;
-            }
-        }
-
-        applySuggestionGhost(rgba, pixelCount, proxyBuffer, colorIndices, palette, labColor, sugRgb, solo);
-
-        return rgba;
+        return this._suggestions.generateSuggestionGhostPreview(labColor, mode);
     }
 
-    /**
-     * Set a suggestion ghost preview (triggered by clicking a suggested swatch).
-     * Emits highlightChanged with a ghost buffer instead of a color index.
-     * @param {{L: number, a: number, b: number}} labColor
-     * @param {'integrated'|'solo'} [mode='integrated'] - 'integrated' shows all colors
-     *   with suggestion replacing captured pixels; 'solo' dims non-captured to #282828
-     */
+    /** Set a suggestion ghost preview. Emits highlightChanged via ghostChanged event. */
     setSuggestionGhost(labColor, mode = 'integrated') {
-        const ghostBuffer = this.generateSuggestionGhostPreview(labColor, mode);
-        if (ghostBuffer) {
-            this._ghostLabColor = { L: labColor.L, a: labColor.a, b: labColor.b };
-            this._ghostMode = mode;
-            this.state.highlightColorIndex = -2;
-            this.emit('highlightChanged', { colorIndex: -2, ghostBuffer });
-        }
+        this._suggestions.setSuggestionGhost(labColor, mode);
     }
 
     /**
@@ -1787,7 +1564,7 @@ class SessionState extends EventEmitter {
      * @returns {Array<{L, a, b}>|null}
      */
     getPalette() {
-        return this._buildOverriddenPalette();
+        return this._paletteSurgery.buildOverriddenPalette();
     }
 
     // ─── Archetype State Cache ─────────────────────────────────
@@ -1808,26 +1585,9 @@ class SessionState extends EventEmitter {
             knobs[key] = this.state[key];
         }
 
-        // Deep-copy Maps and Sets to prevent cross-archetype mutation
-        const paletteOverrides = new Map();
-        for (const [idx, color] of this.paletteOverrides) {
-            paletteOverrides.set(idx, { ...color });
-        }
-
-        const mergeHistory = new Map();
-        for (const [target, sources] of this.mergeHistory) {
-            mergeHistory.set(target, new Set(sources));
-        }
-
-        const deletedColors = new Set(this.deletedColors);
-        const addedColors = new Set(this.addedColors);
-
         this._archetypeStateCache.set(id, {
             knobs,
-            paletteOverrides,
-            mergeHistory,
-            deletedColors,
-            addedColors
+            ...this._paletteSurgery.snapshot()
         });
     }
 
@@ -1851,23 +1611,13 @@ class SessionState extends EventEmitter {
             }
         }
 
-        // Restore palette surgery (deep-copy back to prevent cache mutation)
-        this.paletteOverrides.clear();
-        for (const [idx, color] of cached.paletteOverrides) {
-            this.paletteOverrides.set(idx, { ...color });
-        }
-
-        this.mergeHistory.clear();
-        for (const [target, sources] of cached.mergeHistory) {
-            this.mergeHistory.set(target, new Set(sources));
-        }
-
-        this.deletedColors.clear();
-        for (const idx of cached.deletedColors) {
-            this.deletedColors.add(idx);
-        }
-
-        this.addedColors = new Set(cached.addedColors || []);
+        // Restore palette surgery via manager (deep-copies internally)
+        this._paletteSurgery.restore({
+            paletteOverrides: cached.paletteOverrides,
+            mergeHistory: cached.mergeHistory,
+            deletedColors: cached.deletedColors,
+            addedColors: cached.addedColors
+        });
 
         // Detect if restored values differ from archetype defaults
         this.state.isKnobsCustomized = false;
@@ -1890,10 +1640,7 @@ class SessionState extends EventEmitter {
      * @returns {boolean}
      */
     isCustomized() {
-        return this.state.isKnobsCustomized ||
-            this.paletteOverrides.size > 0 ||
-            this.deletedColors.size > 0 ||
-            this.addedColors.size > 0;
+        return this.state.isKnobsCustomized || this._paletteSurgery.hasEdits();
     }
 
     // ─── Private Helpers ─────────────────────────────────────
@@ -1930,117 +1677,6 @@ class SessionState extends EventEmitter {
             accuracyDeltaE,
             dnaFidelity
         });
-    }
-
-    /**
-     * Inject the Chameleon (dynamic_interpolator) entry into a sorted score array.
-     * Score is derived from blend distance to nearest Mk2 cluster centroid.
-     *
-     * @param {Array} scores - Descending-sorted archetype scores from ArchetypeMapper
-     * @returns {Array} Same array with Chameleon inserted at correct position
-     * @private
-     */
-    _injectChameleon(scores) {
-        const config = this._chameleonConfig || Reveal.generateConfigurationMk2(this.imageDNA);
-        const nearestDist = config.meta.blendInfo.neighbors[0].distance;
-        const chameleonScore = Math.max(30, Math.min(85, 75 - 10 * nearestDist));
-
-        const entry = {
-            id: 'dynamic_interpolator',
-            score: chameleonScore,
-            _synthetic: {
-                name: 'Chameleon',
-                description: 'Adaptive interpolation from image DNA. Blends nearest archetype parameters weighted by distance.',
-                preferred_sectors: [],
-                parameters: {}
-            }
-        };
-
-        // Insert at correct descending position (avoid Array.sort JSC issues)
-        let idx = scores.length;
-        for (let i = 0; i < scores.length; i++) {
-            if (chameleonScore >= scores[i].score) { idx = i; break; }
-        }
-        scores.splice(idx, 0, entry);
-        return scores;
-    }
-
-    /**
-     * Inject the Distilled pseudo-archetype entry into a sorted score array.
-     * Gets a synthetic DNA score derived from Chameleon's score (both are
-     * meta-archetypes that adapt to the image). Placed right after Chameleon.
-     * @private
-     */
-    _injectDistilled(scores) {
-        // Derive synthetic DNA score from Chameleon's score (peer meta-archetype)
-        const chameleon = scores.find(s => s.id === 'dynamic_interpolator');
-        const distilledScore = chameleon ? Math.max(0, chameleon.score - 1) : 50;
-
-        const entry = {
-            id: 'distilled',
-            score: distilledScore,
-            _synthetic: {
-                name: 'Distilled',
-                description: 'Minimal batch-pipeline posterization. No archetype overrides — pure color extraction with 20→12 distillation.',
-                preferred_sectors: [],
-                parameters: {}
-            }
-        };
-
-        // Place right after Chameleon
-        const chameleonIdx = chameleon ? scores.indexOf(chameleon) : -1;
-        scores.splice(chameleonIdx + 1, 0, entry);
-        return scores;
-    }
-
-    /**
-     * Inject the Salamander pseudo-archetype entry into a sorted score array.
-     * DNA-driven distillation: Chameleon's adaptive parameters with Distilled's
-     * no-pruning guarantee. Placed right after Distilled.
-     * @private
-     */
-    _injectSalamander(scores) {
-        const chameleon = scores.find(s => s.id === 'dynamic_interpolator');
-        const salamanderScore = chameleon ? Math.max(0, chameleon.score - 2) : 48;
-
-        const entry = {
-            id: 'salamander',
-            score: salamanderScore,
-            _synthetic: {
-                name: 'Salamander',
-                description: 'DNA-driven distillation. Adaptive color count and SALIENCY centroid from image DNA — no palette reduction, no preprocessing, every distilled color survives.',
-                preferred_sectors: [],
-                parameters: {}
-            }
-        };
-
-        // Place right after Distilled
-        const distilled = scores.find(s => s.id === 'distilled');
-        const distilledIdx = distilled ? scores.indexOf(distilled) : -1;
-        scores.splice(distilledIdx + 1, 0, entry);
-        return scores;
-    }
-
-    /**
-     * Select the eager-scored tier-1 set: 3 pseudo-archetypes + top-1 per group.
-     * Scores array must already be DNA-ranked descending with _group injected.
-     *
-     * @param {Array} scores - DNA-ranked score array
-     * @returns {Set<string>} IDs to eager-score during startup
-     * @private
-     */
-    _selectEagerSet(scores) {
-        const eager = new Set(['dynamic_interpolator', 'distilled', 'salamander']);
-        const seenGroups = new Set();
-        for (const s of scores) {
-            if (eager.has(s.id)) continue;
-            const group = s._group || 'all';
-            if (!seenGroups.has(group)) {
-                seenGroups.add(group);
-                eager.add(s.id);
-            }
-        }
-        return eager;
     }
 
     /**
@@ -2112,30 +1748,7 @@ class SessionState extends EventEmitter {
         }
     }
 
-    /**
-     * Build a palette array with overrides applied on top of the BASELINE palette.
-     * Uses the clean posterization output (never mutated by knobs) so that
-     * override indices remain stable regardless of minVolume compaction.
-     * @private
-     * @returns {Array<{L, a, b}>|null}
-     */
-    _buildOverriddenPalette() {
-        if (!this.proxyEngine || !this.proxyEngine._baselineState) return null;
-
-        // ALWAYS use the clean, un-mutated baseline palette as the source.
-        // Never fall back to separationState.palette — it's a mutable result
-        // of knob application and creates index drift when minVolume remaps.
-        const basePalette = this.proxyEngine._baselineState.palette;
-        const result = basePalette.map(c => ({ ...c }));
-
-        for (const [idx, color] of this.paletteOverrides) {
-            if (idx < result.length) {
-                result[idx] = { ...color };
-            }
-        }
-
-        return result;
-    }
+    // _buildOverriddenPalette → delegated to this._paletteSurgery.buildOverriddenPalette()
 }
 
 module.exports = SessionState;

@@ -288,13 +288,13 @@ describe('resetToDefaults', () => {
 
     it('clears suggested color selections', () => {
         const s = setupSession();
-        s._checkedSuggestions = [{ L: 50, a: 10, b: -5 }];
-        s._cachedSuggestions = [{ L: 50, a: 10, b: -5, source: 'test', reason: 'test' }];
+        s._suggestions.checkedSuggestions.push({ L: 50, a: 10, b: -5 });
+        s._suggestions.cachedSuggestions = [{ L: 50, a: 10, b: -5, source: 'test', reason: 'test' }];
 
         s.resetToDefaults();
 
-        expect(s._checkedSuggestions).toEqual([]);
-        expect(s._cachedSuggestions).toBeNull();
+        expect(s._suggestions.checkedSuggestions).toEqual([]);
+        expect(s._suggestions.cachedSuggestions).toBeNull();
     });
 
     it('deletes cache entry for current archetype', () => {
