@@ -456,6 +456,12 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         }
     }
 
+    // 8b. Edge survival — structural fidelity (needs lab16bit before release)
+    const RevelationError = Reveal.RevelationError;
+    const edgeResult = RevelationError.edgeSurvival16(
+        lab16bit, colorIndices, width, height
+    );
+
     // Release lab16bit - no longer needed after separation
     lab16bit = null;
 
@@ -488,7 +494,13 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         { targetColors: params.targetColorsSlider }
     );
 
+    // Inject edge survival into metrics (matches ProxyEngine/ScoringManager flow)
+    metrics.feature_preservation.edgeSurvival = edgeResult.edgeSurvival;
+    metrics.feature_preservation.significantEdges = edgeResult.significantEdges;
+    metrics.feature_preservation.survivedEdges = edgeResult.survivedEdges;
+
     console.log(`  DeltaE: avg=${metrics.global_fidelity.avgDeltaE}, max=${metrics.global_fidelity.maxDeltaE}`);
+    console.log(`  Edge Survival: ${(edgeResult.edgeSurvival * 100).toFixed(1)}% (${edgeResult.survivedEdges}/${edgeResult.significantEdges} edges)`);
     console.log(`  Revelation Score: ${metrics.feature_preservation.revelationScore}`);
     console.log(`  Integrity: ${metrics.physical_feasibility.integrityScore}%`);
 
