@@ -533,7 +533,9 @@ class ProductionWorker {
 
         // Assign numbered names after sorting
         for (let i = 0; i < layers.length; i++) {
-            layers[i].name = `[${i + 1}] ${layers[i].hex}`;
+            const c = layers[i].labColor;
+            const lab = `L${c.L.toFixed(0)} a${c.a >= 0 ? '+' : ''}${c.a.toFixed(0)} b${c.b >= 0 ? '+' : ''}${c.b.toFixed(0)}`;
+            layers[i].name = `[${i + 1}] ${layers[i].hex} ${lab}`;
         }
 
         return layers;
