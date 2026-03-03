@@ -306,6 +306,14 @@ function initPlugin() {
             // Show finalize button
             const finalizeRow = document.getElementById('finalize-row');
             if (finalizeRow) finalizeRow.style.display = '';
+
+            // Show right panel and header controls (hidden during loading)
+            const hudPanel = document.getElementById('hud-panel');
+            if (hudPanel) hudPanel.style.display = '';
+            const loupeZoom = document.getElementById('loupe-zoom');
+            if (loupeZoom) loupeZoom.style.display = '';
+            const btnSync = document.getElementById('btn-sync');
+            if (btnSync) btnSync.style.display = '';
         });
 
         // Update stats panel below preview on every posterization
@@ -631,8 +639,13 @@ function setStatus(text) {
 function _showProgress(label, percent) {
     const bar = document.getElementById('ingest-progress');
     const fill = document.getElementById('ingest-progress-fill');
+    const placeholder = document.getElementById('preview-placeholder');
     if (bar) bar.style.display = 'block';
     if (fill && percent != null) fill.style.width = percent + '%';
+    // Show phase label in the main preview area (large, visible)
+    if (placeholder && placeholder.style.display !== 'none') {
+        placeholder.textContent = label;
+    }
     setStatus(label);
 }
 
@@ -781,6 +794,14 @@ function _clearUI() {
     // Hide finalize row
     const finalizeRow = document.getElementById('finalize-row');
     if (finalizeRow) finalizeRow.style.display = 'none';
+
+    // Hide right panel and header controls (shown on proxyReady)
+    const hudPanel = document.getElementById('hud-panel');
+    if (hudPanel) hudPanel.style.display = 'none';
+    const loupeZoom = document.getElementById('loupe-zoom');
+    if (loupeZoom) loupeZoom.style.display = 'none';
+    const btnSync = document.getElementById('btn-sync');
+    if (btnSync) btnSync.style.display = 'none';
 
     // Clear status and accuracy
     setStatus('');
