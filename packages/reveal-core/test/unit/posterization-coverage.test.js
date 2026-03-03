@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 
 const Reveal = require('../../index.js');
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
+const PaletteOps = require('../../lib/engines/PaletteOps');
 const LabEncoding = Reveal.LabEncoding;
 const LabDistance = Reveal.LabDistance;
 const HueAnalysis = Reveal.engines.HueAnalysis;
@@ -610,9 +611,9 @@ describe('LabEncoding Module (formerly ColorSpace)', () => {
         });
     });
 
-    describe('PosterizationEngine.calculateCIELABDistance', () => {
+    describe('PaletteOps.calculateCIELABDistance', () => {
         it('should return squared distance for performance', () => {
-            const distSq = PosterizationEngine.calculateCIELABDistance(
+            const distSq = PaletteOps.calculateCIELABDistance(
                 { L: 50, a: 0, b: 0 },
                 { L: 50, a: 3, b: 4 }
             );
@@ -621,12 +622,12 @@ describe('LabEncoding Module (formerly ColorSpace)', () => {
         });
 
         it('should apply higher L weight for grayscale', () => {
-            const distColor = PosterizationEngine.calculateCIELABDistance(
+            const distColor = PaletteOps.calculateCIELABDistance(
                 { L: 50, a: 0, b: 0 },
                 { L: 60, a: 0, b: 0 },
                 false
             );
-            const distGray = PosterizationEngine.calculateCIELABDistance(
+            const distGray = PaletteOps.calculateCIELABDistance(
                 { L: 50, a: 0, b: 0 },
                 { L: 60, a: 0, b: 0 },
                 true

@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest';
 
-const PosterizationEngine = require('../../lib/engines/PosterizationEngine');
+const PaletteOps = require('../../lib/engines/PaletteOps');
 const LabDistance = require('../../lib/color/LabDistance');
 
 /**
@@ -43,7 +43,7 @@ describe('_prunePalette — cross-metric behavior', () => {
     describe('near-duplicate yellows (ΔE76=1.0, ΔE2000≈0.21)', () => {
         test('CIE76 merges yellows at threshold 2.0', () => {
             const palette = [YELLOW_A, YELLOW_B, RED, BLUE];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 2.0, 92, 0, TUNING_NO_HUELOCK, 'cie76'
             );
             expect(result.length).toBe(3); // One yellow removed
@@ -51,7 +51,7 @@ describe('_prunePalette — cross-metric behavior', () => {
 
         test('CIE94 merges yellows at threshold 2.0', () => {
             const palette = [YELLOW_A, YELLOW_B, RED, BLUE];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 2.0, 92, 0, TUNING_NO_HUELOCK, 'cie94'
             );
             expect(result.length).toBe(3);
@@ -59,7 +59,7 @@ describe('_prunePalette — cross-metric behavior', () => {
 
         test('CIE2000 merges yellows at threshold 2.0', () => {
             const palette = [YELLOW_A, YELLOW_B, RED, BLUE];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 2.0, 92, 0, TUNING_NO_HUELOCK, 'cie2000'
             );
             expect(result.length).toBe(3);
@@ -82,7 +82,7 @@ describe('_prunePalette — cross-metric behavior', () => {
     describe('two pinks (ΔE76≈10.3, ΔE2000≈3.88)', () => {
         test('CIE76 does NOT merge pinks at threshold 8.0', () => {
             const palette = [PINK_A, PINK_B, RED, BLUE];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 8.0, 92, 0, TUNING_NO_HUELOCK, 'cie76'
             );
             // CIE76 distance ~10.3 > threshold 8 → should NOT merge
@@ -91,7 +91,7 @@ describe('_prunePalette — cross-metric behavior', () => {
 
         test('CIE2000 DOES merge pinks at threshold 8.0', () => {
             const palette = [PINK_A, PINK_B, RED, BLUE];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 8.0, 92, 0, TUNING_NO_HUELOCK, 'cie2000'
             );
             // CIE2000 distance ~3.88 < threshold 8 → should merge
@@ -100,7 +100,7 @@ describe('_prunePalette — cross-metric behavior', () => {
 
         test('CIE2000 does NOT merge pinks at threshold 3.0', () => {
             const palette = [PINK_A, PINK_B, RED, BLUE];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 3.0, 92, 0, TUNING_NO_HUELOCK, 'cie2000'
             );
             // CIE2000 distance ~3.88 > threshold 3 → should NOT merge
@@ -122,7 +122,7 @@ describe('_prunePalette — cross-metric behavior', () => {
             // Without L-weight: dist = sqrt(16) = 4
             // At threshold 5.0: L-weighted version should NOT merge (8 > 5)
             const palette = [darkA, darkB, RED];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 5.0, 92, 0, TUNING_NO_HUELOCK, 'cie76'
             );
             expect(result.length).toBe(3); // Should NOT merge due to L-weighting
@@ -148,7 +148,7 @@ describe('_prunePalette — cross-metric behavior', () => {
                 { L: 80, a: -30, b: 40 },
                 { L: 20, a: 5, b: -50 },
             ];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 10.0, 92, 4, TUNING_NO_HUELOCK, 'cie2000'
             );
             // Should stop at 4 even though more merges are possible
@@ -161,10 +161,10 @@ describe('_prunePalette — cross-metric behavior', () => {
                 { L: 51, a: 11, b: 11 },
                 { L: 80, a: -30, b: 40 },
             ];
-            const resultWithTarget = PosterizationEngine._prunePalette(
+            const resultWithTarget = PaletteOps._prunePalette(
                 palette, 10.0, 92, 2, TUNING_NO_HUELOCK, 'cie2000'
             );
-            const resultNoTarget = PosterizationEngine._prunePalette(
+            const resultNoTarget = PaletteOps._prunePalette(
                 palette, 10.0, 92, 0, TUNING_NO_HUELOCK, 'cie2000'
             );
             // With target=2, stops early; without target, merges all it can
@@ -189,7 +189,7 @@ describe('_prunePalette — cross-metric behavior', () => {
                 }
             };
             const palette = [warmRed, warmOrange, BLUE];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 20.0, 92, 0, tuningStrictHue, 'cie76'
             );
             // Should keep both despite being close, due to hue lock
@@ -210,7 +210,7 @@ describe('_prunePalette — cross-metric behavior', () => {
                 }
             };
             const palette = [grayA, grayB, RED];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 5.0, 92, 0, tuningStrictHue, 'cie76'
             );
             // Should merge grays (chroma < 5, hue lock bypassed)
@@ -224,7 +224,7 @@ describe('_prunePalette — cross-metric behavior', () => {
             const midTone = { L: 80, a: 3, b: 6 };
 
             const palette = [highlight, midTone, RED];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 30.0, 92, 0, TUNING_NO_HUELOCK, 'cie76'
             );
             // L=95 > whitePoint(92) and L=80 <= 92 → highlight protection blocks merge
@@ -236,7 +236,7 @@ describe('_prunePalette — cross-metric behavior', () => {
             const highlightB = { L: 97, a: 2, b: 2 };
 
             const palette = [highlightA, highlightB, RED];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 5.0, 92, 0, TUNING_NO_HUELOCK, 'cie76'
             );
             // Both above whitePoint → no protection → should merge
@@ -252,7 +252,7 @@ describe('_prunePalette — cross-metric behavior', () => {
             const lowSaliency = { L: 51, a: 1, b: 1 };     // Saliency = 51*1.5 + 1.4*2.5 = 80.0
 
             const palette = [lowSaliency, highSaliency];
-            const result = PosterizationEngine._prunePalette(
+            const result = PaletteOps._prunePalette(
                 palette, 100.0, 92, 0, TUNING_NO_HUELOCK, 'cie76'
             );
             expect(result.length).toBe(1);
@@ -280,13 +280,13 @@ describe('_prunePalette — unconditional similarity prune behavior', () => {
         ];
 
         // Budget prune with targetCount=8 would NOT merge (already at 8)
-        const resultBudget = PosterizationEngine._prunePalette(
+        const resultBudget = PaletteOps._prunePalette(
             [...palette], 2.0, 92, 8, TUNING_NO_HUELOCK, 'cie2000'
         );
         expect(resultBudget.length).toBe(8); // Budget stops at target
 
         // Unconditional prune with targetCount=0 DOES merge
-        const resultUnconditional = PosterizationEngine._prunePalette(
+        const resultUnconditional = PaletteOps._prunePalette(
             [...palette], 2.0, 92, 0, TUNING_NO_HUELOCK, 'cie2000'
         );
         expect(resultUnconditional.length).toBe(7); // Yellow pair merged
@@ -303,13 +303,13 @@ describe('_prunePalette — unconditional similarity prune behavior', () => {
         ];
 
         // With threshold 2.0 (old hard-coded): pinks survive (3.88 > 2.0)
-        const resultLowThreshold = PosterizationEngine._prunePalette(
+        const resultLowThreshold = PaletteOps._prunePalette(
             [...palette], 2.0, 92, 0, TUNING_NO_HUELOCK, 'cie2000'
         );
         expect(resultLowThreshold.length).toBe(5); // Pinks survive
 
         // With threshold 6.0 (archetype paletteReduction): pinks merge (3.88 < 6.0)
-        const resultHighThreshold = PosterizationEngine._prunePalette(
+        const resultHighThreshold = PaletteOps._prunePalette(
             [...palette], 6.0, 92, 0, TUNING_NO_HUELOCK, 'cie2000'
         );
         expect(resultHighThreshold.length).toBe(4); // Pinks merged
@@ -320,7 +320,7 @@ describe('_prunePalette — unconditional similarity prune behavior', () => {
         const palette = [YELLOW_A, YELLOW_B, RED];
         const threshold = Math.max(0, 2.0); // Simulates the floor logic
 
-        const result = PosterizationEngine._prunePalette(
+        const result = PaletteOps._prunePalette(
             [...palette], threshold, 92, 0, TUNING_NO_HUELOCK, 'cie2000'
         );
         // Yellows ΔE00≈0.21 < 2.0 → merge
@@ -336,7 +336,7 @@ describe('_prunePalette — unconditional similarity prune behavior', () => {
             { L: 20, a: 5, b: -50 },   // Blue (distinct)
         ];
 
-        const result = PosterizationEngine._prunePalette(
+        const result = PaletteOps._prunePalette(
             [...palette], 2.0, 92, 0, TUNING_NO_HUELOCK, 'cie2000'
         );
         // Both duplicate pairs should merge → 3 remaining

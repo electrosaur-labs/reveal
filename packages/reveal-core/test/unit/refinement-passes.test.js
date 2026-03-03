@@ -11,6 +11,7 @@
 import { describe, test, expect } from 'vitest';
 
 const PosterizationEngine = require('../../lib/engines/PosterizationEngine');
+const PaletteOps = require('../../lib/engines/PaletteOps');
 const ParameterGenerator = require('../../lib/analysis/ParameterGenerator');
 const ArchetypeLoader = require('../../lib/analysis/ArchetypeLoader');
 
@@ -57,13 +58,13 @@ function createFourColorImage(size) {
 }
 
 
-describe('PosterizationEngine._refineKMeans', () => {
+describe('PaletteOps._refineKMeans', () => {
 
     test('should return palette unchanged for single color', () => {
         const pixels = new Float32Array([50, 10, 20, 51, 11, 21]);
         const palette = [{ L: 50, a: 10, b: 20 }];
 
-        const result = PosterizationEngine._refineKMeans(pixels, palette);
+        const result = PaletteOps._refineKMeans(pixels, palette);
         expect(result).toHaveLength(1);
     });
 
@@ -71,7 +72,7 @@ describe('PosterizationEngine._refineKMeans', () => {
         const pixels = new Float32Array(0);
         const palette = [{ L: 50, a: 10, b: 20 }, { L: 80, a: -10, b: 30 }];
 
-        const result = PosterizationEngine._refineKMeans(pixels, palette);
+        const result = PaletteOps._refineKMeans(pixels, palette);
         expect(result).toEqual(palette);
     });
 
@@ -99,7 +100,7 @@ describe('PosterizationEngine._refineKMeans', () => {
             { L: 60, a: 0, b: 0 }   // 10 units away from cluster at L=70
         ];
 
-        const refined = PosterizationEngine._refineKMeans(pixels, palette);
+        const refined = PaletteOps._refineKMeans(pixels, palette);
 
         // Centroids should move closer to actual centers
         expect(refined[0].L).toBeCloseTo(30, 0);
@@ -111,7 +112,7 @@ describe('PosterizationEngine._refineKMeans', () => {
         const palette = [{ L: 30, a: 0, b: 0 }, { L: 70, a: 0, b: 0 }];
         palette._allColors = [{ L: 50, a: 0, b: 0 }];
 
-        const result = PosterizationEngine._refineKMeans(pixels, palette);
+        const result = PaletteOps._refineKMeans(pixels, palette);
         expect(result._allColors).toEqual(palette._allColors);
     });
 });

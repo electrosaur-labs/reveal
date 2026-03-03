@@ -7,8 +7,7 @@
 
 import { describe, test, expect } from 'vitest';
 
-// Import PosterizationEngine
-const PosterizationEngine = require('../../lib/engines/PosterizationEngine');
+const PaletteOps = require('../../lib/engines/PaletteOps');
 
 describe('Density Floor (Ghost Color Removal)', () => {
     describe('Basic Filtering', () => {
@@ -33,7 +32,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 503; i < 750; i++) assignments[i] = 3;
             for (let i = 750; i < 1000; i++) assignments[i] = 4;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005  // 0.5%
@@ -60,7 +59,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 0; i < 500; i++) assignments[i] = 0;
             for (let i = 500; i < 1000; i++) assignments[i] = 1;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -91,7 +90,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             assignments[804] = 3;
             for (let i = 805; i < 1000; i++) assignments[i] = 4;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -124,7 +123,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 496; i < 500; i++) assignments[i] = 1; // 4 pixels (0.4% - below threshold)
             for (let i = 500; i < 1000; i++) assignments[i] = 2;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -156,7 +155,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 304; i < 700; i++) assignments[i] = 2;
             for (let i = 700; i < 1000; i++) assignments[i] = 3;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -190,7 +189,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 401; i < 700; i++) assignments[i] = 2;
             for (let i = 700; i < 1000; i++) assignments[i] = 3;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -222,7 +221,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             assignments[700] = 4; // Sparse (1 pixel)
             for (let i = 701; i < 1200; i++) assignments[i] = 5;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -251,7 +250,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 900; i < 908; i++) assignments[i] = 1;
             for (let i = 908; i < 1000; i++) assignments[i] = 2;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.01  // 1% threshold
@@ -273,7 +272,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             assignments[998] = 1;
             assignments[999] = 1;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.001  // 0.1% threshold
@@ -298,7 +297,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 400; i < 800; i++) assignments[i] = 1;
             for (let i = 800; i < 1000; i++) assignments[i] = 255; // Transparent pixels
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -325,7 +324,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 990; i < 1000; i++) assignments[i] = 1;
             for (let i = 1000; i < 10000; i++) assignments[i] = 255;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005  // 0.5%
@@ -346,7 +345,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
 
             const assignments = new Uint8Array(0);
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -366,7 +365,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
 
             const assignments = new Uint8Array([0]);
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -387,7 +386,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 0; i < 995; i++) assignments[i] = 0;
             for (let i = 995; i < 1000; i++) assignments[i] = 1;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005  // 0.5%
@@ -408,7 +407,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 0; i < 996; i++) assignments[i] = 0;
             for (let i = 996; i < 1000; i++) assignments[i] = 1;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005  // 0.5%
@@ -429,7 +428,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             // Each color has 1 pixel out of 3 total (33.3% each - well above 0.5%)
             const assignments = new Uint8Array([0, 1, 2]);
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005  // 0.5%
@@ -460,7 +459,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 80100; i < 100000; i++) assignments[i] = 3;
 
             const startTime = performance.now();
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005
@@ -493,7 +492,7 @@ describe('Density Floor (Ghost Color Removal)', () => {
             for (let i = 6003; i < 8000; i++) assignments[i] = 3;
             for (let i = 8000; i < 10000; i++) assignments[i] = 4;
 
-            const result = PosterizationEngine._applyDensityFloor(
+            const result = PaletteOps._applyDensityFloor(
                 assignments,
                 palette,
                 0.005  // 0.5%
