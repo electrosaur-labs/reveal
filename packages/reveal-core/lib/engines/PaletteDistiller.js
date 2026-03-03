@@ -59,11 +59,18 @@ class PaletteDistiller {
         // Nothing to reduce
         if (N <= K) {
             const remap = new Uint8Array(N);
+            const counts = new Float64Array(N);
             for (let i = 0; i < N; i++) remap[i] = i;
+            for (let i = 0; i < pixelCount; i++) {
+                const idx = assignments[i];
+                if (idx < N) counts[idx]++;
+            }
             return {
                 palette: palette.map(c => ({ ...c })),
                 remap,
-                selected: Array.from({ length: N }, (_, i) => i)
+                selected: Array.from({ length: N }, (_, i) => i),
+                ghostsExcluded: 0,
+                coverageCounts: counts
             };
         }
 
