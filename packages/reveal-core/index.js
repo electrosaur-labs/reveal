@@ -140,6 +140,8 @@ function generateConfigurationDistilled(dna) {
         peakFinderMaxPeaks: 1,
         splitMode: 'median',
         preprocessingIntensity: 'off', // no bilateral filter — matches batch pipeline exactly
+        distanceMetric: 'cie76',       // explicit — prevents state leakage from previous archetype
+        ditherType: 'none',            // explicit — blue-noise causes speckles on colorful images
         speckleRescue: 5, // despeckle masks for print-ready output
     };
 }

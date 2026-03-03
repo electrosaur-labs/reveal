@@ -11,9 +11,9 @@
  * The palette was curated by the user — re-posterizing at full resolution
  * would produce different centroids, invalidating palette overrides.
  *
- * PERFORMANCE: Inline 16-bit CIE76 nearest-neighbor (no async yields,
- * no string hashing). Spatial locality snaps adjacent pixels to last
- * winner. Full-res 20MP image separates in <2s.
+ * PERFORMANCE: Uses SeparationEngine with L-weighted CIE76 distance
+ * (matching batch pipeline). Yields every 64K pixels for Photoshop
+ * responsiveness. Full-res 20MP image separates in <2s.
  */
 
 const { app, core, action } = require("photoshop");
@@ -139,17 +139,12 @@ class ProductionWorker {
             // Separation uses BASELINE palette so palette overrides do not
             // deflect the nearest-neighbour search. Override colours are layer
             // fill colours only — they live in labPalette, not separationPalette.
-            let colorIndices;
-            if (metric === 'cie76' && ditherType === 'none') {
-                colorIndices = self._mapPixelsFast(labPixels, separationPalette, pixelCount);
-            } else {
-                const meshCount = prodConfig.meshSize || null;
-                logger.log(`[ProductionWorker] Using ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'} (via SeparationEngine)`);
-                colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-                    labPixels, separationPalette, null, actualWidth, actualHeight,
-                    { ditherType, distanceMetric: metric, meshCount }
-                );
-            }
+            const meshCount = prodConfig.meshSize || null;
+            logger.log(`[ProductionWorker] Separating: ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'}`);
+            const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+                labPixels, separationPalette, null, actualWidth, actualHeight,
+                { ditherType, distanceMetric: metric, meshCount }
+            );
 
             logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms (metric=${metric})`);
 
@@ -323,17 +318,12 @@ class ProductionWorker {
             BilateralFilter.applyBilateralFilterLab(labPixels, width, height, 3, 5000);
         }
 
-        // Map pixels using locked palette — fast CIE76 inline
+        // Map pixels using locked palette via SeparationEngine (L-weighted CIE76)
         const metric = this._sessionState.getState().distanceMetric || 'cie76';
-        let colorIndices;
-        if (metric === 'cie76') {
-            colorIndices = this._mapPixelsFast(labPixels, labPalette, pixelCount);
-        } else {
-            colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-                labPixels, labPalette, null, width, height,
-                { ditherType: 'none', distanceMetric: metric }
-            );
-        }
+        const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
+            labPixels, labPalette, null, width, height,
+            { ditherType: 'none', distanceMetric: metric }
+        );
 
         // Remap merged/deleted colors (same fix as production render)
         if (this._sessionState.mergeHistory.size > 0) {
@@ -397,61 +387,6 @@ class ProductionWorker {
         }
 
         return { buffer, width, height, eRev, labPixels, colorIndices, labPalette };
-    }
-
-    // ─── Fast Pixel Mapping ──────────────────────────────────────
-    // Inline CIE76 in native 16-bit space. No async, no string hash,
-    // no per-pixel conversion. Spatial locality + early exit.
-
-    _mapPixelsFast(labPixels, labPalette, pixelCount) {
-        const paletteSize = labPalette.length;
-        const colorIndices = new Uint8Array(pixelCount);
-
-        // Pre-convert palette to 16-bit integer space once
-        const palL = new Int32Array(paletteSize);
-        const palA = new Int32Array(paletteSize);
-        const palB = new Int32Array(paletteSize);
-        for (let j = 0; j < paletteSize; j++) {
-            palL[j] = Math.round((labPalette[j].L / 100) * 32768);
-            palA[j] = Math.round((labPalette[j].a / 128) * 16384 + 16384);
-            palB[j] = Math.round((labPalette[j].b / 128) * 16384 + 16384);
-        }
-
-        // Snap threshold: ~ΔE 1.3 in 16-bit CIE76 space
-        const SNAP = 180000;
-        let lastBest = 0;
-
-        for (let p = 0; p < pixelCount; p++) {
-            const off = p * 3;
-            const pL = labPixels[off];
-            const pA = labPixels[off + 1];
-            const pB = labPixels[off + 2];
-
-            // Check last winner first (spatial locality)
-            const dL0 = pL - palL[lastBest];
-            const dA0 = pA - palA[lastBest];
-            const dB0 = pB - palB[lastBest];
-            let minDist = dL0 * dL0 + dA0 * dA0 + dB0 * dB0;
-
-            if (minDist > SNAP) {
-                let best = lastBest;
-                for (let c = 0; c < paletteSize; c++) {
-                    const dL = pL - palL[c];
-                    const dA = pA - palA[c];
-                    const dB = pB - palB[c];
-                    const dist = dL * dL + dA * dA + dB * dB;
-                    if (dist < minDist) {
-                        minDist = dist;
-                        best = c;
-                        if (dist < SNAP) break;
-                    }
-                }
-                lastBest = best;
-            }
-            colorIndices[p] = lastBest;
-        }
-
-        return colorIndices;
     }
 
     // ─── Build Layer Objects ─────────────────────────────────────

@@ -536,14 +536,14 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // 12. Write output PSD (8-bit for QuickLook compatibility)
-    console.log(`  Writing PSD...`);
+    // 12. Write output PSD (match input bit depth)
+    console.log(`  Writing ${depth}-bit PSD...`);
     const outputPsdPath = path.join(outputDir, `${basename}.psd`);
     const writer = new PSDWriter({
         width,
         height,
         colorMode: 'lab',
-        bitsPerChannel: 8,
+        bitsPerChannel: depth,
         documentName: basename
     });
 
