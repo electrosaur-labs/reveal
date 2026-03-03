@@ -231,9 +231,23 @@ function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
 }
 
 /**
- * Process a single Lab PSD (8-bit or 16-bit)
+ * Pseudo-archetype IDs that use code-only generators instead of JSON archetypes.
  */
-async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
+const PSEUDO_ARCHETYPES = {
+    'chameleon':   dna => Reveal.generateConfigurationMk2(dna),
+    'distilled':   dna => Reveal.generateConfigurationDistilled(dna),
+    'salamander':  dna => Reveal.generateConfigurationSalamander(dna),
+};
+
+/**
+ * Process a single Lab PSD (8-bit or 16-bit)
+ * @param {string} inputPath - Path to input PSD
+ * @param {string} outputDir - Output directory
+ * @param {number} expectedBitDepth - 8 or 16
+ * @param {Object} [cliOptions] - CLI options
+ * @param {string} [cliOptions.archetype] - Archetype ID override (real JSON id or pseudo: chameleon, distilled, salamander)
+ */
+async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions = {}) {
     const basename = path.basename(inputPath, '.psd');
     console.log(chalk.cyan(`\nProcessing: ${basename}`));
 
@@ -274,15 +288,42 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
     console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, StdDev=${dna.l_std_dev}, maxC=${dna.maxC}`);
 
     // 4. Generate configuration
-    const config = ParameterGenerator.generate(dna, {
-        imageData: null,
-        width,
-        height,
-        preprocessingIntensity: 'auto'
-    });
+    const archetypeOverride = cliOptions.archetype;
+    let config;
+
+    if (archetypeOverride && PSEUDO_ARCHETYPES[archetypeOverride]) {
+        // Pseudo-archetype: code-only generator (chameleon, distilled, salamander)
+        config = PSEUDO_ARCHETYPES[archetypeOverride](dna);
+        config.meta = config.meta || {};
+        config.meta.archetypeId = archetypeOverride;
+        config.meta.archetype = archetypeOverride;
+        config.meta.matchScore = null;
+        config.meta.matchBreakdown = null;
+        config.meta.matchRanking = [];
+        console.log(chalk.green(`  Archetype: ${archetypeOverride} (pseudo — code-only generator)`));
+    } else if (archetypeOverride) {
+        // Real JSON archetype: manual override via manualArchetypeId
+        config = ParameterGenerator.generate(dna, {
+            imageData: null,
+            width,
+            height,
+            preprocessingIntensity: 'auto',
+            manualArchetypeId: archetypeOverride
+        });
+        console.log(chalk.green(`  Archetype: ${config.meta?.archetype || archetypeOverride} (manual override)`));
+    } else {
+        // Default: DNA-based auto-match
+        config = ParameterGenerator.generate(dna, {
+            imageData: null,
+            width,
+            height,
+            preprocessingIntensity: 'auto'
+        });
+        console.log(chalk.green(`  Archetype: ${config.meta?.archetype || 'unknown'} (DNA auto-match)`));
+    }
+
     dna.archetype = config.meta?.archetypeId;
-    console.log(chalk.green(`  Archetype: ${config.meta?.archetype || 'unknown'}`));
-    console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
+    console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias || 'n/a'}, Dither: ${config.ditherType || 'none'}`);
 
     // 4a. Bilateral prefilter (edge-preserving noise reduction)
     const BilateralFilter = Reveal.BilateralFilter;
@@ -599,17 +640,35 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth) {
 async function main() {
     const args = process.argv.slice(2);
 
-    if (args.length < 3) {
-        console.log(chalk.bold(`\nUsage: node posterize-psd.js <bitDepth> <inputPSD> <outputDir>`));
-        console.log(`\n  bitDepth:  8 or 16 (expected bit depth of input file)`);
-        console.log(`  inputPSD:  Path to input Lab PSD file`);
-        console.log(`  outputDir: Directory for output PSD and JSON files`);
-        console.log(`\nExample:`);
-        console.log(`  node posterize-psd.js 16 ./input/image.psd ./output\n`);
+    // Parse --archetype flag from anywhere in args
+    let archetype = null;
+    const positionalArgs = [];
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--archetype' && i + 1 < args.length) {
+            archetype = args[i + 1];
+            i++; // skip value
+        } else if (args[i].startsWith('--archetype=')) {
+            archetype = args[i].split('=')[1];
+        } else {
+            positionalArgs.push(args[i]);
+        }
+    }
+
+    if (positionalArgs.length < 3) {
+        console.log(chalk.bold(`\nUsage: node posterize-psd.js <bitDepth> <inputPSD> <outputDir> [--archetype <id>]`));
+        console.log(`\n  bitDepth:    8 or 16 (expected bit depth of input file)`);
+        console.log(`  inputPSD:    Path to input Lab PSD file`);
+        console.log(`  outputDir:   Directory for output PSD and JSON files`);
+        console.log(`  --archetype: Optional archetype override. Accepts:`);
+        console.log(`               Pseudo-archetypes: chameleon, distilled, salamander`);
+        console.log(`               Real archetypes:   warm_naturalist, subtle_naturalist, etc.`);
+        console.log(`\nExamples:`);
+        console.log(`  node posterize-psd.js 16 ./input/image.psd ./output`);
+        console.log(`  node posterize-psd.js 16 ./input/image.psd ./output --archetype salamander\n`);
         process.exit(1);
     }
 
-    const [bitDepthArg, inputPath, outputDir] = args;
+    const [bitDepthArg, inputPath, outputDir] = positionalArgs;
     const bitDepth = parseInt(bitDepthArg, 10);
 
     if (bitDepth !== 8 && bitDepth !== 16) {
@@ -627,9 +686,12 @@ async function main() {
     console.log(`Input:    ${inputPath}`);
     console.log(`Output:   ${outputDir}`);
     console.log(`Expected: ${bitDepth}-bit Lab`);
+    if (archetype) {
+        console.log(`Archetype: ${archetype} (override)`);
+    }
 
     try {
-        const result = await posterizePsd(inputPath, outputDir, bitDepth);
+        const result = await posterizePsd(inputPath, outputDir, bitDepth, { archetype });
         console.log(chalk.green(`\nDone.`));
     } catch (error) {
         console.error(chalk.red(`\nError: ${error.message}`));

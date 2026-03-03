@@ -24,8 +24,10 @@ const { posterizePsd } = require('./posterize-psd');
 
 /**
  * Process all PSDs in a directory
+ * @param {Object} [cliOptions] - Options to pass through to posterizePsd
+ * @param {string} [cliOptions.archetype] - Archetype ID override
  */
-async function processDirectory(inputDir, outputDir, bitDepth, sourceName) {
+async function processDirectory(inputDir, outputDir, bitDepth, sourceName, cliOptions = {}) {
     if (!fs.existsSync(inputDir)) {
         return [];
     }
@@ -58,7 +60,7 @@ async function processDirectory(inputDir, outputDir, bitDepth, sourceName) {
         console.log(chalk.bold(`[${i + 1}/${files.length}] ${file}`));
 
         try {
-            const result = await posterizePsd(inputPath, outputDir, bitDepth);
+            const result = await posterizePsd(inputPath, outputDir, bitDepth, cliOptions);
             results.push({
                 success: true,
                 filename: result.filename,
@@ -85,14 +87,14 @@ async function processDirectory(inputDir, outputDir, bitDepth, sourceName) {
 /**
  * Process a source (met, rijks, etc.)
  */
-async function processSource(sourceName, bitDepths, baseDir) {
+async function processSource(sourceName, bitDepths, baseDir, cliOptions = {}) {
     const results = [];
 
     for (const bitDepth of bitDepths) {
         const inputDir = path.join(baseDir, 'input', sourceName, 'psd', `${bitDepth}bit`);
         const outputDir = path.join(baseDir, 'output', sourceName, 'psd', `${bitDepth}bit`);
 
-        const dirResults = await processDirectory(inputDir, outputDir, bitDepth, sourceName);
+        const dirResults = await processDirectory(inputDir, outputDir, bitDepth, sourceName, cliOptions);
         results.push(...dirResults);
     }
 
@@ -103,8 +105,23 @@ async function processSource(sourceName, bitDepths, baseDir) {
  * Main batch processing
  */
 async function main() {
-    const sourceArg = process.argv[2] || 'all';
-    const bitDepthArg = process.argv[3] || 'all';
+    // Parse --archetype flag from anywhere in args
+    const rawArgs = process.argv.slice(2);
+    let archetype = null;
+    const positionalArgs = [];
+    for (let i = 0; i < rawArgs.length; i++) {
+        if (rawArgs[i] === '--archetype' && i + 1 < rawArgs.length) {
+            archetype = rawArgs[i + 1];
+            i++;
+        } else if (rawArgs[i].startsWith('--archetype=')) {
+            archetype = rawArgs[i].split('=')[1];
+        } else {
+            positionalArgs.push(rawArgs[i]);
+        }
+    }
+
+    const sourceArg = positionalArgs[0] || 'all';
+    const bitDepthArg = positionalArgs[1] || 'all';
     const baseDir = path.join(__dirname, '../data/SP100');
     const inputBaseDir = path.join(baseDir, 'input');
 
@@ -133,6 +150,7 @@ async function main() {
 
     console.log(`Sources:    ${sources.join(', ') || 'none found'}`);
     console.log(`Bit depths: ${bitDepths.join(', ')}`);
+    if (archetype) console.log(`Archetype:  ${archetype} (override)`);
 
     if (sources.length === 0) {
         console.log(chalk.yellow(`\nNo source directories found in ${inputBaseDir}`));
@@ -149,7 +167,8 @@ async function main() {
             continue;
         }
 
-        const results = await processSource(source, bitDepths, baseDir);
+        const cliOptions = archetype ? { archetype } : {};
+        const results = await processSource(source, bitDepths, baseDir, cliOptions);
         allResults.push(...results);
     }
 
