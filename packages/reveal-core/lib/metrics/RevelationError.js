@@ -205,6 +205,98 @@ const RevelationError = {
         }
 
         return sumDE / pixelCount;
+    },
+
+    /**
+     * Compute edge survival ratio from 16-bit Lab pixels + palette indices.
+     *
+     * Measures structural fidelity: what fraction of significant color boundaries
+     * in the original image are preserved in the posterized version.
+     *
+     * Algorithm:
+     *   1. Scan all horizontal + vertical adjacent pixel pairs
+     *   2. A pair is a "significant edge" if the original Lab ΔE exceeds threshold
+     *   3. An edge "survives" if the two pixels have different palette assignments
+     *   4. Edge survival = survived / significant (0→1, higher = better structure)
+     *
+     * High threshold focuses on major region boundaries (sky/ground, subject/background),
+     * not fine texture — capturing "large detail" fidelity.
+     *
+     * @param {Uint16Array} labPixels    - 16-bit Lab interleaved (L,a,b per pixel, PS encoding 0-32768)
+     * @param {Uint8Array}  colorIndices - Palette index per pixel
+     * @param {number} width
+     * @param {number} height
+     * @param {Object} [options]
+     * @param {number} [options.edgeThreshold=15] - Min perceptual ΔE for a "significant" edge
+     * @returns {{ edgeSurvival: number, significantEdges: number, survivedEdges: number }}
+     */
+    edgeSurvival16(labPixels, colorIndices, width, height, options) {
+        const threshold = (options && options.edgeThreshold) || 15;
+        const thresholdSq = threshold * threshold;
+
+        // 16-bit PS encoding → perceptual units
+        const L_SCALE = 100 / 32768;
+        const AB_SCALE = 128 / 16384;
+
+        let significantEdges = 0;
+        let survivedEdges = 0;
+
+        // Horizontal edges (pixel i, pixel i+1 in same row)
+        for (let y = 0; y < height; y++) {
+            const rowOff = y * width;
+            for (let x = 0; x < width - 1; x++) {
+                const p1 = rowOff + x;
+                const p2 = p1 + 1;
+                const off1 = p1 * 3;
+                const off2 = p2 * 3;
+
+                const dL = (labPixels[off1] - labPixels[off2]) * L_SCALE;
+                const da = (labPixels[off1 + 1] - labPixels[off2 + 1]) * AB_SCALE;
+                const db = (labPixels[off1 + 2] - labPixels[off2 + 2]) * AB_SCALE;
+                const dESq = dL * dL + da * da + db * db;
+
+                if (dESq >= thresholdSq) {
+                    significantEdges++;
+                    if (colorIndices[p1] !== colorIndices[p2]) {
+                        survivedEdges++;
+                    }
+                }
+            }
+        }
+
+        // Vertical edges (pixel at row y, pixel at row y+1 in same column)
+        for (let y = 0; y < height - 1; y++) {
+            const row1Off = y * width;
+            const row2Off = (y + 1) * width;
+            for (let x = 0; x < width; x++) {
+                const p1 = row1Off + x;
+                const p2 = row2Off + x;
+                const off1 = p1 * 3;
+                const off2 = p2 * 3;
+
+                const dL = (labPixels[off1] - labPixels[off2]) * L_SCALE;
+                const da = (labPixels[off1 + 1] - labPixels[off2 + 1]) * AB_SCALE;
+                const db = (labPixels[off1 + 2] - labPixels[off2 + 2]) * AB_SCALE;
+                const dESq = dL * dL + da * da + db * db;
+
+                if (dESq >= thresholdSq) {
+                    significantEdges++;
+                    if (colorIndices[p1] !== colorIndices[p2]) {
+                        survivedEdges++;
+                    }
+                }
+            }
+        }
+
+        const edgeSurvival = significantEdges > 0
+            ? survivedEdges / significantEdges
+            : 1; // no significant edges → trivially perfect
+
+        return {
+            edgeSurvival: parseFloat(edgeSurvival.toFixed(4)),
+            significantEdges,
+            survivedEdges
+        };
     }
 };
 

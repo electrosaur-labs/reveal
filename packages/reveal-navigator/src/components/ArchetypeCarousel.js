@@ -296,9 +296,9 @@ class ArchetypeCarousel {
         on('carouselReady', (data) => {
             this._rebuild(data.scores);
         });
-        // Update individual card ΔE as each archetype is scored in the background.
+        // Update individual card ΔE + edge survival as each archetype is scored in the background.
         on('archetypeScored', (data) => {
-            this._updateCardDeltaE(data.id, data.meanDeltaE, data.targetColors, data.sortScore);
+            this._updateCardDeltaE(data.id, data.meanDeltaE, data.targetColors, data.sortScore, data.edgeSurvival);
         });
         // All scored — sort by displayed ΔE (includes live values from clicked cards).
         on('scoringComplete', () => {
@@ -385,10 +385,13 @@ class ArchetypeCarousel {
         card.dataset.id = match.id;
         card.dataset.group = isSynthetic ? 'specialist' : (archetype.group || 'all');
 
-        // Score bar — ΔE drives the bar when available, otherwise DNA score
+        // Score bar — edge survival drives bar when available, then ΔE, then DNA score
+        const hasEdge = match.edgeSurvival != null;
         const hasDE = match.meanDeltaE != null;
         const hasScore = match.score != null;
-        const scorePercent = hasDE
+        const scorePercent = hasEdge
+            ? Math.min(100, Math.max(0, match.edgeSurvival * 100))   // Edge survival is 0-1
+            : hasDE
             ? Math.min(100, Math.max(0, 100 - match.meanDeltaE * 4))  // Lower ΔE = fuller bar
             : hasScore ? Math.min(100, Math.max(0, match.score)) : 0;
 
@@ -403,17 +406,18 @@ class ArchetypeCarousel {
             : '';
 
         const deStr = hasDE ? match.meanDeltaE.toFixed(1) : '-';
+        const edgeStr = hasEdge ? (match.edgeSurvival * 100).toFixed(0) + '%' : '-';
         const colorsStr = match.targetColors ? `${match.targetColors}c` : '';
         const deDisplay = hasDE && colorsStr ? `${deStr} (${colorsStr})` : deStr;
         const dnaStr = match.score != null ? match.score.toFixed(0) : '-';
-        const debugBg = hasDE ? '#ff0' : '#888';
+        const debugBg = hasEdge ? '#ff0' : hasDE ? '#ff0' : '#888';
         if (match.sortScore != null) card.dataset.sortScore = match.sortScore.toFixed(2);
         if (match.meanDeltaE != null) card.dataset.deltaE = match.meanDeltaE.toFixed(2);
         if (match.score != null) card.dataset.dnaScore = match.score.toFixed(2);
         if (match.targetColors != null) card.dataset.screenCount = match.targetColors;
-        const debugTitle = `${archetype.name} \u00b7 \u0394E ${deStr} \u00b7 ${colorsStr || '?c'} \u00b7 DNA ${dnaStr}`;
+        const debugTitle = `${archetype.name} \u00b7 \u0394E ${deStr} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?c'} \u00b7 DNA ${dnaStr}`;
         card.innerHTML =
-            `<div class="card-debug-de" title="${debugTitle}" style="background:${debugBg};color:#000;font-size:14px;font-weight:bold;text-align:center;">${String(sortIndex + 1).padStart(2, '0')} \u0394E=${deStr} ${colorsStr} DNA=${dnaStr}</div>` +
+            `<div class="card-debug-de" title="${debugTitle}" style="background:${debugBg};color:#000;font-size:14px;font-weight:bold;text-align:center;">${String(sortIndex + 1).padStart(2, '0')} \u0394E=${deStr} ${colorsStr} E=${edgeStr} DNA=${dnaStr}</div>` +
             `<div class="card-name">${archetype.name}</div>` +
             traitsHtml +
             `<div class="card-score-row">` +
@@ -483,14 +487,15 @@ class ArchetypeCarousel {
     }
 
     /**
-     * Update a single card's displayed ΔE from a background scoring event.
+     * Update a single card's displayed ΔE + edge survival from a background scoring event.
      * Skips the active card — its ΔE is synced to the live value by previewUpdated.
      */
-    _updateCardDeltaE(id, meanDeltaE, targetColors, sortScore) {
+    _updateCardDeltaE(id, meanDeltaE, targetColors, sortScore, edgeSurvival) {
         const card = this._container.querySelector(`.carousel-card[data-id="${id}"]`);
         if (!card) return;
 
         const de = meanDeltaE.toFixed(1);
+        const edgeStr = edgeSurvival != null ? (edgeSurvival * 100).toFixed(0) + '%' : '-';
         const colorsStr = targetColors ? `${targetColors}c` : '';
         const scoreVal = card.querySelector('.card-score-val');
         if (scoreVal) scoreVal.textContent = colorsStr ? `${de} (${colorsStr})` : de;
@@ -498,18 +503,24 @@ class ArchetypeCarousel {
         card.dataset.deltaE = meanDeltaE.toFixed(2);
         if (targetColors != null) card.dataset.screenCount = targetColors;
         const scoreFill = card.querySelector('.card-score-fill');
-        if (scoreFill) scoreFill.style.width = Math.min(100, Math.max(0, 100 - meanDeltaE * 4)) + '%';
+        if (scoreFill) {
+            // Edge survival drives the bar when available
+            const pct = edgeSurvival != null
+                ? Math.min(100, Math.max(0, edgeSurvival * 100))
+                : Math.min(100, Math.max(0, 100 - meanDeltaE * 4));
+            scoreFill.style.width = pct + '%';
+        }
         const debugDiv = card.querySelector('.card-debug-de');
         if (debugDiv) {
-            // Preserve sort index and DNA value, update ΔE + screen count
+            // Preserve sort index and DNA value, update ΔE + edge + screen count
             const parts = debugDiv.textContent.match(/^(\d+)\s.*DNA=(.+)$/);
             const idx = parts ? parts[1] : '??';
             const dna = parts ? parts[2] : '-';
-            debugDiv.textContent = `${idx} \u0394E=${de} ${colorsStr} DNA=${dna}`;
+            debugDiv.textContent = `${idx} \u0394E=${de} ${colorsStr} E=${edgeStr} DNA=${dna}`;
             debugDiv.style.background = '#ff0';
             // Update hover with archetype name + scores
             const name = card.querySelector('.card-name')?.textContent || '?';
-            debugDiv.title = `${name} \u00b7 \u0394E ${de} \u00b7 ${colorsStr || '?c'} \u00b7 DNA ${dna}`;
+            debugDiv.title = `${name} \u00b7 \u0394E ${de} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?c'} \u00b7 DNA ${dna}`;
         }
     }
 

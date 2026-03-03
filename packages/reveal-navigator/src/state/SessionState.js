@@ -271,9 +271,10 @@ class SessionState extends EventEmitter {
         this.state.isProcessing = false;
 
         const initialAccuracy = this.calculateCurrentAccuracy();
+        const initialEdgeSurvival = this.calculateCurrentEdgeSurvival();
         const initialFidelity = this.calculateDNAFidelity();
 
-        // Store Chameleon's ΔE
+        // Store Chameleon's ΔE and edge survival
         if (initialAccuracy != null) {
             this._archetypeDeltaE.set('dynamic_interpolator', initialAccuracy);
         }
@@ -326,34 +327,37 @@ class SessionState extends EventEmitter {
 
         const allScores = this.getAllArchetypeScores(); // instant DNA ranking
 
-        // Inject Chameleon's ΔE and screen count (already computed above)
+        // Inject Chameleon's ΔE, edge survival, and screen count (already computed above)
         const chameleonEntry = allScores.find(s => s.id === 'dynamic_interpolator');
         if (chameleonEntry) {
             const sep = this.proxyEngine.separationState;
             const chameleonColors = sep && sep.palette ? sep.palette.length : 0;
             chameleonEntry.meanDeltaE = initialAccuracy;
+            chameleonEntry.edgeSurvival = initialEdgeSurvival;
             chameleonEntry.targetColors = chameleonColors;
             chameleonEntry.sortScore = initialAccuracy != null
-                ? this._computeSortScore(initialAccuracy, chameleonColors) : null;
+                ? this._computeSortScore(initialAccuracy, chameleonColors, initialEdgeSurvival) : null;
         }
 
-        // Inject Distilled's ΔE (scored above)
+        // Inject Distilled's ΔE and edge survival (scored above)
         const distilledEntry = allScores.find(s => s.id === 'distilled');
         if (distilledEntry) {
             distilledEntry.meanDeltaE = distilledAccuracy;
+            distilledEntry.edgeSurvival = distilledQuality.edgeSurvival;
             distilledEntry.targetColors = 12;
             distilledEntry.sortScore = distilledAccuracy != null
-                ? this._computeSortScore(distilledAccuracy, 12) : null;
+                ? this._computeSortScore(distilledAccuracy, 12, distilledQuality.edgeSurvival) : null;
         }
 
-        // Inject Salamander's ΔE (scored above)
+        // Inject Salamander's ΔE and edge survival (scored above)
         const salamanderEntry = allScores.find(s => s.id === 'salamander');
         if (salamanderEntry) {
             const salamanderColors = salamanderQuality.rgbPalette ? salamanderQuality.rgbPalette.length : 0;
             salamanderEntry.meanDeltaE = salamanderAccuracy;
+            salamanderEntry.edgeSurvival = salamanderQuality.edgeSurvival;
             salamanderEntry.targetColors = salamanderColors;
             salamanderEntry.sortScore = salamanderAccuracy != null
-                ? this._computeSortScore(salamanderAccuracy, salamanderColors) : null;
+                ? this._computeSortScore(salamanderAccuracy, salamanderColors, salamanderQuality.edgeSurvival) : null;
         }
 
         this.emit('carouselReady', { scores: allScores, topMatchId: 'dynamic_interpolator' });
@@ -367,15 +371,35 @@ class SessionState extends EventEmitter {
     }
 
     /**
-     * Compute sort score: raw ΔE + exponential screen count penalty.
-     * Baseline 8 screens, no penalty at ≤8. Above 8, penalty grows
-     * exponentially: 9→0.5, 10→1.4, 11→2.9, 12→5.0, 14→11.3
+     * Compute sort score: structural fidelity loss + screen count penalty.
+     *
+     * Primary signal: edge survival (what fraction of major color boundaries
+     * in the original are preserved). This captures "detail loss" that meanΔE
+     * misses — e.g., palette reduction merging visually distinct regions.
+     *
+     * Secondary signal: screen count penalty (exponential above 8).
+     * Screen economy matters for print production cost.
+     *
+     * Lower = better.
+     *
+     * @param {number} meanDeltaE - Mean color error (unused in v2, kept for API compat)
+     * @param {number} targetColors - Number of palette colors (screens)
+     * @param {number} [edgeSurvival] - Fraction of significant edges preserved (0-1)
      * @private
      */
-    _computeSortScore(meanDeltaE, targetColors) {
+    _computeSortScore(meanDeltaE, targetColors, edgeSurvival) {
+        // Structural fidelity loss: (1 - edgeSurvival) × 50
+        // At 70% survival → 15, at 60% → 20, at 50% → 25
+        // Falls back to ΔE-based estimate when edge survival not yet computed
+        const structuralLoss = edgeSurvival != null
+            ? (1 - edgeSurvival) * 50
+            : meanDeltaE;  // fallback before edge data available
+
+        // Screen economy penalty: exponential above 8 screens
         const excess = Math.max(0, (targetColors || 0) - 8);
-        const penalty = excess > 0 ? 0.5 * Math.pow(1.6, excess - 1) : 0;
-        return meanDeltaE + penalty;
+        const screenPenalty = excess > 0 ? 0.5 * Math.pow(1.6, excess - 1) : 0;
+
+        return structuralLoss + screenPenalty;
     }
 
     /**
@@ -445,6 +469,7 @@ class SessionState extends EventEmitter {
                 const quality = await this.proxyEngine.getPaletteWithQuality(config, knobs);
                 const deltaE = quality.meanDeltaE;
                 const colors = quality.rgbPalette ? quality.rgbPalette.length : 0;
+                const edgeSurvival = quality.edgeSurvival;
 
                 if (this._scoringGeneration !== generation) {
                     logger.log(`[SessionState] Background scoring cancelled after await (gen ${generation} → ${this._scoringGeneration})`);
@@ -453,14 +478,16 @@ class SessionState extends EventEmitter {
                 }
 
                 match.meanDeltaE = deltaE;
+                match.edgeSurvival = edgeSurvival;
                 match.targetColors = colors;
-                match.sortScore = this._computeSortScore(deltaE, colors);
+                match.sortScore = this._computeSortScore(deltaE, colors, edgeSurvival);
                 this._archetypeDeltaE.set(match.id, deltaE);
                 computed++;
 
                 this.emit('archetypeScored', {
                     id: match.id,
                     meanDeltaE: deltaE,
+                    edgeSurvival,
                     targetColors: colors,
                     sortScore: match.sortScore,
                     computed,
@@ -819,10 +846,20 @@ class SessionState extends EventEmitter {
             this.state.isProcessing = false;
 
             const swapAccuracy = this.calculateCurrentAccuracy();
-            // Store ΔE so on-demand clicked cards update their display
+            const swapEdgeSurvival = this.calculateCurrentEdgeSurvival();
+            // Store ΔE + edge survival so on-demand clicked cards update their display
             if (swapAccuracy != null) {
                 this._archetypeDeltaE.set(archetypeId, swapAccuracy);
-                this.emit('archetypeScored', { id: archetypeId, meanDeltaE: swapAccuracy });
+                const sep = this.proxyEngine.separationState;
+                const swapColors = sep && sep.palette ? sep.palette.length : 0;
+                const swapSortScore = this._computeSortScore(swapAccuracy, swapColors, swapEdgeSurvival);
+                this.emit('archetypeScored', {
+                    id: archetypeId,
+                    meanDeltaE: swapAccuracy,
+                    edgeSurvival: swapEdgeSurvival,
+                    targetColors: swapColors,
+                    sortScore: swapSortScore
+                });
             }
             const swapFidelity = this.calculateDNAFidelity();
             this.emit('previewUpdated', {
@@ -1488,6 +1525,21 @@ class SessionState extends EventEmitter {
         return Reveal.RevelationError.meanDeltaE16(
             proxy.proxyBuffer, colorIndices, palette, width * height
         );
+    }
+
+    /**
+     * Compute edge survival for the current live separation state.
+     * @returns {number|null} Edge survival ratio (0-1), or null if not ready
+     */
+    calculateCurrentEdgeSurvival() {
+        const proxy = this.proxyEngine;
+        if (!proxy || !proxy.proxyBuffer || !proxy.separationState) return null;
+
+        const { colorIndices, width, height } = proxy.separationState;
+        const result = Reveal.RevelationError.edgeSurvival16(
+            proxy.proxyBuffer, colorIndices, width, height
+        );
+        return result.edgeSurvival;
     }
 
     /**

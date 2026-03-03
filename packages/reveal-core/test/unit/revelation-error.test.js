@@ -243,6 +243,88 @@ describe('RevelationError', () => {
         });
     });
 
+    describe('edgeSurvival16', () => {
+        // Helper: encode perceptual Lab → 16-bit PS encoding
+        function encode16(L, a, b) {
+            return [
+                Math.round((L / 100) * 32768),
+                Math.round((a / 128) * 16384 + 16384),
+                Math.round((b / 128) * 16384 + 16384)
+            ];
+        }
+
+        it('should return 1.0 when all edges are preserved', () => {
+            // 2x1 image: two very different colors, assigned to different palette entries
+            const p0 = encode16(20, 0, 0);  // dark
+            const p1 = encode16(80, 0, 0);  // bright — ΔE=60, well above threshold
+            const labPixels = new Uint16Array([...p0, ...p1]);
+            const colorIndices = new Uint8Array([0, 1]); // different assignments
+
+            const result = RevelationError.edgeSurvival16(labPixels, colorIndices, 2, 1);
+            expect(result.edgeSurvival).toBe(1);
+            expect(result.significantEdges).toBe(1);
+            expect(result.survivedEdges).toBe(1);
+        });
+
+        it('should return 0.0 when all edges are destroyed', () => {
+            // 2x1 image: two very different colors, but assigned to SAME palette entry
+            const p0 = encode16(20, 0, 0);
+            const p1 = encode16(80, 0, 0);
+            const labPixels = new Uint16Array([...p0, ...p1]);
+            const colorIndices = new Uint8Array([0, 0]); // same assignment — edge destroyed
+
+            const result = RevelationError.edgeSurvival16(labPixels, colorIndices, 2, 1);
+            expect(result.edgeSurvival).toBe(0);
+            expect(result.significantEdges).toBe(1);
+            expect(result.survivedEdges).toBe(0);
+        });
+
+        it('should ignore edges below threshold', () => {
+            // 2x1 image: two nearly identical colors (ΔE < 15)
+            const p0 = encode16(50, 0, 0);
+            const p1 = encode16(55, 0, 0);  // ΔE=5, below threshold
+            const labPixels = new Uint16Array([...p0, ...p1]);
+            const colorIndices = new Uint8Array([0, 0]);
+
+            const result = RevelationError.edgeSurvival16(labPixels, colorIndices, 2, 1);
+            expect(result.significantEdges).toBe(0);
+            expect(result.edgeSurvival).toBe(1); // no significant edges → trivially perfect
+        });
+
+        it('should handle custom threshold', () => {
+            const p0 = encode16(50, 0, 0);
+            const p1 = encode16(60, 0, 0);  // ΔE=10
+            const labPixels = new Uint16Array([...p0, ...p1]);
+            const colorIndices = new Uint8Array([0, 1]);
+
+            // Default threshold 15 → not significant
+            const r15 = RevelationError.edgeSurvival16(labPixels, colorIndices, 2, 1);
+            expect(r15.significantEdges).toBe(0);
+
+            // Lower threshold 8 → significant and survived
+            const r8 = RevelationError.edgeSurvival16(labPixels, colorIndices, 2, 1, { edgeThreshold: 8 });
+            expect(r8.significantEdges).toBe(1);
+            expect(r8.survivedEdges).toBe(1);
+        });
+
+        it('should count both horizontal and vertical edges', () => {
+            // 2x2 image: checkerboard of dark/bright
+            const dark = encode16(20, 0, 0);
+            const bright = encode16(80, 0, 0);
+            const labPixels = new Uint16Array([
+                ...dark, ...bright,   // row 0: dark, bright
+                ...bright, ...dark    // row 1: bright, dark
+            ]);
+            const colorIndices = new Uint8Array([0, 1, 1, 0]);
+
+            const result = RevelationError.edgeSurvival16(labPixels, colorIndices, 2, 2);
+            // 2x2 has: 2 horizontal edges (1 per row) + 2 vertical edges (1 per col) = 4
+            expect(result.significantEdges).toBe(4);
+            expect(result.survivedEdges).toBe(4);
+            expect(result.edgeSurvival).toBe(1);
+        });
+    });
+
     describe('cross-validation: fromBuffers vs fromIndices', () => {
         it('should produce similar E_rev for equivalent inputs', () => {
             // Create a simple 2x2 image with known colors

@@ -454,10 +454,18 @@ class ProxyEngine {
             this.proxyBuffer, colorIndices, result.paletteLab, pixelCount
         );
 
+        // Structural fidelity: what fraction of major color boundaries survive
+        const edgeResult = RevelationError.edgeSurvival16(
+            this.proxyBuffer, colorIndices, proxyW, proxyH
+        );
+
         return {
             labPalette: result.paletteLab,
             rgbPalette: result.palette,
-            meanDeltaE
+            meanDeltaE,
+            edgeSurvival: edgeResult.edgeSurvival,
+            significantEdges: edgeResult.significantEdges,
+            survivedEdges: edgeResult.survivedEdges
         };
     }
 
