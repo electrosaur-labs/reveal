@@ -811,13 +811,30 @@ class SessionState extends EventEmitter {
 
             logger.log(`[SessionState] Archetype swap: ${archetypeId}`);
 
+            // 4. Pre-restore: apply cached structural params (e.g. targetColors)
+            //    BEFORE re-posterize so dirty overrides affect quantization.
+            //    Palette surgery (overrides/merges/deletes) is restored AFTER posterize.
+            const cached = archetypeId ? this._archetypeStateCache.get(archetypeId) : null;
+            if (cached) {
+                for (const key of STRUCTURAL_PARAMS) {
+                    if (cached.knobs[key] !== undefined) {
+                        this.state[key] = cached.knobs[key];
+                        if (this.currentConfig) this.currentConfig[key] = cached.knobs[key];
+                    }
+                }
+                // targetColorsSlider alias — keep in sync
+                if (cached.knobs.targetColors !== undefined) {
+                    this.currentConfig.targetColorsSlider = cached.knobs.targetColors;
+                }
+            }
+
             this.emit('archetypeChanged', { archetypeId, config: this.currentConfig });
 
-            // 4. Re-posterize with fresh archetype config (deterministic palette)
+            // 5. Re-posterize with config (includes restored structural overrides)
             const result = await this.proxyEngine.rePosterize(this.currentConfig);
             logger.log(`[SessionState] Swap result: ${result.palette.length} colors, ${result.elapsedMs.toFixed(0)}ms`);
 
-            // 5. Auto-restore cached state if returning to a previously visited archetype
+            // 6. Full restore: remaining knobs + palette surgery
             const restored = this._restoreArchetypeState(archetypeId);
 
             // Emit configChanged so sliders sync (must happen after restore so values are current)
@@ -1978,7 +1995,7 @@ class SessionState extends EventEmitter {
             score: salamanderScore,
             _synthetic: {
                 name: 'Salamander',
-                description: 'DNA-driven distillation. Adaptive color count from image DNA with VOLUMETRIC centroid — no palette reduction, every distilled color survives.',
+                description: 'DNA-driven distillation. Adaptive color count and SALIENCY centroid from image DNA — no palette reduction, no preprocessing, every distilled color survives.',
                 preferred_sectors: [],
                 parameters: {}
             }

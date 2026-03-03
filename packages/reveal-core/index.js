@@ -148,16 +148,15 @@ function generateConfigurationDistilled(dna) {
  * Generate configuration for the Salamander pseudo-archetype.
  * Code-only (no JSON archetype file), like Chameleon and Distilled.
  *
- * Merges Chameleon's DNA-adaptive parameters (interpolated color count,
- * weight tuning) with Distilled's "no pruning" guarantee and raw signal
- * preservation. DNA tells you HOW MANY colors; the distilled engine with
- * VOLUMETRIC centroid picks WHICH colors; no palette reduction ensures
- * they all survive intact.
+ * Chameleon's DNA-adaptive parameters (interpolated color count, SALIENCY
+ * centroid, weight tuning) with Distilled's "no pruning" guarantee and raw
+ * signal preservation. DNA tells you HOW MANY colors and WHAT centroid
+ * strategy; the distilled engine picks WHICH colors; no palette reduction
+ * ensures they all survive intact.
  *
- * Key difference from Chameleon: VOLUMETRIC centroid (unbiased) instead
- * of SALIENCY, no preprocessing, no palette reduction.
- * Key difference from Distilled: DNA-driven color count and weights
- * instead of fixed 12.
+ * Key difference from Chameleon: no preprocessing, no palette reduction.
+ * Key difference from Distilled: DNA-driven color count, weights, and
+ * SALIENCY centroid instead of fixed 12 with VOLUMETRIC.
  *
  * @param {Object} dna - Image DNA from DNAGenerator (7D vector)
  * @returns {Object} Posterization config
@@ -165,9 +164,8 @@ function generateConfigurationDistilled(dna) {
 function generateConfigurationSalamander(dna) {
     const config = generateConfigurationMk2(dna);
 
-    // VOLUMETRIC centroid — unbiased color selection (unlike Chameleon's SALIENCY)
+    // SALIENCY centroid inherited from Chameleon — DNA-driven color selection
     // Color count stays DNA-driven from the interpolator (not fixed like Distilled's 12)
-    config.centroidStrategy = 'VOLUMETRIC';
 
     // Disable palette reduction — all distilled colors survive
     config.enablePaletteReduction = false;

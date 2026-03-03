@@ -85,9 +85,10 @@ describe('generateConfigurationSalamander', () => {
             expect(salamander.targetColors).toBeLessThanOrEqual(14);
         });
 
-        it('uses VOLUMETRIC centroid strategy (unlike Chameleon SALIENCY)', () => {
-            const config = Reveal.generateConfigurationSalamander(PHOTO_DNA);
-            expect(config.centroidStrategy).toBe('VOLUMETRIC');
+        it('inherits SALIENCY centroid strategy from Chameleon', () => {
+            const chameleon = Reveal.generateConfigurationMk2(PHOTO_DNA);
+            const salamander = Reveal.generateConfigurationSalamander(PHOTO_DNA);
+            expect(salamander.centroidStrategy).toBe(chameleon.centroidStrategy);
         });
 
         it('inherits blendInfo from Chameleon interpolator', () => {
@@ -124,7 +125,7 @@ describe('generateConfigurationSalamander', () => {
     });
 
     describe('comparison with Chameleon and Distilled', () => {
-        it('differs from Chameleon in palette reduction and centroid', () => {
+        it('differs from Chameleon only in pruning and preprocessing', () => {
             const chameleon = Reveal.generateConfigurationMk2(PHOTO_DNA);
             const salamander = Reveal.generateConfigurationSalamander(PHOTO_DNA);
 
@@ -133,19 +134,18 @@ describe('generateConfigurationSalamander', () => {
             expect(salamander.snapThreshold).toBe(0);
             expect(salamander.densityFloor).toBe(0);
             expect(salamander.preprocessingIntensity).toBe('off');
-            // VOLUMETRIC vs SALIENCY
-            expect(salamander.centroidStrategy).toBe('VOLUMETRIC');
+            // Same centroid strategy (both SALIENCY from interpolator)
+            expect(salamander.centroidStrategy).toBe(chameleon.centroidStrategy);
         });
 
-        it('differs from Distilled in DNA-derived weights and color count', () => {
+        it('differs from Distilled in DNA-derived weights, centroid, and color count', () => {
             const distilled = Reveal.generateConfigurationDistilled(PHOTO_DNA);
             const salamander = Reveal.generateConfigurationSalamander(PHOTO_DNA);
 
             // Distilled always 12; Salamander is DNA-driven
             expect(distilled.targetColors).toBe(12);
-            // Both use VOLUMETRIC centroid
-            expect(distilled.centroidStrategy).toBeUndefined(); // Distilled uses engine default
-            expect(salamander.centroidStrategy).toBe('VOLUMETRIC');
+            // Distilled uses engine default (VOLUMETRIC); Salamander uses SALIENCY from Chameleon
+            expect(distilled.centroidStrategy).toBeUndefined();
             expect(salamander.meta.engine).toBe('salamander');
             expect(salamander.meta.blendInfo).toBeDefined();
             // Distilled has no blendInfo (no DNA interpolation)

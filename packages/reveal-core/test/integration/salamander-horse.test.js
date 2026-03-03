@@ -42,11 +42,12 @@ describe('Salamander posterization — horse regression', () => {
         expect(pixels.length).toBe(350 * 512 * 3);
     });
 
-    test('Salamander config has DNA-driven colors with VOLUMETRIC centroid', () => {
+    test('Salamander config has DNA-driven colors with SALIENCY centroid', () => {
+        const chameleon = Reveal.generateConfigurationMk2(dna);
         const config = Reveal.generateConfigurationSalamander(dna);
         expect(config.targetColors).toBeGreaterThanOrEqual(4);
         expect(config.targetColors).toBeLessThanOrEqual(14);
-        expect(config.centroidStrategy).toBe('VOLUMETRIC');
+        expect(config.centroidStrategy).toBe(chameleon.centroidStrategy);
         expect(config.engineType).toBe('distilled');
         expect(config.enablePaletteReduction).toBe(false);
     });
