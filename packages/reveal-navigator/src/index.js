@@ -240,6 +240,35 @@ function initPlugin() {
             syncAdvancedControls(sessionState.getState());
         });
 
+        // ─── Structural change confirmation ─────────────────────
+        const confirmBanner = document.getElementById('structural-confirm');
+        const confirmOk = document.getElementById('structural-confirm-ok');
+        const confirmCancel = document.getElementById('structural-confirm-cancel');
+
+        sessionState.on('confirmStructuralChange', () => {
+            if (confirmBanner) confirmBanner.setAttribute('style', 'display: block');
+        });
+
+        sessionState.on('revertParameter', ({ key, value }) => {
+            if (confirmBanner) confirmBanner.setAttribute('style', 'display: none');
+            // Snap slider/picker back to current value
+            syncAdvancedControls(sessionState.getState());
+            if (knobs) knobs.syncFromConfig(sessionState.getState());
+        });
+
+        if (confirmOk) {
+            confirmOk.addEventListener('click', () => {
+                confirmBanner.setAttribute('style', 'display: none');
+                sessionState.confirmStructuralChange();
+            });
+        }
+        if (confirmCancel) {
+            confirmCancel.addEventListener('click', () => {
+                confirmBanner.setAttribute('style', 'display: none');
+                sessionState.cancelStructuralChange();
+            });
+        }
+
         // Progress events from SessionState (heavy CPU phases during loadImage)
         sessionState.on('progress', (data) => {
             _showProgress(data.label, data.percent);

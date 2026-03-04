@@ -3,6 +3,7 @@
  *
  * Interactions:
  *   click          → select/isolate that color (or deselect if same)
+ *   drag A→B       → merge A into B (A takes B's color)
  *   shift+click    → merge selected into clicked swatch
  *   ctrl+click     → open Photoshop color picker to override color
  *   double-click   → open Photoshop color picker (same, but unreliable in UXP)
@@ -33,6 +34,15 @@ class PaletteSurgeon {
 
         // Guard: block clicks while Photoshop color picker modal is open
         this._pickerOpen = false;
+
+        // Drag-to-merge state
+        this._dragSourceIndex = -1;
+        this._dragStartX = 0;
+        this._dragStartY = 0;
+        this._isDragging = false;
+        this._dragOverIndex = -1;
+        this._dragShiftKey = false;
+        this._dragAltKey = false;
 
         // Currently selected suggested swatch index (within filtered list), -1 = none
         this._selectedSuggestionIdx = -1;
@@ -211,25 +221,101 @@ class PaletteSurgeon {
             swatch.appendChild(label);
             swatch.appendChild(revertBtn);
 
-            // ── Ctrl+click → color picker (pointerdown fires before OS/PS intercept) ──
+            // ── Pointer handlers: drag-to-merge + click + ctrl-click ──
             swatch.addEventListener('pointerdown', (e) => {
-                if (e.ctrlKey && !this._pickerOpen) {
-                    const idx = parseInt(e.currentTarget.dataset.index);
+                if (this._pickerOpen) return;
+                const idx = parseInt(e.currentTarget.dataset.index);
+
+                // Ctrl+click → color picker (fires before OS/PS intercept)
+                if (e.ctrlKey) {
                     if (!this._session.deletedColors.has(idx)) {
                         e.preventDefault();
                         e.stopPropagation();
-                        swatch._ctrlHandled = true;
                         this._openColorPicker(idx);
                     }
+                    return;
                 }
+
+                if (isDeleted) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+                swatch.setPointerCapture(e.pointerId);
+
+                this._dragSourceIndex = idx;
+                this._dragStartX = e.clientX;
+                this._dragStartY = e.clientY;
+                this._isDragging = false;
+                this._dragOverIndex = -1;
+                this._dragShiftKey = e.shiftKey;
+                this._dragAltKey = e.altKey;
+
+                // One-shot pointerup on document (proven to fire in UXP)
+                const onUp = (ev) => {
+                    document.removeEventListener('pointerup', onUp);
+
+                    const wasDragging = this._isDragging;
+                    const source = this._dragSourceIndex;
+
+                    // Clean up merge target highlight
+                    if (this._dragOverIndex >= 0) {
+                        const tgtEl = this._swatchElements.get(this._dragOverIndex);
+                        if (tgtEl) tgtEl.classList.remove('surgeon-merge-target');
+                    }
+
+                    // Find target via ev.target (works in UXP; elementFromPoint doesn't)
+                    let targetIdx = this._dragOverIndex;
+                    if (targetIdx < 0) {
+                        const hitSwatch = ev.target ? ev.target.closest('.surgeon-swatch[data-index]') : null;
+                        targetIdx = hitSwatch ? parseInt(hitSwatch.dataset.index) : -1;
+                    }
+
+                    // Reset state
+                    this._dragSourceIndex = -1;
+                    this._dragOverIndex = -1;
+                    this._isDragging = false;
+
+                    if (wasDragging && targetIdx >= 0 && targetIdx !== source &&
+                        !this._session.deletedColors.has(targetIdx)) {
+                        logger.log(`[Surgeon] MERGE ${source}→${targetIdx} (drag)`);
+                        this._session.mergePaletteColors(source, targetIdx).catch(err => {
+                            logger.log(`[PaletteSurgeon] Merge failed: ${err.message}`);
+                        });
+                    } else if (!wasDragging) {
+                        this._onSwatchClick(source, this._dragShiftKey, this._dragAltKey);
+                    }
+                };
+                document.addEventListener('pointerup', onUp);
             });
 
-            // ── Click handler — reads index from DOM ──
-            swatch.onclick = (e) => {
-                if (swatch._ctrlHandled) { swatch._ctrlHandled = false; return; }
-                const idx = parseInt(e.currentTarget.dataset.index);
-                this._onSwatchClick(idx, e.shiftKey, e.altKey);
-            };
+            // ── pointermove: setPointerCapture routes events here during drag ──
+            swatch.addEventListener('pointermove', (e) => {
+                if (this._dragSourceIndex < 0) return;
+
+                const dx = e.clientX - this._dragStartX;
+                const dy = e.clientY - this._dragStartY;
+                if (dx * dx + dy * dy >= 25) this._isDragging = true;
+
+                // Hit-test via bounding rects (UXP lacks elementFromPoint)
+                const overIdx = this._hitTestSwatch(e.clientX, e.clientY);
+
+                if (overIdx !== this._dragOverIndex) {
+                    const prevIdx = this._dragOverIndex;
+                    this._dragOverIndex = overIdx;
+                    // Defer class changes — UXP may skip repaints during pointer capture
+                    setTimeout(() => {
+                        if (prevIdx >= 0) {
+                            const prev = this._swatchElements.get(prevIdx);
+                            if (prev) prev.classList.remove('surgeon-merge-target');
+                        }
+                        if (overIdx >= 0 && overIdx !== this._dragSourceIndex &&
+                            !this._session.deletedColors.has(overIdx)) {
+                            const el = this._swatchElements.get(overIdx);
+                            if (el) el.classList.add('surgeon-merge-target');
+                        }
+                    }, 0);
+                }
+            });
 
             this._grid.appendChild(swatch);
             this._swatchElements.set(i, swatch);
@@ -663,6 +749,24 @@ class PaletteSurgeon {
                 }
             }
         }
+    }
+    // ─── Drag Helpers ──────────────────────────────────────
+
+    /**
+     * Hit-test swatches by bounding rect (UXP lacks elementFromPoint).
+     * @param {number} clientX
+     * @param {number} clientY
+     * @returns {number} palette index under pointer, or -1
+     */
+    _hitTestSwatch(clientX, clientY) {
+        for (const [idx, el] of this._swatchElements) {
+            const r = el.getBoundingClientRect();
+            if (clientX >= r.left && clientX <= r.right &&
+                clientY >= r.top && clientY <= r.bottom) {
+                return idx;
+            }
+        }
+        return -1;
     }
 }
 

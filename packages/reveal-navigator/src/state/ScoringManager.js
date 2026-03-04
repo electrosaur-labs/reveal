@@ -121,13 +121,6 @@ class ScoringManager extends EventEmitter {
      */
     selectEagerSet(scores) {
         const eager = new Set(['dynamic_interpolator', 'distilled', 'salamander']);
-        let regularCount = 0;
-        for (const s of scores) {
-            if (eager.has(s.id)) continue;
-            eager.add(s.id);
-            regularCount++;
-            if (regularCount >= 3) break;
-        }
         this._eagerSet = eager;
         return eager;
     }

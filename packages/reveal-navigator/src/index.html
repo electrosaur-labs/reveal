@@ -645,6 +645,32 @@
             overflow-y: auto;
         }
 
+        #structural-confirm {
+            padding: 6px 8px;
+            background: #3a2a1a;
+            border: 1px solid #f0a030;
+            border-radius: 3px;
+            margin-top: 4px;
+            font-size: 11px;
+            color: #f0d080;
+        }
+        #structural-confirm button {
+            margin-left: 8px;
+            padding: 2px 10px;
+            border: 1px solid #888;
+            border-radius: 3px;
+            background: #444;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        #structural-confirm button:hover {
+            background: #555;
+        }
+        #structural-confirm-ok {
+            border-color: #f0a030;
+        }
+
         .surgeon-header {
             font-size: 10px;
             color: #888;
@@ -666,6 +692,12 @@
             border-radius: 3px;
             cursor: pointer;
             position: relative;
+            touch-action: none;
+        }
+        .surgeon-swatch:active:not(.surgeon-deleted) {
+            opacity: 0.5;
+            border-color: #f0a030;
+            cursor: grabbing;
         }
 
         .surgeon-swatch.surgeon-hover {
@@ -1109,6 +1141,13 @@
 
             <!-- Palette Surgeon (color isolation + merge) -->
             <div id="palette-surgeon"></div>
+
+            <!-- Confirmation banner for structural changes that destroy palette edits -->
+            <div id="structural-confirm" style="display: none;">
+                <span id="structural-confirm-msg">Palette edits will be lost. Continue?</span>
+                <button id="structural-confirm-ok">OK</button>
+                <button id="structural-confirm-cancel">Cancel</button>
+            </div>
 
             <!-- Scoring progress bar (visible during background archetype scoring) -->
             <div id="carousel-progress">

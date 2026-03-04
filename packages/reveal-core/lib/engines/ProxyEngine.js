@@ -681,6 +681,101 @@ class ProxyEngine {
         };
     }
 
+    // ─── Baseline Snapshot (for archetype state cache) ──────
+
+    /**
+     * Deep-copy the current baseline state + preprocessing intensity
+     * so it can be restored later without re-posterizing.
+     * @returns {Object} Opaque snapshot — pass to restoreBaselineSnapshot()
+     */
+    getBaselineSnapshot() {
+        if (!this._baselineState) return null;
+        const b = this._baselineState;
+        return {
+            palette: b.palette.map(c => ({ ...c })),
+            rgbPalette: b.rgbPalette ? b.rgbPalette.map(c =>
+                typeof c === 'string' ? c : { ...c }
+            ) : null,
+            colorIndices: new Uint8Array(b.colorIndices),
+            masks: b.masks.map(m => new Uint8Array(m)),
+            width: b.width,
+            height: b.height,
+            distanceMetric: b.distanceMetric || 'cie76',
+            metadata: { ...(b.metadata || {}) },
+            preprocessingIntensity: this._proxyPreprocessingIntensity
+        };
+    }
+
+    /**
+     * Restore a previously cached baseline snapshot.
+     * Sets both _baselineState and separationState, then generates a preview.
+     * Caller follows up with updateProxy() to apply knobs + palette overrides.
+     *
+     * @param {Object} snapshot - From getBaselineSnapshot()
+     * @param {Object} [config] - Archetype config (for sourceMetadata sync)
+     * @returns {{previewBuffer: Uint8ClampedArray, palette: Array, dimensions: Object, metadata: Object, elapsedMs: number}}
+     */
+    restoreBaselineSnapshot(snapshot, config) {
+        const startTime = performance.now();
+
+        // Restore preprocessing state — if the cached archetype used a different
+        // filter intensity, swap the proxyBuffer to match
+        if (snapshot.preprocessingIntensity !== this._proxyPreprocessingIntensity && this._rawProxyBuffer) {
+            const intensity = snapshot.preprocessingIntensity;
+            if (intensity && intensity !== 'off') {
+                const buf = new Uint16Array(this._rawProxyBuffer);
+                const isHeavy = intensity === 'heavy';
+                const radius = isHeavy ? 5 : 3;
+                BilateralFilter.applyBilateralFilterLab(buf, snapshot.width, snapshot.height, radius, 5000);
+                this.proxyBuffer = buf;
+            } else {
+                this.proxyBuffer = this._rawProxyBuffer;
+            }
+            this._proxyPreprocessingIntensity = intensity;
+        }
+
+        // Deep-copy into _baselineState
+        this._baselineState = {
+            palette: snapshot.palette.map(c => ({ ...c })),
+            rgbPalette: snapshot.rgbPalette ? snapshot.rgbPalette.map(c =>
+                typeof c === 'string' ? c : { ...c }
+            ) : null,
+            colorIndices: new Uint8Array(snapshot.colorIndices),
+            masks: snapshot.masks.map(m => new Uint8Array(m)),
+            width: snapshot.width,
+            height: snapshot.height,
+            distanceMetric: snapshot.distanceMetric || 'cie76',
+            metadata: { ...(snapshot.metadata || {}) }
+        };
+
+        // Also set separationState from the restored baseline
+        this._restoreFromBaseline();
+
+        // Sync metadata that rePosterize normally sets
+        if (config) {
+            this.sourceMetadata.targetColors = config.targetColors || config.targetColorsSlider || 0;
+            this._substrateMode = config.substrateMode || 'auto';
+        }
+
+        // Generate clean preview (no knobs)
+        const previewBuffer = this._generatePreviewFromIndices(
+            this.separationState.colorIndices,
+            this.separationState.rgbPalette,
+            snapshot.width,
+            snapshot.height
+        );
+
+        const elapsed = performance.now() - startTime;
+
+        return {
+            previewBuffer,
+            palette: this.separationState.palette,
+            dimensions: { width: snapshot.width, height: snapshot.height },
+            metadata: this.separationState.metadata,
+            elapsedMs: elapsed
+        };
+    }
+
     /**
      * Stride subsample — picks every Nth pixel, no interpolation.
      * Stride computed dynamically to target PROXY_TARGET_SIZE (800px long edge).

@@ -53,10 +53,8 @@ const ALL_KNOBS = new Set([
     ...UNIMPLEMENTED_KNOBS
 ]);
 
-// All archetypes get ΔE-scored in the background after splash.
-// Scoring is async/non-blocking — carousel updates progressively.
-// Tier-1 eager set: 3 pseudo-archetypes + top-1 per group (see ScoringManager.selectEagerSet)
-// Tier-2 remaining: scored on-demand when user clicks their card
+// Pseudo-archetypes (Chameleon, Distilled, Salamander) are ΔE-scored at startup.
+// All other archetypes are scored on-demand when the user clicks their card.
 
 const DEBOUNCE_MS = 50;
 
@@ -469,6 +467,30 @@ class SessionState extends EventEmitter {
     // ─── Parameter Updates (Reactive Loop) ───────────────────
 
     /**
+     * Confirm a pending structural change that would destroy palette edits.
+     * Called by the UI after the user clicks OK on the warning dialog.
+     */
+    confirmStructuralChange() {
+        const pending = this._pendingStructuralChange;
+        if (!pending) return;
+        this._pendingStructuralChange = null;
+        this._structuralChangeConfirmed = true;
+        this.updateParameter(pending.key, pending.value);
+    }
+
+    /**
+     * Cancel a pending structural change — palette edits are preserved.
+     * Called by the UI after the user clicks Cancel on the warning dialog.
+     * Emits revertParameter so the UI can snap the slider back.
+     */
+    cancelStructuralChange() {
+        const pending = this._pendingStructuralChange;
+        if (!pending) return;
+        this._pendingStructuralChange = null;
+        this.emit('revertParameter', { key: pending.key, value: this.state[pending.key] });
+    }
+
+    /**
      * Update a single parameter and schedule a proxy update.
      *
      * @param {string} key - Parameter name
@@ -476,6 +498,17 @@ class SessionState extends EventEmitter {
      */
     updateParameter(key, value) {
         if (this.state[key] === value) return;
+
+        // Structural param + palette edits → need confirmation before proceeding
+        if (STRUCTURAL_PARAMS.has(key) && this._paletteSurgery.hasEdits()) {
+            if (!this._structuralChangeConfirmed) {
+                // Stash the pending change and ask for confirmation
+                this._pendingStructuralChange = { key, value };
+                this.emit('confirmStructuralChange', { key, value });
+                return;
+            }
+            this._structuralChangeConfirmed = false;
+        }
 
         this.state[key] = value;
 
@@ -550,52 +583,23 @@ class SessionState extends EventEmitter {
             let result;
 
             if (this.state.isArchetypeDirty) {
-                // Slow path: structural param changed — full re-posterize
-                logger.log(`[SessionState] *** SLOW PATH: re-posterize triggered, overrides=${this.paletteOverrides.size}`);
-
-                // Save user's manual color overrides — these are sacrosanct
-                // decisions that must survive re-posterization.
-                const savedOverrides = new Map();
-                for (const [idx, color] of this.paletteOverrides) {
-                    savedOverrides.set(idx, { ...color });
-                }
+                // Slow path: structural param changed — full re-posterize.
+                // Clean slate: all palette surgery is lost (new palette = new indices).
+                logger.log(`[SessionState] *** SLOW PATH: re-posterize triggered, clearing palette surgery`);
 
                 this._rebuildConfigFromState();
 
-                this.paletteOverrides.clear();
-                this.mergeHistory.clear();
-                this.deletedColors.clear();
+                this._paletteSurgery.reset();
                 this._suggestions.clearForSwap();
                 this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
                 result = await this.proxyEngine.rePosterize(this.currentConfig);
                 this.state.isArchetypeDirty = false;
+
+                // Invalidate cached baseline — structural change made it stale
+                const id = this.state.activeArchetypeId;
+                if (id) this._archetypeStateCache.delete(id);
+
                 logger.log(`[SessionState] Structural re-posterize: targetColors=${this.currentConfig.targetColors}, palette=${result.palette.length} colors`);
-
-                // Re-inject saved overrides: find closest new palette slot
-                // for each user-chosen color and re-establish the override.
-                if (savedOverrides.size > 0) {
-                    const newPalette = this.proxyEngine._baselineState.palette;
-                    const LabDistance = Reveal.LabDistance;
-                    const claimed = new Set();  // prevent two overrides claiming same slot
-
-                    for (const [, color] of savedOverrides) {
-                        let bestIdx = -1, bestDist = Infinity;
-                        for (let i = 0; i < newPalette.length; i++) {
-                            if (claimed.has(i)) continue;
-                            const d = LabDistance.cie76SquaredInline(
-                                color.L, color.a, color.b,
-                                newPalette[i].L, newPalette[i].a, newPalette[i].b
-                            );
-                            if (d < bestDist) { bestDist = d; bestIdx = i; }
-                        }
-                        if (bestIdx >= 0) {
-                            this.paletteOverrides.set(bestIdx, { ...color });
-                            claimed.add(bestIdx);
-                            logger.log(`[SessionState] Re-injected override Lab=(${color.L.toFixed(1)},${color.a.toFixed(1)},${color.b.toFixed(1)}) → slot ${bestIdx} (dist=${bestDist.toFixed(0)})`);
-                        }
-                    }
-                    this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
-                }
             }
 
             // Build update params — always include palette overrides so they
@@ -695,30 +699,35 @@ class SessionState extends EventEmitter {
 
             logger.log(`[SessionState] Archetype swap: ${archetypeId}`);
 
-            // 4. Pre-restore: apply cached structural params (e.g. targetColors)
-            //    BEFORE re-posterize so dirty overrides affect quantization.
-            //    Palette surgery (overrides/merges/deletes) is restored AFTER posterize.
             const cached = archetypeId ? this._archetypeStateCache.get(archetypeId) : null;
-            if (cached) {
-                for (const key of STRUCTURAL_PARAMS) {
-                    if (cached.knobs[key] !== undefined) {
-                        this.state[key] = cached.knobs[key];
-                        if (this.currentConfig) this.currentConfig[key] = cached.knobs[key];
-                    }
-                }
-                // targetColorsSlider alias — keep in sync
-                if (cached.knobs.targetColors !== undefined) {
-                    this.currentConfig.targetColorsSlider = cached.knobs.targetColors;
-                }
-            }
 
             this.emit('archetypeChanged', { archetypeId, config: this.currentConfig });
 
-            // 5. Re-posterize with config (includes restored structural overrides)
-            const result = await this.proxyEngine.rePosterize(this.currentConfig);
-            logger.log(`[SessionState] Swap result: ${result.palette.length} colors, ${result.elapsedMs.toFixed(0)}ms`);
+            let result;
+            if (cached && cached.baseline) {
+                // ── Fast path: restore cached baseline (skip re-posterize) ──
+                // Indices are guaranteed correct because it's the exact same
+                // baseline the palette surgery was originally made against.
+                result = this.proxyEngine.restoreBaselineSnapshot(cached.baseline, this.currentConfig);
+                logger.log(`[SessionState] Swap FAST (cached baseline): ${result.palette.length} colors, ${result.elapsedMs.toFixed(1)}ms`);
+            } else {
+                // ── Slow path: first visit — need to posterize ──
+                if (cached) {
+                    for (const key of STRUCTURAL_PARAMS) {
+                        if (cached.knobs[key] !== undefined) {
+                            this.state[key] = cached.knobs[key];
+                            if (this.currentConfig) this.currentConfig[key] = cached.knobs[key];
+                        }
+                    }
+                    if (cached.knobs.targetColors !== undefined) {
+                        this.currentConfig.targetColorsSlider = cached.knobs.targetColors;
+                    }
+                }
+                result = await this.proxyEngine.rePosterize(this.currentConfig);
+                logger.log(`[SessionState] Swap SLOW (re-posterize): ${result.palette.length} colors, ${result.elapsedMs.toFixed(0)}ms`);
+            }
 
-            // 6. Full restore: remaining knobs + palette surgery
+            // Restore knobs + palette surgery
             const restored = this._restoreArchetypeState(archetypeId);
 
             // Emit configChanged so sliders sync (must happen after restore so values are current)
@@ -1587,6 +1596,7 @@ class SessionState extends EventEmitter {
 
         this._archetypeStateCache.set(id, {
             knobs,
+            baseline: this.proxyEngine ? this.proxyEngine.getBaselineSnapshot() : null,
             ...this._paletteSurgery.snapshot()
         });
     }

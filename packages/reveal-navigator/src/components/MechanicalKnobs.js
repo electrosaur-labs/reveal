@@ -193,6 +193,12 @@ class MechanicalKnobs {
             }
         }
     }
+
+    /** Public: snap sliders to current state (e.g. after cancelled structural change). */
+    syncFromConfig(config) {
+        this._syncFromConfig(config);
+        this._updateAllRevertIcons();
+    }
 }
 
 module.exports = MechanicalKnobs;
