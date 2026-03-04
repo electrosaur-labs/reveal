@@ -27,7 +27,8 @@ const {
     convert8bitTo16bitLab,
     convertPsd16bitToEngineLab,
     convertPsd16bitTo8bitLab,
-    rgbToHex
+    rgbToHex,
+    generateThumbnail
 } = require('./batch-utils');
 
 /**
@@ -51,6 +52,25 @@ function reconstructProcessedLab(colorIndices, paletteLab, pixelCount) {
     }
 
     return processedLab;
+}
+
+/**
+ * Reconstruct posterized Lab image from color indices in native 16-bit Lab encoding.
+ * Photoshop 16-bit Lab: L: 0-32768, a/b: 0-32768 (16384=neutral), big-endian.
+ */
+function reconstructProcessedLab16(colorIndices, paletteLab, pixelCount) {
+    const buf = Buffer.alloc(pixelCount * 6);
+    for (let i = 0; i < pixelCount; i++) {
+        const color = paletteLab[colorIndices[i]];
+        // PSD file format: full 0-65535 range per channel (NOT UXP's 0-32768)
+        const L16 = Math.max(0, Math.min(65535, Math.round((color.L / 100) * 65535)));
+        const a16 = Math.max(0, Math.min(65535, Math.round((color.a + 128) * 257)));
+        const b16 = Math.max(0, Math.min(65535, Math.round((color.b + 128) * 257)));
+        buf.writeUInt16BE(L16, i * 6);
+        buf.writeUInt16BE(a16, i * 6 + 2);
+        buf.writeUInt16BE(b16, i * 6 + 4);
+    }
+    return buf;
 }
 
 /**
@@ -544,6 +564,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         height,
         colorMode: 'lab',
         bitsPerChannel: depth,
+        compression: 'none',
         documentName: basename
     });
 
@@ -572,23 +593,24 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
     });
 
     // Add fill+mask layers
-    for (const layer of layersToWrite) {
+    for (let li = 0; li < layersToWrite.length; li++) {
+        const layer = layersToWrite[li];
         const hex = rgbToHex(layer.rgb.r, layer.rgb.g, layer.rgb.b);
+        const aSign = layer.color.a >= 0 ? '+' : '';
+        const bSign = layer.color.b >= 0 ? '+' : '';
         writer.addFillLayer({
-            name: `Color ${layer.index + 1} (${hex})`,
+            name: `[${li + 1}] ${hex} L${Math.round(layer.color.L)} a${aSign}${Math.round(layer.color.a)} b${bSign}${Math.round(layer.color.b)}`,
             color: layer.color,
             mask: layer.mask
         });
     }
 
-    // Set Reveal metadata (Resource 4000) for filtering and analysis
-    // TODO: Implement setRevealMetadata() in PSDWriter or use alternative approach
-    // writer.setRevealMetadata({
-    //     revScore: metrics.feature_preservation.revelationScore,
-    //     archetype: config.meta?.archetype || 'unknown',
-    //     colors: filteredPaletteLab.length, // Use filtered count (after removing empty layers)
-    //     preset: config.id
-    // });
+    // Resource 1036: Thumbnail for Finder icon
+    // Section 5: Composite for QuickLook (8-bit Lab, writer upsamples to 16-bit)
+    console.log(`  Generating thumbnail + composite for QuickLook...`);
+    const thumbnail = await generateThumbnail(processedLab, width, height);
+    writer.setThumbnail(thumbnail);
+    writer.setComposite(processedLab);
 
     const psdBuffer = writer.write();
     fs.writeFileSync(outputPsdPath, psdBuffer);

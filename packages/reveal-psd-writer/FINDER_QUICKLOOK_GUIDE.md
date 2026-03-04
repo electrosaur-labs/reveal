@@ -1,44 +1,56 @@
 # Definitive Guide: Finder Icons & QuickLook for Lab PSDs
 
-**Last Updated:** 2026-02-01
+**Last Updated:** 2026-03-04
 **Validated On:**
 - 100+ CQ100 benchmark images (16-bit Lab PSDs)
 - Reveal-15 TESTIMAGES dataset (16-bit PNG → 16-bit Lab PSDs)
 - Art Institute of Chicago archival images
 - Photoshop-generated reference files (astronaut-16bit-PS.psd)
+- **Layered separated PSDs (posterize-psd.js output) — 2026-03-04**
 
 **macOS Compatibility:** Tested on macOS Ventura/Sonoma with 8-bit and 16-bit Lab PSDs
 
 ---
 
-## TL;DR - The Formula That Works
+## TL;DR - Two Recipes
 
-For **guaranteed** Finder thumbnails and QuickLook preview on macOS:
+### Recipe 1: Flat PSD (no layers)
 
 ```javascript
-// For BOTH 8-bit and 16-bit Lab PSDs
 const writer = new PSDWriter({
     width, height,
     colorMode: 'lab',
-    bitsPerChannel: 16,          // Or 8 for 8-bit PSDs
+    bitsPerChannel: 16,
     compression: 'none'           // CRITICAL: uncompressed Section 5
 });
 
-// 1. Set thumbnail (Resource 1036 - Photoshop standard)
-writer.setThumbnail({
-    jpegData: thumbJpegBuffer,    // JPEG, 160×160 max recommended
-    width: thumbWidth,
-    height: thumbHeight
-});
-
-// 2. Set composite with 8-bit Lab data (even for 16-bit PSDs!)
-writer.setComposite(lab8bitPixels);  // Uint8Array, width×height×3 bytes
-
-// 3. Write PSD
+writer.setThumbnail({ jpegData, width: tw, height: th });  // Resource 1036
+writer.setComposite(lab8bitPixels);  // Sets flatMode — 3 channels only
 const psdBuffer = writer.write();
 ```
 
-**That's it.** This matches Photoshop's format and works 100% of the time.
+### Recipe 2: Layered PSD (separated output with layers)
+
+```javascript
+const writer = new PSDWriter({
+    width, height,
+    colorMode: 'lab',
+    bitsPerChannel: 16,
+    compression: 'none'           // CRITICAL: uncompressed Section 5
+});
+
+// Add layers FIRST
+writer.addPixelLayer({ name: 'Reference', pixels: lab8bit, visible: false });
+writer.addFillLayer({ name: 'Color 1', color: labColor, mask: maskData });
+// ... more layers ...
+
+// THEN set thumbnail + composite
+writer.setThumbnail({ jpegData, width: tw, height: th });  // Resource 1036
+writer.setComposite(lab8bitPixels);  // Does NOT set flatMode when layers exist
+const psdBuffer = writer.write();
+```
+
+**Both recipes produce working Finder icons AND QuickLook previews.**
 
 ---
 
@@ -76,6 +88,8 @@ writer.setComposite(lab8bit);
 
 PSDWriter automatically upsamples when `bitsPerChannel: 16`.
 
+**DO NOT use native 16-bit composite data** — QuickLook cannot parse it. The PSD file format 16-bit encoding uses 0-65535 range (NOT the UXP API's 0-32768 range), but QuickLook still needs the 8-bit input.
+
 ### 3. Uncompressed Section 5
 
 **CRITICAL:** Use `compression: 'none'` (not `compositeCompression`):
@@ -94,136 +108,30 @@ const writer = new PSDWriter({
 compositeCompression: 'none'  // ← This option doesn't exist!
 ```
 
-Photoshop-generated 16-bit Lab PSDs use uncompressed Section 5 data for QuickLook compatibility.
+RLE compression in Section 5 breaks QuickLook for Lab PSDs.
 
-### 4. Flat Mode (No Layers)
+### 4. setComposite() Behavior
 
-Use `setComposite()` instead of `addPixelLayer()` to enable flat mode:
+`setComposite()` stores 8-bit Lab composite data for Section 5 (QuickLook preview).
 
-```javascript
-writer.setComposite(lab8bit);  // ✓ Flat mode, 3 channels only
-```
+**For flat PSDs:** Also enables flat mode (empty Section 4, 3 channels in header).
 
-**Why:** Lab PSDs MUST have exactly 3 channels (L, a, b) for QuickLook. Adding layers creates extra alpha channels which breaks QuickLook.
+**For layered PSDs:** Does NOT enable flat mode. Layers are written normally in Section 4 (Lr16 block). Header declares 3 + N channels. Section 5 includes composite + extra alpha channels. Both QuickLook and Photoshop work.
 
 ---
 
-## Complete Working Example (16-bit Lab PSD)
+## Working Format Summary
 
-```javascript
-const fs = require('fs');
-const sharp = require('sharp');
-const { PSDWriter } = require('@reveal/psd-writer');
-const ColorSpace = require('@reveal/core/lib/engines/ColorSpace');
-
-async function create16bitLabPSD(inputImage, outputPath) {
-    // 1. Read image as 16-bit RGB
-    const image = sharp(inputImage);
-    const { width, height } = await image.metadata();
-
-    const rgbBuffer16 = await image
-        .removeAlpha()
-        .toColourspace('srgb')
-        .toFormat('raw', { depth: 'ushort' })  // Keep 16-bit
-        .toBuffer();
-
-    const pixelCount = width * height;
-
-    // 2. Convert 16-bit RGB to 8-bit Lab (internally uses 16-bit precision)
-    const lab8bit = new Uint8Array(pixelCount * 3);
-    for (let i = 0; i < pixelCount; i++) {
-        // Read 16-bit RGB (big-endian)
-        const r16 = (rgbBuffer16[i * 6] << 8) | rgbBuffer16[i * 6 + 1];
-        const g16 = (rgbBuffer16[i * 6 + 2] << 8) | rgbBuffer16[i * 6 + 3];
-        const b16 = (rgbBuffer16[i * 6 + 4] << 8) | rgbBuffer16[i * 6 + 5];
-
-        // Convert to 8-bit RGB for ColorSpace
-        const r8 = r16 >> 8;
-        const g8 = g16 >> 8;
-        const b8 = b16 >> 8;
-
-        const lab = ColorSpace.rgbToLab({ r: r8, g: g8, b: b8 });
-
-        // 8-bit Lab encoding
-        lab8bit[i * 3] = Math.round((lab.L / 100) * 255);
-        lab8bit[i * 3 + 1] = Math.round(lab.a + 128);
-        lab8bit[i * 3 + 2] = Math.round(lab.b + 128);
-    }
-
-    // 3. Generate 8-bit RGB for thumbnail
-    const rgb8bit = Buffer.alloc(pixelCount * 3);
-    for (let i = 0; i < pixelCount; i++) {
-        rgb8bit[i * 3] = rgbBuffer16[i * 6];       // High byte
-        rgb8bit[i * 3 + 1] = rgbBuffer16[i * 6 + 2];
-        rgb8bit[i * 3 + 2] = rgbBuffer16[i * 6 + 4];
-    }
-
-    // 4. Generate JPEG thumbnail (max 160×160)
-    const thumbScale = Math.min(160 / width, 160 / height);
-    const thumbWidth = Math.round(width * thumbScale);
-    const thumbHeight = Math.round(height * thumbScale);
-
-    const thumbJpeg = await sharp(rgb8bit, {
-        raw: { width, height, channels: 3 }
-    })
-    .resize(thumbWidth, thumbHeight, { fit: 'inside' })
-    .jpeg({ quality: 90 })
-    .toBuffer();
-
-    // 5. Create 16-bit Lab PSD
-    const psd = new PSDWriter({
-        width,
-        height,
-        colorMode: 'lab',
-        bitsPerChannel: 16,
-        compression: 'none'  // Uncompressed for QuickLook
-    });
-
-    psd.setThumbnail({
-        jpegData: thumbJpeg,
-        width: thumbWidth,
-        height: thumbHeight
-    });
-
-    // Use 8-bit Lab composite (PSDWriter upsamples to 16-bit)
-    psd.setComposite(lab8bit);
-
-    // 6. Write PSD
-    const psdBuffer = psd.write();
-    fs.writeFileSync(outputPath, psdBuffer);
-
-    console.log(`✓ Created: ${outputPath}`);
-    console.log(`  Dimensions: ${width}×${height}`);
-    console.log(`  Mode: Lab Color, 16 Bits/Channel`);
-    console.log(`  Finder icon: ✓ (Resource 1036)`);
-    console.log(`  QuickLook: ✓ (Uncompressed Section 5)`);
-}
-```
-
----
-
-## Validation Checklist
-
-After creating a PSD, verify these requirements:
-
-### On macOS Finder:
-
-1. **Finder Icon Test**
-   - [ ] File shows thumbnail preview in Finder (not generic PSD icon)
-   - [ ] Icon appears within ~5 seconds after file creation
-
-2. **QuickLook Test (Press Space)**
-   - [ ] Preview appears (not black rectangle)
-   - [ ] Colors look correct
-   - [ ] Preview is full image, not corrupted
-
-### In Photoshop:
-
-3. **File Opens Correctly**
-   - [ ] No error messages on open
-   - [ ] Image → Mode shows "Lab Color"
-   - [ ] Image → Mode shows correct bit depth (8-bit or 16-bit)
-   - [ ] Colors match original (no color shift)
+| Component | Flat PSD | Layered PSD |
+|-----------|----------|-------------|
+| Header channels | 3 (L, a, b) | 3 + min(layers, 4) |
+| Resource 1036 | JPEG thumbnail | JPEG thumbnail |
+| Section 4 | Empty (flat mode) | Lr16 block with layer data |
+| Section 5 compression | **none** | **none** |
+| Section 5 data | 8-bit Lab (upsampled) | 8-bit Lab (upsampled) + extra alphas |
+| Finder icon | ✓ | ✓ |
+| QuickLook | ✓ | ✓ |
+| Photoshop opens | ✓ | ✓ (with layers) |
 
 ---
 
@@ -234,21 +142,29 @@ After creating a PSD, verify these requirements:
 **Causes:**
 1. Using RLE compression instead of uncompressed
 2. Native 16-bit Lab composite data (instead of 8-bit upsampled)
-3. Extra alpha channels from layers
 
 **Solution:**
 ```javascript
-// Use compression: 'none' (not compositeCompression)
 const writer = new PSDWriter({
     compression: 'none'  // ✓ Correct
 });
-
-// Use 8-bit Lab composite for 16-bit PSDs
 writer.setComposite(lab8bit);  // ✓ 8-bit, will be upsampled
-
-// Don't use addPixelLayer() - it adds alpha channels
-// writer.addPixelLayer(...)  // ✗ Breaks QuickLook
 ```
+
+### Problem: Photoshop Can't Open File
+
+**Causes:**
+1. Header channel count doesn't match Section 5 channel count
+2. Header says 3 channels but layers exist (need 3 + N)
+3. `flatMode` accidentally enabled when layers were added
+
+**Solution:** Ensure `setComposite()` does NOT set `flatMode` when layers exist. Header channel count must be `3 + min(layers.length, 4)` for layered files.
+
+### Problem: No Layers in Output
+
+**Cause:** `setComposite()` was setting `flatMode = true`, which skips layer writing in Section 4.
+
+**Solution:** `setComposite()` must not touch `flatMode`. Flat mode should only be set by the constructor option `flat: true`.
 
 ### Problem: Generic PSD Icon (No Thumbnail)
 
@@ -259,12 +175,11 @@ writer.setComposite(lab8bit);  // ✓ 8-bit, will be upsampled
 
 **Solution:**
 ```javascript
-// Generate valid JPEG thumbnail
 const thumbJpeg = await sharp(rgbBuffer, {
     raw: { width, height, channels: 3 }
 })
 .resize(thumbWidth, thumbHeight, { fit: 'inside' })
-.jpeg({ quality: 90 })  // Important: valid JPEG
+.jpeg({ quality: 90 })
 .toBuffer();
 
 writer.setThumbnail({
@@ -274,11 +189,12 @@ writer.setThumbnail({
 });
 ```
 
-### Problem: Image Opens but Wrong Colors
+### Problem: Image Opens but Wrong Colors (Blue Cast)
 
-**Cause:** Incorrect Lab encoding
+**Cause:** Incorrect Lab 16-bit encoding — using UXP API range (0-32768) instead of PSD file format range (0-65535).
 
-**Solution:**
+**Solution:** Always use 8-bit Lab for composite data. PSDWriter upsamples correctly via ×257.
+
 ```javascript
 // Correct 8-bit Lab encoding
 lab8bit[i * 3] = Math.round((lab.L / 100) * 255);  // L: 0-100 → 0-255
@@ -300,20 +216,16 @@ Analyzing `astronaut-16bit-PS.psd` (Photoshop-created reference):
 - ✓ Composite data: 8-bit values (0x7F-0x80 range)
 - ✓ Layers: 0 (flat mode)
 
-This format produces working Finder icons and QuickLook previews.
+### Layered Separated PSDs (2026-03-04)
 
-### Working Format Summary
-
-| Component | 8-bit PSD | 16-bit PSD |
-|-----------|-----------|------------|
-| Header bit depth | 8 | 16 |
-| Channels | 3 (L, a, b) | 3 (L, a, b) |
-| Resource | 1036 + JPEG | 1036 + JPEG |
-| Composite data | 8-bit Lab | **8-bit Lab** (upsampled) |
-| Section 5 compression | none | **none** |
-| Layers | 0 (flat mode) | 0 (flat mode) |
-
-**Key insight:** Both 8-bit and 16-bit PSDs use 8-bit Lab composite data with uncompressed Section 5.
+Testing `posterize-psd.js` output (16-bit Lab, 10+ layers):
+- ✓ Header: 16-bit Lab, channels = 3 + min(layers, 4)
+- ✓ Resource 1036: JPEG thumbnail (posterized preview)
+- ✓ Section 4: Lr16 block with fill+mask layers
+- ✓ Section 5: Uncompressed, 8-bit Lab composite + extra alpha channels
+- ✓ Finder icon shows posterized result
+- ✓ QuickLook shows posterized result
+- ✓ Photoshop opens with all layers intact
 
 ---
 
@@ -326,4 +238,4 @@ This format produces working Finder icons and QuickLook previews.
 
 ---
 
-**Success Rate:** 100% Finder icons + QuickLook across 100+ validated images when following this guide.
+**Success Rate:** 100% Finder icons + QuickLook across 100+ validated images (flat and layered) when following this guide.

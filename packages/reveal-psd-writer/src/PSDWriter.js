@@ -394,7 +394,21 @@ class PSDWriter {
             throw new Error(`Composite must be ${expectedSize} bytes (${this.width}×${this.height}×3), got ${pixels.length}`);
         }
         this.compositePixels = Buffer.from(pixels);
-        this.flatMode = true;
+    }
+
+    /**
+     * Set composite pixels in native 16-bit Lab encoding.
+     * Use this for 16-bit PSD files to avoid 8→16 upscaling loss.
+     *
+     * @param {Buffer} pixels - 16-bit Lab pixel data (6 bytes per pixel: L, a, b as big-endian uint16)
+     */
+    setComposite16(pixels) {
+        const expectedSize = this.width * this.height * 6;
+        if (pixels.length !== expectedSize) {
+            throw new Error(`Composite16 must be ${expectedSize} bytes (${this.width}×${this.height}×6), got ${pixels.length}`);
+        }
+        this.compositePixels = Buffer.from(pixels);
+        this.compositePixels16bit = true;
     }
 
     /**
@@ -1074,12 +1088,12 @@ class PSDWriter {
         // Calculate how many extra alpha channels we need (same formula as header)
         const extraAlphaCount = this.layers.length > 0 ? Math.min(this.layers.length, 4) : 0;
 
-        // Find the pixel source: compositePixels (flat mode) or first pixel layer
-        const pixelLayer = this.flatMode ? null : this.layers.find(layer => layer.type === 'pixel');
-        const pixelSource = this.flatMode ? this.compositePixels : (pixelLayer ? pixelLayer.pixels : null);
+        // Find the pixel source: explicit composite (preferred) or first pixel layer
+        const pixelLayer = this.compositePixels ? null : this.layers.find(layer => layer.type === 'pixel');
+        const pixelSource = this.compositePixels || (pixelLayer ? pixelLayer.pixels : null);
 
-        // Check if flat mode composite is native 16-bit (6 bytes/pixel instead of 3)
-        const compositeIs16bit = this.flatMode && this.compositePixels16bit;
+        // Check if composite is native 16-bit (6 bytes/pixel instead of 3)
+        const compositeIs16bit = this.compositePixels && this.compositePixels16bit;
 
         const useRLE = this.compression === 'rle';
 
