@@ -44,17 +44,31 @@ const {
  * @returns {Promise<{jpegData: Buffer, width: number, height: number}>}
  */
 async function generateThumbnail(lab8bit, width, height, maxSize = 256) {
-    const pixelCount = width * height;
-    const rgb = lab8bitToRgb(lab8bit, pixelCount);
-
     const scale = Math.min(maxSize / width, maxSize / height);
     const thumbWidth = Math.round(width * scale);
     const thumbHeight = Math.round(height * scale);
 
+    // Downsample Lab data first to avoid full-res RGB allocation
+    const smallLab = new Uint8Array(thumbWidth * thumbHeight * 3);
+    const xRatio = width / thumbWidth;
+    const yRatio = height / thumbHeight;
+    for (let y = 0; y < thumbHeight; y++) {
+        const srcY = Math.min(Math.round(y * yRatio), height - 1);
+        for (let x = 0; x < thumbWidth; x++) {
+            const srcX = Math.min(Math.round(x * xRatio), width - 1);
+            const srcIdx = (srcY * width + srcX) * 3;
+            const dstIdx = (y * thumbWidth + x) * 3;
+            smallLab[dstIdx] = lab8bit[srcIdx];
+            smallLab[dstIdx + 1] = lab8bit[srcIdx + 1];
+            smallLab[dstIdx + 2] = lab8bit[srcIdx + 2];
+        }
+    }
+
+    const rgb = lab8bitToRgb(smallLab, thumbWidth * thumbHeight);
+
     const jpegBuffer = await sharp(Buffer.from(rgb), {
-        raw: { width, height, channels: 3 }
+        raw: { width: thumbWidth, height: thumbHeight, channels: 3 }
     })
-    .resize(thumbWidth, thumbHeight)
     .jpeg({ quality: 80 })
     .toBuffer();
 

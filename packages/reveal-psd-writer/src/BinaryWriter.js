@@ -97,7 +97,8 @@ class BinaryWriter {
      * Write raw bytes from Buffer or Uint8Array
      */
     writeBytes(data) {
-        const buf = Buffer.from(data);
+        // Accept Buffer by reference to avoid copying
+        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
         this.buffers.push(buf);
         this.length += buf.length;
     }

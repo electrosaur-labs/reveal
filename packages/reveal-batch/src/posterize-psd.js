@@ -487,7 +487,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
 
     // 9. Calculate validation metrics (using filtered colors)
     console.log(`  Computing validation metrics...`);
-    const processedLab = reconstructProcessedLab(
+    let processedLab = reconstructProcessedLab(
         colorIndices,
         filteredPaletteLab, // Use filtered palette (matches layers)
         pixelCount
@@ -556,6 +556,10 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         fs.mkdirSync(outputDir, { recursive: true });
     }
 
+    // === Release metrics data before PSD write (no longer needed) ===
+    // colorIndices, layersForMetrics, originalLabClamped are done
+    colorIndices = null;
+
     // 12. Write output PSD (match input bit depth)
     console.log(`  Writing ${depth}-bit PSD...`);
     const outputPsdPath = path.join(outputDir, `${basename}.psd`);
@@ -568,12 +572,20 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         documentName: basename
     });
 
+    // Generate thumbnail BEFORE adding layers (uses processedLab which we free after)
+    console.log(`  Generating thumbnail + composite for QuickLook...`);
+    const thumbnail = await generateThumbnail(processedLab, width, height);
+    writer.setThumbnail(thumbnail);
+    writer.setComposite(processedLab);  // Writer takes reference, no copy needed
+    processedLab = null; // Free — writer has the reference now
+
     // Add original as invisible reference layer
     writer.addPixelLayer({
         name: 'Original Image (Reference)',
         pixels: lab8bit,
         visible: false
     });
+    lab8bit = null; // Free — writer has the reference now
 
     // Sort layers by lightness (light to dark) for proper print stacking (using filtered data)
     const layersToWrite = filteredPaletteLab.map((color, i) => ({
@@ -592,7 +604,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         console.log(`    ${idx + 1}. ${hex} - L=${layer.color.L.toFixed(1)}, Coverage=${pct}%`);
     });
 
-    // Add fill+mask layers
+    // Add fill+mask layers (writer takes mask by reference)
     for (let li = 0; li < layersToWrite.length; li++) {
         const layer = layersToWrite[li];
         const hex = rgbToHex(layer.rgb.r, layer.rgb.g, layer.rgb.b);
@@ -604,13 +616,8 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
             mask: layer.mask
         });
     }
-
-    // Resource 1036: Thumbnail for Finder icon
-    // Section 5: Composite for QuickLook (8-bit Lab, writer upsamples to 16-bit)
-    console.log(`  Generating thumbnail + composite for QuickLook...`);
-    const thumbnail = await generateThumbnail(processedLab, width, height);
-    writer.setThumbnail(thumbnail);
-    writer.setComposite(processedLab);
+    // Free masks array — writer has references to individual masks
+    filteredMasks.length = 0;
 
     const psdBuffer = writer.write();
     fs.writeFileSync(outputPsdPath, psdBuffer);
@@ -645,6 +652,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
             breakdown: m.breakdown
         })),
         dna,
+        outputDna: outputDNA,
         configuration: config,
         palette,
         metrics,

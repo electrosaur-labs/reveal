@@ -92,7 +92,10 @@ async function processSource(sourceName, bitDepths, baseDir, cliOptions = {}) {
 
     for (const bitDepth of bitDepths) {
         const inputDir = path.join(baseDir, 'input', sourceName, 'psd', `${bitDepth}bit`);
-        const outputDir = path.join(baseDir, 'output', sourceName, 'psd', `${bitDepth}bit`);
+        // When archetype override is set, output to flat archetype-named directory
+        const outputDir = cliOptions.archetype
+            ? path.join(baseDir, 'output', 'psd', cliOptions.archetype)
+            : path.join(baseDir, 'output', sourceName, 'psd', `${bitDepth}bit`);
 
         const dirResults = await processDirectory(inputDir, outputDir, bitDepth, sourceName, cliOptions);
         results.push(...dirResults);

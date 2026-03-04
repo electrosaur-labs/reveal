@@ -207,11 +207,20 @@ class PSDWriter {
                     layer._channelData.push({ totalSize: 2, empty: true });
                     layer._channelData.push({ totalSize: 2, empty: true });
 
-                    // Mask channel
+                    // Mask channel — convert 8-bit mask to 16-bit on the fly if needed
+                    let maskData = layer.mask;
+                    if (layer.maskIs8bit) {
+                        const mask16 = Buffer.alloc(pixelCount * 2);
+                        for (let i = 0; i < pixelCount; i++) {
+                            mask16.writeUInt16BE(maskData[i] * 257, i * 2);
+                        }
+                        maskData = mask16;
+                        layer.mask = null; // Free 8-bit mask — no longer needed
+                    }
                     if (useRLE) {
-                        layer._channelData.push(this._compressChannelRLE(layer.mask, 2));
+                        layer._channelData.push(this._compressChannelRLE(maskData, 2));
                     } else {
-                        layer._channelData.push({ totalSize: 2 + layer.mask.length, raw: layer.mask });
+                        layer._channelData.push({ totalSize: 2 + maskData.length, raw: maskData });
                     }
                 }
             } else {
@@ -292,29 +301,17 @@ class PSDWriter {
             throw new Error(`Mask must be ${expectedSize8} bytes (8-bit) or ${expectedSize16} bytes (16-bit)`);
         }
 
-        // Convert 8-bit mask to 16-bit if needed
-        let mask = options.mask;
-        if (this.bitsPerChannel === 16 && mask.length === expectedSize8) {
-            // Convert 8-bit mask (1 byte/pixel) to 16-bit (2 bytes/pixel)
-            // Standard conversion: value8 * 257 gives value16
-            const mask16 = new Uint8Array(expectedSize16);
-
-            for (let i = 0; i < pixelCount; i++) {
-                const value8 = mask[i];
-                const value16 = value8 * 257;
-
-                mask16[i * 2] = (value16 >> 8) & 0xFF;      // High byte
-                mask16[i * 2 + 1] = value16 & 0xFF;          // Low byte
-            }
-            mask = mask16;
-        }
+        // Store mask by reference — 8→16 conversion deferred to write time
+        const mask = options.mask;
+        const maskIs8bit = (mask.length === expectedSize8);
 
         this.layers.push({
             id: this.nextLayerID++,
             name: options.name,
             type: 'fill',
             color: options.color,
-            mask: mask
+            mask: mask,
+            maskIs8bit: maskIs8bit
         });
     }
 
@@ -353,11 +350,13 @@ class PSDWriter {
             );
         }
 
+        // Accept buffer by reference to avoid copying large pixel data
+        const pixelBuf = pixels16bit || (Buffer.isBuffer(options.pixels) ? options.pixels : Buffer.from(options.pixels));
         this.layers.push({
             id: this.nextLayerID++,
             name: options.name,
             type: 'pixel',
-            pixels: pixels16bit || Buffer.from(options.pixels),
+            pixels: pixelBuf,
             pixels16bit: pixels16bit !== null,  // Flag indicating native 16-bit format
             visible: options.visible !== undefined ? options.visible : true
         });
@@ -393,7 +392,8 @@ class PSDWriter {
         if (pixels.length !== expectedSize) {
             throw new Error(`Composite must be ${expectedSize} bytes (${this.width}×${this.height}×3), got ${pixels.length}`);
         }
-        this.compositePixels = Buffer.from(pixels);
+        // Accept buffer by reference to avoid copying large data
+        this.compositePixels = Buffer.isBuffer(pixels) ? pixels : Buffer.from(pixels);
     }
 
     /**
@@ -1203,67 +1203,76 @@ class PSDWriter {
                 writer.writeBytes(compressedData);
             }
         } else {
-            // Uncompressed (type 0)
+            // Uncompressed (type 0) — write channels as bulk buffers
             writer.writeUint16(0);
 
             if (this.bitsPerChannel === 16) {
                 if (pixelSource) {
                     if ((pixelLayer && pixelLayer.pixels16bit) || compositeIs16bit) {
-                        // Native 16-bit: write directly (6 bytes per pixel)
-                        // L channel (planar)
-                        for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint8(pixelSource[i * 6]);
-                            writer.writeUint8(pixelSource[i * 6 + 1]);
-                        }
-                        // a channel (planar)
-                        for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint8(pixelSource[i * 6 + 2]);
-                            writer.writeUint8(pixelSource[i * 6 + 3]);
-                        }
-                        // b channel (planar)
-                        for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint8(pixelSource[i * 6 + 4]);
-                            writer.writeUint8(pixelSource[i * 6 + 5]);
+                        // Native 16-bit: deinterleave channels into bulk buffers
+                        for (let ch = 0; ch < 3; ch++) {
+                            const channelBuf = Buffer.allocUnsafe(pixelCount * 2);
+                            const srcOff = ch * 2;
+                            for (let i = 0; i < pixelCount; i++) {
+                                channelBuf[i * 2] = pixelSource[i * 6 + srcOff];
+                                channelBuf[i * 2 + 1] = pixelSource[i * 6 + srcOff + 1];
+                            }
+                            writer.writeBytes(channelBuf);
                         }
                     } else {
-                        // 8-bit encoding: scale to 16-bit
-                        for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint16(pixelSource[i * 3] * 257);
-                        }
-                        for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint16(pixelSource[i * 3 + 1] * 257);
-                        }
-                        for (let i = 0; i < pixelCount; i++) {
-                            writer.writeUint16(pixelSource[i * 3 + 2] * 257);
+                        // 8-bit encoding: scale to 16-bit, one channel buffer at a time
+                        for (let ch = 0; ch < 3; ch++) {
+                            const channelBuf = Buffer.allocUnsafe(pixelCount * 2);
+                            for (let i = 0; i < pixelCount; i++) {
+                                channelBuf.writeUInt16BE(pixelSource[i * 3 + ch] * 257, i * 2);
+                            }
+                            writer.writeBytes(channelBuf);
                         }
                     }
                 } else {
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint16(65535);
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint16(32768);
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint16(32768);
+                    // Neutral white: L=65535, a=32768, b=32768
+                    const neutralValues = [65535, 32768, 32768];
+                    for (let ch = 0; ch < 3; ch++) {
+                        const channelBuf = Buffer.allocUnsafe(pixelCount * 2);
+                        for (let i = 0; i < pixelCount; i++) {
+                            channelBuf.writeUInt16BE(neutralValues[ch], i * 2);
+                        }
+                        writer.writeBytes(channelBuf);
+                    }
                 }
 
-                // Extra alpha channels for layer masks (16-bit uncompressed)
-                for (let a = 0; a < extraAlphaCount; a++) {
+                // Extra alpha channels for layer masks (16-bit, fully opaque)
+                if (extraAlphaCount > 0) {
+                    const alphaBuf = Buffer.allocUnsafe(pixelCount * 2);
                     for (let i = 0; i < pixelCount; i++) {
-                        writer.writeUint16(65535);  // Fully opaque
+                        alphaBuf.writeUInt16BE(65535, i * 2);
+                    }
+                    for (let a = 0; a < extraAlphaCount; a++) {
+                        writer.writeBytes(alphaBuf); // Reuse same buffer for all alpha channels
                     }
                 }
             } else {
                 if (pixelSource) {
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelSource[i * 3]);
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelSource[i * 3 + 1]);
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(pixelSource[i * 3 + 2]);
+                    // 8-bit: deinterleave Lab channels into bulk buffers
+                    for (let ch = 0; ch < 3; ch++) {
+                        const channelBuf = Buffer.allocUnsafe(pixelCount);
+                        for (let i = 0; i < pixelCount; i++) {
+                            channelBuf[i] = pixelSource[i * 3 + ch];
+                        }
+                        writer.writeBytes(channelBuf);
+                    }
                 } else {
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(128);
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(128);
-                    for (let i = 0; i < pixelCount; i++) writer.writeUint8(128);
+                    const neutralBuf = Buffer.alloc(pixelCount, 128);
+                    for (let ch = 0; ch < 3; ch++) {
+                        writer.writeBytes(neutralBuf);
+                    }
                 }
 
-                // Extra alpha channels for layer masks (8-bit uncompressed)
-                for (let a = 0; a < extraAlphaCount; a++) {
-                    for (let i = 0; i < pixelCount; i++) {
-                        writer.writeUint8(255);  // Fully opaque
+                // Extra alpha channels for layer masks (8-bit, fully opaque)
+                if (extraAlphaCount > 0) {
+                    const alphaBuf = Buffer.alloc(pixelCount, 255);
+                    for (let a = 0; a < extraAlphaCount; a++) {
+                        writer.writeBytes(alphaBuf);
                     }
                 }
             }
