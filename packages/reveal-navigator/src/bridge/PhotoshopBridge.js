@@ -16,7 +16,7 @@
 
 const { app, core, action } = require("photoshop");
 const { imaging } = require("photoshop");
-const logger = require('@reveal/core').logger;
+const logger = require('@electrosaur-labs/core').logger;
 
 class PhotoshopBridge {
 

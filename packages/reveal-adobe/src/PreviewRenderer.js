@@ -5,7 +5,7 @@
  * Imports: PluginState, ColorUtils, MechanicalFilters
  */
 
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 const SeparationEngine = Reveal.engines.SeparationEngine;
 const logger = Reveal.logger;

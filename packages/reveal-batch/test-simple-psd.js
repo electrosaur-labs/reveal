@@ -4,7 +4,7 @@
  */
 
 const fs = require('fs');
-const { PSDWriter } = require('@reveal/psd-writer');
+const { PSDWriter } = require('@electrosaur-labs/psd-writer');
 
 const width = 100;
 const height = 100;

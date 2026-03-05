@@ -11,7 +11,7 @@ DNA v2.0 adds sophisticated archetype matching using **12-sector hue analysis** 
 ### 1. Generate DNA v2.0 from Lab Pixels
 
 ```javascript
-const { DNAGenerator } = require('@reveal/core');
+const { DNAGenerator } = require('@electrosaur-labs/core');
 
 const generator = new DNAGenerator();
 const dna = generator.generate(labPixels, width, height, { bitDepth: 8 });
@@ -41,7 +41,7 @@ console.log(dna);
 ### 2. Match DNA to Archetype (Automatic)
 
 ```javascript
-const { ArchetypeLoader } = require('@reveal/core');
+const { ArchetypeLoader } = require('@electrosaur-labs/core');
 
 // DNA v2.0: Uses multi-factor scoring (40/45/15)
 const archetype = ArchetypeLoader.matchArchetype(dna);
@@ -78,7 +78,7 @@ const archetype = ArchetypeLoader.matchArchetype(dnaV1);
 ### Option A: Full Pipeline (DNA v2.0 Generation + Matching)
 
 ```javascript
-const { DNAGenerator, ArchetypeLoader, ParameterGenerator } = require('@reveal/core');
+const { DNAGenerator, ArchetypeLoader, ParameterGenerator } = require('@electrosaur-labs/core');
 
 // 1. Generate DNA v2.0
 const generator = new DNAGenerator();
@@ -103,7 +103,7 @@ console.log(`Parameters: targetColors=${config.targetColors}, ditherType=${confi
 If you already have `ImageHeuristicAnalyzer` generating DNA v1.0:
 
 ```javascript
-const { ImageHeuristicAnalyzer, DNAGenerator, ArchetypeLoader } = require('@reveal/core');
+const { ImageHeuristicAnalyzer, DNAGenerator, ArchetypeLoader } = require('@electrosaur-labs/core');
 
 // Existing v1.0 analysis
 const analysisV1 = ImageHeuristicAnalyzer.analyze(labPixels, width, height);
@@ -123,7 +123,7 @@ const config = ParameterGenerator.generate(dnaV2, { imageData: rgbaPixels, width
 ### Option C: Manual Archetype Matching (Advanced)
 
 ```javascript
-const { ArchetypeMapper, ArchetypeLoader } = require('@reveal/core');
+const { ArchetypeMapper, ArchetypeLoader } = require('@electrosaur-labs/core');
 
 const archetypes = ArchetypeLoader.loadArchetypes();
 const mapper = new ArchetypeMapper(archetypes);
@@ -254,7 +254,7 @@ npm test -- archetype-mapper.test.js
 ### Test with Sample DNA
 
 ```javascript
-const { ArchetypeMapper, ArchetypeLoader } = require('@reveal/core');
+const { ArchetypeMapper, ArchetypeLoader } = require('@electrosaur-labs/core');
 
 // Monochromatic blue image
 const dna = {

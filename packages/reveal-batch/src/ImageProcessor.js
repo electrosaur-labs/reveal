@@ -1,11 +1,11 @@
 /**
- * ImageProcessor - Handles image I/O and processing with Sharp + @reveal/core
+ * ImageProcessor - Handles image I/O and processing with Sharp + @electrosaur-labs/core
  */
 
 const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const LabConverter = Reveal.LabConverter;
 
 class ImageProcessor {

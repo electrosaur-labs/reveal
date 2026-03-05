@@ -174,7 +174,7 @@ a global E_rev score per image. That is a separate tool from the Navigator.
 | **Purpose** | Archetype quality validation | Real-time archetype exploration |
 | **User** | Runs unattended, results reviewed after | User is actively scrubbing UI |
 
-They share the same core engines (`@reveal/core`) but serve completely different
+They share the same core engines (`@electrosaur-labs/core`) but serve completely different
 workflows. E_rev from the batch audit informs archetype quality *offline* — the
 Navigator's job is *real-time* exploration of one image.
 

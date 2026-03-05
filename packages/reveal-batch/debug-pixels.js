@@ -1,5 +1,5 @@
 const { parsePPM } = require('./src/ppmParser');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const path = require('path');
 
 // Parse astronaut PPM

@@ -18,7 +18,7 @@
 
 const { initializeProxyMode, stopProxyMode, getProxyState } = require('./ProxyIntegration');
 const PhotoshopAPI = require('./api/PhotoshopAPI');
-const logger = require('@reveal/core').logger;
+const logger = require('@electrosaur-labs/core').logger;
 
 class ProxyModeTestHarness {
     /**

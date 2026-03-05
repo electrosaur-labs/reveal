@@ -2,7 +2,7 @@
 /**
  * A/B test: posterize the horse image and compare palettes.
  *
- * Reads the 16-bit Lab PSD via @reveal/psd-reader, converts to engine encoding,
+ * Reads the 16-bit Lab PSD via @electrosaur-labs/psd-reader, converts to engine encoding,
  * runs PosterizationEngine with the matched archetype, and prints the palette
  * with Lab values + hue angles.
  *
@@ -11,9 +11,9 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { readPsd } = require('@reveal/psd-reader');
-const Reveal = require('@reveal/core');
-const LabEncoding = require('@reveal/core/lib/color/LabEncoding');
+const { readPsd } = require('@electrosaur-labs/psd-reader');
+const Reveal = require('@electrosaur-labs/core');
+const LabEncoding = require('@electrosaur-labs/core/lib/color/LabEncoding');
 
 // Reuse the batch pipeline's DNA v2.0 calculator
 const { posterizePsd } = require('./src/posterize-psd.js');

@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const SessionState = require('../src/state/SessionState');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 

@@ -13,9 +13,9 @@
 const fs   = require('fs');
 const path = require('path');
 
-const { readPsd }             = require('@reveal/psd-reader');
-const { PSDWriter }           = require('@reveal/psd-writer');
-const Reveal                  = require('@reveal/core');
+const { readPsd }             = require('@electrosaur-labs/psd-reader');
+const { PSDWriter }           = require('@electrosaur-labs/psd-writer');
+const Reveal                  = require('@electrosaur-labs/core');
 const { LabEncoding }         = Reveal;
 const { PosterizationEngine } = Reveal.engines;
 const { convertPsd16bitToEngineLab, convertEngine16bitTo8bitLab } = LabEncoding;

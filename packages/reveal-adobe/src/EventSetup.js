@@ -6,7 +6,7 @@
 
 const { action, imaging, app } = require("photoshop");
 
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const logger = Reveal.logger;
 
 const pluginState = require('./PluginState');

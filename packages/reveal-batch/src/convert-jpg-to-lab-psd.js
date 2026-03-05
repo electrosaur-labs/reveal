@@ -9,8 +9,8 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
-const { PSDWriter } = require('@reveal/psd-writer');
-const LabEncoding = require('@reveal/core').LabEncoding;
+const { PSDWriter } = require('@electrosaur-labs/psd-writer');
+const LabEncoding = require('@electrosaur-labs/core').LabEncoding;
 
 const INPUT_DIR = path.join(__dirname, '../data/SP100/input/minkler/jpg');
 const OUTPUT_8BIT = path.join(__dirname, '../data/SP100/output/minkler/psd/8bit');

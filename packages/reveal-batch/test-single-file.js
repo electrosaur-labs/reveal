@@ -5,24 +5,24 @@
 
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@reveal/core');
-const { PSDWriter } = require('@reveal/psd-writer');
+const Reveal = require('@electrosaur-labs/core');
+const { PSDWriter } = require('@electrosaur-labs/psd-writer');
 const { parsePPM } = require('./src/ppmParser');
 const chalk = require('chalk');
 
 const ImageHeuristicAnalyzer = Reveal.engines.ImageHeuristicAnalyzer;
 
 const PRESETS = {
-    'standard-image': require('@reveal/core/presets/standard-image.json'),
-    'halftone-portrait': require('@reveal/core/presets/halftone-portrait.json'),
-    'vibrant-graphic': require('@reveal/core/presets/vibrant-graphic.json'),
-    'atmospheric-photo': require('@reveal/core/presets/atmospheric-photo.json'),
-    'pastel-high-key': require('@reveal/core/presets/pastel-high-key.json'),
-    'vintage-muted': require('@reveal/core/presets/vintage-muted.json'),
-    'deep-shadow-noir': require('@reveal/core/presets/deep-shadow-noir.json'),
-    'neon-fluorescent': require('@reveal/core/presets/neon-fluorescent.json'),
-    'textural-grunge': require('@reveal/core/presets/textural-grunge.json'),
-    'commercial-offset': require('@reveal/core/presets/commercial-offset.json')
+    'standard-image': require('@electrosaur-labs/core/presets/standard-image.json'),
+    'halftone-portrait': require('@electrosaur-labs/core/presets/halftone-portrait.json'),
+    'vibrant-graphic': require('@electrosaur-labs/core/presets/vibrant-graphic.json'),
+    'atmospheric-photo': require('@electrosaur-labs/core/presets/atmospheric-photo.json'),
+    'pastel-high-key': require('@electrosaur-labs/core/presets/pastel-high-key.json'),
+    'vintage-muted': require('@electrosaur-labs/core/presets/vintage-muted.json'),
+    'deep-shadow-noir': require('@electrosaur-labs/core/presets/deep-shadow-noir.json'),
+    'neon-fluorescent': require('@electrosaur-labs/core/presets/neon-fluorescent.json'),
+    'textural-grunge': require('@electrosaur-labs/core/presets/textural-grunge.json'),
+    'commercial-offset': require('@electrosaur-labs/core/presets/commercial-offset.json')
 };
 
 function rgbToHex(r, g, b) {

@@ -161,7 +161,7 @@ a/b: 0-65535 (32768 = neutral)
 ```javascript
 const { writeUnifiedPsd } = require('./UnifiedPSDWriter');
 const sharp = require('sharp');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 
 async function convertTiff(inputPath, outputPath) {
     // Load and resize

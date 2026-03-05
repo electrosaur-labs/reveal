@@ -1,6 +1,6 @@
 # reveal-batch
 
-Command-line batch processing tool for screen print color separation using @reveal/core.
+Command-line batch processing tool for screen print color separation using @electrosaur-labs/core.
 
 ## Features
 
@@ -156,7 +156,7 @@ output/
 
 ## Dependencies
 
-- **@reveal/core** - Pure JavaScript color separation engines
+- **@electrosaur-labs/core** - Pure JavaScript color separation engines
 - **sharp** - High-performance image processing
 - **commander** - CLI framework
 - **chalk** - Terminal colors

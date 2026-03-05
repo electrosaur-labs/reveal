@@ -4,13 +4,13 @@
  * Tests the snapshot/restore lifecycle, isCustomized() helper,
  * resetToDefaults(), and the swapArchetype() auto-restore flow.
  *
- * Uses REAL @reveal/core (pure JS, no I/O) — no mocking needed.
+ * Uses REAL @electrosaur-labs/core (pure JS, no I/O) — no mocking needed.
  * setupSession() creates a SessionState with a mock proxyEngine
  * and a real config generated from a real archetype.
  */
 
 const SessionState = require('../src/state/SessionState');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 
 // Use a real archetype ID so generateConfiguration returns deterministic values
 const ARCHETYPE_A = 'standard-balanced';

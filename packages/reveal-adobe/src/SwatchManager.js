@@ -5,7 +5,7 @@
  * Imports: PreviewRenderer (for render calls after swatch changes)
  */
 
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const logger = Reveal.logger;
 
 const { renderPreview, render1to1Preview } = require('./PreviewRenderer');

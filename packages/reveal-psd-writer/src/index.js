@@ -1,5 +1,5 @@
 /**
- * @reveal/psd-writer - Minimal PSD file writer for Lab color separations
+ * @electrosaur-labs/psd-writer - Minimal PSD file writer for Lab color separations
  *
  * Uses local PSDWriter with RLE compression support.
  */

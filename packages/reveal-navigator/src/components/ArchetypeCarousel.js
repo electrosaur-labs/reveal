@@ -9,8 +9,8 @@
  * Vanilla+ pattern: subscribes to SessionState events.
  */
 
-const Reveal = require("@reveal/core");
-const logger = require('@reveal/core').logger;
+const Reveal = require("@electrosaur-labs/core");
+const logger = require('@electrosaur-labs/core').logger;
 
 // Sector → approximate hue for visual indicator
 const SECTOR_HUES = {

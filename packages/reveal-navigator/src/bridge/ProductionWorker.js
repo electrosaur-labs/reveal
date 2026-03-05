@@ -18,7 +18,7 @@
 
 const { app, core, action } = require("photoshop");
 const { imaging } = require("photoshop");
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const PhotoshopBridge = require("./PhotoshopBridge");
 
 const logger = Reveal.logger;

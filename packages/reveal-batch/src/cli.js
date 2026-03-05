@@ -2,7 +2,7 @@
 /**
  * reveal-batch - Command-line batch processing for screen print color separation
  *
- * Uses @reveal/core engines for pure JavaScript posterization and separation.
+ * Uses @electrosaur-labs/core engines for pure JavaScript posterization and separation.
  * Processes images with Sharp for file I/O and color space conversion.
  */
 
@@ -10,7 +10,7 @@ const { Command } = require('commander');
 const chalk = require('chalk');
 const path = require('path');
 const fs = require('fs');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const ImageProcessor = require('./ImageProcessor');
 
 const program = new Command();

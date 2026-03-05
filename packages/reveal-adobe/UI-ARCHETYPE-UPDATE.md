@@ -18,26 +18,26 @@
 ```javascript
 const ARCHETYPES = {
     // Core archetypes (DNA v2.0 optimized) - 16 NEW
-    'subtle-naturalist': require('@reveal/core/archetypes/subtle-naturalist.json'),
-    'structural-outlier-rescue': require('@reveal/core/archetypes/structural-outlier-rescue.json'),
-    'blue-rescue': require('@reveal/core/archetypes/blue-rescue.json'),
-    'silver-gelatin': require('@reveal/core/archetypes/silver-gelatin.json'),
-    'neon-graphic': require('@reveal/core/archetypes/neon-graphic.json'),
-    'cinematic-moody': require('@reveal/core/archetypes/cinematic-moody.json'),
-    'muted-vintage': require('@reveal/core/archetypes/muted-vintage.json'),         // NEW
-    'pastel-high-key': require('@reveal/core/archetypes/pastel-high-key.json'),     // NEW
-    'noir-shadow': require('@reveal/core/archetypes/noir-shadow.json'),             // NEW
-    'pure-graphic': require('@reveal/core/archetypes/pure-graphic.json'),
-    'vibrant-tonal': require('@reveal/core/archetypes/vibrant-tonal.json'),
-    'warm-tonal-optimized': require('@reveal/core/archetypes/warm-tonal-optimized.json'),
-    'thermonuclear-yellow': require('@reveal/core/archetypes/thermonuclear-yellow.json'),
-    'soft-ethereal': require('@reveal/core/archetypes/soft-ethereal.json'),
-    'hard-commercial': require('@reveal/core/archetypes/hard-commercial.json'),     // NEW
-    'bright-desaturated': require('@reveal/core/archetypes/bright-desaturated.json'), // NEW
+    'subtle-naturalist': require('@electrosaur-labs/core/archetypes/subtle-naturalist.json'),
+    'structural-outlier-rescue': require('@electrosaur-labs/core/archetypes/structural-outlier-rescue.json'),
+    'blue-rescue': require('@electrosaur-labs/core/archetypes/blue-rescue.json'),
+    'silver-gelatin': require('@electrosaur-labs/core/archetypes/silver-gelatin.json'),
+    'neon-graphic': require('@electrosaur-labs/core/archetypes/neon-graphic.json'),
+    'cinematic-moody': require('@electrosaur-labs/core/archetypes/cinematic-moody.json'),
+    'muted-vintage': require('@electrosaur-labs/core/archetypes/muted-vintage.json'),         // NEW
+    'pastel-high-key': require('@electrosaur-labs/core/archetypes/pastel-high-key.json'),     // NEW
+    'noir-shadow': require('@electrosaur-labs/core/archetypes/noir-shadow.json'),             // NEW
+    'pure-graphic': require('@electrosaur-labs/core/archetypes/pure-graphic.json'),
+    'vibrant-tonal': require('@electrosaur-labs/core/archetypes/vibrant-tonal.json'),
+    'warm-tonal-optimized': require('@electrosaur-labs/core/archetypes/warm-tonal-optimized.json'),
+    'thermonuclear-yellow': require('@electrosaur-labs/core/archetypes/thermonuclear-yellow.json'),
+    'soft-ethereal': require('@electrosaur-labs/core/archetypes/soft-ethereal.json'),
+    'hard-commercial': require('@electrosaur-labs/core/archetypes/hard-commercial.json'),     // NEW
+    'bright-desaturated': require('@electrosaur-labs/core/archetypes/bright-desaturated.json'), // NEW
 
     // Legacy archetypes (backward compatibility) - 2
-    'vibrant-hyper': require('@reveal/core/archetypes/vibrant-hyper.json'),
-    'standard-balanced': require('@reveal/core/archetypes/standard-balanced.json')
+    'vibrant-hyper': require('@electrosaur-labs/core/archetypes/vibrant-hyper.json'),
+    'standard-balanced': require('@electrosaur-labs/core/archetypes/standard-balanced.json')
 };
 ```
 

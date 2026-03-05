@@ -42,7 +42,7 @@ npm run test:core    # 664+ tests
 ### Programmatic Usage (Node.js)
 
 ```javascript
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 
 // 1. Analyze image DNA
 const dna = Reveal.analyzeImage(labPixels, width, height, { bitDepth: 16 });
@@ -68,21 +68,21 @@ const { colorIndices, masks } = await Reveal.separate(
 
 | Package | Description |
 |---------|-------------|
-| **[@reveal/core](packages/reveal-core/)** | Pure JS engines — posterization, separation, DNA analysis, archetypes. **Zero dependencies.** |
-| **[@reveal/navigator](packages/reveal-navigator/)** | Photoshop UXP panel — real-time archetype exploration, palette surgery, production render |
-| **[@reveal/adobe](packages/reveal-adobe/)** | Photoshop UXP command dialog (superseded by Navigator, kept for reference) |
-| **[@reveal/batch](packages/reveal-batch/)** | CLI batch processor for automated testing and benchmarking |
-| **[@reveal/psd-reader](packages/reveal-psd-reader/)** | Minimal PSD reader for Lab documents |
-| **[@reveal/psd-writer](packages/reveal-psd-writer/)** | PSD writer for 8/16-bit Lab with fill+mask and pixel layers |
+| **[@electrosaur-labs/core](packages/reveal-core/)** | Pure JS engines — posterization, separation, DNA analysis, archetypes. **Zero dependencies.** |
+| **[@electrosaur-labs/navigator](packages/reveal-navigator/)** | Photoshop UXP panel — real-time archetype exploration, palette surgery, production render |
+| **[@electrosaur-labs/adobe](packages/reveal-adobe/)** | Photoshop UXP command dialog (superseded by Navigator, kept for reference) |
+| **[@electrosaur-labs/batch](packages/reveal-batch/)** | CLI batch processor for automated testing and benchmarking |
+| **[@electrosaur-labs/psd-reader](packages/reveal-psd-reader/)** | Minimal PSD reader for Lab documents |
+| **[@electrosaur-labs/psd-writer](packages/reveal-psd-writer/)** | PSD writer for 8/16-bit Lab with fill+mask and pixel layers |
 
 ## Architecture
 
 ```
-@reveal/core (Pure Math)          Zero dependencies, no I/O
+@electrosaur-labs/core (Pure Math)          Zero dependencies, no I/O
      │
-     ├── @reveal/navigator        Photoshop UXP panel (real-time preview + production)
-     ├── @reveal/adobe            Photoshop UXP dialog (legacy)
-     └── @reveal/batch            Node.js CLI (ag-psd, sharp, commander)
+     ├── @electrosaur-labs/navigator        Photoshop UXP panel (real-time preview + production)
+     ├── @electrosaur-labs/adobe            Photoshop UXP dialog (legacy)
+     └── @electrosaur-labs/batch            Node.js CLI (ag-psd, sharp, commander)
 ```
 
 The core engines are pure computation — no file system, no network, no Photoshop APIs. Adapters handle I/O for each platform. This means you can run the same separation algorithm in a Photoshop plugin, a Node.js batch pipeline, a web worker, or an AI agent's function call.

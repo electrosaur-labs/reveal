@@ -54,7 +54,7 @@ All DNA objects can now be validated against JSON schemas with detailed error an
 **API:**
 
 ```javascript
-const { DNAValidator } = require('@reveal/core');
+const { DNAValidator } = require('@electrosaur-labs/core');
 
 // Validate any DNA object
 const result = DNAValidator.validate(dna);
@@ -97,7 +97,7 @@ npm test -- dna-validator.test.js
 ### Validate DNA v1.0
 
 ```javascript
-const { DNAValidator } = require('@reveal/core');
+const { DNAValidator } = require('@electrosaur-labs/core');
 
 const dnaV1 = {
     l: 52.3,
@@ -118,7 +118,7 @@ if (result.valid) {
 ### Validate DNA v2.0
 
 ```javascript
-const { DNAValidator } = require('@reveal/core');
+const { DNAValidator } = require('@electrosaur-labs/core');
 
 const dnaV2 = {
     version: '2.0',
@@ -156,7 +156,7 @@ console.log(`Warnings: ${result.warnings.length}`);
 ### Validate Before Processing
 
 ```javascript
-const { DNAGenerator, DNAValidator, ArchetypeLoader } = require('@reveal/core');
+const { DNAGenerator, DNAValidator, ArchetypeLoader } = require('@electrosaur-labs/core');
 
 // Generate DNA
 const generator = new DNAGenerator();
@@ -239,7 +239,7 @@ DNAValidator provides warnings for unusual (but valid) values:
 ### 1. DNAGenerator Integration
 
 ```javascript
-const { DNAGenerator, DNAValidator } = require('@reveal/core');
+const { DNAGenerator, DNAValidator } = require('@electrosaur-labs/core');
 
 const generator = new DNAGenerator();
 const dna = generator.generate(labPixels, width, height, { bitDepth: 8 });
@@ -277,7 +277,7 @@ app.post('/api/analyze', (req, res) => {
 ### 3. Batch Processing Validation
 
 ```javascript
-const { DNAGenerator, DNAValidator } = require('@reveal/core');
+const { DNAGenerator, DNAValidator } = require('@electrosaur-labs/core');
 
 for (const image of images) {
     const dna = DNAGenerator.generate(image.pixels, image.width, image.height);

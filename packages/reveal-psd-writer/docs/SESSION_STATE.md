@@ -148,7 +148,7 @@ Layer Record:
 2. **Analyze differences** - Understand which bytes/fields cause the warning
 3. **Update PSDWriter** - Fix identified issues in `src/PSDWriter.js`
 4. **Test** - Generate new file and verify no warning
-5. **Integrate** - Connect PSD writer with @reveal/core
+5. **Integrate** - Connect PSD writer with @electrosaur-labs/core
 6. **Build CQ100_v4** - Generate 100 reference images as PSDs
 
 ## Key Commands

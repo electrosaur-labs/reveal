@@ -10,7 +10,7 @@
 
 ### Three Core Components
 
-1. **ProxyEngine** (`@reveal/core/engines/ProxyEngine.js`)
+1. **ProxyEngine** (`@electrosaur-labs/core/engines/ProxyEngine.js`)
    - 512px low-resolution proxy for <30ms updates
    - Bilinear downsampling from source
    - Incremental updates (only re-runs affected steps)

@@ -5,7 +5,7 @@
  * error/success dialogs and managing preview section visibility.
  */
 
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const logger = Reveal.logger;
 
 /**

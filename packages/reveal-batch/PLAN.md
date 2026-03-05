@@ -92,7 +92,7 @@ npm run analyze-sp50
 
 | File | Change |
 |------|--------|
-| `@reveal/core/lib/analysis/ParameterGenerator.js` | Chroma Driver v1.3 |
+| `@electrosaur-labs/core/lib/analysis/ParameterGenerator.js` | Chroma Driver v1.3 |
 | `src/MetricsCalculator.js` | Added efficiency penalty |
 | `src/CQ100_MetaAnalyzer.js` | Calibrated thresholds (RevScore > 20) |
 

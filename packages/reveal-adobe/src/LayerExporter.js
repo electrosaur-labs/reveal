@@ -405,7 +405,7 @@ export class LayerExporter {
      */
     async _createCompositeLayer(palette, colorIndices, width, height) {
         const { app, imaging } = require('photoshop');
-        const { PreviewEngine } = await import('@reveal/core/engines/PreviewEngine.js');
+        const { PreviewEngine } = await import('@electrosaur-labs/core/engines/PreviewEngine.js');
 
         // 1. Generate RGBA preview buffer
         const previewBuffer = PreviewEngine.generatePreview(

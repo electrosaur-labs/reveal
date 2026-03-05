@@ -14,7 +14,7 @@
  * to the stable palette index. Event handlers ALWAYS read from DOM.
  */
 
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const logger = Reveal.logger;
 
 const DBLCLICK_MS = 350;

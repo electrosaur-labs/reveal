@@ -5,10 +5,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 const ParameterGenerator = Reveal.ParameterGenerator;
-const PSDWriter = require('@reveal/psd-writer');
+const PSDWriter = require('@electrosaur-labs/psd-writer');
 
 const IMAGE_NAME = 'shopping_bags';
 const INPUT_DIR = path.join(__dirname, '../data/CQ100_v4/input/tiff');

@@ -5,7 +5,7 @@
  */
 
 const ImageProcessor = require('./ImageProcessor');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 
 module.exports = {
   ImageProcessor,

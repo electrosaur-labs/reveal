@@ -38,12 +38,12 @@ const presetsSrc = path.join(__dirname, '..', '..', 'reveal-core', 'presets');
 const presetsDst = path.join(distDir, 'presets');
 if (fs.existsSync(presetsSrc)) {
     copyDirRecursive(presetsSrc, presetsDst);
-    console.log('✓ Copied presets/ from @reveal/core');
+    console.log('✓ Copied presets/ from @electrosaur-labs/core');
 }
 const archetypesSrc = path.join(__dirname, '..', '..', 'reveal-core', 'archetypes');
 const archetypesDst = path.join(distDir, 'archetypes');
 if (fs.existsSync(archetypesSrc)) {
     copyDirRecursive(archetypesSrc, archetypesDst);
-    console.log('✓ Copied archetypes/ from @reveal/core');
+    console.log('✓ Copied archetypes/ from @electrosaur-labs/core');
 }
 console.log('Asset copying complete!');

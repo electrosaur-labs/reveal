@@ -16,8 +16,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { readPsd } = require('@reveal/psd-reader');
-const Reveal = require('@reveal/core');
+const { readPsd } = require('@electrosaur-labs/psd-reader');
+const Reveal = require('@electrosaur-labs/core');
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 const SeparationEngine = Reveal.engines.SeparationEngine;
 const ProxyEngine = Reveal.engines.ProxyEngine;

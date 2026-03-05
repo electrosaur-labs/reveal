@@ -30,9 +30,9 @@
  */
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@reveal/core');
-const { PSDWriter } = require('@reveal/psd-writer');
-const { readPsd } = require('@reveal/psd-reader');
+const Reveal = require('@electrosaur-labs/core');
+const { PSDWriter } = require('@electrosaur-labs/psd-writer');
+const { readPsd } = require('@electrosaur-labs/psd-reader');
 const ParameterGenerator = Reveal.ParameterGenerator;
 const MetricsCalculator = require('./MetricsCalculator');
 const BilateralFilter = Reveal.BilateralFilter;
@@ -511,7 +511,7 @@ async function processImage(inputPath, outputDir) {
         dna.entropy = parseFloat(entropyScore.toFixed(1));
         console.log(`  Entropy: ${dna.entropy}`);
 
-        // 6. Determine if preprocessing is needed (using @reveal/core decision logic)
+        // 6. Determine if preprocessing is needed (using @electrosaur-labs/core decision logic)
         const preprocessDecision = BilateralFilter.shouldPreprocess(dna, entropyScore);
 
         if (preprocessDecision.shouldProcess) {

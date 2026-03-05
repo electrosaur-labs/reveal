@@ -1,7 +1,7 @@
 {
-  "name": "@reveal/adobe",
+  "name": "@electrosaur-labs/adobe",
   "version": "0.13.0",
-  "description": "Photoshop UXP plugin for screen print color separation using @reveal/core",
+  "description": "Photoshop UXP plugin for screen print color separation using @electrosaur-labs/core",
   "main": "dist/index.js",
   "scripts": {
     "build": "webpack --mode production && node scripts/copy-assets.js",
@@ -10,7 +10,7 @@
     "postbuild": "node scripts/copy-assets.js"
   },
   "dependencies": {
-    "@reveal/core": "*",
+    "@electrosaur-labs/core": "*",
     "buffer": "^6.0.3",
     "jpeg-js": "^0.4.4"
   },

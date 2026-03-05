@@ -5,8 +5,8 @@
  */
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@reveal/core');
-const { readPsd } = require('@reveal/psd-reader');
+const Reveal = require('@electrosaur-labs/core');
+const { readPsd } = require('@electrosaur-labs/psd-reader');
 const MetricsCalculator = require('./src/MetricsCalculator');
 
 // Failing images to test

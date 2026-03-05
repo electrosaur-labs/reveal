@@ -369,8 +369,8 @@ async function runPipelineTest(sampleSize, opts = {}) {
     console.log(chalk.bold('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
 
     // Lazy-load heavy dependencies
-    const Reveal = require('@reveal/core');
-    const { readPsd } = require('@reveal/psd-reader');
+    const Reveal = require('@electrosaur-labs/core');
+    const { readPsd } = require('@electrosaur-labs/psd-reader');
     const MetricsCalculator = require('./MetricsCalculator');
     const ParameterGenerator = Reveal.ParameterGenerator;
     const BilateralFilter = Reveal.BilateralFilter;
@@ -801,7 +801,7 @@ async function processWithInterpolation(inputPath, outputDir, harvestImg, engine
 
         // Write PSD if requested
         if (writePsd) {
-            const { PSDWriter } = require('@reveal/psd-writer');
+            const { PSDWriter } = require('@electrosaur-labs/psd-writer');
             const outputPsdPath = path.join(outputDir, `${basename}.psd`);
             const writer = new PSDWriter({
                 width, height,

@@ -1,9 +1,8 @@
 {
-  "name": "@reveal/core",
+  "name": "@electrosaur-labs/core",
   "version": "1.0.0",
   "description": "Pure JavaScript color separation engines for screen printing and AI agents",
   "main": "index.js",
-  "types": "index.d.ts",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
@@ -21,7 +20,7 @@
     "ai-agent",
     "openai-function"
   ],
-  "author": "Electrosaur",
+  "author": "Electrosaur Labs",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -37,7 +36,6 @@
   },
   "files": [
     "index.js",
-    "index.d.ts",
     "lib/",
     "README.md",
     "LICENSE"

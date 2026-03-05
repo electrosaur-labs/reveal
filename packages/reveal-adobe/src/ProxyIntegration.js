@@ -14,7 +14,7 @@
  * @module ProxyIntegration
  */
 
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const ProxyEngine = Reveal.ProxyEngine;
 const PreviewEngine = Reveal.engines.PreviewEngine;
 const { SessionState } = require('./SessionState');

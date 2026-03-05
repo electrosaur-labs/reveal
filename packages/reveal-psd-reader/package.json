@@ -1,9 +1,9 @@
 {
-  "name": "@reveal/psd-reader",
+  "name": "@electrosaur-labs/psd-reader",
   "version": "0.1.0",
   "description": "Minimal PSD file reader for Lab color documents",
   "main": "index.js",
-  "author": "Reveal Project",
+  "author": "Electrosaur Labs",
   "license": "Apache-2.0",
   "keywords": [
     "psd",

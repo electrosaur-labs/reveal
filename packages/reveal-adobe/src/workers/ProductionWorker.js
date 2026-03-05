@@ -8,8 +8,8 @@
  * @module ProductionWorker
  */
 
-import { PosterizationEngine } from '@reveal/core/engines/PosterizationEngine.js';
-import { SeparationEngine } from '@reveal/core/engines/SeparationEngine.js';
+import { PosterizationEngine } from '@electrosaur-labs/core/engines/PosterizationEngine.js';
+import { SeparationEngine } from '@electrosaur-labs/core/engines/SeparationEngine.js';
 
 /**
  * Run production posterization (high-res, full pipeline)

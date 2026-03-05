@@ -221,7 +221,7 @@ describe('generateSuggestionGhostPreview', () => {
 
 describe('setSuggestionGhost', () => {
     it('emits ghostChanged when ghost buffer is generated', () => {
-        const Reveal = require('@reveal/core');
+        const Reveal = require('@electrosaur-labs/core');
         const sm = new SuggestionManager();
 
         // Set up a minimal proxyEngine with real separation state

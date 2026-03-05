@@ -1,4 +1,4 @@
-# @reveal/psd-writer
+# @electrosaur-labs/psd-writer
 
 Minimal PSD file writer for 8-bit Lab color documents with fill+mask layers.
 
@@ -19,7 +19,7 @@ Writes Photoshop PSD files for screen printing color separations. Each layer rep
 ## Usage
 
 ```javascript
-const PSDWriter = require('@reveal/psd-writer');
+const PSDWriter = require('@electrosaur-labs/psd-writer');
 
 // Create writer
 const writer = new PSDWriter({

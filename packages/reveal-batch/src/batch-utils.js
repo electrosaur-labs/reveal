@@ -1,12 +1,12 @@
 /**
  * batch-utils.js — Shared utilities for reveal-batch scripts
  *
- * Re-exports centralized Lab encoding conversions from @reveal/core
+ * Re-exports centralized Lab encoding conversions from @electrosaur-labs/core
  * and adds batch-specific helpers (thumbnail generation).
  *
  * @module batch-utils
  */
-const { LabEncoding } = require('@reveal/core');
+const { LabEncoding } = require('@electrosaur-labs/core');
 const sharp = require('sharp');
 
 // Re-export all LabEncoding functions and constants

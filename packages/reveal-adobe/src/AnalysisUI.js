@@ -6,7 +6,7 @@
 
 const { core } = require("photoshop");
 
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const ParameterGenerator = Reveal.ParameterGenerator;
 const ArchetypeMapper = Reveal.ArchetypeMapper;
 const SeparationEngine = Reveal.engines.SeparationEngine;
@@ -19,7 +19,7 @@ const { resolveDistanceMetric } = require('./ColorUtils');
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 
 /**
- * Compute E_rev score. Delegates to @reveal/core RevelationError.fromBuffers().
+ * Compute E_rev score. Delegates to @electrosaur-labs/core RevelationError.fromBuffers().
  */
 function computeERev(originalLab8, processedLab8, width, height, stride) {
     const result = RevelationError.fromBuffers(originalLab8, processedLab8, width, height, { stride });

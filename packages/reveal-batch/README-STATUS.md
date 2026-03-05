@@ -9,8 +9,8 @@ This document tracks the status of the CQ100_v4 batch processing implementation.
 ## ✅ Completed Components
 
 ### Dependencies
-- ✅ `@reveal/core@1.0.0` - Core separation engines
-- ✅ `@reveal/psd-writer@1.1.0` - 16-bit Lab PSD writer with uncompressed masks
+- ✅ `@electrosaur-labs/core@1.0.0` - Core separation engines
+- ✅ `@electrosaur-labs/psd-writer@1.1.0` - 16-bit Lab PSD writer with uncompressed masks
 - ✅ `sharp@0.33.0` - Image loading and color space conversion
 - ✅ `chalk@4.1.2` - Terminal colors
 - ✅ `commander@11.1.0` - CLI framework
@@ -206,7 +206,7 @@ Based on Architect's categorization matrix:
 
 ## 🐛 Troubleshooting
 
-### Issue: "Cannot find module '@reveal/psd-writer'"
+### Issue: "Cannot find module '@electrosaur-labs/psd-writer'"
 **Fix:** Install dependencies
 ```bash
 npm install

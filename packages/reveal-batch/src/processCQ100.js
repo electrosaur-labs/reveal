@@ -12,8 +12,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@reveal/core');
-const { PSDWriter } = require('@reveal/psd-writer');
+const Reveal = require('@electrosaur-labs/core');
+const { PSDWriter } = require('@electrosaur-labs/psd-writer');
 const { parsePPM } = require('./ppmParser');
 const MetricsCalculator = require('./MetricsCalculator');
 const ParameterGenerator = Reveal.ParameterGenerator;
@@ -22,7 +22,7 @@ const chalk = require('chalk');
 const { rgbToHex } = require('./batch-utils');
 
 // Load presets dynamically from reveal-core/presets directory
-const { loadPresets } = require('@reveal/core/src/presetLoader');
+const { loadPresets } = require('@electrosaur-labs/core/src/presetLoader');
 const PRESETS = loadPresets();
 
 /**

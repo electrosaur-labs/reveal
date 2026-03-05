@@ -94,12 +94,12 @@ TECHNICAL DETAILS
 Engine:  Reveal v1.1-archetype-selector
 Input:   16-bit Lab PSD files
 Process: 
-  1. Read 16-bit Lab PSD using @reveal/psd-reader
+  1. Read 16-bit Lab PSD using @electrosaur-labs/psd-reader
   2. Calculate image DNA (104 characteristics)
   3. Select archetype via 4D distance matching
   4. Posterize to 3-9 colors using median cut + SALIENCY
   5. Generate color-separated layers with optional dithering
-  6. Write multi-layer PSD using @reveal/psd-writer
+  6. Write multi-layer PSD using @electrosaur-labs/psd-writer
   7. Validate output and generate metrics
 
 Features Used:

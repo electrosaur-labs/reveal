@@ -1,7 +1,7 @@
 {
-  "name": "@reveal/batch",
+  "name": "@electrosaur-labs/batch",
   "version": "1.0.0",
-  "description": "Command-line batch processing tool for screen print color separation using @reveal/core",
+  "description": "Command-line batch processing tool for screen print color separation using @electrosaur-labs/core",
   "main": "src/index.js",
   "bin": {
     "reveal-batch": "./src/cli.js"
@@ -34,9 +34,9 @@
     "ab-test": "node src/ab-test-interpolator.js"
   },
   "dependencies": {
-    "@reveal/core": "*",
-    "@reveal/psd-reader": "*",
-    "@reveal/psd-writer": "*",
+    "@electrosaur-labs/core": "*",
+    "@electrosaur-labs/psd-reader": "*",
+    "@electrosaur-labs/psd-writer": "*",
     "ag-psd": "^29.1.0",
     "chalk": "^4.1.2",
     "commander": "^11.1.0",
@@ -52,6 +52,6 @@
   "author": "Electrosaur Labs",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.17.0"
   }
 }

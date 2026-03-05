@@ -1,5 +1,5 @@
 
-> @reveal/batch@1.0.0 process-cq100
+> @electrosaur-labs/batch@1.0.0 process-cq100
 > node src/processCQ100.js
 
 

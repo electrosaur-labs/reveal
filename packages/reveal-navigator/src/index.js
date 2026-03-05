@@ -8,7 +8,7 @@
 
 const { entrypoints } = require("uxp");
 const { app, action } = require("photoshop");
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const SessionState = require("./state/SessionState");
 const PhotoshopBridge = require("./bridge/PhotoshopBridge");
 const ProductionWorker = require("./bridge/ProductionWorker");
@@ -670,7 +670,7 @@ function updateMatchScore() {
         } else if (activeId === 'distilled') {
             nameEl.textContent = 'Distilled';
         } else {
-            const Reveal = require('@reveal/core');
+            const Reveal = require('@electrosaur-labs/core');
             const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
             const arch = archetypes.find(a => a.id === activeId);
             nameEl.textContent = arch ? arch.name : activeId;

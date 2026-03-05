@@ -1,7 +1,7 @@
 {
-  "name": "@reveal/navigator",
+  "name": "@electrosaur-labs/navigator",
   "version": "1.0.0",
-  "description": "Navigator UI for screen print color separation using @reveal/core",
+  "description": "Navigator UI for screen print color separation using @electrosaur-labs/core",
   "main": "dist/index.js",
   "scripts": {
     "build": "webpack --mode production && node scripts/copy-assets.js",
@@ -12,7 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@reveal/core": "*",
+    "@electrosaur-labs/core": "*",
     "buffer": "^6.0.3",
     "jpeg-js": "^0.4.4"
   },

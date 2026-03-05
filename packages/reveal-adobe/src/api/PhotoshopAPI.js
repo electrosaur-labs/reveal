@@ -8,8 +8,8 @@
 const { app, action, core } = require("photoshop");
 const { imaging } = require("photoshop");
 
-// Import @reveal/core utilities
-const Reveal = require("@reveal/core");
+// Import @electrosaur-labs/core utilities
+const Reveal = require("@electrosaur-labs/core");
 const DocumentValidator = Reveal.engines.DocumentValidator;
 const logger = Reveal.logger;
 

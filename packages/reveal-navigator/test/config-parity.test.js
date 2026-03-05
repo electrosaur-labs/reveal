@@ -10,7 +10,7 @@
  */
 
 const SessionState = require('../src/state/SessionState');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 
 const { CONFIG_CATEGORIES, KNOB_DEFAULTS } = Reveal.engines.ParameterGenerator;
 

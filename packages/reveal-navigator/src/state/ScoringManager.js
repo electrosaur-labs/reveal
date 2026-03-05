@@ -7,7 +7,7 @@
  */
 
 const EventEmitter = require('./EventEmitter');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const logger = Reveal.logger;
 
 class ScoringManager extends EventEmitter {

@@ -41,7 +41,7 @@
  if (fs.existsSync(presetsSrc)) {
 -    fs.cpSync(presetsSrc, presetsDst, { recursive: true });
 +    copyDirRecursive(presetsSrc, presetsDst);
-     console.log('✓ Copied presets/ from @reveal/core');
+     console.log('✓ Copied presets/ from @electrosaur-labs/core');
  } else {
      console.warn('⚠ Presets directory not found at', presetsSrc);
  }

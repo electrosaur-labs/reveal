@@ -23,7 +23,7 @@
  */
 
 const jpeg = require('jpeg-js');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const { uint8ToBase64 } = require('../utils/base64');
 const { BG_COLOR } = require('../utils/pixelProcessing');
 

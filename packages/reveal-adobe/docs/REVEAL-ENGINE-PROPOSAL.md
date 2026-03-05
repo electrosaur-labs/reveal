@@ -16,7 +16,7 @@ This proposal outlines a refactored architecture for the reveal-adobe plugin tha
 The existing `index.js` (~127KB) handles:
 - UI event binding
 - DNA extraction via `DNAGenerator.js`
-- Parameter generation via `@reveal/core/lib/analysis/ParameterGenerator`
+- Parameter generation via `@electrosaur-labs/core/lib/analysis/ParameterGenerator`
 - Posterization via `PosterizationEngine`
 - Separation via `SeparationEngine`
 - Photoshop layer creation via `PhotoshopAPI.js`
@@ -201,9 +201,9 @@ export class RemapTable {
 
 | Proposed | Existing Equivalent |
 |----------|---------------------|
-| `SepEngine` | `@reveal/core/lib/engines/SeparationEngine` |
-| `DynamicConfigurator` | `@reveal/core/lib/analysis/ParameterGenerator` |
-| `MetricsCalculator` | `@reveal/batch/src/MetricsCalculator` (batch-only) |
+| `SepEngine` | `@electrosaur-labs/core/lib/engines/SeparationEngine` |
+| `DynamicConfigurator` | `@electrosaur-labs/core/lib/analysis/ParameterGenerator` |
+| `MetricsCalculator` | `@electrosaur-labs/batch/src/MetricsCalculator` (batch-only) |
 | `ImageLoader.fromLayer()` | `DNAGenerator.js` + `PhotoshopAPI.js` |
 | `RemapTable` | **New - not yet implemented** |
 

@@ -6,7 +6,7 @@
  */
 
 const ScoringManager = require('../src/state/ScoringManager');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 
 const DUMMY_DNA = new Reveal.DNAGenerator().generate(
     new Uint16Array(3 * 4 * 4), 4, 4, { bitDepth: 16 }

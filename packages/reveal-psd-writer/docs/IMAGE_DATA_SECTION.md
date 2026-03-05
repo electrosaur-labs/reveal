@@ -162,7 +162,7 @@ When testing in Photoshop:
 - 📝 Uses black background (L=0) for test files
 
 **Future integration:**
-When integrating with @reveal/core, we'll need to either:
+When integrating with @electrosaur-labs/core, we'll need to either:
 1. Calculate proper merged preview from layer stack (accurate but slower)
 2. Use neutral grey background (L=16384, faster but shows grey before layers load)
 

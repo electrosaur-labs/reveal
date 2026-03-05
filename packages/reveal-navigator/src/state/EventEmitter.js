@@ -1,7 +1,7 @@
 /**
  * Minimal event emitter for Navigator UI reactivity.
  */
-const logger = require('@reveal/core').logger;
+const logger = require('@electrosaur-labs/core').logger;
 
 class EventEmitter {
     constructor() {

@@ -10,9 +10,9 @@
  */
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@reveal/core');
-const { PSDWriter } = require('@reveal/psd-writer');
-const { readPsd } = require('@reveal/psd-reader');
+const Reveal = require('@electrosaur-labs/core');
+const { PSDWriter } = require('@electrosaur-labs/psd-writer');
+const { readPsd } = require('@electrosaur-labs/psd-reader');
 const { convertPsd16bitToEngineLab, convertPsd16bitTo8bitLab, convert8bitTo16bitLab } = require('./batch-utils');
 
 const SeparationEngine = Reveal.engines.SeparationEngine;

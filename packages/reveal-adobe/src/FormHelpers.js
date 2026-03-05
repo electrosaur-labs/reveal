@@ -4,7 +4,7 @@
  * No mutable state dependencies. Reads from DOM, writes to DOM.
  */
 
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const logger = Reveal.logger;
 const PhotoshopAPI = require("./api/PhotoshopAPI");
 
@@ -35,21 +35,21 @@ const sliderConfigs = [
  * Note: Must be hardcoded for UXP/browser environment (no fs module)
  */
 const PARAMETER_PRESETS = {
-    'standard-image': require('@reveal/core/presets/standard-image.json'),
-    'halftone-portrait': require('@reveal/core/presets/halftone-portrait.json'),
-    'vibrant-graphic': require('@reveal/core/presets/vibrant-graphic.json'),
-    'atmospheric-photo': require('@reveal/core/presets/atmospheric-photo.json'),
-    'pastel-high-key': require('@reveal/core/presets/pastel-high-key.json'),
-    'vintage-muted': require('@reveal/core/presets/vintage-muted.json'),
-    'deep-shadow-noir': require('@reveal/core/presets/deep-shadow-noir.json'),
-    'neon-fluorescent': require('@reveal/core/presets/neon-fluorescent.json'),
-    'textural-grunge': require('@reveal/core/presets/textural-grunge.json'),
-    'commercial-offset': require('@reveal/core/presets/commercial-offset.json'),
-    'minkler-justice': require('@reveal/core/presets/minkler-justice.json'),
-    'warhol-pop': require('@reveal/core/presets/warhol-pop.json'),
-    'technical-enamel': require('@reveal/core/presets/technical-enamel.json'),
-    'punchy-commercial': require('@reveal/core/presets/punchy-commercial.json'),
-    'cinematic-moody': require('@reveal/core/presets/cinematic-moody.json')
+    'standard-image': require('@electrosaur-labs/core/presets/standard-image.json'),
+    'halftone-portrait': require('@electrosaur-labs/core/presets/halftone-portrait.json'),
+    'vibrant-graphic': require('@electrosaur-labs/core/presets/vibrant-graphic.json'),
+    'atmospheric-photo': require('@electrosaur-labs/core/presets/atmospheric-photo.json'),
+    'pastel-high-key': require('@electrosaur-labs/core/presets/pastel-high-key.json'),
+    'vintage-muted': require('@electrosaur-labs/core/presets/vintage-muted.json'),
+    'deep-shadow-noir': require('@electrosaur-labs/core/presets/deep-shadow-noir.json'),
+    'neon-fluorescent': require('@electrosaur-labs/core/presets/neon-fluorescent.json'),
+    'textural-grunge': require('@electrosaur-labs/core/presets/textural-grunge.json'),
+    'commercial-offset': require('@electrosaur-labs/core/presets/commercial-offset.json'),
+    'minkler-justice': require('@electrosaur-labs/core/presets/minkler-justice.json'),
+    'warhol-pop': require('@electrosaur-labs/core/presets/warhol-pop.json'),
+    'technical-enamel': require('@electrosaur-labs/core/presets/technical-enamel.json'),
+    'punchy-commercial': require('@electrosaur-labs/core/presets/punchy-commercial.json'),
+    'cinematic-moody': require('@electrosaur-labs/core/presets/cinematic-moody.json')
 };
 
 // Validate presets on load
@@ -64,10 +64,10 @@ Object.keys(PARAMETER_PRESETS).forEach(id => {
  * ARCHETYPES - DNA-driven parameter baselines
  * Each archetype contains complete 30-parameter specifications
  *
- * Auto-discovered from @reveal/core/archetypes/ via webpack require.context().
+ * Auto-discovered from @electrosaur-labs/core/archetypes/ via webpack require.context().
  * Adding/removing archetype JSON files in reveal-core automatically updates this map.
  */
-const archetypeContext = require.context('@reveal/core/archetypes', false, /^\.\/(?!schema\b).*\.json$/);
+const archetypeContext = require.context('@electrosaur-labs/core/archetypes', false, /^\.\/(?!schema\b).*\.json$/);
 const ARCHETYPES = {};
 archetypeContext.keys().forEach(key => {
     const id = key.replace('./', '').replace('.json', '');

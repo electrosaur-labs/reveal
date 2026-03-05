@@ -4,10 +4,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
-const { readPsd } = require('@reveal/psd-reader');
-const { PSDWriter } = require('@reveal/psd-writer');
+const { readPsd } = require('@electrosaur-labs/psd-reader');
+const { PSDWriter } = require('@electrosaur-labs/psd-writer');
 const ParameterGenerator = Reveal.ParameterGenerator;
 const LabConverter = Reveal.LabConverter;
 

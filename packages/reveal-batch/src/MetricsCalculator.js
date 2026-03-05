@@ -309,7 +309,7 @@ class MetricsCalculator {
 
     /**
      * Calculate Revelation Error Score (E_rev)
-     * Delegates to @reveal/core RevelationError.fromBuffers().
+     * Delegates to @electrosaur-labs/core RevelationError.fromBuffers().
      *
      * @param {Uint8ClampedArray} originalLab - Original Lab pixels (byte encoding, 3 bytes/pixel)
      * @param {Uint8ClampedArray} processedLab - Posterized Lab pixels (byte encoding, 3 bytes/pixel)
@@ -320,7 +320,7 @@ class MetricsCalculator {
      * @returns {{ eRev: number, chromaStats: { cMax: number, avgChroma: number, chromaPixelRatio: number } }}
      */
     static calculateRevelationErrorScore(originalLab, processedLab, width, height, options = {}) {
-        const RevelationError = require('@reveal/core').RevelationError;
+        const RevelationError = require('@electrosaur-labs/core').RevelationError;
         return RevelationError.fromBuffers(originalLab, processedLab, width, height, options);
     }
 }

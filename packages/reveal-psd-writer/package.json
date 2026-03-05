@@ -1,5 +1,5 @@
 {
-  "name": "@reveal/psd-writer",
+  "name": "@electrosaur-labs/psd-writer",
   "version": "1.2.0",
   "description": "PSD file writer for 8-bit and 16-bit Lab documents with fill+mask and pixel layers",
   "main": "src/index.js",

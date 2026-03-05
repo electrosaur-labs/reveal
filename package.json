@@ -8,12 +8,12 @@
   ],
   "scripts": {
     "test": "npm run test --workspaces",
-    "test:core": "npm test -w @reveal/core",
-    "test:adobe": "npm test -w @reveal/adobe",
+    "test:core": "npm test -w @electrosaur-labs/core",
+    "test:adobe": "npm test -w @electrosaur-labs/adobe",
     "build": "npm run build --workspaces --if-present",
-    "build:adobe": "npm run build -w @reveal/adobe",
-    "build:navigator": "npm run build -w @reveal/navigator",
-    "test:navigator": "npm test -w @reveal/navigator",
+    "build:adobe": "npm run build -w @electrosaur-labs/adobe",
+    "build:navigator": "npm run build -w @electrosaur-labs/navigator",
+    "test:navigator": "npm test -w @electrosaur-labs/navigator",
     "clean": "npm run clean --workspaces --if-present"
   },
   "keywords": [
@@ -24,7 +24,7 @@
     "photoshop",
     "monorepo"
   ],
-  "author": "Electrosaur",
+  "author": "Electrosaur Labs",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

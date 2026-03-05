@@ -4,7 +4,7 @@
  * Zero state dependencies. All functions are pure or take explicit parameters.
  */
 
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 const logger = Reveal.logger;
 

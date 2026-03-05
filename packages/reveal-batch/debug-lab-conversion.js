@@ -4,7 +4,7 @@
 
 const path = require('path');
 const { parsePPM } = require('./src/ppmParser');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 
 const inputPath = path.join(__dirname, 'data/CQ100_v4/input/ppm/astronaut.ppm');
 

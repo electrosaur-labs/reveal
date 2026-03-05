@@ -77,7 +77,7 @@ There are no linters or formatters configured. Match the style of surrounding co
 
 ## Hard Constraints
 
-### `@reveal/core` must have ZERO external dependencies
+### `@electrosaur-labs/core` must have ZERO external dependencies
 
 This is a non-negotiable architectural constraint. The core engines must remain 100% pure JavaScript so they can run in any environment — Node.js, browsers, Photoshop UXP, AI agents — without bundler configuration or polyfills.
 

@@ -1,4 +1,4 @@
-# @reveal/psd-reader
+# @electrosaur-labs/psd-reader
 
 Minimal PSD file reader for Lab color documents.
 
@@ -22,7 +22,7 @@ Reads single-layer (flattened) Lab PSDs to extract composite image data for proc
 
 ```javascript
 const fs = require('fs');
-const { readPsd } = require('@reveal/psd-reader');
+const { readPsd } = require('@electrosaur-labs/psd-reader');
 
 const buffer = fs.readFileSync('input.psd');
 const psd = readPsd(buffer);
@@ -83,7 +83,7 @@ This package implements a minimal subset of the Adobe PSD specification:
 
 - **Single-layer only** - Extracts composite image, ignores layer data
 - **Lab only** - No RGB/CMYK support (throws error)
-- **No editing** - Read-only (use @reveal/psd-writer to create PSDs)
+- **No editing** - Read-only (use @electrosaur-labs/psd-writer to create PSDs)
 - **8-bit output** - 16-bit PSDs downsampled to 8-bit automatically
 
 ## Round-Trip Testing
@@ -99,13 +99,13 @@ This tests that PSDs can be read and written back with identical pixel data.
 
 **Important Notes:**
 - **Programmatic validation**: Round-trip test validates that composite data is preserved byte-for-byte
-- **Photoshop display**: Files created by @reveal/psd-writer use pixel layers (not composite data), so the composite section contains neutral Lab values (L=255, a=128, b=128) which displays as white/blank in Photoshop when viewing the background layer
+- **Photoshop display**: Files created by @electrosaur-labs/psd-writer use pixel layers (not composite data), so the composite section contains neutral Lab values (L=255, a=128, b=128) which displays as white/blank in Photoshop when viewing the background layer
 - **Expected behavior**: Both original and round-trip files will show blank composite in Photoshop, but pixel data matches perfectly programmatically
-- **Production use**: For creating PSDs that display correctly in Photoshop, use the full workflow (source image → Lab conversion → @reveal/psd-writer with pixel layers)
+- **Production use**: For creating PSDs that display correctly in Photoshop, use the full workflow (source image → Lab conversion → @electrosaur-labs/psd-writer with pixel layers)
 
 ## Companion Package
 
-See [@reveal/psd-writer](../reveal-psd-writer) for creating Lab PSDs.
+See [@electrosaur-labs/psd-writer](../reveal-psd-writer) for creating Lab PSDs.
 
 ## License
 

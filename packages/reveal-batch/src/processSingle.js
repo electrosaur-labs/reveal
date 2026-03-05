@@ -12,8 +12,8 @@
 const fs = require('fs');
 const path = require('path');
 const chalk = require('chalk');
-const Reveal = require('@reveal/core');
-const PSDWriter = require('@reveal/psd-writer');
+const Reveal = require('@electrosaur-labs/core');
+const PSDWriter = require('@electrosaur-labs/psd-writer');
 const ParameterGenerator = Reveal.ParameterGenerator;
 
 // ============================================================================

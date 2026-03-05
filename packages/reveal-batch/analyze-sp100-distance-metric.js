@@ -1,12 +1,12 @@
 /**
  * Analyze SP100 PSD files for distance metric breakdown
- * Uses @reveal/psd-reader to read Lab PSDs and extracts DNA for each image
+ * Uses @electrosaur-labs/psd-reader to read Lab PSDs and extracts DNA for each image
  */
 
 const fs = require('fs');
 const path = require('path');
-const psdReader = require('@reveal/psd-reader');
-const ParameterGenerator = require('@reveal/core').ParameterGenerator;
+const psdReader = require('@electrosaur-labs/psd-reader');
+const ParameterGenerator = require('@electrosaur-labs/core').ParameterGenerator;
 
 const SP100_INPUT_8BIT = path.join(__dirname, 'data/SP100/input');
 

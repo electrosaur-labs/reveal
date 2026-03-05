@@ -1,13 +1,13 @@
 /**
  * MechanicalFiltersAdapter - Thin adapter bridging reveal-adobe's flat-assignments
- * interface to @reveal/core's MechanicalKnobs (which operates on masks + colorIndices).
+ * interface to @electrosaur-labs/core's MechanicalKnobs (which operates on masks + colorIndices).
  *
  * reveal-adobe's preview pipeline works with flat Uint8Array assignment arrays.
  * Core MechanicalKnobs needs per-color binary masks + colorIndices.
  * This adapter handles the conversion in both directions.
  */
 
-const { MechanicalKnobs } = require('@reveal/core');
+const { MechanicalKnobs } = require('@electrosaur-labs/core');
 
 /**
  * Apply shadowClamp via core MechanicalKnobs.

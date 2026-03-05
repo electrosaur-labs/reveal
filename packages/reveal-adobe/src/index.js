@@ -8,8 +8,8 @@
 const { entrypoints } = require("uxp");
 const { core, action, imaging, app } = require("photoshop");
 
-// Import @reveal/core engines
-const Reveal = require("@reveal/core");
+// Import @electrosaur-labs/core engines
+const Reveal = require("@electrosaur-labs/core");
 const PosterizationEngine = Reveal.engines.PosterizationEngine;
 const BilateralFilter = Reveal.BilateralFilter;
 const CropEngine = Reveal.CropEngine;

@@ -16,7 +16,7 @@
  * Vanilla+ pattern: subscribes to SessionState events.
  */
 
-const logger = require('@reveal/core').logger;
+const logger = require('@electrosaur-labs/core').logger;
 
 const KNOB_DEFS = [
     // Primary knobs

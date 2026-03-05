@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
-const { PSDWriter } = require('@reveal/psd-writer');
+const { PSDWriter } = require('@electrosaur-labs/psd-writer');
 const { readPsd } = require('../reveal-psd-reader');
 
 const testFile = process.argv[2] || 'data/SP100/output/loc/psd/loc_2014635594.psd';

@@ -4,7 +4,7 @@
  * Imports: PreviewRenderer, SwatchManager
  */
 
-const Reveal = require("@reveal/core");
+const Reveal = require("@electrosaur-labs/core");
 const logger = Reveal.logger;
 
 const { renderNavigatorMap, render1to1Preview, updateNavigatorViewport } = require('./PreviewRenderer');

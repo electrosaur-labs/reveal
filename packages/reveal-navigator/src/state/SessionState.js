@@ -5,14 +5,14 @@
  * with final high-fidelity production render.
  *
  * Design principles:
- *   - State coordinator, NOT an engine — delegates to @reveal/core
+ *   - State coordinator, NOT an engine — delegates to @electrosaur-labs/core
  *   - Simple on/off/emit listener pattern (no framework dependency)
  *   - Built-in debounce for slider scrubbing (~50ms)
  *   - ProxyEngine is the hot path for mechanical knobs
  */
 
 const EventEmitter = require('./EventEmitter');
-const Reveal = require('@reveal/core');
+const Reveal = require('@electrosaur-labs/core');
 const PaletteSurgeryManager = require('./PaletteSurgeryManager');
 const ScoringManager = require('./ScoringManager');
 const SuggestionManager = require('./SuggestionManager');

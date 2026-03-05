@@ -10,8 +10,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@reveal/core');
-const { PSDWriter } = require('@reveal/psd-writer');
+const Reveal = require('@electrosaur-labs/core');
+const { PSDWriter } = require('@electrosaur-labs/psd-writer');
 const { parsePPM } = require('./ppmParser');
 const chalk = require('chalk');
 

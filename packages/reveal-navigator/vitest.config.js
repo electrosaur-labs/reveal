@@ -9,7 +9,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@reveal/core': path.resolve(__dirname, '../reveal-core'),
+      '@electrosaur-labs/core': path.resolve(__dirname, '../reveal-core'),
     }
   }
 });
