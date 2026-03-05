@@ -36,7 +36,7 @@ The core engine is **100% pure JavaScript with zero external dependencies**, so 
 
 ```bash
 npm install
-npm run test:core    # 664+ tests
+npm run test:core    # 1,000+ tests
 ```
 
 ### Programmatic Usage (Node.js)
