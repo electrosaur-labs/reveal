@@ -1,6 +1,4 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# Development Guide
 
 ## Project Overview
 
@@ -53,9 +51,9 @@ npm run test:watch          # Watch mode
 npm run test:coverage       # Coverage report
 ```
 
-## First Steps for Any New Session
+## First Steps
 
-**Always read `.claude-context.md` first** — it contains the current session state, recent changes, known issues, and next steps. This is the single most important file for getting oriented.
+Read this file and the README to understand the architecture. Then explore the package you're working on.
 
 ## Architecture
 
@@ -110,9 +108,8 @@ reveal-project/
 │   ├── reveal-psd-reader/     # PSD file reader (ag-psd wrapper)
 │   └── reveal-psd-writer/     # PSD file writer with Lab support
 │
-├── .claude-context.md         # Session state and critical code locations
-├── IMPORTANT-SESSION-STATE-LOCATION.md  # Session state directive
-└── SESSION_STATE.md           # Historical session state
+├── DEVELOPMENT.md             # This file
+└── CONTRIBUTING.md            # Contribution guidelines
 ```
 
 ## Key Algorithms and Code Locations
@@ -462,15 +459,6 @@ cd packages/reveal-batch
 npm run analyze-sp100  # Full batch validation
 ```
 
-## Session State Management
-
-**CRITICAL:** Never use `~/` for session state files.
-
-**Correct location:** `/workspaces/electrosaur/session-states/`
-
-**Latest session state:** See `.claude-context.md` in project root
-
-**See:** `IMPORTANT-SESSION-STATE-LOCATION.md` for detailed explanation
 
 ## Constraints
 
@@ -480,20 +468,10 @@ npm run analyze-sp100  # Full batch validation
 - **Maximum 10 distinct colors** per image
 - **reveal-core must have ZERO external dependencies** (keep it portable)
 
-## Critical Context Files
-
-- **`.claude-context.md`** - Current session state, critical code locations, latest changes
-- **`IMPORTANT-SESSION-STATE-LOCATION.md`** - Session state directive
-- **`SESSION_STATE.md`** - Historical session state (legacy)
-- **`/workspaces/electrosaur/session-states/`** - Directory of all session state files
 
 ## Quick Reference: Development Workflow
 
 ```bash
-# Start new work on reveal-project
-cd /workspaces/electrosaur/reveal-project
-cat .claude-context.md  # Read current session state
-
 # Make changes to core engines
 cd packages/reveal-core
 npm run test:watch  # Run tests in watch mode
@@ -519,7 +497,6 @@ git commit -m "feat(reveal-core): description"
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| **Session State** | `.claude-context.md` | Current work, critical code locations |
 | **Main API** | `packages/reveal-core/index.js` | Agent-optimized mid-level API |
 | **Posterization** | `packages/reveal-core/lib/engines/PosterizationEngine.js` | Color quantization engine |
 | **Separation** | `packages/reveal-core/lib/engines/SeparationEngine.js` | Pixel mapping and dithering |
