@@ -106,7 +106,6 @@ const PROXY_ENGINE_READS = new Set([
 // but NO engine currently reads them. They have UI controls that do nothing.
 // When you implement one, move it to the appropriate ENGINE_READS set above.
 const KNOWN_UNIMPLEMENTED = new Set([
-    'neutralCentroidClampThreshold', // UI slider, no engine reads it
     // meshSize — now correctly mapped to meshCount in toEngineOptions()
 ]);
 
@@ -119,6 +118,7 @@ const METADATA_KEYS = new Set([
     'meta',
     'rangeClamp',
     'preprocessing',        // Preprocessing intensity descriptor (separate from engine option)
+    'neutralCentroidClampThreshold', // Fixed safety floor (0.5), not user-tunable
 ]);
 
 // ─── Derived / Multiplier Keys ───────────────────────────────────────

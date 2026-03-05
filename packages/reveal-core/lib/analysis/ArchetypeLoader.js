@@ -240,7 +240,6 @@ class ArchetypeLoader {
                 preserveWhite: true,
                 preserveBlack: true,
                 ignoreTransparent: true,
-                neutralCentroidClampThreshold: 0.5,
                 preprocessingIntensity: 'auto'
             }
         };

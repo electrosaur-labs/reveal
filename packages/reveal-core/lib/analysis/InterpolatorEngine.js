@@ -21,7 +21,7 @@ const CONTINUOUS_PARAMS = [
     'highlightThreshold', 'highlightBoost',
     'paletteReduction', 'substrateTolerance', 'hueLockAngle', 'shadowPoint',
     'shadowClamp', 'minVolume', 'speckleRescue', 'detailRescue',
-    'neutralCentroidClampThreshold', 'neutralSovereigntyThreshold',
+    'neutralSovereigntyThreshold',
     'chromaGate', 'refinementPasses',
     'minColors', 'maxColors',
     'shadowChromaGateL'

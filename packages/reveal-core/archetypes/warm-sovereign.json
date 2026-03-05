@@ -52,7 +52,6 @@
     "preserveBlack": false,
     "ignoreTransparent": true,
     "neutralSovereigntyThreshold": 0,
-    "neutralCentroidClampThreshold": 0,
     "neutralIsolationThreshold": 0,
     "preprocessingIntensity": "off",
     "shadowClamp": 4,

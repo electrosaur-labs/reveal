@@ -48,7 +48,6 @@ function initPlugin() {
         preview = new Preview(
             document.getElementById('preview-img'),
             document.getElementById('status-text'),
-            document.getElementById('accuracy-text'),
             document.getElementById('preview-placeholder'),
             sessionState
         );
@@ -416,6 +415,25 @@ function initPlugin() {
                 btnHelp.classList.toggle('active');
             });
         }
+
+        // Per-control help toggle: click ? button to show/hide inline help
+        document.querySelectorAll('.knob-help-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const row = btn.closest('.knob-row');
+                if (!row) return;
+                let helpEl = row.nextElementSibling;
+                while (helpEl && !helpEl.classList.contains('knob-help')) {
+                    helpEl = helpEl.nextElementSibling;
+                }
+                if (helpEl) helpEl.classList.toggle('visible');
+            });
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('knob-help-btn')) {
+                document.querySelectorAll('.knob-help.visible').forEach(el => el.classList.remove('visible'));
+            }
+        });
 
         // Wire Finalize button
         const btnFinalize = document.getElementById('btn-finalize');
@@ -832,10 +850,8 @@ function _clearUI() {
     const btnSync = document.getElementById('btn-sync');
     if (btnSync) btnSync.style.display = 'none';
 
-    // Clear status and accuracy
+    // Clear status
     setStatus('');
-    const accuracyEl = document.getElementById('accuracy-text');
-    if (accuracyEl) accuracyEl.textContent = '';
 }
 
 /**

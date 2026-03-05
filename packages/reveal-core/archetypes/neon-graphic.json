@@ -51,7 +51,6 @@
     "preserveBlack": true,
     "ignoreTransparent": true,
     "neutralSovereigntyThreshold": 25,
-    "neutralCentroidClampThreshold": 15,
     "preprocessingIntensity": "none",
     "chromaGate": 1.8,
     "detailRescue": 8,

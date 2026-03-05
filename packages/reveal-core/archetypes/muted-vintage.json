@@ -50,7 +50,6 @@
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
     "neutralSovereigntyThreshold": 15,
-    "neutralCentroidClampThreshold": 3,
     "preprocessingIntensity": "light",
     "refinementPasses": 1
   }

@@ -51,7 +51,6 @@ const KNOB_DEFS = [
     { key: 'detailRescue',       sliderId: 'knob-detailRescue',       valId: 'detailRescue-val',       revertId: 'revert-detailRescue',       decimals: 0, unit: ''  },
 
     // Advanced: Engine
-    { key: 'neutralCentroidClampThreshold', sliderId: 'knob-neutralCentroidClampThreshold', valId: 'neutralCentroidClampThreshold-val', revertId: 'revert-neutralCentroidClampThreshold', decimals: 1, unit: '' },
     { key: 'neutralSovereigntyThreshold',   sliderId: 'knob-neutralSovereigntyThreshold',   valId: 'neutralSovereigntyThreshold-val',   revertId: 'revert-neutralSovereigntyThreshold',   decimals: 0, unit: '' }
 ];
 

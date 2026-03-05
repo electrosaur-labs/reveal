@@ -24,6 +24,7 @@ const PreprocessingIntensity = {
     OFF: 'off',
     AUTO: 'auto',
     LIGHT: 'light',
+    MEDIUM: 'medium',
     HEAVY: 'heavy'
 };
 
@@ -281,6 +282,16 @@ function createPreprocessingConfig(dna, imageData = null, width = 0, height = 0,
             radius: 3,
             sigmaR: 30,
             reason: 'Light filter (user override)'
+        };
+    }
+
+    if (intensityOverride === 'medium') {
+        return {
+            enabled: true,
+            intensity: 'medium',
+            radius: 4,
+            sigmaR: 37,
+            reason: 'Medium filter (user override)'
         };
     }
 
