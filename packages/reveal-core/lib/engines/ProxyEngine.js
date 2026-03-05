@@ -482,8 +482,10 @@ class ProxyEngine {
             throw new Error('Proxy not initialized');
         }
 
-        // Append to current separation state palette
-        this.separationState.palette.push({ ...labColor });
+        // Append to current separation state palette.
+        // Tag as _userAdded so minVolume won't prune it — the user explicitly
+        // asked for this color; the ghost-plate filter should not silently remove it.
+        this.separationState.palette.push({ ...labColor, _userAdded: true });
         this.separationState.rgbPalette.push(LabEncoding.labToRgbD50(labColor));
 
         // Full nearest-neighbor re-separation with expanded palette

@@ -126,7 +126,8 @@ class PaletteSurgeon {
 
         for (let i = 0; i < rgbPalette.length; i++) {
             const isDeleted = this._session.deletedColors.has(i);
-            if (counts[i] === 0 && !isDeleted) continue;   // skip truly empty, keep deleted
+            const isAdded = this._session.addedColors.has(i);
+            if (counts[i] === 0 && !isDeleted && !isAdded) continue;   // skip truly empty, keep deleted + added
 
             const pct = isDeleted ? '—' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
             const isOverridden = this._session.paletteOverrides.has(i);
@@ -165,7 +166,7 @@ class PaletteSurgeon {
             }
 
             // ── Added color badge ("+" on user-added swatches) ──
-            if (this._session.addedColors.has(i)) {
+            if (isAdded) {
                 const addBadge = document.createElement('span');
                 addBadge.className = 'surgeon-add-badge';
                 addBadge.textContent = '+';
@@ -185,7 +186,7 @@ class PaletteSurgeon {
                 }
             }
 
-            // ── Merge badge ("+N" on target swatches that absorbed others) ──
+            // ── Merge badge ("+N" on target, "−" on source) ──
             const mergedSources = this._session.mergeHistory.get(i);
             const mergeCount = mergedSources ? mergedSources.size : 0;
             if (mergeCount > 0) {
@@ -194,6 +195,19 @@ class PaletteSurgeon {
                 badge.textContent = `+${mergeCount}`;
                 badge.title = `Absorbed ${mergeCount} merged color${mergeCount > 1 ? 's' : ''}`;
                 colorBlock.appendChild(badge);
+            }
+
+            // "−" on merge sources (this swatch was merged into another)
+            let isMergeSource = false;
+            for (const [, sources] of this._session.mergeHistory) {
+                if (sources.has(i)) { isMergeSource = true; break; }
+            }
+            if (isMergeSource) {
+                const mBadge = document.createElement('span');
+                mBadge.className = 'surgeon-merge-badge surgeon-merge-source';
+                mBadge.textContent = '\u2212';  // −
+                mBadge.title = 'Merged into another color — click \u21BA to revert';
+                colorBlock.appendChild(mBadge);
             }
 
             // ── Percentage label ──
@@ -205,7 +219,6 @@ class PaletteSurgeon {
             const revertBtn = document.createElement('button');
             revertBtn.className = 'surgeon-revert';
             const isSelected = (this._state === 'SELECTED' && i === this._selectedIndex);
-            const isAdded = this._session.addedColors.has(i);
             if ((isOverridden || isDeleted || isAdded) && isSelected) revertBtn.classList.add('visible');
             revertBtn.textContent = '\u21BA';
             revertBtn.title = 'Revert to original color';
@@ -228,7 +241,7 @@ class PaletteSurgeon {
 
                 // Ctrl+click → color picker (fires before OS/PS intercept)
                 if (e.ctrlKey) {
-                    if (!this._session.deletedColors.has(idx)) {
+                    if (!this._isDeadSwatch(idx)) {
                         e.preventDefault();
                         e.stopPropagation();
                         this._openColorPicker(idx);
@@ -236,17 +249,21 @@ class PaletteSurgeon {
                     return;
                 }
 
-                if (isDeleted) return;
-
                 e.preventDefault();
                 e.stopPropagation();
-                swatch.setPointerCapture(e.pointerId);
 
-                this._dragSourceIndex = idx;
-                this._dragStartX = e.clientX;
-                this._dragStartY = e.clientY;
-                this._isDragging = false;
-                this._dragOverIndex = -1;
+                // Deleted swatches: allow click (select → revert) but no drag
+                if (!isDeleted) {
+                    swatch.setPointerCapture(e.pointerId);
+                    this._dragSourceIndex = idx;
+                    this._dragStartX = e.clientX;
+                    this._dragStartY = e.clientY;
+                    this._isDragging = false;
+                    this._dragOverIndex = -1;
+                } else {
+                    this._dragSourceIndex = idx;
+                    this._isDragging = false;
+                }
                 this._dragShiftKey = e.shiftKey;
                 this._dragAltKey = e.altKey;
 
@@ -341,7 +358,7 @@ class PaletteSurgeon {
 
     // ─── Click ───────────────────────────────────────────────
 
-    _onSwatchClick(i, shiftKey, altKey) {
+    _onSwatchClick(i, _shiftKey, altKey) {
         if (this._pickerOpen) return;
 
         // Clear any suggested swatch selection
@@ -380,33 +397,13 @@ class PaletteSurgeon {
         if (i === this._lastClickIndex && (now - this._lastClickTime) < DBLCLICK_MS) {
             this._lastClickTime = 0;
             this._lastClickIndex = -1;
-            this._openColorPicker(i);
+            if (!this._isDeadSwatch(i)) {
+                this._openColorPicker(i);
+            }
             return;
         }
         this._lastClickTime = now;
         this._lastClickIndex = i;
-
-        // SHIFT+click while selected → merge
-        if (shiftKey && this._state === 'SELECTED' && this._selectedIndex !== i) {
-            const source = this._selectedIndex;
-            const target = i;
-            logger.log(`[Surgeon] MERGE ${source}→${target} (shift+click)`);
-            const prevState = this._state;
-            const prevIndex = this._selectedIndex;
-            this._state = 'IDLE';
-            this._selectedIndex = -1;
-            this._session.clearHighlight();
-            this._header.textContent = 'Click a color to isolate';
-            this._updateSelectionCSS();
-            this._session.mergePaletteColors(source, target).catch(err => {
-                logger.log(`[PaletteSurgeon] Merge failed: ${err.message}`);
-                this._state = prevState;
-                this._selectedIndex = prevIndex;
-                this._header.textContent = 'Merge failed — try again';
-                this._updateSelectionCSS();
-            });
-            return;
-        }
 
         // Plain click: select/deselect
         if (this._state === 'SELECTED' && this._selectedIndex === i) {
@@ -493,6 +490,11 @@ class PaletteSurgeon {
                 }
             }, { commandName: "Pick Swatch Color" });
 
+            // Modal is done — release the picker lock immediately so the
+            // dialog close handler stops re-showing.  The async processing
+            // below (overridePaletteColor) must not hold this lock.
+            this._pickerOpen = false;
+
             // Reset to IDLE before applying so the rebuild sees clean state
             this._state = 'IDLE';
             this._selectedIndex = -1;
@@ -511,7 +513,7 @@ class PaletteSurgeon {
             this._selectedIndex = -1;
             this._header.textContent = 'Click a color to isolate';
         } finally {
-            this._pickerOpen = false;
+            this._pickerOpen = false;  // belt-and-suspenders for error paths
         }
     }
 
@@ -555,6 +557,11 @@ class PaletteSurgeon {
                 }
             }, { commandName: "Pick New Color" });
 
+            // Modal is done — release the picker lock immediately so the
+            // dialog close handler stops re-showing.  The async processing
+            // below (addPaletteColor) must not hold this lock.
+            this._pickerOpen = false;
+
             if (result) {
                 const lab = Reveal.rgbToLab(result.r, result.g, result.b);
                 logger.log(`[PaletteSurgeon] Adding color: rgb(${result.r},${result.g},${result.b}) → Lab(${lab.L.toFixed(1)},${lab.a.toFixed(1)},${lab.b.toFixed(1)})`);
@@ -566,7 +573,7 @@ class PaletteSurgeon {
             logger.log(`[PaletteSurgeon] Add color picker error: ${err.message}`);
             this._header.textContent = 'Click a color to isolate';
         } finally {
-            this._pickerOpen = false;
+            this._pickerOpen = false;  // belt-and-suspenders for error paths
         }
     }
 
@@ -750,6 +757,15 @@ class PaletteSurgeon {
             }
         }
     }
+    /** True if swatch is deleted or a merge source (not editable). */
+    _isDeadSwatch(i) {
+        if (this._session.deletedColors.has(i)) return true;
+        for (const sources of this._session.mergeHistory.values()) {
+            if (sources.has(i)) return true;
+        }
+        return false;
+    }
+
     // ─── Drag Helpers ──────────────────────────────────────
 
     /**

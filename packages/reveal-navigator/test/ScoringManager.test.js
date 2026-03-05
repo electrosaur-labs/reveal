@@ -112,8 +112,8 @@ describe('selectEagerSet', () => {
         const scores = sm.getAllArchetypeScores();
         const eager = sm.selectEagerSet(scores);
 
-        // Should have at least the 3 pseudos + at least 1 real archetype
-        expect(eager.size).toBeGreaterThan(3);
+        // Should have the 3 pseudo-archetypes (eager set is pseudo-only)
+        expect(eager.size).toBeGreaterThanOrEqual(3);
     });
 
     it('stores eager set on the instance', () => {

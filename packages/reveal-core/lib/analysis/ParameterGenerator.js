@@ -73,13 +73,13 @@ const BilateralFilter = require('../preprocessing/BilateralFilter');
  * PRODUCTION — affects production render only:
  * @property {number} [trapSize] - Trap size (set at session level, not by archetype)
  * @property {number} [meshSize] - Screen mesh TPI (set at session level, default 230)
+ * @property {string} ditherType - Dither algorithm ('blue-noise'|'floyd-steinberg'|'atkinson'|'bayer'|'none')
  *
  * UNIMPLEMENTED — stored but no engine reads them:
  * @property {number} vibrancyThreshold - (unimplemented)
  * @property {number} detailRescue - (unimplemented)
  * @property {boolean} medianPass - (unimplemented)
  * @property {string} maskProfile - (unimplemented)
- * @property {string} ditherType - Dither algorithm ('blue-noise'|'floyd-steinberg'|'atkinson'|'bayer'|'none')
  *
  * METADATA:
  * @property {string} id - Matched archetype ID
@@ -115,9 +115,9 @@ class ParameterGenerator {
         /** Post-separation knobs — mask/preview re-render only (fast path) */
         MECHANICAL: ['minVolume', 'speckleRescue', 'shadowClamp'],
         /** Affect production render only — meaningless at proxy resolution */
-        PRODUCTION: ['trapSize', 'meshSize'],
+        PRODUCTION: ['trapSize', 'meshSize', 'ditherType'],
         /** Stored but no engine reads them yet */
-        UNIMPLEMENTED: ['vibrancyThreshold', 'detailRescue', 'medianPass', 'maskProfile', 'ditherType'],
+        UNIMPLEMENTED: ['vibrancyThreshold', 'detailRescue', 'medianPass', 'maskProfile'],
     };
 
     /**

@@ -786,6 +786,9 @@
             padding: 0 3px;
             line-height: 13px;
         }
+        .surgeon-merge-source {
+            background: #e6923a;
+        }
 
         .surgeon-swatch.surgeon-deleted {
             opacity: 0.4;
@@ -1557,20 +1560,6 @@
                     </select>
                     <span class="knob-help">Scatter pattern to simulate gradients with solid inks</span>
 
-                    <!-- Group: Output -->
-                    <div class="knob-group-label">Output</div>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Edge Quality</span>
-                        <button class="knob-revert" id="revert-maskProfile">&#x21BA;</button>
-                    </div>
-                    <select id="picker-maskProfile">
-                        <option value="Gray Gamma 2.2">Hard Edges</option>
-                        <option value="Dot Gain 20%">Soft Edges</option>
-                        <option value="Gray Gamma 1.8">Mac Legacy</option>
-                        <option value="sGray">sRGB Gray</option>
-                    </select>
-                    <span class="knob-help">Mask edge profile — affects how cleanly colors meet</span>
                 </details>
             </div>
 

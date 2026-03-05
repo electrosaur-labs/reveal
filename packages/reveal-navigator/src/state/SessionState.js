@@ -690,6 +690,7 @@ class SessionState extends EventEmitter {
             this.paletteOverrides.clear();
             this.mergeHistory.clear();
             this.deletedColors.clear();
+            this.addedColors.clear();
             this._suggestions.clearForSwap();
 
             // Reset decision support state
@@ -915,6 +916,17 @@ class SessionState extends EventEmitter {
             if (sources.size === 0) this.mergeHistory.delete(target);
         }
 
+        // Cascade: if this index was itself a merge target (had dependents),
+        // revert those dependents too — their overrides pointed at this color.
+        const dependents = this.mergeHistory.get(colorIndex);
+        if (dependents) {
+            for (const dep of dependents) {
+                this.paletteOverrides.delete(dep);
+                this.deletedColors.delete(dep);
+            }
+            this.mergeHistory.delete(colorIndex);
+        }
+
         const overriddenPalette = this._paletteSurgery.buildOverriddenPalette();
 
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
@@ -1032,22 +1044,41 @@ class SessionState extends EventEmitter {
         }
 
         this._scoring.cancelScoring();
-        logger.log(`[SessionState.merge] source=${sourceIndex} target=${targetIndex} mapSize_before=${this.paletteOverrides.size} keys=[${[...this.paletteOverrides.keys()]}]`);
+
+        // Follow merge chain: if target is itself a merge source, redirect
+        // to the ultimate target.  A→B then C→A should become C→B.
+        let ultimateTarget = targetIndex;
+        for (const [target, sources] of this.mergeHistory) {
+            if (sources.has(ultimateTarget)) {
+                ultimateTarget = target;
+                break;
+            }
+        }
+
+        logger.log(`[SessionState.merge] source=${sourceIndex} target=${targetIndex}${ultimateTarget !== targetIndex ? ` → ultimate=${ultimateTarget}` : ''} mapSize_before=${this.paletteOverrides.size} keys=[${[...this.paletteOverrides.keys()]}]`);
 
         // Read from baseline+overrides (the consistent visible state),
         // not separationState.palette which is mutable post-knob state.
         const palette = this._paletteSurgery.buildOverriddenPalette();
-        if (!palette || sourceIndex >= palette.length || targetIndex >= palette.length) {
-            throw new Error(`Invalid palette index: source=${sourceIndex}, target=${targetIndex}, size=${palette ? palette.length : 0}`);
+        if (!palette || sourceIndex >= palette.length || ultimateTarget >= palette.length) {
+            throw new Error(`Invalid palette index: source=${sourceIndex}, target=${ultimateTarget}, size=${palette ? palette.length : 0}`);
         }
 
-        this.paletteOverrides.set(sourceIndex, { ...palette[targetIndex] });
-
-        // Track merge relationship so UI can show "+N" badge on target
-        if (!this.mergeHistory.has(targetIndex)) {
-            this.mergeHistory.set(targetIndex, new Set());
+        // Clean up: if source was already merged into a different target,
+        // remove it from the old target's source set (prevents stale +N badges).
+        for (const [target, sources] of this.mergeHistory) {
+            if (sources.delete(sourceIndex) && sources.size === 0) {
+                this.mergeHistory.delete(target);
+            }
         }
-        this.mergeHistory.get(targetIndex).add(sourceIndex);
+
+        this.paletteOverrides.set(sourceIndex, { ...palette[ultimateTarget] });
+
+        // Track merge relationship on the ultimate target so badge count is correct
+        if (!this.mergeHistory.has(ultimateTarget)) {
+            this.mergeHistory.set(ultimateTarget, new Set());
+        }
+        this.mergeHistory.get(ultimateTarget).add(sourceIndex);
 
         const overriddenPalette = this._paletteSurgery.buildOverriddenPalette();
 
@@ -1098,7 +1129,17 @@ class SessionState extends EventEmitter {
 
         this.addedColors.add(newIndex);
 
-        const result = await this.proxyEngine.addColorAndReseparate(labColor);
+        await this.proxyEngine.addColorAndReseparate(labColor);
+
+        // Apply current knobs so the user sees the same result as updateProxy.
+        // Without this, the initial add preview skips speckle/shadow knobs —
+        // the color appears post-add but vanishes on the next updateProxy call
+        // (e.g. archetype swap round-trip) when speckleRescue despeckles it.
+        const updateParams = { ...this.getMechanicalKnobs() };
+        if (this.paletteOverrides.size > 0) {
+            updateParams.paletteOverride = this._paletteSurgery.buildOverriddenPalette();
+        }
+        const result = await this.proxyEngine.updateProxy(updateParams);
 
         this.previewBuffer = result.previewBuffer;
         this.state.proxyBufferReady = true;

@@ -75,6 +75,10 @@ class MechanicalKnobs {
             if (colorCounts[i] === 0) continue;
             if (colorCounts[i] >= minPixels) {
                 strongIndices.push(i);
+            } else if (palette[i]._userAdded) {
+                // User-added colors are unconditionally strong — the user
+                // explicitly added this color; minVolume must not prune it.
+                strongIndices.push(i);
             } else if (palette[i]._minVolumeExempt && colorCounts[i] >= exemptMinPixels) {
                 strongIndices.push(i);
             } else {

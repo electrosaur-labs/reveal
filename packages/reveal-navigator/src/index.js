@@ -157,7 +157,7 @@ function initPlugin() {
         const PICKER_DEFS = [
             'engineType', 'splitMode', 'distanceMetric', 'centroidStrategy', 'vibrancyMode',
             'substrateMode', 'ditherType', 'colorMode', 'preprocessingIntensity',
-            'meshSize', 'maskProfile'
+            'meshSize'
         ];
         for (const key of PICKER_DEFS) {
             const picker = document.getElementById(`picker-${key}`);

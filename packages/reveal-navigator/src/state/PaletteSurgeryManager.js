@@ -103,6 +103,17 @@ class PaletteSurgeryManager {
             if (sources.size === 0) this._mergeHistory.delete(target);
         }
 
+        // If this index was itself a merge target (had sources merged into it),
+        // cascade-revert those sources too — they were pointing at this color
+        // which is now restored to its original, so the chain is broken.
+        const dependents = this._mergeHistory.get(colorIndex);
+        if (dependents) {
+            for (const dep of dependents) {
+                this._paletteOverrides.delete(dep);
+            }
+            this._mergeHistory.delete(colorIndex);
+        }
+
         return true;
     }
 

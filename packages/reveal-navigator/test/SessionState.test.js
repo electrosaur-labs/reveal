@@ -66,6 +66,23 @@ function setupSession(archetypeId = ARCHETYPE_A) {
             palette: [{ L: 50, a: 0, b: 0 }, { L: 80, a: 10, b: -20 }],
             elapsedMs: 5
         }),
+        getBaselineSnapshot: vi.fn().mockReturnValue({
+            palette: [{ L: 50, a: 0, b: 0 }, { L: 80, a: 10, b: -20 }],
+            rgbPalette: [{ r: 128, g: 128, b: 128 }, { r: 200, g: 180, b: 220 }],
+            colorIndices: new Uint8Array([0, 1, 0, 1]),
+            masks: [new Uint8Array([255, 0, 255, 0]), new Uint8Array([0, 255, 0, 255])],
+            width: 2,
+            height: 2,
+            distanceMetric: 'cie76',
+            metadata: {}
+        }),
+        restoreBaselineSnapshot: vi.fn().mockReturnValue({
+            previewBuffer: new Uint8ClampedArray(16),
+            palette: [{ L: 50, a: 0, b: 0 }, { L: 80, a: 10, b: -20 }],
+            dimensions: { width: 2, height: 2 },
+            metadata: {},
+            elapsedMs: 1
+        }),
     };
 
     return session;
