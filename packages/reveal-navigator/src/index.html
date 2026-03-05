@@ -98,24 +98,6 @@
             max-width: 120px;
         }
 
-        #btn-sync {
-            background: none;
-            border: 1px solid #555;
-            color: #aaa;
-            width: 24px;
-            height: 24px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 14px;
-            line-height: 22px;
-            text-align: center;
-            flex-shrink: 0;
-        }
-
-        #btn-sync:hover { background: #505050; color: #ddd; }
-        #btn-sync:active { background: #404040; }
-        #btn-sync:disabled { opacity: 0.3; cursor: default; }
-
         /* ─── Preview (maximized) ─── */
         #preview-container {
             flex: 1 1 0;
@@ -213,7 +195,8 @@
 
         /* ─── Mechanical Knobs Panel ─── */
         #knobs-panel {
-            flex-shrink: 0;
+            flex: 1 1 0;
+            min-height: 0;
             display: flex;
             flex-direction: column;
             padding: 5px 4px;
@@ -234,6 +217,9 @@
         .knob-label {
             color: #e0e0e0;
             font-size: 10px;
+        }
+        .knob-check-group .knob-label {
+            min-width: 100px;
         }
 
         .knob-val {
@@ -275,39 +261,67 @@
             color: #e0e0e0;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin: 8px 0 2px 0;
+            margin: 10px 0 2px 0;
+            border-top: 1px solid #444;
+            padding-top: 8px;
         }
 
         /* ─── Help Toggle System ─── */
         .knob-help {
             display: none;
-            font-size: 9px;
-            color: #888;
-            padding: 0 0 2px 0;
-            margin-bottom: 4px;
-            line-height: 1.4;
+            font-size: 12px;
+            color: #1a1a1a;
+            background: #fff3b0;
+            border: 1px solid #e0c860;
+            border-radius: 4px;
+            padding: 6px 8px;
+            margin: 4px 0 6px 0;
+            line-height: 1.5;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
         #knobs-panel.show-help .knob-help {
             display: block;
         }
         #btn-help-toggle {
             background: none;
-            border: 1px solid #555;
+            border: none;
             color: #888;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
-            width: 18px;
-            height: 18px;
-            border-radius: 9px;
             cursor: pointer;
             padding: 0;
-            line-height: 18px;
-            text-align: center;
+            width: 16px;
+            text-align: right;
             flex-shrink: 0;
+            margin-left: auto;
         }
         #btn-help-toggle:hover, #btn-help-toggle.active {
             color: #4da6ff;
-            border-color: #4da6ff;
+        }
+
+        /* ─── Per-Control Help Button ─── */
+        .knob-help-btn {
+            display: inline-block;
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0;
+            width: 16px;
+            text-align: right;
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+        .knob-help-btn:hover {
+            color: #4da6ff;
+        }
+        .knob-help-btn.active {
+            color: #4da6ff;
+        }
+        .knob-help.visible {
+            display: block;
         }
 
         #advanced-panel summary {
@@ -323,8 +337,8 @@
         }
 
         #knobs-panel select {
-            width: 100%;
-            margin-bottom: 4px;
+            flex: 1 1 auto;
+            min-width: 0;
             padding: 3px 4px;
             background: #383838;
             color: #ccc;
@@ -342,24 +356,48 @@
             accent-color: #4da6ff;
         }
 
-        #btn-reset-archetype {
+        #btn-reread {
             width: 100%;
-            margin-top: 4px;
-            padding: 4px 8px;
-            background: #383838;
-            border: 1px solid #555;
-            color: #ccc;
+            margin-top: 12px;
+            margin-bottom: 4px;
+            padding: 6px 8px;
+            background: #1a2a3a;
+            border: 1px solid #3070a0;
+            color: #60b0ff;
             border-radius: 3px;
             font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        #btn-reread:hover:not(:disabled) {
+            background: #203848;
+            border-color: #4090c0;
+        }
+        #btn-reread:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+
+        #btn-reset-top {
+            width: 100%;
+            margin-top: 4px;
+            margin-bottom: 8px;
+            padding: 6px 8px;
+            background: #3a3020;
+            border: 1px solid #7a6530;
+            color: #e0a030;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
             cursor: pointer;
         }
 
-        #btn-reset-archetype:hover:not(:disabled) {
-            background: #4a4a4a;
-            border-color: #777;
+        #btn-reset-top:hover:not(:disabled) {
+            background: #4a3a28;
+            border-color: #a08040;
         }
 
-        #btn-reset-archetype:disabled {
+        #btn-reset-top:disabled {
             opacity: 0.3;
             cursor: default;
         }
@@ -672,6 +710,9 @@
         }
 
         .surgeon-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             font-size: 10px;
             color: #888;
             margin-bottom: 4px;
@@ -931,12 +972,19 @@
             flex: 0 0 320px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
             padding: 8px;
             border-left: 1px solid #444;
             background: #2a2a2a;
             min-height: 0;
+            overflow: hidden;
+        }
+        #knobs-header {
+            flex: 0 0 auto;
+        }
+        #knobs-scroll {
+            flex: 1 1 0;
             overflow-y: auto;
+            min-height: 0;
         }
 
         #radar-container {
@@ -1109,7 +1157,8 @@
                     <option value="4">1:4</option>
                     <option value="8">1:8</option>
                 </select>
-                <button id="btn-sync" title="Re-sync from canvas" style="display:none;">&#x21bb;</button>
+                <button class="knob-help-btn" id="loupe-help-btn" title="Help" style="display:none;">?</button>
+                <span class="knob-help" id="loupe-help-text">Pixel-level magnifier. Hover over the preview to see a 1:1 crop of the posterized output. Shows the exact Lab coordinates and per-pixel ΔE so you can verify separation accuracy at print resolution. Change zoom level to see wider context.</span>
             </div>
 
             <!-- Preview (maximized) -->
@@ -1191,17 +1240,33 @@
         <div id="hud-panel" style="display:none;">
             <!-- Mechanical Knobs -->
             <div id="knobs-panel" style="display:none;">
-                <div class="knob-row" style="margin-bottom:4px;">
-                    <span style="color:#e0e0e0; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">Controls</span>
-                    <button id="btn-help-toggle" title="Toggle help descriptions">?</button>
+                <div id="knobs-header">
+                    <button id="btn-reread" title="Reread the document from Photoshop">Reread Document</button>
+                    <button id="btn-reset-top" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
+
+                    <div class="knob-row" style="margin-bottom:4px;">
+                        <span style="color:#e0e0e0; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">Controls</span>
+                        <button id="btn-help-toggle" title="Toggle help descriptions">?</button>
+                    </div>
+
+                    <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+                        <div id="radar-container">
+                            <img id="radar-img" width="300" height="300" />
+                        </div>
+                        <button class="knob-help-btn" id="radar-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help" id="radar-help-text">Parameter radar — each axis shows a tuning parameter. The green polygon is your current settings, blue dots show the archetype DNA baseline. Drag any vertex to adjust that parameter in real time. The preview updates as you drag.</span>
                 </div>
+
+                <div id="knobs-scroll">
                 <div class="knob-row">
                     <span class="knob-label">Screens</span>
                     <button class="knob-revert" id="revert-targetColors" title="Revert to archetype default">&#x21BA;</button>
                     <span class="knob-val" id="targetColors-val">8</span>
+                    <button class="knob-help-btn" title="Help">?</button>
                 </div>
                 <sp-slider id="knob-targetColors" min="3" max="12" step="1" value="8" variant="filled"></sp-slider>
-                <span class="knob-help">Number of ink screens in the final separation</span>
+                <span class="knob-help">How many separate ink colors to extract. More screens = more fidelity but more setup cost. Typical range: 4–8 for commercial work, 8–12 for fine art reproduction.</span>
 
                 <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
 
@@ -1209,57 +1274,157 @@
                     <span class="knob-label">Ghost Screen Removal</span>
                     <button class="knob-revert" id="revert-minVolume" title="Revert to archetype default">&#x21BA;</button>
                     <span class="knob-val" id="minVolume-val">1.5%</span>
+                    <button class="knob-help-btn" title="Help">?</button>
                 </div>
                 <sp-slider id="knob-minVolume" min="0" max="5" step="0.1" value="1.5" variant="filled"></sp-slider>
-                <span class="knob-help">Remove screens with less than this % coverage</span>
+                <span class="knob-help">Eliminate ghost screens — colors that cover less than this percentage of the image get merged into their nearest neighbor. Saves screens without visible quality loss.</span>
 
                 <div class="knob-row">
                     <span class="knob-label">Dust Removal</span>
                     <button class="knob-revert" id="revert-speckleRescue" title="Revert to archetype default">&#x21BA;</button>
                     <span class="knob-val" id="speckleRescue-val">4px</span>
+                    <button class="knob-help-btn" title="Help">?</button>
                 </div>
                 <sp-slider id="knob-speckleRescue" min="0" max="30" step="1" value="4" variant="filled"></sp-slider>
-                <span class="knob-help">Clean isolated specks smaller than this pixel radius</span>
+                <span class="knob-help">Remove isolated pixel clusters smaller than this radius. Cleans up stray dots that would print as visible defects on mesh. Higher values = cleaner stencils but may lose fine detail.</span>
 
                 <div class="knob-row">
                     <span class="knob-label">Shadow Floor</span>
                     <button class="knob-revert" id="revert-shadowClamp" title="Revert to archetype default">&#x21BA;</button>
                     <span class="knob-val" id="shadowClamp-val">8.0%</span>
+                    <button class="knob-help-btn" title="Help">?</button>
                 </div>
                 <sp-slider id="knob-shadowClamp" min="0" max="40" step="0.5" value="8" variant="filled"></sp-slider>
-                <span class="knob-help">Minimum ink density — clamp faint areas to printable level</span>
+                <span class="knob-help">Set minimum ink density on each screen. Faint mask areas below this threshold get boosted to a printable level, preventing wash-out on press. 0% = no clamping.</span>
 
                 <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
 
                 <div class="knob-row">
                     <span class="knob-label">Mesh Count</span>
                     <button class="knob-revert" id="revert-meshSize" title="Revert to default">&#x21BA;</button>
+                    <select id="picker-meshSize">
+                        <option value="0">No Mesh (0)</option>
+                        <option value="110">110 TPI</option>
+                        <option value="156">156 TPI</option>
+                        <option value="200">200 TPI</option>
+                        <option value="230" selected>230 TPI</option>
+                        <option value="280">280 TPI</option>
+                        <option value="305">305 TPI</option>
+                        <option value="355">355 TPI</option>
+                    </select>
+                    <button class="knob-help-btn" title="Help">?</button>
                 </div>
-                <select id="picker-meshSize">
-                    <option value="0">No Mesh (0)</option>
-                    <option value="110">110 TPI</option>
-                    <option value="156">156 TPI</option>
-                    <option value="200">200 TPI</option>
-                    <option value="230" selected>230 TPI</option>
-                    <option value="280">280 TPI</option>
-                    <option value="305">305 TPI</option>
-                    <option value="355">355 TPI</option>
-                </select>
-                <span class="knob-help">Screen mesh thread count — finer mesh = smaller dots</span>
+                <span class="knob-help">Thread count of your screen mesh. Higher TPI = finer halftone dots. Affects dithering scale so the pattern matches your actual mesh. Set to 0 for no mesh adjustment.</span>
 
                 <div class="knob-row">
                     <span class="knob-label">Trap Width</span>
                     <button class="knob-revert" id="revert-trapSize" title="Revert to default">&#x21BA;</button>
                     <span class="knob-val" id="trapSize-val">0pt</span>
+                    <button class="knob-help-btn" title="Help">?</button>
                 </div>
                 <sp-slider id="knob-trapSize" min="0" max="10" step="1" value="0" variant="filled"></sp-slider>
-                <span class="knob-help">Overlap between adjacent colors to prevent white gaps</span>
+                <span class="knob-help">Expand lighter colors under darker neighbors to prevent white gaps from misregistration on press. Measured in points. 0 = no trapping.</span>
 
-                <div id="radar-container">
-                    <img id="radar-img" width="300" height="300" />
+                <!-- Group: Method -->
+                <div class="knob-group-label">Method</div>
+
+                <div class="knob-row">
+                    <span class="knob-label">Separation Method</span>
+                    <button class="knob-revert" id="revert-engineType">&#x21BA;</button>
+                    <select id="picker-engineType">
+                        <option value="reveal-mk1.5">Standard</option>
+                        <option value="distilled">Adaptive</option>
+                        <option value="reveal">Hue-Aware</option>
+                        <option value="balanced">Fast</option>
+                        <option value="classic">Classic</option>
+                        <option value="stencil">Stencil</option>
+                    </select>
+                    <button class="knob-help-btn" title="Help">?</button>
+                </div>
+                <span class="knob-help">Standard: full Mk 1.5 engine with neutral sovereignty and highlight rescue. Adaptive: over-quantize then distil to target count. Hue-Aware: Mk 1.0 with hue gap recovery. Fast: Mk 1.0 without hue analysis. Classic: simple RGB median cut. Stencil: luminance-only for single-color work.</span>
+
+                <div class="knob-row">
+                    <span class="knob-label">Color Mode</span>
+                    <button class="knob-revert" id="revert-colorMode">&#x21BA;</button>
+                    <select id="picker-colorMode">
+                        <option value="color">Color</option>
+                        <option value="bw">B/W</option>
+                        <option value="grayscale">Grayscale</option>
+                    </select>
+                    <button class="knob-help-btn" title="Help">?</button>
+                </div>
+                <span class="knob-help">Color: full chromatic separation. B/W: two-tone black and white only. Grayscale: luminance-only separation across multiple gray levels.</span>
+
+                <!-- Group: Print Surface -->
+                <div class="knob-group-label">Print Surface</div>
+
+                <div class="knob-row">
+                    <span class="knob-label">Surface</span>
+                    <button class="knob-revert" id="revert-substrateMode">&#x21BA;</button>
+                    <select id="picker-substrateMode">
+                        <option value="auto">Auto</option>
+                        <option value="white">White</option>
+                        <option value="dark">Dark</option>
+                        <option value="black">Black</option>
+                        <option value="none">None</option>
+                        <option value="transparent">Transparent</option>
+                    </select>
+                    <button class="knob-help-btn" title="Help">?</button>
+                </div>
+                <span class="knob-help">What you're printing on. Auto detects from the image. White/Dark/Black set the substrate color explicitly. Transparent treats the substrate as see-through. Affects how background pixels are handled in the separation.</span>
+
+                <div class="knob-row">
+                    <span class="knob-label">Tolerance</span>
+                    <button class="knob-revert" id="revert-substrateTolerance">&#x21BA;</button>
+                    <span class="knob-val" id="substrateTolerance-val">2.0</span>
+                    <button class="knob-help-btn" title="Help">?</button>
+                </div>
+                <sp-slider id="knob-substrateTolerance" min="0" max="5" step="0.5" value="2" variant="filled"></sp-slider>
+                <span class="knob-help">How close a pixel's color must be to the substrate before it's treated as background and skipped. Higher = more aggressive background removal. Lower = only exact matches are skipped.</span>
+
+                <div class="knob-check-group">
+                    <div class="knob-row">
+                        <span class="knob-label">Keep White</span>
+                        <button class="knob-revert" id="revert-preserveWhite">&#x21BA;</button>
+                        <input type="checkbox" id="chk-preserveWhite" class="adv-checkbox" checked>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help">Guarantee a pure white screen in the palette. Essential when printing on dark substrates where white ink provides the base layer.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Keep Black</span>
+                        <button class="knob-revert" id="revert-preserveBlack">&#x21BA;</button>
+                        <input type="checkbox" id="chk-preserveBlack" class="adv-checkbox" checked>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help">Guarantee a pure black screen in the palette. Keeps crisp outlines and text sharp instead of mixing from other dark colors.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Skip Transparent</span>
+                        <button class="knob-revert" id="revert-ignoreTransparent">&#x21BA;</button>
+                        <input type="checkbox" id="chk-ignoreTransparent" class="adv-checkbox" checked>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help">Skip fully transparent pixels so they don't influence color selection. Turn off if your image uses transparency as a design element.</span>
                 </div>
 
-                <button id="btn-reset-archetype" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
+                <!-- Group: Output -->
+                <div class="knob-group-label">Output</div>
+
+                <div class="knob-row">
+                    <span class="knob-label">Halftone</span>
+                    <button class="knob-revert" id="revert-ditherType">&#x21BA;</button>
+                    <select id="picker-ditherType">
+                        <option value="none">None</option>
+                        <option value="blue-noise">Blue Noise</option>
+                        <option value="floyd-steinberg">Floyd-Steinberg</option>
+                        <option value="bayer">Bayer</option>
+                        <option value="atkinson">Atkinson</option>
+                        <option value="stucki">Stucki</option>
+                    </select>
+                    <button class="knob-help-btn" title="Help">?</button>
+                </div>
+                <span class="knob-help">Dithering pattern to simulate gradients with solid inks. None = hard edges. Blue Noise = organic, film-like grain. Floyd-Steinberg = classic error diffusion. Bayer = ordered grid pattern.</span>
 
                 <!-- ─── Advanced (Engine Room) ─── -->
                 <details id="advanced-panel">
@@ -1269,91 +1434,63 @@
                     <div class="knob-group-label">Method</div>
 
                     <div class="knob-row">
-                        <span class="knob-label">Separation Method</span>
-                        <button class="knob-revert" id="revert-engineType">&#x21BA;</button>
-                    </div>
-                    <select id="picker-engineType">
-                        <option value="reveal-mk1.5">Standard</option>
-                        <option value="distilled">Adaptive</option>
-                        <option value="reveal">Hue-Aware</option>
-                        <option value="balanced">Fast</option>
-                        <option value="classic">Classic</option>
-                        <option value="stencil">Stencil</option>
-                    </select>
-                    <span class="knob-help">Standard: direct Mk 1.5 posterization. Adaptive: over-quantize then distil. Hue-Aware: Mk 1.0 with hue gap recovery. Fast: Mk 1.0 without hue gaps. Classic: RGB median cut. Stencil: luminance only.</span>
-
-                    <div class="knob-row">
                         <span class="knob-label">Starting Palette</span>
                         <button class="knob-revert" id="revert-splitMode">&#x21BA;</button>
+                        <select id="picker-splitMode">
+                            <option value="variance">Detail Priority</option>
+                            <option value="median">Color Priority</option>
+                        </select>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-splitMode">
-                        <option value="variance">Detail Priority</option>
-                        <option value="median">Color Priority</option>
-                    </select>
-                    <span class="knob-help">Color Priority preserves more distinct hues — Detail Priority minimizes overall error</span>
+                    <span class="knob-help">How median cut partitions color space. Detail Priority (variance) splits where error is highest — best for photographic work. Color Priority (median) splits where color count is highest — preserves more distinct hues in graphic art.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Color Matching</span>
                         <button class="knob-revert" id="revert-distanceMetric">&#x21BA;</button>
+                        <select id="picker-distanceMetric">
+                            <option value="cie76">Standard (CIE76)</option>
+                            <option value="cie94">Perceptual (CIE94)</option>
+                            <option value="cie2000">Museum Grade (CIE2000)</option>
+                        </select>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-distanceMetric">
-                        <option value="cie76">Standard</option>
-                        <option value="cie94">Perceptual</option>
-                        <option value="cie2000">Museum Grade</option>
-                    </select>
-                    <span class="knob-help">How pixel-to-color distance is measured</span>
+                    <span class="knob-help">Distance formula for matching pixels to palette colors. CIE76: fast Euclidean — good for graphics. CIE94: chroma-weighted — better for photos with saturated colors. CIE2000: museum-grade perceptual accuracy — slow but best for fine art.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Color Selection</span>
                         <button class="knob-revert" id="revert-centroidStrategy">&#x21BA;</button>
+                        <select id="picker-centroidStrategy">
+                            <option value="SALIENCY">Eye-Catching (Saliency)</option>
+                            <option value="ROBUST_SALIENCY">Balanced (Robust Saliency)</option>
+                            <option value="VOLUMETRIC">Even Fill (Volumetric)</option>
+                            <option value="AVERAGE">Simple Average (Average)</option>
+                        </select>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-centroidStrategy">
-                        <option value="SALIENCY">Eye-Catching</option>
-                        <option value="ROBUST_SALIENCY">Balanced</option>
-                        <option value="VOLUMETRIC">Even Fill</option>
-                        <option value="AVERAGE">Simple Average</option>
-                    </select>
-                    <span class="knob-help">How representative colors are chosen from each region</span>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Color Mode</span>
-                        <button class="knob-revert" id="revert-colorMode">&#x21BA;</button>
-                    </div>
-                    <select id="picker-colorMode">
-                        <option value="color">Color</option>
-                        <option value="bw">B/W</option>
-                        <option value="grayscale">Grayscale</option>
-                    </select>
-                    <span class="knob-help">Full color, black & white, or grayscale output</span>
+                    <span class="knob-help">How the representative color is picked from each median cut bucket. Saliency: top 5% most vivid pixels — punchy results. Robust Saliency: same but clamps outliers — stable for warm-dominant images. Volumetric: weighted by pixel count — even coverage. Average: simple mean — flat but predictable.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Pre-Smoothing</span>
                         <button class="knob-revert" id="revert-preprocessingIntensity">&#x21BA;</button>
+                        <select id="picker-preprocessingIntensity">
+                            <option value="off">Off</option>
+                            <option value="auto">Auto</option>
+                            <option value="light">Light</option>
+                            <option value="medium">Medium</option>
+                            <option value="heavy">Heavy</option>
+                        </select>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-preprocessingIntensity">
-                        <option value="off">Off</option>
-                        <option value="auto">Auto</option>
-                        <option value="light">Light</option>
-                        <option value="medium">Medium</option>
-                        <option value="heavy">Heavy</option>
-                    </select>
-                    <span class="knob-help">Noise reduction before separation — smooths photos</span>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Gray Snap</span>
-                        <button class="knob-revert" id="revert-neutralCentroidClampThreshold">&#x21BA;</button>
-                        <span class="knob-val" id="neutralCentroidClampThreshold-val">0.5</span>
-                    </div>
-                    <sp-slider id="knob-neutralCentroidClampThreshold" min="0" max="20" step="0.5" value="0.5" variant="filled"></sp-slider>
-                    <span class="knob-help">Snap near-neutral centroids to true gray</span>
+                    <span class="knob-help">Edge-preserving bilateral filter applied before separation. Smooths noise and compression artifacts while keeping hard edges sharp. Off for clean graphics, Light–Heavy for photos. Auto enables only when image entropy is high.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Gray Protection</span>
                         <button class="knob-revert" id="revert-neutralSovereigntyThreshold">&#x21BA;</button>
                         <span class="knob-val" id="neutralSovereigntyThreshold-val">0</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-neutralSovereigntyThreshold" min="0" max="100" step="1" value="0" variant="filled"></sp-slider>
-                    <span class="knob-help">Reserve a dedicated neutral screen when neutrals exceed this %</span>
+                    <span class="knob-help">When neutral (low-chroma) pixels exceed this % of the image, one palette slot is reserved for a dedicated neutral. Prevents white/gray backgrounds from consuming the chromatic color budget.</span>
 
                     <!-- Group: Saturation -->
                     <div class="knob-group-label">Saturation</div>
@@ -1362,30 +1499,33 @@
                         <span class="knob-label">Boost</span>
                         <button class="knob-revert" id="revert-vibrancyBoost">&#x21BA;</button>
                         <span class="knob-val" id="vibrancyBoost-val">1.4×</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-vibrancyBoost" min="0.5" max="3" step="0.05" value="1.4" variant="filled"></sp-slider>
-                    <span class="knob-help">How much to push colors toward full saturation</span>
+                    <span class="knob-help">Multiplier that pushes centroid colors toward full saturation. Higher values rescue muted colors that median cut tends to average out. 1.0× = no boost.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Curve</span>
                         <button class="knob-revert" id="revert-vibrancyMode">&#x21BA;</button>
+                        <select id="picker-vibrancyMode">
+                            <option value="linear">Linear</option>
+                            <option value="subtle">Subtle</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="aggressive">Aggressive</option>
+                            <option value="exponential">Exponential</option>
+                        </select>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-vibrancyMode">
-                        <option value="linear">Linear</option>
-                        <option value="subtle">Subtle</option>
-                        <option value="moderate">Moderate</option>
-                        <option value="aggressive">Aggressive</option>
-                        <option value="exponential">Exponential</option>
-                    </select>
-                    <span class="knob-help">How the saturation boost ramps up</span>
+                    <span class="knob-help">Shape of the saturation boost curve. Linear: uniform boost across all chroma levels. Subtle–Aggressive: progressively stronger push on muted colors. Exponential: maximum rescue for the most desaturated pixels.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Gate</span>
                         <button class="knob-revert" id="revert-chromaGate">&#x21BA;</button>
                         <span class="knob-val" id="chromaGate-val">—</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-chromaGate" min="1" max="3" step="0.1" value="1" variant="filled"></sp-slider>
-                    <span class="knob-help">Multiplier for saturation boost on high-chroma pixels</span>
+                    <span class="knob-help">Chroma threshold gate — pixels below this chroma level don't receive the saturation boost. Prevents noise in near-neutral areas from getting amplified. Higher = more selective boosting.</span>
 
                     <!-- Group: Color Merging -->
                     <div class="knob-group-label">Color Merging</div>
@@ -1394,31 +1534,37 @@
                         <span class="knob-label">Merge Distance</span>
                         <button class="knob-revert" id="revert-paletteReduction">&#x21BA;</button>
                         <span class="knob-val" id="paletteReduction-val">6.0</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-paletteReduction" min="0" max="20" step="0.5" value="6" variant="filled"></sp-slider>
-                    <span class="knob-help">Colors closer than this ΔE get merged into one</span>
+                    <span class="knob-help">Palette colors closer than this ΔE distance get merged into one screen. Higher values = fewer, more distinct colors. Useful for reducing screen count when similar inks would be hard to distinguish on press.</span>
 
-                    <div class="knob-row">
-                        <span class="knob-label">Auto Merge</span>
-                        <button class="knob-revert" id="revert-enablePaletteReduction">&#x21BA;</button>
-                        <input type="checkbox" id="chk-enablePaletteReduction" class="adv-checkbox" checked>
-                    </div>
-                    <span class="knob-help">Automatically merge very similar colors</span>
+                    <div class="knob-check-group">
+                        <div class="knob-row">
+                            <span class="knob-label">Auto Merge</span>
+                            <button class="knob-revert" id="revert-enablePaletteReduction">&#x21BA;</button>
+                            <input type="checkbox" id="chk-enablePaletteReduction" class="adv-checkbox" checked>
+                            <button class="knob-help-btn" title="Help">?</button>
+                        </div>
+                        <span class="knob-help">Master switch for the palette reduction pass. When off, no colors are merged regardless of Merge Distance. When on, the engine applies the ΔE merge threshold.</span>
 
-                    <div class="knob-row">
-                        <span class="knob-label">Hue Recovery</span>
-                        <button class="knob-revert" id="revert-enableHueGapAnalysis">&#x21BA;</button>
-                        <input type="checkbox" id="chk-enableHueGapAnalysis" class="adv-checkbox" checked>
+                        <div class="knob-row">
+                            <span class="knob-label">Hue Recovery</span>
+                            <button class="knob-revert" id="revert-enableHueGapAnalysis">&#x21BA;</button>
+                            <input type="checkbox" id="chk-enableHueGapAnalysis" class="adv-checkbox" checked>
+                            <button class="knob-help-btn" title="Help">?</button>
+                        </div>
+                        <span class="knob-help">Master switch for hue gap analysis. When on, the engine scans for hue sectors missing from the palette and injects rescue colors. Prevents median cut from dropping minority hues like green foliage in warm images.</span>
                     </div>
-                    <span class="knob-help">Recover missing hues that median cut skipped</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Hue Lock</span>
                         <button class="knob-revert" id="revert-hueLockAngle">&#x21BA;</button>
                         <span class="knob-val" id="hueLockAngle-val">20°</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-hueLockAngle" min="0" max="90" step="1" value="20" variant="filled"></sp-slider>
-                    <span class="knob-help">Hue angle tolerance for locking recovered colors</span>
+                    <span class="knob-help">Hue angle tolerance (in degrees) for locking recovered colors into their target sector. Wider angle = more forgiving hue matches. 0° = exact hue match required.</span>
 
                     <!-- Group: Color Priority -->
                     <div class="knob-group-label">Color Priority</div>
@@ -1427,25 +1573,28 @@
                         <span class="knob-label">Lightness</span>
                         <button class="knob-revert" id="revert-lWeight">&#x21BA;</button>
                         <span class="knob-val" id="lWeight-val">1.2×</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-lWeight" min="0.5" max="3" step="0.1" value="1.2" variant="filled"></sp-slider>
-                    <span class="knob-help">Weight given to light/dark differences when sorting pixels</span>
+                    <span class="knob-help">Weight for lightness (L*) axis in median cut splitting. Higher = more screens dedicated to tonal range. Lower = engine favors chromatic variety over tonal steps.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Color Intensity</span>
                         <button class="knob-revert" id="revert-cWeight">&#x21BA;</button>
                         <span class="knob-val" id="cWeight-val">2.0×</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-cWeight" min="0.5" max="6" step="0.1" value="2" variant="filled"></sp-slider>
-                    <span class="knob-help">Weight given to color saturation differences when sorting pixels</span>
+                    <span class="knob-help">Weight for chroma (saturation) axis in median cut splitting. Higher = more screens dedicated to color intensity differences. Lower = engine favors tonal or hue variety.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Black Pull</span>
                         <button class="knob-revert" id="revert-blackBias">&#x21BA;</button>
                         <span class="knob-val" id="blackBias-val">3.0</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-blackBias" min="0" max="10" step="0.5" value="3" variant="filled"></sp-slider>
-                    <span class="knob-help">Pull dark pixels toward a dedicated black screen</span>
+                    <span class="knob-help">Bias that pulls very dark pixels toward a dedicated black screen. Higher values = stronger black snap, giving crisper shadows and outlines. 0 = no black preference.</span>
 
                     <!-- Group: Tone -->
                     <div class="knob-group-label">Tone</div>
@@ -1454,71 +1603,28 @@
                         <span class="knob-label">Highlight</span>
                         <button class="knob-revert" id="revert-highlightThreshold">&#x21BA;</button>
                         <span class="knob-val" id="highlightThreshold-val">90 L</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-highlightThreshold" min="80" max="100" step="1" value="90" variant="filled"></sp-slider>
-                    <span class="knob-help">Lightness above which pixels are considered highlights</span>
+                    <span class="knob-help">L* value above which pixels are treated as highlights. Highlighted pixels can receive an extra saturation boost to prevent pastel wash-out in bright areas.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Highlight Boost</span>
                         <button class="knob-revert" id="revert-highlightBoost">&#x21BA;</button>
                         <span class="knob-val" id="highlightBoost-val">1.5×</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-highlightBoost" min="0" max="3" step="0.1" value="1.5" variant="filled"></sp-slider>
-                    <span class="knob-help">Extra saturation push for highlight pixels</span>
+                    <span class="knob-help">Extra saturation multiplier applied to pixels above the Highlight Threshold. Rescues washed-out pastels in bright areas. 1.0× = no extra boost.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Shadow Point</span>
                         <button class="knob-revert" id="revert-shadowPoint">&#x21BA;</button>
                         <span class="knob-val" id="shadowPoint-val">15 L</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-shadowPoint" min="5" max="25" step="1" value="15" variant="filled"></sp-slider>
-                    <span class="knob-help">Lightness below which pixels are treated as shadows</span>
-
-                    <!-- Group: Print Surface -->
-                    <div class="knob-group-label">Print Surface</div>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Surface</span>
-                        <button class="knob-revert" id="revert-substrateMode">&#x21BA;</button>
-                    </div>
-                    <select id="picker-substrateMode">
-                        <option value="auto">Auto</option>
-                        <option value="white">White</option>
-                        <option value="dark">Dark</option>
-                        <option value="black">Black</option>
-                        <option value="none">None</option>
-                        <option value="transparent">Transparent</option>
-                    </select>
-                    <span class="knob-help">What the ink prints on — affects background color handling</span>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Tolerance</span>
-                        <button class="knob-revert" id="revert-substrateTolerance">&#x21BA;</button>
-                        <span class="knob-val" id="substrateTolerance-val">2.0</span>
-                    </div>
-                    <sp-slider id="knob-substrateTolerance" min="0" max="5" step="0.5" value="2" variant="filled"></sp-slider>
-                    <span class="knob-help">How closely a pixel must match the surface to be skipped</span>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Keep White</span>
-                        <button class="knob-revert" id="revert-preserveWhite">&#x21BA;</button>
-                        <input type="checkbox" id="chk-preserveWhite" class="adv-checkbox" checked>
-                    </div>
-                    <span class="knob-help">Force a pure white in the palette</span>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Keep Black</span>
-                        <button class="knob-revert" id="revert-preserveBlack">&#x21BA;</button>
-                        <input type="checkbox" id="chk-preserveBlack" class="adv-checkbox" checked>
-                    </div>
-                    <span class="knob-help">Force a pure black in the palette</span>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Skip Transparent</span>
-                        <button class="knob-revert" id="revert-ignoreTransparent">&#x21BA;</button>
-                        <input type="checkbox" id="chk-ignoreTransparent" class="adv-checkbox" checked>
-                    </div>
-                    <span class="knob-help">Ignore fully transparent pixels during separation</span>
+                    <span class="knob-help">L* value below which pixels are treated as deep shadows. Shadow pixels get special handling to preserve dark detail instead of collapsing to pure black.</span>
 
                     <!-- Group: Detail -->
                     <div class="knob-group-label">Detail</div>
@@ -1527,39 +1633,27 @@
                         <span class="knob-label">Smoothing</span>
                         <button class="knob-revert" id="revert-medianPass">&#x21BA;</button>
                         <input type="checkbox" id="chk-medianPass" class="adv-checkbox">
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <span class="knob-help">Apply median filter to reduce color noise</span>
+                    <span class="knob-help">Apply a median filter pass after separation to reduce color noise at screen boundaries. Smooths jagged edges between adjacent ink regions.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Fine Detail</span>
                         <button class="knob-revert" id="revert-detailRescue">&#x21BA;</button>
                         <span class="knob-val" id="detailRescue-val">—</span>
+                        <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <sp-slider id="knob-detailRescue" min="0" max="20" step="1" value="0" variant="filled"></sp-slider>
-                    <span class="knob-help">Preserve fine detail that smoothing might erase</span>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Halftone</span>
-                        <button class="knob-revert" id="revert-ditherType">&#x21BA;</button>
-                    </div>
-                    <select id="picker-ditherType">
-                        <option value="none">None</option>
-                        <option value="blue-noise">Blue Noise</option>
-                        <option value="floyd-steinberg">Floyd-Steinberg</option>
-                        <option value="bayer">Bayer</option>
-                        <option value="atkinson">Atkinson</option>
-                        <option value="stucki">Stucki</option>
-                    </select>
-                    <span class="knob-help">Scatter pattern to simulate gradients with solid inks</span>
+                    <span class="knob-help">Counterbalances smoothing by restoring fine detail that the median filter might erase. Higher values = more detail preserved at the cost of noisier boundaries.</span>
 
                 </details>
+                </div><!-- /knobs-scroll -->
             </div>
 
             <!-- radar moved above Advanced panel -->
             <div id="hud-info">
                 <div id="status-bar">
                     <span id="status-text">Waiting for document...</span>
-                    <span id="accuracy-text"></span>
                 </div>
                 <div id="dominant-sector" style="display:none"></div>
             </div>

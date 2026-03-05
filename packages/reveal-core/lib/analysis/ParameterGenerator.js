@@ -52,7 +52,7 @@ const BilateralFilter = require('../preprocessing/BilateralFilter');
  * @property {boolean} preserveWhite - Force white into palette
  * @property {boolean} preserveBlack - Force black into palette
  * @property {boolean} ignoreTransparent - Skip transparent pixels
- * @property {number} neutralCentroidClampThreshold - Neutral centroid clamping (default 0.5)
+ * @property {number} neutralCentroidClampThreshold - Neutral centroid clamping (fixed at 0.5)
  * @property {number} neutralSovereigntyThreshold - Neutral sovereignty pixel threshold
  * @property {number} chromaGate - cWeight multiplier for high-chroma images (default 1.0)
  * @property {string} preprocessingIntensity - 'off'|'auto'|'light'|'heavy'
@@ -106,7 +106,7 @@ class ParameterGenerator {
             'enableHueGapAnalysis', 'hueLockAngle',
             'shadowPoint', 'colorMode',
             'preserveWhite', 'preserveBlack', 'ignoreTransparent',
-            'neutralCentroidClampThreshold', 'neutralSovereigntyThreshold',
+            'neutralSovereigntyThreshold',
             'chromaGate', 'preprocessingIntensity',
             'refinementPasses', 'splitMode',
             'detailRescue', 'medianPass',
@@ -281,7 +281,7 @@ class ParameterGenerator {
             centroidStrategy: params.centroidStrategy || 'SALIENCY',
 
             // Neutral clamping (DNA v2.0 feature)
-            neutralCentroidClampThreshold: params.neutralCentroidClampThreshold || 0.5,
+            neutralCentroidClampThreshold: 0.5,  // Fixed safety floor — not user-tunable
             neutralSovereigntyThreshold: params.neutralSovereigntyThreshold || 0,
 
             // Median cut split strategy: 'variance' (Wu SSE-minimizing) or 'median' (standard)

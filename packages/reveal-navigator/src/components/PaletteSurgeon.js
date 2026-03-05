@@ -54,8 +54,20 @@ class PaletteSurgeon {
         // Build DOM
         this._header = document.createElement('div');
         this._header.className = 'surgeon-header';
-        this._header.textContent = 'Click a color to isolate';
+        const headerText = document.createElement('span');
+        headerText.textContent = 'Click a color to isolate';
+        this._headerText = headerText;
+        this._header.appendChild(headerText);
+
+        // Palette help (? inside header, help text below)
+        this._paletteHelp = this._createHelpBlock(
+            'Your extracted color palette. Click a swatch to isolate that color in the preview. ' +
+            'Ctrl+click opens the color picker for manual editing. Drag one swatch onto another to merge. ' +
+            'The X badge deletes a color and redistributes its pixels to the nearest neighbor.'
+        );
+        this._header.appendChild(this._paletteHelp.btn);
         this._container.appendChild(this._header);
+        this._container.appendChild(this._paletteHelp.text);
 
         this._grid = document.createElement('div');
         this._grid.className = 'surgeon-grid';
@@ -75,7 +87,7 @@ class PaletteSurgeon {
             this._selectedSuggestionIdx = -1;
             this._suggestionViewMode = null;
             this._session.clearHighlight();
-            this._header.textContent = 'Click a color to isolate';
+            this._headerText.textContent = 'Click a color to isolate';
         });
     }
 
@@ -84,7 +96,7 @@ class PaletteSurgeon {
         this._state = 'IDLE';
         this._selectedIndex = -1;
         this._session.clearHighlight();
-        this._header.textContent = 'Click a color to isolate';
+        this._headerText.textContent = 'Click a color to isolate';
         this._updateSelectionCSS();
     }
 
@@ -114,7 +126,7 @@ class PaletteSurgeon {
                 this._state = 'IDLE';
                 this._selectedIndex = -1;
                 this._session.clearHighlight();
-                this._header.textContent = 'Click a color to isolate';
+                this._headerText.textContent = 'Click a color to isolate';
             }
         }
 
@@ -385,7 +397,7 @@ class PaletteSurgeon {
         if (isDeleted) {
             this._state = 'SELECTED';
             this._selectedIndex = i;
-            this._header.textContent = `Deleted — click \u21BA or Alt+click to restore`;
+            this._headerText.textContent = `Deleted — click \u21BA or Alt+click to restore`;
             this._session.setHighlight(i);
             this._rebuild();  // rebuild reads _state/_selectedIndex to set selection + revert button
             return;
@@ -411,13 +423,13 @@ class PaletteSurgeon {
             this._state = 'IDLE';
             this._selectedIndex = -1;
             this._session.clearHighlight();
-            this._header.textContent = 'Click a color to isolate';
+            this._headerText.textContent = 'Click a color to isolate';
         } else {
             // Different swatch or IDLE → select this one
             this._selectedIndex = i;
             this._state = 'SELECTED';
             this._session.setHighlight(i);
-            this._header.textContent = 'Shift+click merge \u2022 Alt+click delete \u2022 Ctrl+click edit';
+            this._headerText.textContent = 'Shift+click merge \u2022 Alt+click delete \u2022 Ctrl+click edit';
         }
 
         this._updateSelectionCSS();
@@ -432,7 +444,7 @@ class PaletteSurgeon {
         this._state = 'IDLE';
         this._selectedIndex = -1;
         this._session.clearHighlight();
-        this._header.textContent = 'Click a color to isolate';
+        this._headerText.textContent = 'Click a color to isolate';
         this._updateSelectionCSS();
 
         logger.log(`[Surgeon] DELETE swatch ${i} (alt+click)`);
@@ -440,7 +452,7 @@ class PaletteSurgeon {
             logger.log(`[PaletteSurgeon] Delete failed: ${err.message}`);
             this._state = prevState;
             this._selectedIndex = prevIndex;
-            this._header.textContent = 'Delete failed — try again';
+            this._headerText.textContent = 'Delete failed — try again';
             this._updateSelectionCSS();
         });
     }
@@ -457,7 +469,7 @@ class PaletteSurgeon {
         if (!rgb) return;
 
         this._pickerOpen = true;
-        this._header.textContent = 'Opening color picker...';
+        this._headerText.textContent = 'Opening color picker...';
 
         try {
             const { core, action, app } = require("photoshop");
@@ -499,7 +511,7 @@ class PaletteSurgeon {
             this._state = 'IDLE';
             this._selectedIndex = -1;
             this._session.clearHighlight();
-            this._header.textContent = 'Click a color to isolate';
+            this._headerText.textContent = 'Click a color to isolate';
             this._updateSelectionCSS();
 
             if (result) {
@@ -511,7 +523,7 @@ class PaletteSurgeon {
             logger.log(`[PaletteSurgeon] Color picker error: ${err.message}`);
             this._state = 'IDLE';
             this._selectedIndex = -1;
-            this._header.textContent = 'Click a color to isolate';
+            this._headerText.textContent = 'Click a color to isolate';
         } finally {
             this._pickerOpen = false;  // belt-and-suspenders for error paths
         }
@@ -523,7 +535,7 @@ class PaletteSurgeon {
         if (this._pickerOpen) return;
 
         this._pickerOpen = true;
-        this._header.textContent = 'Pick a color to add...';
+        this._headerText.textContent = 'Pick a color to add...';
 
         try {
             const { core, action, app } = require("photoshop");
@@ -568,10 +580,10 @@ class PaletteSurgeon {
                 await this._session.addPaletteColor(lab);
             }
 
-            this._header.textContent = 'Click a color to isolate';
+            this._headerText.textContent = 'Click a color to isolate';
         } catch (err) {
             logger.log(`[PaletteSurgeon] Add color picker error: ${err.message}`);
-            this._header.textContent = 'Click a color to isolate';
+            this._headerText.textContent = 'Click a color to isolate';
         } finally {
             this._pickerOpen = false;  // belt-and-suspenders for error paths
         }
@@ -587,7 +599,7 @@ class PaletteSurgeon {
             this._state = 'IDLE';
             this._selectedIndex = -1;
             this._session.clearHighlight();
-            this._header.textContent = 'Click a color to isolate';
+            this._headerText.textContent = 'Click a color to isolate';
             this._session.removeAddedColor(i).catch(err => {
                 logger.log(`[PaletteSurgeon] Remove added color failed: ${err.message}`);
             });
@@ -644,10 +656,20 @@ class PaletteSurgeon {
         this._suggestedTray.innerHTML = '';
         this._suggestedTray.style.display = 'block';
 
+        const labelRow = document.createElement('div');
+        labelRow.setAttribute('style', 'display: flex; align-items: center; justify-content: space-between;');
         const label = document.createElement('div');
         label.className = 'surgeon-suggested-label';
         label.textContent = 'Suggested';
-        this._suggestedTray.appendChild(label);
+        labelRow.appendChild(label);
+        const sugHelp = this._createHelpBlock(
+            'Colors detected in the image but missing from your palette. ' +
+            'Click once to see the color isolated, click again to see a "what if" preview with it added. ' +
+            'Ctrl+click toggles a checkmark — checked colors are injected into the palette at commit time.'
+        );
+        labelRow.appendChild(sugHelp.btn);
+        this._suggestedTray.appendChild(labelRow);
+        this._suggestedTray.appendChild(sugHelp.text);
 
         const row = document.createElement('div');
         row.className = 'surgeon-suggested-row';
@@ -705,13 +727,13 @@ class PaletteSurgeon {
                             { L: suggestion.L, a: suggestion.a, b: suggestion.b },
                             'integrated'
                         );
-                        this._header.textContent = 'Showing "what if" \u2014 click to deselect';
+                        this._headerText.textContent = 'Showing "what if" \u2014 click to deselect';
                     } else {
                         // Integrated → deselect
                         this._selectedSuggestionIdx = -1;
                         this._suggestionViewMode = null;
                         this._session.clearHighlight();
-                        this._header.textContent = 'Click a color to isolate';
+                        this._headerText.textContent = 'Click a color to isolate';
                     }
                 } else {
                     // Select this suggestion → show solo isolation
@@ -721,7 +743,7 @@ class PaletteSurgeon {
                         { L: suggestion.L, a: suggestion.a, b: suggestion.b },
                         'solo'
                     );
-                    this._header.textContent = 'Ctrl+click to mark "must have"';
+                    this._headerText.textContent = 'Ctrl+click to mark "must have"';
                 }
                 this._renderSuggestedColors();
             };
@@ -783,6 +805,36 @@ class PaletteSurgeon {
             }
         }
         return -1;
+    }
+
+    /**
+     * Create a ? help button + collapsible help text block.
+     * @param {string} helpText
+     * @returns {{ btn: HTMLElement, text: HTMLElement }}
+     */
+    _createHelpBlock(helpText) {
+        const btn = document.createElement('button');
+        btn.className = 'knob-help-btn';
+        btn.title = 'Help';
+        btn.textContent = '?';
+
+        const text = document.createElement('span');
+        text.className = 'knob-help';
+        text.textContent = helpText;
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = text.classList.contains('visible');
+            // Close any other open help
+            document.querySelectorAll('.knob-help.visible').forEach(el => el.classList.remove('visible'));
+            document.querySelectorAll('.knob-help-btn.active').forEach(el => el.classList.remove('active'));
+            if (!isVisible) {
+                text.classList.add('visible');
+                btn.classList.add('active');
+            }
+        });
+
+        return { btn, text };
     }
 }
 

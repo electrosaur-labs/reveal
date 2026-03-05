@@ -36,7 +36,6 @@
     "vibrancyBoost": 2,
     "paletteReduction": 12,
     "enablePaletteReduction": true,
-    "neutralCentroidClampThreshold": 15,
     "isolationThreshold": 25,
     "preserveWhite": true,
     "preserveBlack": true,

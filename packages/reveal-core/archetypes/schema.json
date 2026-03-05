@@ -98,7 +98,6 @@
         "paletteReduction": { "type": "number", "minimum": 0, "maximum": 20 },
         "hueLockAngle": { "type": "number", "minimum": 0, "maximum": 90 },
         "neutralSovereigntyThreshold": { "type": "number", "minimum": 0, "maximum": 100 },
-        "neutralCentroidClampThreshold": { "type": "number", "minimum": 0, "maximum": 20 },
         "ditherType": { "type": "string", "enum": ["BlueNoise", "Atkinson", "none"] },
         "shadowClamp": {
           "type": "number",

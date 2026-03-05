@@ -45,7 +45,6 @@
     "preserveBlack": true,
     "ignoreTransparent": true,
     "neutralSovereigntyThreshold": 10,
-    "neutralCentroidClampThreshold": 5,
     "preprocessingIntensity": "none",
     "refinementPasses": 0
   }

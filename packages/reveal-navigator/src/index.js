@@ -48,7 +48,6 @@ function initPlugin() {
         preview = new Preview(
             document.getElementById('preview-img'),
             document.getElementById('status-text'),
-            document.getElementById('accuracy-text'),
             document.getElementById('preview-placeholder'),
             sessionState
         );
@@ -138,12 +137,11 @@ function initPlugin() {
         }
 
         // Wire Reset to Defaults button (knobs + palette surgery)
-        const btnReset = document.getElementById('btn-reset-archetype');
+        const btnReset = document.getElementById('btn-reset-top');
         if (btnReset) {
             btnReset.addEventListener('click', () => {
                 sessionState.resetToDefaults();
             });
-            // Always visible, disabled when nothing is customized
             btnReset.disabled = true;
             const updateResetState = () => {
                 btnReset.disabled = !sessionState.isCustomized();
@@ -341,8 +339,8 @@ function initPlugin() {
             if (hudPanel) hudPanel.style.display = '';
             const loupeZoom = document.getElementById('loupe-zoom');
             if (loupeZoom) loupeZoom.style.display = '';
-            const btnSync = document.getElementById('btn-sync');
-            if (btnSync) btnSync.style.display = '';
+            const loupeHelpBtn = document.getElementById('loupe-help-btn');
+            if (loupeHelpBtn) loupeHelpBtn.style.display = '';
         });
 
         // Update stats panel below preview on every posterization
@@ -388,10 +386,13 @@ function initPlugin() {
             updateDNADisplay();
         });
 
-        // Wire Sync button — manual sync shows error dialog on failure
-        const btnSync = document.getElementById('btn-sync');
-        if (btnSync) {
-            btnSync.addEventListener('click', () => ingestActiveDocument(true));
+        // Wire Reread Document button — re-ingests from Photoshop
+        const btnReread = document.getElementById('btn-reread');
+        if (btnReread) {
+            btnReread.addEventListener('click', () => {
+                btnReread.disabled = true;
+                ingestActiveDocument(true);
+            });
         }
 
         // Wire error overlay OK button
@@ -416,6 +417,32 @@ function initPlugin() {
                 btnHelp.classList.toggle('active');
             });
         }
+
+        // Per-control help toggle: click ? button to show/hide inline help
+        document.querySelectorAll('.knob-help-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Find the associated help text: walk from the knob-row, or from the button itself
+                const row = btn.closest('.knob-row');
+                let helpEl = null;
+                let start = row || btn;
+                let sibling = start.nextElementSibling;
+                while (sibling && !sibling.classList.contains('knob-help')) {
+                    sibling = sibling.nextElementSibling;
+                }
+                helpEl = sibling;
+                if (helpEl) {
+                    helpEl.classList.toggle('visible');
+                    btn.classList.toggle('active', helpEl.classList.contains('visible'));
+                }
+            });
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('knob-help-btn')) {
+                document.querySelectorAll('.knob-help.visible').forEach(el => el.classList.remove('visible'));
+                document.querySelectorAll('.knob-help-btn.active').forEach(el => el.classList.remove('active'));
+            }
+        });
 
         // Wire Finalize button
         const btnFinalize = document.getElementById('btn-finalize');
@@ -542,13 +569,10 @@ function showErrorDialog(title, message) {
 async function ingestActiveDocument(showDialog) {
     if (isIngesting) return;
     isIngesting = true;
-
     // Immediately clear stale content so old preview never flashes
     _clearUI();
     if (sessionState) sessionState.reset();
 
-    const btnSync = document.getElementById('btn-sync');
-    if (btnSync) btnSync.disabled = true;
 
     _showProgress('Preparing\u2026', 0);
     await new Promise(r => setTimeout(r, 20)); // yield so progress bar paints
@@ -601,7 +625,6 @@ async function ingestActiveDocument(showDialog) {
         _hideProgress();
     } finally {
         isIngesting = false;
-        if (btnSync) btnSync.disabled = false;
     }
 }
 
@@ -703,6 +726,7 @@ async function handleFinalize() {
 
     isProductionRunning = true;
 
+
     // Disable UI immediately
     const btn = document.getElementById('btn-finalize');
     const carouselEl = document.getElementById('carousel');
@@ -748,12 +772,14 @@ async function handleFinalize() {
         if (progressEl) progressEl.style.display = 'none';
     } finally {
         isProductionRunning = false;
+
     }
 }
 
 /** Dismiss the dialog after successful render and reset UI for next invocation. */
 function _closeDialog() {
     _resetFinalizeUI();
+
     if (loupe) loupe.destroy();
     currentDocId = null;
     dialogOpen = false;
@@ -829,13 +855,11 @@ function _clearUI() {
     if (hudPanel) hudPanel.style.display = 'none';
     const loupeZoom = document.getElementById('loupe-zoom');
     if (loupeZoom) loupeZoom.style.display = 'none';
-    const btnSync = document.getElementById('btn-sync');
-    if (btnSync) btnSync.style.display = 'none';
+    const loupeHelpBtn = document.getElementById('loupe-help-btn');
+    if (loupeHelpBtn) loupeHelpBtn.style.display = 'none';
 
-    // Clear status and accuracy
+    // Clear status
     setStatus('');
-    const accuracyEl = document.getElementById('accuracy-text');
-    if (accuracyEl) accuracyEl.textContent = '';
 }
 
 /**
@@ -845,6 +869,7 @@ function _clearUI() {
 function _onDialogDismissed() {
     if (!dialogOpen) return;
     logger.log('[Navigator] Dialog dismissed by user');
+
     if (loupe) loupe.destroy();
     currentDocId = null;
     dialogOpen = false;

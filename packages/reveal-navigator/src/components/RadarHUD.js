@@ -508,10 +508,23 @@ class RadarHUD {
                 'box-sizing: border-box; z-index: 5;'
             );
 
-            // Show tooltip on hover
+            // Show tooltip on hover + highlight handle
             const tip = DRAG_MAP[i].tip;
+            const defaultStyle = 'position: absolute; width: ' + HANDLE_SIZE + 'px; height: ' + HANDLE_SIZE + 'px; ' +
+                'border-radius: 50%; background: rgba(255,255,255,0.85); ' +
+                'border: 2px solid #4da6ff; cursor: grab; ' +
+                'box-sizing: border-box; z-index: 5;';
+            const hoverStyle = 'position: absolute; width: ' + HANDLE_SIZE + 'px; height: ' + HANDLE_SIZE + 'px; ' +
+                'border-radius: 50%; background: #50e050; ' +
+                'border: 2px solid #30b030; cursor: grab; ' +
+                'box-sizing: border-box; z-index: 5;';
             el.addEventListener('pointerenter', () => {
                 if (this._dragAxisIndex >= 0) return; // Hide during drag
+                // Preserve position when changing style to hover
+                const elLeft = el.style.left;
+                const elTop = el.style.top;
+                const elDisplay = el.style.display;
+                el.setAttribute('style', hoverStyle + ' left: ' + elLeft + '; top: ' + elTop + '; display: ' + elDisplay + ';');
                 this._tooltip.textContent = tip;
                 // Position above the handle, centered horizontally.
                 // UXP ignores CSS transform, so offset manually.
@@ -528,6 +541,11 @@ class RadarHUD {
                 );
             });
             el.addEventListener('pointerleave', () => {
+                // Restore default handle style
+                const elLeft = el.style.left;
+                const elTop = el.style.top;
+                const elDisplay = el.style.display;
+                el.setAttribute('style', defaultStyle + ' left: ' + elLeft + '; top: ' + elTop + '; display: ' + elDisplay + ';');
                 this._tooltip.setAttribute('style',
                     'position: absolute; display: none; pointer-events: none; z-index: 10; ' +
                     'font-size: 10px; color: #fff; background: rgba(0,0,0,0.8); ' +

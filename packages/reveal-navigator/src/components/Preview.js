@@ -18,14 +18,12 @@ class Preview {
     /**
      * @param {HTMLImageElement} imgElement - The <img> to render into
      * @param {HTMLElement} statusElement - Element for timing display
-     * @param {HTMLElement} accuracyElement - Element for Delta-E readout
      * @param {HTMLElement} placeholderElement - Placeholder text element (for error display)
      * @param {import('../state/SessionState')} sessionState
      */
-    constructor(imgElement, statusElement, accuracyElement, placeholderElement, sessionState) {
+    constructor(imgElement, statusElement, placeholderElement, sessionState) {
         this._img = imgElement;
         this._status = statusElement;
-        this._accuracy = accuracyElement;
         this._placeholder = placeholderElement;
         this._session = sessionState;
         this._dimensions = null;
@@ -168,7 +166,6 @@ class Preview {
             }
 
             this._setStatus(`${data.elapsedMs.toFixed(0)}ms`);
-            this._setAccuracy(data.accuracyDeltaE);
         } catch (err) {
             this._showError('Update failed: ' + err.message);
         }
@@ -211,7 +208,6 @@ class Preview {
      */
     _showError(msg) {
         this._setStatus('Error');
-        this._setAccuracy(null);
         // Show error in the placeholder area so it's impossible to miss
         if (this._placeholder) {
             this._placeholder.textContent = msg;
@@ -325,13 +321,6 @@ class Preview {
 
     _setStatus(text) {
         if (this._status) this._status.textContent = text;
-    }
-
-    _setAccuracy(deltaE) {
-        if (!this._accuracy) return;
-        this._accuracy.textContent = deltaE !== null && deltaE !== undefined
-            ? `\u0394E ${deltaE.toFixed(1)}`
-            : '';
     }
 
 }
