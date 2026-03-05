@@ -356,7 +356,6 @@
         #knobs-panel select {
             flex: 1 1 auto;
             min-width: 0;
-            margin-bottom: 4px;
             padding: 3px 4px;
             background: #383838;
             color: #ccc;
@@ -1275,18 +1274,18 @@
                 <div class="knob-row">
                     <span class="knob-label">Mesh Count</span>
                     <button class="knob-revert" id="revert-meshSize" title="Revert to default">&#x21BA;</button>
+                    <select id="picker-meshSize">
+                        <option value="0">No Mesh (0)</option>
+                        <option value="110">110 TPI</option>
+                        <option value="156">156 TPI</option>
+                        <option value="200">200 TPI</option>
+                        <option value="230" selected>230 TPI</option>
+                        <option value="280">280 TPI</option>
+                        <option value="305">305 TPI</option>
+                        <option value="355">355 TPI</option>
+                    </select>
                     <button class="knob-help-btn" title="Help">?</button>
                 </div>
-                <select id="picker-meshSize">
-                    <option value="0">No Mesh (0)</option>
-                    <option value="110">110 TPI</option>
-                    <option value="156">156 TPI</option>
-                    <option value="200">200 TPI</option>
-                    <option value="230" selected>230 TPI</option>
-                    <option value="280">280 TPI</option>
-                    <option value="305">305 TPI</option>
-                    <option value="355">355 TPI</option>
-                </select>
                 <span class="knob-help">Screen mesh thread count — finer mesh = smaller dots</span>
 
                 <div class="knob-row">
@@ -1304,28 +1303,28 @@
                 <div class="knob-row">
                     <span class="knob-label">Separation Method</span>
                     <button class="knob-revert" id="revert-engineType">&#x21BA;</button>
+                    <select id="picker-engineType">
+                        <option value="reveal-mk1.5">Standard</option>
+                        <option value="distilled">Adaptive</option>
+                        <option value="reveal">Hue-Aware</option>
+                        <option value="balanced">Fast</option>
+                        <option value="classic">Classic</option>
+                        <option value="stencil">Stencil</option>
+                    </select>
                     <button class="knob-help-btn" title="Help">?</button>
                 </div>
-                <select id="picker-engineType">
-                    <option value="reveal-mk1.5">Standard</option>
-                    <option value="distilled">Adaptive</option>
-                    <option value="reveal">Hue-Aware</option>
-                    <option value="balanced">Fast</option>
-                    <option value="classic">Classic</option>
-                    <option value="stencil">Stencil</option>
-                </select>
                 <span class="knob-help">Standard: direct Mk 1.5 posterization. Adaptive: over-quantize then distil. Hue-Aware: Mk 1.0 with hue gap recovery. Fast: Mk 1.0 without hue gaps. Classic: RGB median cut. Stencil: luminance only.</span>
 
                 <div class="knob-row">
                     <span class="knob-label">Color Mode</span>
                     <button class="knob-revert" id="revert-colorMode">&#x21BA;</button>
+                    <select id="picker-colorMode">
+                        <option value="color">Color</option>
+                        <option value="bw">B/W</option>
+                        <option value="grayscale">Grayscale</option>
+                    </select>
                     <button class="knob-help-btn" title="Help">?</button>
                 </div>
-                <select id="picker-colorMode">
-                    <option value="color">Color</option>
-                    <option value="bw">B/W</option>
-                    <option value="grayscale">Grayscale</option>
-                </select>
                 <span class="knob-help">Full color, black & white, or grayscale output</span>
 
                 <!-- Group: Print Surface -->
@@ -1334,16 +1333,16 @@
                 <div class="knob-row">
                     <span class="knob-label">Surface</span>
                     <button class="knob-revert" id="revert-substrateMode">&#x21BA;</button>
+                    <select id="picker-substrateMode">
+                        <option value="auto">Auto</option>
+                        <option value="white">White</option>
+                        <option value="dark">Dark</option>
+                        <option value="black">Black</option>
+                        <option value="none">None</option>
+                        <option value="transparent">Transparent</option>
+                    </select>
                     <button class="knob-help-btn" title="Help">?</button>
                 </div>
-                <select id="picker-substrateMode">
-                    <option value="auto">Auto</option>
-                    <option value="white">White</option>
-                    <option value="dark">Dark</option>
-                    <option value="black">Black</option>
-                    <option value="none">None</option>
-                    <option value="transparent">Transparent</option>
-                </select>
                 <span class="knob-help">What the ink prints on — affects background color handling</span>
 
                 <div class="knob-row">
@@ -1385,16 +1384,16 @@
                 <div class="knob-row">
                     <span class="knob-label">Halftone</span>
                     <button class="knob-revert" id="revert-ditherType">&#x21BA;</button>
+                    <select id="picker-ditherType">
+                        <option value="none">None</option>
+                        <option value="blue-noise">Blue Noise</option>
+                        <option value="floyd-steinberg">Floyd-Steinberg</option>
+                        <option value="bayer">Bayer</option>
+                        <option value="atkinson">Atkinson</option>
+                        <option value="stucki">Stucki</option>
+                    </select>
                     <button class="knob-help-btn" title="Help">?</button>
                 </div>
-                <select id="picker-ditherType">
-                    <option value="none">None</option>
-                    <option value="blue-noise">Blue Noise</option>
-                    <option value="floyd-steinberg">Floyd-Steinberg</option>
-                    <option value="bayer">Bayer</option>
-                    <option value="atkinson">Atkinson</option>
-                    <option value="stucki">Stucki</option>
-                </select>
                 <span class="knob-help">Scatter pattern to simulate gradients with solid inks</span>
 
                 <button id="btn-reset-archetype" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
@@ -1409,51 +1408,51 @@
                     <div class="knob-row">
                         <span class="knob-label">Starting Palette</span>
                         <button class="knob-revert" id="revert-splitMode">&#x21BA;</button>
+                        <select id="picker-splitMode">
+                            <option value="variance">Detail Priority</option>
+                            <option value="median">Color Priority</option>
+                        </select>
                         <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-splitMode">
-                        <option value="variance">Detail Priority</option>
-                        <option value="median">Color Priority</option>
-                    </select>
                     <span class="knob-help">Color Priority preserves more distinct hues — Detail Priority minimizes overall error</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Color Matching</span>
                         <button class="knob-revert" id="revert-distanceMetric">&#x21BA;</button>
+                        <select id="picker-distanceMetric">
+                            <option value="cie76">Standard (CIE76)</option>
+                            <option value="cie94">Perceptual (CIE94)</option>
+                            <option value="cie2000">Museum Grade (CIE2000)</option>
+                        </select>
                         <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-distanceMetric">
-                        <option value="cie76">Standard (CIE76)</option>
-                        <option value="cie94">Perceptual (CIE94)</option>
-                        <option value="cie2000">Museum Grade (CIE2000)</option>
-                    </select>
                     <span class="knob-help">How pixel-to-color distance is measured</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Color Selection</span>
                         <button class="knob-revert" id="revert-centroidStrategy">&#x21BA;</button>
+                        <select id="picker-centroidStrategy">
+                            <option value="SALIENCY">Eye-Catching (Saliency)</option>
+                            <option value="ROBUST_SALIENCY">Balanced (Robust Saliency)</option>
+                            <option value="VOLUMETRIC">Even Fill (Volumetric)</option>
+                            <option value="AVERAGE">Simple Average (Average)</option>
+                        </select>
                         <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-centroidStrategy">
-                        <option value="SALIENCY">Eye-Catching (Saliency)</option>
-                        <option value="ROBUST_SALIENCY">Balanced (Robust Saliency)</option>
-                        <option value="VOLUMETRIC">Even Fill (Volumetric)</option>
-                        <option value="AVERAGE">Simple Average (Average)</option>
-                    </select>
                     <span class="knob-help">How representative colors are chosen from each region</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Pre-Smoothing</span>
                         <button class="knob-revert" id="revert-preprocessingIntensity">&#x21BA;</button>
+                        <select id="picker-preprocessingIntensity">
+                            <option value="off">Off</option>
+                            <option value="auto">Auto</option>
+                            <option value="light">Light</option>
+                            <option value="medium">Medium</option>
+                            <option value="heavy">Heavy</option>
+                        </select>
                         <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-preprocessingIntensity">
-                        <option value="off">Off</option>
-                        <option value="auto">Auto</option>
-                        <option value="light">Light</option>
-                        <option value="medium">Medium</option>
-                        <option value="heavy">Heavy</option>
-                    </select>
                     <span class="knob-help">Noise reduction before separation — smooths photos</span>
 
                     <div class="knob-row">
@@ -1480,15 +1479,15 @@
                     <div class="knob-row">
                         <span class="knob-label">Curve</span>
                         <button class="knob-revert" id="revert-vibrancyMode">&#x21BA;</button>
+                        <select id="picker-vibrancyMode">
+                            <option value="linear">Linear</option>
+                            <option value="subtle">Subtle</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="aggressive">Aggressive</option>
+                            <option value="exponential">Exponential</option>
+                        </select>
                         <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <select id="picker-vibrancyMode">
-                        <option value="linear">Linear</option>
-                        <option value="subtle">Subtle</option>
-                        <option value="moderate">Moderate</option>
-                        <option value="aggressive">Aggressive</option>
-                        <option value="exponential">Exponential</option>
-                    </select>
                     <span class="knob-help">How the saturation boost ramps up</span>
 
                     <div class="knob-row">
