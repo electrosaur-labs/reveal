@@ -44,7 +44,6 @@
     "preserveWhite": true,
     "preserveBlack": true,
     "ignoreTransparent": true,
-    "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 10,
     "neutralCentroidClampThreshold": 5,
     "preprocessingIntensity": "none",

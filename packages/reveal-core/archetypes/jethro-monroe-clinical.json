@@ -53,7 +53,6 @@
     "hueLockAngle": 2,
     "colorMode": "color",
     "ignoreTransparent": true,
-    "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 0,
     "densityFloor": 0,
     "preprocessingIntensity": "off",

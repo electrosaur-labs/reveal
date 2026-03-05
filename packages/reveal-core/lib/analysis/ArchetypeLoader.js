@@ -240,7 +240,6 @@ class ArchetypeLoader {
                 preserveWhite: true,
                 preserveBlack: true,
                 ignoreTransparent: true,
-                maskProfile: 'Gray Gamma 2.2',
                 neutralCentroidClampThreshold: 0.5,
                 preprocessingIntensity: 'auto'
             }

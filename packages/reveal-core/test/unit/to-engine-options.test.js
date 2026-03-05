@@ -31,7 +31,6 @@ describe('ParameterGenerator.toEngineOptions', () => {
         preserveWhite: true,
         preserveBlack: true,
         ignoreTransparent: true,
-        maskProfile: 'Gray Gamma 2.2',
         shadowClamp: 0,
         chromaGate: 1.0,
         detailRescue: 0,

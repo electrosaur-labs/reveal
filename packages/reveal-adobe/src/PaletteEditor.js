@@ -862,8 +862,7 @@ function showPaletteEditor(selectedPalette) {
                         const layerData = orderedLayers[i];
 
                         const layerDataWithProfile = {
-                            ...layerData,
-                            maskProfile: pluginState.posterizationData.params.maskProfile
+                            ...layerData
                         };
 
                         const createdLayer = is16bit

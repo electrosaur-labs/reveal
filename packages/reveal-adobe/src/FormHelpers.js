@@ -109,7 +109,6 @@ function getFormValues() {
         preserveBlack: document.getElementById("preserveBlack")?.checked ?? false,
         ignoreTransparent: document.getElementById("ignoreTransparent")?.checked ?? true,
         enableHueGapAnalysis: document.getElementById("enableHueGapAnalysis")?.checked ?? true,
-        maskProfile: document.getElementById("maskProfile")?.value ?? "Gray Gamma 2.2",
         engineType: document.getElementById("engineType")?.value ?? "reveal-mk1.5",
         centroidStrategy: document.getElementById("centroidStrategy")?.value ?? "SALIENCY",
         colorMode: document.getElementById("colorMode")?.value ?? "color",

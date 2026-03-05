@@ -24,7 +24,6 @@
     "preserveBlack": true,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
-    "ditherType": "BlueNoise",
-    "maskProfile": "Gray Gamma 2.2"
+    "ditherType": "BlueNoise"
   }
 }

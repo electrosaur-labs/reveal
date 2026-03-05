@@ -24,7 +24,6 @@
     "preserveBlack": false,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": false,
-    "ditherType": "none",
-    "maskProfile": "Gray Gamma 2.2"
+    "ditherType": "none"
   }
 }

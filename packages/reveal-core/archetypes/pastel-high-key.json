@@ -44,7 +44,6 @@
     "preserveBlack": false,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
-    "maskProfile": "Gray Gamma 2.2",
     "neutralSovereigntyThreshold": 5,
     "neutralCentroidClampThreshold": 1,
     "preprocessingIntensity": "light",

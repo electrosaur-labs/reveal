@@ -73,8 +73,7 @@ async function processImage() {
             ditherType: config.ditherType,
             blackBias: config.blackBias,
             saturationBoost: config.saturationBoost,
-            rangeClamp: config.rangeClamp,
-            maskProfile: 'Gray Gamma 2.2'
+            rangeClamp: config.rangeClamp
         }
     );
 
@@ -136,8 +135,7 @@ async function processImage() {
             preserveWhite: true,
             preserveBlack: true,
             ignoreTransparent: true,
-            enableHueGapAnalysis: true,
-            maskProfile: 'Gray Gamma 2.2'
+            enableHueGapAnalysis: true
         },
         palette: result.palette,
         metrics: result.metrics,

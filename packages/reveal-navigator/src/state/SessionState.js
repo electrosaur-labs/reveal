@@ -41,16 +41,10 @@ const PRODUCTION_KNOB_DEFAULTS = KNOB_DEFAULTS.PRODUCTION;
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
 const STRUCTURAL_PARAMS = new Set(CONFIG_CATEGORIES.STRUCTURAL);
 
-// Parameters with UI controls that don't yet affect any engine.
-// Keep in ALL_KNOBS for config sync and dirty detection, but NOT in
-// STRUCTURAL_PARAMS — changing them should not trigger re-posterize.
-const UNIMPLEMENTED_KNOBS = new Set(CONFIG_CATEGORIES.UNIMPLEMENTED);
-
 // Union of all user-facing knobs (for snapshot/restore/reset/dirty loops).
-// Includes mechanical, production, structural, and unimplemented params.
+// Includes mechanical, production, and structural params.
 const ALL_KNOBS = new Set([
-    ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS,
-    ...UNIMPLEMENTED_KNOBS
+    ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS
 ]);
 
 // Pseudo-archetypes (Chameleon, Distilled, Salamander) are ΔE-scored at startup.

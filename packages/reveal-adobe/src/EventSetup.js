@@ -443,7 +443,6 @@ function attachAllEventListeners(dialog, handlePosterization) {
                 preserveBlack: false,
                 ignoreTransparent: true,
                 enableHueGapAnalysis: true,
-                maskProfile: 'Gray Gamma 2.2'
             };
 
             // Reset all form controls (use targetColorsSlider instead of targetColors)
@@ -551,7 +550,6 @@ function attachAllEventListeners(dialog, handlePosterization) {
                     preserveBlack: false,
                     ignoreTransparent: true,
                     enableHueGapAnalysis: true,
-                    maskProfile: 'Gray Gamma 2.2',
                     // Production Quality Controls (defaults off)
                     minVolume: 0,
                     speckleRescue: 0,
@@ -628,7 +626,6 @@ function attachAllEventListeners(dialog, handlePosterization) {
                         preserveWhite: params.preserveWhite,
                         preserveBlack: params.preserveBlack,
                         ignoreTransparent: params.ignoreTransparent,
-                        maskProfile: params.maskProfile,
                         // Production Quality Controls (Archetype Overrides)
                         minVolume: params.minVolume,
                         speckleRescue: params.speckleRescue,

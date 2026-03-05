@@ -77,8 +77,7 @@ async function testSingleFile() {
             blackBias: config.blackBias,
             ignoreTransparent: true,
             enableHueGapAnalysis: true,
-            ditherType: config.ditherType,
-            maskProfile: 'Gray Gamma 2.2'
+            ditherType: config.ditherType
         }
     );
 

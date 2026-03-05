@@ -36,7 +36,7 @@ const PREP_ALIASES = { 'none': 'off' };
 
 const CATEGORICAL_PARAMS = [
     'ditherType', 'distanceMetric', 'centroidStrategy',
-    'substrateMode', 'colorMode', 'maskProfile',
+    'substrateMode', 'colorMode',
     'preserveWhite', 'preserveBlack', 'ignoreTransparent',
     'enablePaletteReduction', 'enableHueGapAnalysis', 'medianPass'
 ];

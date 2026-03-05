@@ -97,6 +97,8 @@ const PROXY_ENGINE_READS = new Set([
     'distanceMetric',
     'bitDepth',
     'substrateMode',
+    'detailRescue',         // BilateralFilter reads during preprocessing
+    'medianPass',           // MedianFilter reads during preprocessing
 ]);
 
 // ─── Known Unimplemented Parameters ──────────────────────────────────
@@ -104,9 +106,6 @@ const PROXY_ENGINE_READS = new Set([
 // but NO engine currently reads them. They have UI controls that do nothing.
 // When you implement one, move it to the appropriate ENGINE_READS set above.
 const KNOWN_UNIMPLEMENTED = new Set([
-    'detailRescue',                 // UI slider, no engine reads it
-    'medianPass',                   // UI checkbox, no engine reads it
-    'maskProfile',                  // UI dropdown, ProductionWorker doesn't use it yet
     'neutralCentroidClampThreshold', // UI slider, no engine reads it
     // meshSize — now correctly mapped to meshCount in toEngineOptions()
 ]);

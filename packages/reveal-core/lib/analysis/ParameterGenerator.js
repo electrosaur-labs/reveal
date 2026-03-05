@@ -75,10 +75,9 @@ const BilateralFilter = require('../preprocessing/BilateralFilter');
  * @property {number} [meshSize] - Screen mesh TPI (set at session level, default 230)
  * @property {string} ditherType - Dither algorithm ('blue-noise'|'floyd-steinberg'|'atkinson'|'bayer'|'none')
  *
- * UNIMPLEMENTED — stored but no engine reads them:
- * @property {number} detailRescue - (unimplemented)
- * @property {boolean} medianPass - (unimplemented)
- * @property {string} maskProfile - (unimplemented)
+ * STRUCTURAL (preprocessing):
+ * @property {number} detailRescue - BilateralFilter entropy threshold reduction (0-20)
+ * @property {boolean} medianPass - Enable/disable median filter pass
  *
  * METADATA:
  * @property {string} id - Matched archetype ID
@@ -110,13 +109,12 @@ class ParameterGenerator {
             'neutralCentroidClampThreshold', 'neutralSovereigntyThreshold',
             'chromaGate', 'preprocessingIntensity',
             'refinementPasses', 'splitMode',
+            'detailRescue', 'medianPass',
         ],
         /** Post-separation knobs — mask/preview re-render only (fast path) */
         MECHANICAL: ['minVolume', 'speckleRescue', 'shadowClamp'],
         /** Affect production render only — meaningless at proxy resolution */
         PRODUCTION: ['trapSize', 'meshSize', 'ditherType'],
-        /** Stored but no engine reads them yet */
-        UNIMPLEMENTED: ['detailRescue', 'medianPass', 'maskProfile'],
     };
 
     /**
@@ -278,9 +276,6 @@ class ParameterGenerator {
             preserveWhite: params.preserveWhite !== undefined ? params.preserveWhite : true,
             preserveBlack: params.preserveBlack !== undefined ? params.preserveBlack : true,
             ignoreTransparent: params.ignoreTransparent !== undefined ? params.ignoreTransparent : true,
-
-            // Mask profile
-            maskProfile: params.maskProfile || 'Gray Gamma 2.2',
 
             // Engine selection (engineType already set above from archetype.engine)
             centroidStrategy: params.centroidStrategy || 'SALIENCY',
@@ -682,9 +677,6 @@ class ParameterGenerator {
             preserveWhite: config.preserveWhite,
             preserveBlack: config.preserveBlack,
             ignoreTransparent: config.ignoreTransparent,
-
-            // Mask
-            maskProfile: config.maskProfile,
 
             // Mechanical knobs (post-separation)
             shadowClamp: config.shadowClamp,
