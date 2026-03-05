@@ -426,12 +426,16 @@ function initPlugin() {
                 while (helpEl && !helpEl.classList.contains('knob-help')) {
                     helpEl = helpEl.nextElementSibling;
                 }
-                if (helpEl) helpEl.classList.toggle('visible');
+                if (helpEl) {
+                    helpEl.classList.toggle('visible');
+                    btn.classList.toggle('active', helpEl.classList.contains('visible'));
+                }
             });
         });
         document.addEventListener('click', (e) => {
             if (!e.target.classList.contains('knob-help-btn')) {
                 document.querySelectorAll('.knob-help.visible').forEach(el => el.classList.remove('visible'));
+                document.querySelectorAll('.knob-help-btn.active').forEach(el => el.classList.remove('active'));
             }
         });
 
