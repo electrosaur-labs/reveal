@@ -159,7 +159,6 @@ function generateConfigurationDistilled(dna) {
 
         // Vibrancy
         vibrancyBoost: 1.4,
-        vibrancyThreshold: 10,
 
         // Highlights / shadows
         highlightThreshold: 90,

@@ -104,7 +104,6 @@ const PROXY_ENGINE_READS = new Set([
 // but NO engine currently reads them. They have UI controls that do nothing.
 // When you implement one, move it to the appropriate ENGINE_READS set above.
 const KNOWN_UNIMPLEMENTED = new Set([
-    'vibrancyThreshold',            // UI slider, no engine reads it
     'detailRescue',                 // UI slider, no engine reads it
     'medianPass',                   // UI checkbox, no engine reads it
     'maskProfile',                  // UI dropdown, ProductionWorker doesn't use it yet

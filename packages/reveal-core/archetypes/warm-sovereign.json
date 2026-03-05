@@ -37,7 +37,6 @@
     "centroidStrategy": "VOLUMETRIC",
     "vibrancyMode": "subtle",
     "vibrancyBoost": 1.0,
-    "vibrancyThreshold": 12,
     "highlightThreshold": 96,
     "highlightBoost": 1.5,
     "enablePaletteReduction": false,

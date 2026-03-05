@@ -33,7 +33,6 @@
     "substrateTolerance": 1.5,
     "vibrancyMode": "exponential",
     "vibrancyBoost": 1.4,
-    "vibrancyThreshold": 10,
     "highlightThreshold": 80,
     "highlightBoost": 3,
     "enablePaletteReduction": true,

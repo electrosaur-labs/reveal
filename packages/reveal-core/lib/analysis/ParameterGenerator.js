@@ -76,7 +76,6 @@ const BilateralFilter = require('../preprocessing/BilateralFilter');
  * @property {string} ditherType - Dither algorithm ('blue-noise'|'floyd-steinberg'|'atkinson'|'bayer'|'none')
  *
  * UNIMPLEMENTED — stored but no engine reads them:
- * @property {number} vibrancyThreshold - (unimplemented)
  * @property {number} detailRescue - (unimplemented)
  * @property {boolean} medianPass - (unimplemented)
  * @property {string} maskProfile - (unimplemented)
@@ -117,7 +116,7 @@ class ParameterGenerator {
         /** Affect production render only — meaningless at proxy resolution */
         PRODUCTION: ['trapSize', 'meshSize', 'ditherType'],
         /** Stored but no engine reads them yet */
-        UNIMPLEMENTED: ['vibrancyThreshold', 'detailRescue', 'medianPass', 'maskProfile'],
+        UNIMPLEMENTED: ['detailRescue', 'medianPass', 'maskProfile'],
     };
 
     /**
@@ -252,7 +251,6 @@ class ParameterGenerator {
             // Vibrancy
             vibrancyMode: params.vibrancyMode || 'moderate',
             vibrancyBoost: params.vibrancyBoost || 1.4,
-            vibrancyThreshold: params.vibrancyThreshold || 10,
 
             // Highlights
             highlightThreshold: params.highlightThreshold || 90,
@@ -493,7 +491,7 @@ class ParameterGenerator {
             },
             magenta: {
                 name: 'Punch Recovery',
-                overrides: { paletteReduction: 6.0, vibrancyThreshold: 2 },
+                overrides: { paletteReduction: 6.0 },
                 purpose: 'Maintains micro-detail in magentas without wasting screens'
             },
             pink: {
@@ -655,7 +653,6 @@ class ParameterGenerator {
             // Vibrancy — use canonical name directly, NOT saturationBoost
             vibrancyMode: config.vibrancyMode,
             vibrancyBoost: config.vibrancyBoost,
-            vibrancyThreshold: config.vibrancyThreshold,
 
             // Highlights
             highlightThreshold: config.highlightThreshold,

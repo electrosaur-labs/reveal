@@ -18,7 +18,6 @@ describe('ParameterGenerator.toEngineOptions', () => {
         vibrancyMode: 'moderate',
         vibrancyBoost: 1.4,
         saturationBoost: 1.4,  // Legacy alias — should NOT appear in output
-        vibrancyThreshold: 10,
         highlightThreshold: 90,
         highlightBoost: 1.5,
         enablePaletteReduction: true,

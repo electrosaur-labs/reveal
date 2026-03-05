@@ -40,7 +40,6 @@
     "blackBias": 6,
     "vibrancyMode": "subtle",
     "vibrancyBoost": 1.2,
-    "vibrancyThreshold": 15,
     "highlightThreshold": 96,
     "highlightBoost": 1.5,
     "enablePaletteReduction": true,

@@ -185,7 +185,6 @@ async function handleAnalyzeImage() {
 
             vibrancyMode: config.vibrancyMode,
             vibrancyBoost: config.vibrancyBoost,
-            vibrancyThreshold: config.vibrancyThreshold,
 
             highlightThreshold: config.highlightThreshold,
             highlightBoost: config.highlightBoost,

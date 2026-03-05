@@ -17,7 +17,7 @@
 
 const CONTINUOUS_PARAMS = [
     'lWeight', 'cWeight', 'bWeight', 'blackBias',
-    'vibrancyBoost', 'vibrancyThreshold', 'saturationBoost',
+    'vibrancyBoost', 'saturationBoost',
     'highlightThreshold', 'highlightBoost',
     'paletteReduction', 'substrateTolerance', 'hueLockAngle', 'shadowPoint',
     'shadowClamp', 'minVolume', 'speckleRescue', 'detailRescue',

@@ -34,7 +34,6 @@
     "substrateTolerance": 4,
     "vibrancyMode": "subtle",
     "vibrancyBoost": 0.9,
-    "vibrancyThreshold": 20,
     "highlightThreshold": 92,
     "highlightBoost": 1.8,
     "enablePaletteReduction": true,

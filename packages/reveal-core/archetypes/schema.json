@@ -84,7 +84,7 @@
       "description": "Processing parameters applied upon match",
       "required": [
         "targetColorsSlider", "lWeight", "cWeight", "blackBias",
-        "vibrancyMode", "vibrancyBoost", "vibrancyThreshold",
+        "vibrancyMode", "vibrancyBoost",
         "enablePaletteReduction", "paletteReduction", "hueLockAngle",
         "enableHueGapAnalysis", "ditherType", "neutralSovereigntyThreshold"
       ],
@@ -95,7 +95,6 @@
         "blackBias": { "type": "number", "minimum": 0, "maximum": 10 },
         "vibrancyMode": { "type": "string", "enum": ["linear", "subtle", "moderate", "aggressive", "exponential"] },
         "vibrancyBoost": { "type": "number", "minimum": 0, "maximum": 3 },
-        "vibrancyThreshold": { "type": "number", "minimum": 0, "maximum": 100 },
         "paletteReduction": { "type": "number", "minimum": 0, "maximum": 20 },
         "hueLockAngle": { "type": "number", "minimum": 0, "maximum": 90 },
         "neutralSovereigntyThreshold": { "type": "number", "minimum": 0, "maximum": 100 },

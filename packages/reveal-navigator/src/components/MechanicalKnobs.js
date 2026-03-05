@@ -28,7 +28,6 @@ const KNOB_DEFS = [
 
     // Advanced: Chroma
     { key: 'vibrancyBoost',      sliderId: 'knob-vibrancyBoost',      valId: 'vibrancyBoost-val',      revertId: 'revert-vibrancyBoost',      decimals: 2, unit: '×' },
-    { key: 'vibrancyThreshold',  sliderId: 'knob-vibrancyThreshold',  valId: 'vibrancyThreshold-val',  revertId: 'revert-vibrancyThreshold',  decimals: 0, unit: ''  },
     { key: 'chromaGate',         sliderId: 'knob-chromaGate',         valId: 'chromaGate-val',         revertId: 'revert-chromaGate',         decimals: 1, unit: '×' },
 
     // Advanced: Palette

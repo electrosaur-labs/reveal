@@ -31,7 +31,6 @@
     "blackBias": 1,
     "vibrancyMode": "linear",
     "vibrancyBoost": 1,
-    "vibrancyThreshold": 0,
     "highlightThreshold": 98,
     "highlightBoost": 1,
     "enablePaletteReduction": true,
