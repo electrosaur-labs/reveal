@@ -4,9 +4,11 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Reveal reduces full-color images to 3–9 distinct spot colors using perceptually-accurate Lab color space quantization. It's built for screen printers who need separated ink layers from photographs and artwork — not CMYK process color, but actual spot color separations ready for film output.
+Screen printing doesn't reproduce photographs — it *interprets* them. Reveal is built on the philosophy that **reduction is revelation**: stripping an image down to 5-8 spot colors forces you to find what matters in the image. The colors that survive are the ones that carry the meaning.
 
-The core engine is **100% pure JavaScript with zero external dependencies**, so it runs everywhere: Node.js, browsers, Photoshop UXP plugins, and AI agents.
+Reveal analyzes your image, selects a separation strategy from 26 built-in archetypes, and generates spot color layers ready for film output. It's not simulated process — there's no attempt at photorealism. Instead, it finds a palette that captures the essence of the image and commits to it.
+
+The Photoshop plugin gives you real-time preview, palette editing, and one-click export to separated Lab layers with masks. The core engine is **100% pure JavaScript with zero external dependencies**, so it also runs in Node.js, browsers, and batch pipelines.
 
 <table>
   <tr>
