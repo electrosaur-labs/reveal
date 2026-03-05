@@ -98,24 +98,6 @@
             max-width: 120px;
         }
 
-        #btn-sync {
-            background: none;
-            border: 1px solid #555;
-            color: #aaa;
-            width: 24px;
-            height: 24px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 14px;
-            line-height: 22px;
-            text-align: center;
-            flex-shrink: 0;
-        }
-
-        #btn-sync:hover { background: #505050; color: #ddd; }
-        #btn-sync:active { background: #404040; }
-        #btn-sync:disabled { opacity: 0.3; cursor: default; }
-
         /* ─── Preview (maximized) ─── */
         #preview-container {
             flex: 1 1 0;
@@ -213,7 +195,8 @@
 
         /* ─── Mechanical Knobs Panel ─── */
         #knobs-panel {
-            flex-shrink: 0;
+            flex: 1 1 0;
+            min-height: 0;
             display: flex;
             flex-direction: column;
             padding: 5px 4px;
@@ -373,24 +356,48 @@
             accent-color: #4da6ff;
         }
 
-        #btn-reset-archetype {
+        #btn-reread {
             width: 100%;
-            margin-top: 4px;
-            padding: 4px 8px;
-            background: #383838;
-            border: 1px solid #555;
-            color: #ccc;
+            margin-top: 12px;
+            margin-bottom: 4px;
+            padding: 6px 8px;
+            background: #1a2a3a;
+            border: 1px solid #3070a0;
+            color: #60b0ff;
             border-radius: 3px;
             font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        #btn-reread:hover:not(:disabled) {
+            background: #203848;
+            border-color: #4090c0;
+        }
+        #btn-reread:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+
+        #btn-reset-top {
+            width: 100%;
+            margin-top: 4px;
+            margin-bottom: 8px;
+            padding: 6px 8px;
+            background: #3a3020;
+            border: 1px solid #7a6530;
+            color: #e0a030;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
             cursor: pointer;
         }
 
-        #btn-reset-archetype:hover:not(:disabled) {
-            background: #4a4a4a;
-            border-color: #777;
+        #btn-reset-top:hover:not(:disabled) {
+            background: #4a3a28;
+            border-color: #a08040;
         }
 
-        #btn-reset-archetype:disabled {
+        #btn-reset-top:disabled {
             opacity: 0.3;
             cursor: default;
         }
@@ -703,6 +710,9 @@
         }
 
         .surgeon-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             font-size: 10px;
             color: #888;
             margin-bottom: 4px;
@@ -962,12 +972,19 @@
             flex: 0 0 320px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
             padding: 8px;
             border-left: 1px solid #444;
             background: #2a2a2a;
             min-height: 0;
+            overflow: hidden;
+        }
+        #knobs-header {
+            flex: 0 0 auto;
+        }
+        #knobs-scroll {
+            flex: 1 1 0;
             overflow-y: auto;
+            min-height: 0;
         }
 
         #radar-container {
@@ -1140,7 +1157,8 @@
                     <option value="4">1:4</option>
                     <option value="8">1:8</option>
                 </select>
-                <button id="btn-sync" title="Re-sync from canvas" style="display:none;">&#x21bb;</button>
+                <button class="knob-help-btn" id="loupe-help-btn" title="Help" style="display:none;">?</button>
+                <span class="knob-help" id="loupe-help-text">Pixel-level magnifier. Hover over the preview to see a 1:1 crop of the posterized output. Shows the exact Lab coordinates and per-pixel ΔE so you can verify separation accuracy at print resolution. Change zoom level to see wider context.</span>
             </div>
 
             <!-- Preview (maximized) -->
@@ -1222,15 +1240,25 @@
         <div id="hud-panel" style="display:none;">
             <!-- Mechanical Knobs -->
             <div id="knobs-panel" style="display:none;">
-                <div class="knob-row" style="margin-bottom:4px;">
-                    <span style="color:#e0e0e0; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">Controls</span>
-                    <button id="btn-help-toggle" title="Toggle help descriptions">?</button>
+                <div id="knobs-header">
+                    <button id="btn-reread" title="Reread the document from Photoshop">Reread Document</button>
+                    <button id="btn-reset-top" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
+
+                    <div class="knob-row" style="margin-bottom:4px;">
+                        <span style="color:#e0e0e0; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">Controls</span>
+                        <button id="btn-help-toggle" title="Toggle help descriptions">?</button>
+                    </div>
+
+                    <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+                        <div id="radar-container">
+                            <img id="radar-img" width="300" height="300" />
+                        </div>
+                        <button class="knob-help-btn" id="radar-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help" id="radar-help-text">Parameter radar — each axis shows a tuning parameter. The green polygon is your current settings, blue dots show the archetype DNA baseline. Drag any vertex to adjust that parameter in real time. The preview updates as you drag.</span>
                 </div>
 
-                <div id="radar-container">
-                    <img id="radar-img" width="300" height="300" />
-                </div>
-
+                <div id="knobs-scroll">
                 <div class="knob-row">
                     <span class="knob-label">Screens</span>
                     <button class="knob-revert" id="revert-targetColors" title="Revert to archetype default">&#x21BA;</button>
@@ -1397,8 +1425,6 @@
                     <button class="knob-help-btn" title="Help">?</button>
                 </div>
                 <span class="knob-help">Dithering pattern to simulate gradients with solid inks. None = hard edges. Blue Noise = organic, film-like grain. Floyd-Steinberg = classic error diffusion. Bayer = ordered grid pattern.</span>
-
-                <button id="btn-reset-archetype" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
 
                 <!-- ─── Advanced (Engine Room) ─── -->
                 <details id="advanced-panel">
@@ -1621,6 +1647,7 @@
                     <span class="knob-help">Counterbalances smoothing by restoring fine detail that the median filter might erase. Higher values = more detail preserved at the cost of noisier boundaries.</span>
 
                 </details>
+                </div><!-- /knobs-scroll -->
             </div>
 
             <!-- radar moved above Advanced panel -->
