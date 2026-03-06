@@ -129,6 +129,7 @@ class ArchetypeCarousel {
      * Sort cards in the DOM by the active sort axis.
      */
     _sortCards() {
+        // Only sort non-pinned cards in the main carousel
         const cards = Array.from(this._container.querySelectorAll('.carousel-card'));
         if (cards.length === 0) return;
 
@@ -150,19 +151,17 @@ class ArchetypeCarousel {
             if (aUnscored && !bUnscored) return 1;
             if (!aUnscored && bUnscored) return -1;
             if (aUnscored && bUnscored) {
-                // Both unscored — keep original DNA order via dnaScore descending
                 const aDna = parseFloat(a.dataset.dnaScore) || 0;
                 const bDna = parseFloat(b.dataset.dnaScore) || 0;
                 return bDna - aDna;
             }
 
-            // Pinned cards always sort to top; among themselves sort by
-            // sortScore (best quality first) once ΔE scores are available
+            // Pinned cards always sort to top
             if (aPinned && bPinned) {
                 const aSort = parseFloat(a.dataset.sortScore);
                 const bSort = parseFloat(b.dataset.sortScore);
                 if (!isNaN(aSort) && !isNaN(bSort)) return aSort - bSort;
-                return aPin - bPin; // fallback to static order before scoring
+                return aPin - bPin;
             }
             if (aPinned) return -1;
             if (bPinned) return 1;
@@ -202,20 +201,10 @@ class ArchetypeCarousel {
                 const sortVal = parseFloat(cards[i].dataset.sortScore);
                 if (!isNaN(sortVal) && sortVal < 900 && recommendedCount < 3) {
                     cards[i].classList.add('recommended');
-                    const badge = document.createElement('div');
-                    badge.className = 'recommended-badge';
-                    badge.textContent = '\u2605 Top Pick';
-                    cards[i].insertBefore(badge, cards[i].firstChild);
                     recommendedCount++;
                 }
             }
 
-            const debugDiv = cards[i].querySelector('.card-debug-de');
-            if (debugDiv) {
-                const parts = debugDiv.textContent.match(/^\d+\s(.+)$/);
-                const rest = parts ? parts[1] : debugDiv.textContent;
-                debugDiv.textContent = `${String(i + 1).padStart(2, '0')} ${rest}`;
-            }
         }
 
         this._scrollToActive();
@@ -362,7 +351,11 @@ class ArchetypeCarousel {
         this._cards = scores;
         this._eagerSet = eagerSet || null;
 
+        const SYNTHETIC_IDS = new Set(['dynamic_interpolator', 'distilled', 'salamander']);
+
         this._container.innerHTML = '';
+        this._expanded = false;
+        this._pendingCards = [];
 
         for (let i = 0; i < scores.length; i++) {
             const match = scores[i];
@@ -370,32 +363,69 @@ class ArchetypeCarousel {
             const archetype = archetypeMap.get(match.id) || match._synthetic;
             if (!archetype) continue;
 
+            const isSynth = SYNTHETIC_IDS.has(match.id);
             const isTier1 = !eagerSet || eagerSet.has(match.id);
             const card = this._createCard(match, archetype, i);
             card.dataset.tier = isTier1 ? '1' : '2';
 
-            // Tier-2 cards start grayed out — scored on-demand when clicked
             if (!isTier1) {
                 card.classList.add('unscored');
             }
 
-            this._container.appendChild(card);
+            if (isSynth) {
+                card.classList.add('synthetic');
+                this._container.appendChild(card);
+            } else {
+                // Stash non-synthetic cards; revealed on "More" click
+                this._pendingCards.push(card);
+            }
         }
 
-        // Show filter and sort chips now that cards exist
-        if (this._filtersContainer) {
-            this._filtersContainer.setAttribute('style', 'display: flex;');
+        // Add "More" button after synthetic cards
+        this._moreBtn = document.createElement('div');
+        this._moreBtn.className = 'carousel-card carousel-more';
+        this._moreBtn.innerHTML = `<div class="card-name">More\u2026</div>`;
+        this._moreBtn.addEventListener('pointerup', () => this._expandCarousel());
+        this._container.appendChild(this._moreBtn);
+
+        // Hide filter+sort until expanded (only synthetics visible initially)
+        const filterRow = document.getElementById('carousel-filter-row');
+        if (filterRow) filterRow.setAttribute('style', 'display: none;');
+
+        // Scroll active card into view
+        this._scrollToActive();
+    }
+
+    /**
+     * Expand the carousel: replace "More" with all remaining archetype cards.
+     */
+    _expandCarousel() {
+        if (this._expanded) return;
+        this._expanded = true;
+
+        // Remove "More" button
+        if (this._moreBtn && this._moreBtn.parentNode) {
+            this._moreBtn.remove();
         }
+
+        // Append all stashed cards
+        for (const card of this._pendingCards) {
+            this._container.appendChild(card);
+        }
+        this._pendingCards = [];
+
+        // Show filter+sort row
+        const filterRow = document.getElementById('carousel-filter-row');
+        if (filterRow) filterRow.setAttribute('style', 'display: flex;');
         if (this._sortContainer) {
             this._sortContainer.setAttribute('style', 'display: flex;');
         }
 
-        // Apply current filter
+        // Apply current filter and sort
         if (this._activeFilter !== 'all') {
             this._setFilter(this._activeFilter);
         }
-
-        // Scroll active card into view
+        this._sortCards();
         this._scrollToActive();
     }
 
@@ -412,47 +442,35 @@ class ArchetypeCarousel {
         card.dataset.id = match.id;
         card.dataset.group = isSynthetic ? 'specialist' : (archetype.group || 'all');
 
-        // Score bar — edge survival drives bar when available, then ΔE, then DNA score
+        // Score bar — inverted sortScore (bigger = better, 0-100) when available, else DNA
+        const hasSort = match.sortScore != null;
         const hasEdge = match.edgeSurvival != null;
         const hasDE = match.meanDeltaE != null;
         const hasScore = match.score != null;
-        const scorePercent = hasEdge
-            ? Math.min(100, Math.max(0, match.edgeSurvival * 100))   // Edge survival is 0-1
-            : hasDE
-            ? Math.min(100, Math.max(0, 100 - match.meanDeltaE * 4))  // Lower ΔE = fuller bar
+        const scorePercent = hasSort
+            ? Math.min(100, Math.max(0, 100 - match.sortScore / 9))
             : hasScore ? Math.min(100, Math.max(0, match.score)) : 0;
-
-        // Store hue indicator HTML for reverting when card becomes inactive
-        const hueIndicator = this._buildHueIndicator(archetype);
-        card.dataset.hueHtml = hueIndicator;
-
-        // Trait badges
-        const traits = this._deriveTraits(archetype);
-        const traitsHtml = traits.length > 0
-            ? `<div class="card-traits">${traits.map(t => `<span class="trait-badge">${t}</span>`).join('')}</div>`
-            : '';
 
         const deStr = hasDE ? match.meanDeltaE.toFixed(1) : '-';
         const edgeStr = hasEdge ? (match.edgeSurvival * 100).toFixed(0) + '%' : '-';
         const colorsStr = match.targetColors ? `${match.targetColors}c` : '';
-        const deDisplay = hasDE && colorsStr ? `${deStr} (${colorsStr})` : deStr;
-        const dnaStr = match.score != null ? match.score.toFixed(0) : '-';
-        const debugBg = hasEdge ? '#ff0' : hasDE ? '#ff0' : '#888';
+        const dnaStr = match.score != null ? match.score.toFixed(0) + '%' : '';
         if (match.sortScore != null) card.dataset.sortScore = match.sortScore.toFixed(2);
         if (match.meanDeltaE != null) card.dataset.deltaE = match.meanDeltaE.toFixed(2);
         if (match.score != null) card.dataset.dnaScore = match.score.toFixed(2);
         if (match.targetColors != null) card.dataset.screenCount = match.targetColors;
-        const debugTitle = `${archetype.name} \u00b7 \u0394E ${deStr} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?c'} \u00b7 DNA ${dnaStr}`;
+        const hueIndicator = this._buildHueIndicator(archetype);
+        card.dataset.hueHtml = hueIndicator;
+
+        const sortStr = match.sortScore != null ? Math.round(Math.min(100, Math.max(0, 100 - match.sortScore / 9))) : '';
+        card.title = `\u0394E ${deStr} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?'} screens \u00b7 DNA ${dnaStr}`;
         card.innerHTML =
-            `<div class="card-debug-de" title="${debugTitle}" style="background:${debugBg};color:#000;font-size:14px;font-weight:bold;text-align:center;">${String(sortIndex + 1).padStart(2, '0')} \u0394E=${deStr} ${colorsStr} E=${edgeStr} DNA=${dnaStr}</div>` +
             `<div class="card-name">${archetype.name}</div>` +
-            traitsHtml +
             `<div class="card-score-row">` +
                 `<div class="card-score-bar"><div class="card-score-fill" style="width:${scorePercent}%"></div></div>` +
-                `<span class="card-score-val">${deDisplay}</span>` +
+                `<span class="card-sort-label">${sortStr}</span>` +
             `</div>` +
-            `<div class="card-hue">${hueIndicator}</div>` +
-            (!isActive && !hasDE ? `<div class="card-explore-hint">Click to explore</div>` : '');
+            `<div class="card-hue">${hueIndicator}</div>`;
 
         // Store description for tooltip
         const description = archetype.description || '';
@@ -488,7 +506,10 @@ class ArchetypeCarousel {
     _buildHueIndicator(archetype) {
         const sectors = archetype.preferred_sectors || [];
         if (sectors.length === 0) {
-            return '<span class="card-swatch" style="background:#666"></span>';
+            // Synthetic/universal — rainbow strip
+            return [0, 30, 60, 120, 210, 300].map(h =>
+                `<span class="card-swatch" style="background:hsl(${h},60%,50%)"></span>`
+            ).join('');
         }
         return sectors.slice(0, 5).map(sector => {
             const hue = SECTOR_HUES[sector] !== undefined ? SECTOR_HUES[sector] : 0;
@@ -518,7 +539,10 @@ class ArchetypeCarousel {
      * Skips the active card — its ΔE is synced to the live value by previewUpdated.
      */
     _updateCardDeltaE(id, meanDeltaE, targetColors, sortScore, edgeSurvival) {
-        const card = this._container.querySelector(`.carousel-card[data-id="${id}"]`);
+        let card = this._container.querySelector(`.carousel-card[data-id="${id}"]`);
+        if (!card && this._pendingCards) {
+            card = this._pendingCards.find(c => c.dataset.id === id);
+        }
         if (!card) return;
 
         // Card has been scored — remove grayed-out state
@@ -527,31 +551,21 @@ class ArchetypeCarousel {
         const de = meanDeltaE.toFixed(1);
         const edgeStr = edgeSurvival != null ? (edgeSurvival * 100).toFixed(0) + '%' : '-';
         const colorsStr = targetColors ? `${targetColors}c` : '';
-        const scoreVal = card.querySelector('.card-score-val');
-        if (scoreVal) scoreVal.textContent = colorsStr ? `${de} (${colorsStr})` : de;
         if (sortScore != null) card.dataset.sortScore = sortScore.toFixed(2);
         card.dataset.deltaE = meanDeltaE.toFixed(2);
         if (targetColors != null) card.dataset.screenCount = targetColors;
         const scoreFill = card.querySelector('.card-score-fill');
-        if (scoreFill) {
-            // Edge survival drives the bar when available
-            const pct = edgeSurvival != null
-                ? Math.min(100, Math.max(0, edgeSurvival * 100))
-                : Math.min(100, Math.max(0, 100 - meanDeltaE * 4));
-            scoreFill.style.width = pct + '%';
+        const inverted = sortScore != null ? Math.min(100, Math.max(0, 100 - sortScore / 9)) : null;
+        if (scoreFill && inverted != null) {
+            scoreFill.style.width = inverted + '%';
         }
-        const debugDiv = card.querySelector('.card-debug-de');
-        if (debugDiv) {
-            // Preserve sort index and DNA value, update ΔE + edge + screen count
-            const parts = debugDiv.textContent.match(/^(\d+)\s.*DNA=(.+)$/);
-            const idx = parts ? parts[1] : '??';
-            const dna = parts ? parts[2] : '-';
-            debugDiv.textContent = `${idx} \u0394E=${de} ${colorsStr} E=${edgeStr} DNA=${dna}`;
-            debugDiv.style.background = '#ff0';
-            // Update hover with archetype name + scores
-            const name = card.querySelector('.card-name')?.textContent || '?';
-            debugDiv.title = `${name} \u00b7 \u0394E ${de} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?c'} \u00b7 DNA ${dna}`;
+        // Update sort score label on the card (inverted: bigger = better)
+        const sortLabel = card.querySelector('.card-sort-label');
+        if (sortLabel && inverted != null) {
+            sortLabel.textContent = Math.round(inverted);
         }
+        // Update tooltip with full details
+        card.title = `\u0394E ${de} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?'} screens`;
     }
 
     /**
@@ -560,6 +574,10 @@ class ArchetypeCarousel {
      * posterization completes with correct palette data.
      */
     _updateActiveCard() {
+        // Auto-expand if active card is in pending list
+        if (!this._expanded && this._pendingCards && this._pendingCards.some(c => c.dataset.id === this._activeId)) {
+            this._expandCarousel();
+        }
         const cards = this._container.querySelectorAll('.carousel-card');
         cards.forEach(card => {
             card.classList.toggle('active', card.dataset.id === this._activeId);
@@ -580,18 +598,14 @@ class ArchetypeCarousel {
             const isActive = card.classList.contains('active');
 
             if (isActive) {
-                // Active card has been posterized — no longer unscored
                 card.classList.remove('unscored');
 
-                // Active card: show real palette swatches
                 const rgbPalette = this._getActiveRgbPalette();
                 if (!rgbPalette || rgbPalette.length === 0) return;
 
-                // Remove hue indicator and explore hint
+                // Remove hue indicator
                 const hueRow = card.querySelector('.card-hue');
                 if (hueRow) hueRow.remove();
-                const hint = card.querySelector('.card-explore-hint');
-                if (hint) hint.remove();
 
                 // Create or update swatch row
                 let swatchRow = card.querySelector('.card-swatches');
@@ -604,17 +618,13 @@ class ArchetypeCarousel {
                     `<span class="card-swatch" style="background:rgb(${c.r},${c.g},${c.b})"></span>`
                 ).join('');
 
-            } else {
-                // Non-active card: keep real swatches if already generated,
-                // otherwise restore hue indicator
-                if (!card.querySelector('.card-swatches')) {
-                    // No real swatches yet — ensure hue indicator is present
-                    if (!card.querySelector('.card-hue')) {
-                        const hueDiv = document.createElement('div');
-                        hueDiv.className = 'card-hue';
-                        hueDiv.innerHTML = card.dataset.hueHtml || '';
-                        card.appendChild(hueDiv);
-                    }
+            } else if (!card.querySelector('.card-swatches') && !card.classList.contains('synthetic')) {
+                // Non-active, non-synthetic: restore hue indicator if missing
+                if (!card.querySelector('.card-hue')) {
+                    const hueDiv = document.createElement('div');
+                    hueDiv.className = 'card-hue';
+                    hueDiv.innerHTML = card.dataset.hueHtml || '';
+                    card.appendChild(hueDiv);
                 }
             }
         });
@@ -651,6 +661,8 @@ class ArchetypeCarousel {
         this._activeSort = 'score';
         this._sortAscending = true;
         this._applySortChipState();
+        // If not expanded, auto-expand now that scoring is complete
+        if (!this._expanded) this._expandCarousel();
         this._sortCards();
     }
 

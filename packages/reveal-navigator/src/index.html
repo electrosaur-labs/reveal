@@ -80,22 +80,14 @@
         }
 
         #doc-name {
-            flex: 1;
             font-size: 12px;
             font-weight: 500;
             color: #ccc;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-        }
-
-        #doc-layer {
-            font-size: 10px;
-            color: #888;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 120px;
+            flex-shrink: 1;
+            min-width: 0;
         }
 
         /* ─── Preview (maximized) ─── */
@@ -120,77 +112,53 @@
         }
 
         #preview-placeholder {
-            color: #666;
-            font-size: 11px;
+            color: #aaa;
+            font-size: 48px;
+            font-weight: 700;
             text-align: center;
             padding: 20px;
-            line-height: 1.5;
+            line-height: 1.3;
         }
 
-        #archetype-badge {
-            position: absolute;
-            top: 6px;
-            left: 6px;
-            background: rgba(0,0,0,0.65);
+/* ─── Stats (inline in doc-header) ─── */
+        .stat-archetype-label {
+            color: #e0e0e0;
+            font-weight: 700;
+            font-size: 16px;
+            white-space: nowrap;
+        }
+
+        .stat-val {
             color: #ccc;
-            font-size: 10px;
-            padding: 2px 6px;
-            border-radius: 2px;
-            display: none;
+            font-size: 14px;
+            white-space: nowrap;
         }
 
-        /* ─── Preview Stats Panel ─── */
-        #preview-stats {
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-            padding: 5px 4px;
-            border: 1px solid #3a3a3a;
-            border-radius: 3px;
-            background: #2a2a2a;
-        }
-
-        .stat-row {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 11px;
-            color: #999;
-        }
-
-        .stat-row .stat-label {
-            color: #666;
-            font-size: 10px;
-            min-width: 0;
-        }
-
-        .stat-row .stat-val {
-            color: #ccc;
-        }
-
-        .stat-row .stat-highlight {
+        .stat-highlight {
             color: #8bb8e8;
-            font-weight: 500;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
         }
 
-        .stat-row .stat-score {
+        .stat-score {
             color: #e0c97f;
-            font-weight: 500;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
         }
 
-        .stat-row .stat-breakdown {
-            color: #888;
-            font-size: 10px;
-        }
-
-        .stat-row .stat-dim {
-            color: #777;
+        .stat-sort-score {
+            color: #7be07b;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
         }
 
         .stat-sep {
             color: #555;
-            margin: 0 1px;
+            margin: 0 3px;
+            font-size: 14px;
         }
 
         /* ─── Mechanical Knobs Panel ─── */
@@ -323,6 +291,21 @@
         .knob-help.visible {
             display: block;
         }
+        .hud-help-text {
+            display: none;
+            font-size: 12px;
+            color: #1a1a1a;
+            background: #fff3b0;
+            border: 1px solid #e0c860;
+            border-radius: 4px;
+            padding: 6px 8px;
+            margin: 4px 0 6px 0;
+            line-height: 1.5;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .hud-help-text.visible {
+            display: block;
+        }
 
         #advanced-panel summary {
             font-size: 10px;
@@ -402,12 +385,29 @@
             cursor: default;
         }
 
-/* ─── Carousel Filter Chips ─── */
-        #carousel-filters {
+/* ─── Carousel Filter + Sort Row ─── */
+        #carousel-filter-row {
             display: none;
             flex-shrink: 0;
-            gap: 4px;
+            align-items: center;
+            justify-content: space-between;
             padding: 2px 0;
+            gap: 4px;
+        }
+
+        #carousel-filters {
+            display: flex;
+            gap: 4px;
+            flex-wrap: nowrap;
+            overflow: hidden;
+            align-items: center;
+        }
+
+        .filter-label {
+            font-size: 9px;
+            color: #e0e0e0;
+            flex-shrink: 0;
+            margin-right: 4px;
         }
 
         .filter-chip {
@@ -438,13 +438,13 @@
         #carousel-sort {
             display: none;
             gap: 4px;
-            padding: 2px 0;
             align-items: center;
+            flex-shrink: 0;
         }
 
         .sort-label {
             font-size: 9px;
-            color: #777;
+            color: #e0e0e0;
             margin-right: 2px;
         }
 
@@ -517,6 +517,50 @@
         }
 
 /* ─── Archetype Carousel (horizontal scroll) ─── */
+        .carousel-card.synthetic {
+            background: #e8e0f0;
+            border-color: #b8a8d0;
+            width: auto;
+            min-width: 110px;
+        }
+
+        .carousel-card.synthetic .card-name,
+        .carousel-card.synthetic .card-sort-label {
+            color: #2a1f3d;
+            white-space: nowrap;
+            overflow: visible;
+        }
+
+        .carousel-card.synthetic:hover {
+            background: #ddd4ea;
+            border-color: #9580b8;
+        }
+
+        .carousel-card.synthetic.active {
+            background: #d8cee8;
+            border-color: #7b68b0;
+        }
+
+        .carousel-more {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 60px;
+            width: 60px;
+            background: #333;
+            border-style: dashed;
+        }
+
+        .carousel-more:hover {
+            background: #444;
+            border-color: #888;
+        }
+
+        .carousel-more .card-name {
+            color: #aaa;
+            text-align: center;
+        }
+
         #carousel {
             display: flex;
             gap: 4px;
@@ -526,16 +570,15 @@
             scrollbar-width: thin;
             scrollbar-color: #555 transparent;
             flex-shrink: 0;
-            max-height: 90px;
+            max-height: 70px;
         }
 
         .carousel-card {
             width: 110px;
-            min-height: 90px;
             background: #2a2a2a;
             border: 1px solid #444;
             border-radius: 4px;
-            padding: 6px;
+            padding: 4px 6px;
             cursor: pointer;
             transition: border-color 0.15s;
         }
@@ -612,14 +655,23 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
+        }
+        .card-sort-label {
+            color: #ccc;
+            font-weight: 600;
+            font-size: 10px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            min-width: 16px;
+            text-align: right;
         }
 
         .card-score-row {
             display: flex;
             align-items: center;
             gap: 4px;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
 
         .card-score-bar {
@@ -681,6 +733,16 @@
             background: #2a2a2a;
             height: 90px;
             overflow-y: auto;
+            position: relative;
+        }
+
+        #palette-surgeon .knob-help.visible {
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            bottom: 12px;
+            z-index: 100;
+            display: block;
         }
 
         #structural-confirm {
@@ -710,12 +772,20 @@
         }
 
         .surgeon-header {
+            display: none;
+        }
+
+        .surgeon-palette-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            font-size: 10px;
-            color: #888;
-            margin-bottom: 4px;
+            gap: 4px;
+        }
+
+        .surgeon-row-label {
+            font-size: 9px;
+            color: #e0e0e0;
+            flex-shrink: 0;
+            margin-right: 4px;
         }
 
         .surgeon-grid {
@@ -728,7 +798,7 @@
             display: flex;
             align-items: center;
             gap: 3px;
-            padding: 2px 4px;
+            padding: 0px 4px;
             border: 1px solid transparent;
             border-radius: 3px;
             cursor: pointer;
@@ -758,8 +828,8 @@
 
         .surgeon-color {
             display: inline-block;
-            width: 24px;
-            height: 24px;
+            width: 19px;
+            height: 19px;
             border-radius: 2px;
             border: 1px solid rgba(255,255,255,0.15);
             position: relative;
@@ -879,21 +949,27 @@
 
         /* ─── Suggested Colors Tray ─── */
         .surgeon-suggested-tray {
-            margin-top: 6px;
-            padding: 4px 0;
+            display: none;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+            padding-top: 4px;
             border-top: 1px solid rgba(255,255,255,0.1);
-        }
-        .surgeon-suggested-label {
-            font-size: 10px;
-            color: rgba(255,255,255,0.5);
-            margin-bottom: 4px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            flex-wrap: wrap;
         }
         .surgeon-suggested-row {
             display: flex;
-            gap: 4px;
+            gap: 6px;
             flex-wrap: wrap;
+        }
+        .surgeon-suggested-item {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .surgeon-suggested-pct {
+            font-size: 10px;
+            color: #999;
         }
         .surgeon-suggested-swatch {
             width: 24px;
@@ -1016,10 +1092,7 @@
 
         #status-text { }
         #accuracy-text { color: #999; }
-        #dna-fidelity-text { font-weight: 500; }
-        #dna-fidelity-text.fidelity-good { color: #6bc46b; }
-        #dna-fidelity-text.fidelity-warn { color: #e0c97f; }
-        #dna-fidelity-text.fidelity-bad { color: #e07f7f; }
+        #dna-fidelity-text { font-weight: 600; font-size: 14px; }
 
         #dominant-sector {
             font-size: 10px;
@@ -1146,10 +1219,18 @@
     <div id="root">
         <!-- Left Panel: Full workflow -->
         <div id="main-panel">
-            <!-- Document Header -->
+            <!-- Document Header + Stats -->
             <div id="doc-header">
-                <span id="doc-name">No document</span>
-                <span id="doc-layer"></span>
+                <span id="stat-archetype-name" class="stat-archetype-label" style="display:none;"></span>
+                <span class="stat-sep" id="stat-sep-colors" style="display:none;">&middot;</span>
+                <span class="stat-val" id="stat-colors" style="display:none;"></span>
+                <span class="stat-sep" id="stat-sep-delta" style="display:none;">&middot;</span>
+                <span class="stat-highlight" id="stat-delta" style="display:none;"></span>
+                <span class="stat-sep" id="stat-sep-fidelity" style="display:none;">&middot;</span>
+                <span id="dna-fidelity-text" style="display:none;"></span>
+                <span class="stat-sep" id="stat-sep-score" style="display:none;">&middot;</span>
+                <span class="stat-score" id="stat-score" style="display:none;"></span>
+                <span style="flex:1;"></span>
                 <select id="loupe-zoom" title="Loupe zoom level" style="display:none;">
                     <option value="0">Loupe</option>
                     <option value="1">1:1</option>
@@ -1165,7 +1246,6 @@
             <div id="preview-container">
                 <img id="preview-img" style="display:none;" />
                 <div id="preview-placeholder">Open a Lab document to begin navigation.</div>
-                <div id="archetype-badge"></div>
                 <!-- 1:1 Loupe overlay (hidden until activated) -->
                 <div id="loupe-container">
                     <img id="loupe-img" />
@@ -1174,22 +1254,6 @@
                 </div>
             </div>
 
-            <!-- Stats panel (single line) -->
-            <div id="preview-stats" style="display:none;">
-                <div class="stat-row" id="stat-row-poster">
-                    <span class="stat-val" id="stat-archetype-name"></span>
-                    <span class="stat-sep">&middot;</span>
-                    <span class="stat-val" id="stat-colors"></span>
-                    <span class="stat-sep">&middot;</span>
-                    <span class="stat-highlight" id="stat-delta"></span>
-                    <span class="stat-sep">&middot;</span>
-                    <span class="stat-score" id="stat-score"></span>
-                    <span class="stat-sep">&middot;</span>
-                    <span id="dna-fidelity-text"></span>
-                    <span class="stat-sep stat-time-sep" style="display:none">&middot;</span>
-                    <span class="stat-dim" id="stat-time" style="display:none"></span>
-                </div>
-            </div>
 
             <!-- Palette Surgeon (color isolation + merge) -->
             <div id="palette-surgeon"></div>
@@ -1207,22 +1271,29 @@
                 <div id="carousel-progress-text"></div>
             </div>
 
-            <!-- Carousel Group Filters + Sort Chips -->
-            <div id="carousel-filters">
-                <span class="filter-chip active" data-group="all">All</span>
-                <span class="filter-chip" data-group="natural">Natural</span>
-                <span class="filter-chip" data-group="soft">Soft</span>
-                <span class="filter-chip" data-group="graphic">Graphic</span>
-                <span class="filter-chip" data-group="dramatic">Dramatic</span>
-                <span class="filter-chip" data-group="vibrant">Vibrant</span>
-                <span class="filter-chip" data-group="specialist">Specialist</span>
-            </div>
-            <div id="carousel-sort" style="display:none;">
-                <span class="sort-label">Sort:</span>
-                <span class="sort-chip active" data-sort="score">Score <span class="sort-arrow">&#x25B2;</span></span>
-                <span class="sort-chip" data-sort="de">&#x0394;E <span class="sort-arrow"></span></span>
-                <span class="sort-chip" data-sort="dna">DNA <span class="sort-arrow"></span></span>
-                <span class="sort-chip" data-sort="screens">#Screens <span class="sort-arrow"></span></span>
+            <!-- Carousel Group Filters + Sort (single row) -->
+            <div id="carousel-filter-row">
+                <div id="carousel-filters">
+                    <span class="filter-label">Show</span>
+                    <span class="filter-chip active" data-group="all">All</span>
+                    <span class="filter-chip" data-group="natural">Natural</span>
+                    <span class="filter-chip" data-group="soft">Soft</span>
+                    <span class="filter-chip" data-group="graphic">Graphic</span>
+                    <span class="filter-chip" data-group="dramatic">Dramatic</span>
+                    <span class="filter-chip" data-group="vibrant">Vibrant</span>
+                    <span class="filter-chip" data-group="specialist">Specialist</span>
+                    <button class="knob-help-btn" id="filter-help-btn" title="Help">?</button>
+                </div>
+                <span class="knob-help" id="filter-help-text">Reveal analyzes your image's DNA — luminance, chroma, contrast, entropy — and matches it against 26 built-in archetypes. Each archetype is a separation strategy tuned for a different image character. Groups filter by style: Natural (faithful reproduction), Soft (muted tones), Graphic (bold contrast), Dramatic (deep shadows), Vibrant (saturated color), Specialist (algorithmic variants).</span>
+                <div id="carousel-sort" style="display:none;">
+                    <span class="sort-label">Sort</span>
+                    <span class="sort-chip active" data-sort="score">Score <span class="sort-arrow">&#x25B2;</span></span>
+                    <span class="sort-chip" data-sort="de">&#x0394;E <span class="sort-arrow"></span></span>
+                    <span class="sort-chip" data-sort="dna">DNA <span class="sort-arrow"></span></span>
+                    <span class="sort-chip" data-sort="screens">#Screens <span class="sort-arrow"></span></span>
+                    <button class="knob-help-btn" id="sort-help-btn" title="Help">?</button>
+                </div>
+                <span class="knob-help" id="sort-help-text">Score: composite quality ranking (lower = better match for your image). ΔE: average perceptual color error — how far each pixel drifts from the original. DNA: how well the archetype's parameters match your image's structural fingerprint. #Screens: number of ink colors the archetype produces.</span>
             </div>
 
             <!-- Archetype Carousel (horizontal scroll) -->
@@ -1252,9 +1323,11 @@
                     <div style="display: flex; align-items: flex-start; justify-content: space-between;">
                         <div id="radar-container">
                             <img id="radar-img" width="300" height="300" />
+                            <button class="knob-help-btn" id="hud-help-btn" title="What is the HUD?" style="position:absolute; top:2px; right:2px; margin:0; z-index:10; color:#aaa;">?</button>
                         </div>
                         <button class="knob-help-btn" id="radar-help-btn" title="Help">?</button>
                     </div>
+                    <span class="hud-help-text" id="hud-help-text">The HUD (Heads-Up Display) gives you full control over the separation. The radar shows tuning parameters as a polygon — drag vertices to adjust. Mechanical knobs control post-processing: ghost removal, speckle cleanup, shadow density, mesh size, and trapping. Advanced controls let you fine-tune the color science engine, preprocessing, and quantization strategy.</span>
                     <span class="knob-help" id="radar-help-text">Parameter radar — each axis shows a tuning parameter. The green polygon is your current settings, blue dots show the archetype DNA baseline. Drag any vertex to adjust that parameter in real time. The preview updates as you drag.</span>
                 </div>
 
@@ -1266,7 +1339,7 @@
                     <button class="knob-help-btn" title="Help">?</button>
                 </div>
                 <sp-slider id="knob-targetColors" min="3" max="12" step="1" value="8" variant="filled"></sp-slider>
-                <span class="knob-help">How many separate ink colors to extract. More screens = more fidelity but more setup cost. Typical range: 4–8 for commercial work, 8–12 for fine art reproduction.</span>
+                <span class="knob-help">Target number of ink colors — treated as a hint, not an exact count. The engine may produce a few more or fewer screens depending on the image content, palette pruning, and ghost removal. More screens = more fidelity but more setup cost. Typical range: 4–8 for commercial work, 8–12 for fine art reproduction.</span>
 
                 <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
 

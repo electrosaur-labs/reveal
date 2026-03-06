@@ -30,8 +30,8 @@ const { BG_COLOR } = require('../utils/pixelProcessing');
 const AXES = [
     { key: 'l',                     label: 'L',       max: 100 },
     { key: 'c',                     label: 'C',       max: 80  },
-    { key: 'hue_entropy',           label: 'Entropy',  max: 1   },
-    { key: 'temperature_bias',      label: 'Temp',     max: 1, offset: 1, scale: 0.5 }, // -1..+1 → 0..1
+    { key: 'hue_entropy',           label: 'Entropy',     max: 1   },
+    { key: 'temperature_bias',      label: 'Temperature', max: 1, offset: 1, scale: 0.5 }, // -1..+1 → 0..1
     { key: 'l_std_dev',             label: '\u03C3L',  max: 40  },
     { key: 'primary_sector_weight', label: 'Sector',   max: 1   },
     { key: 'k',                     label: 'K',        max: 100 }
@@ -462,12 +462,25 @@ class RadarHUD {
             const el = document.createElement('span');
             el.textContent = AXES[i].label;
             el.style.position = 'absolute';
-            el.style.left = lx + 'px';
-            el.style.top = ly + 'px';
             el.style.fontSize = '11px';
             el.style.color = '#888';
             el.style.pointerEvents = 'none';
             el.style.whiteSpace = 'nowrap';
+
+            // Position labels so right-side ones don't overflow the container
+            const sinA = Math.sin(angle);
+            const estWidth = AXES[i].label.length * 6.5;
+            if (sinA > 0.3) {
+                // Right side: right-align so text ends near the axis point
+                el.style.left = (lx - estWidth) + 'px';
+            } else if (sinA < -0.3) {
+                // Left side: left-align from axis point
+                el.style.left = lx + 'px';
+            } else {
+                // Top/bottom: center on axis point
+                el.style.left = (lx - estWidth / 2) + 'px';
+            }
+            el.style.top = ly + 'px';
             this._container.appendChild(el);
             labels.push(el);
         }

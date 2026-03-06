@@ -69,9 +69,19 @@ class PaletteSurgeon {
         this._container.appendChild(this._header);
         this._container.appendChild(this._paletteHelp.text);
 
+        // Palette label + grid on same line
+        this._paletteRow = document.createElement('div');
+        this._paletteRow.className = 'surgeon-palette-row';
+        this._paletteLabel = document.createElement('span');
+        this._paletteLabel.className = 'surgeon-row-label';
+        this._paletteLabel.textContent = 'Palette';
+        this._paletteRow.appendChild(this._paletteLabel);
         this._grid = document.createElement('div');
         this._grid.className = 'surgeon-grid';
-        this._container.appendChild(this._grid);
+        this._paletteRow.appendChild(this._grid);
+        this._paletteRow.appendChild(this._paletteHelp.btn);
+        this._container.appendChild(this._paletteRow);
+        this._container.appendChild(this._paletteHelp.text);
 
         // Suggested colors tray (rendered below the palette grid)
         this._suggestedTray = document.createElement('div');
@@ -654,22 +664,18 @@ class PaletteSurgeon {
         }
 
         this._suggestedTray.innerHTML = '';
-        this._suggestedTray.style.display = 'block';
+        this._suggestedTray.style.display = 'flex';
 
-        const labelRow = document.createElement('div');
-        labelRow.setAttribute('style', 'display: flex; align-items: center; justify-content: space-between;');
-        const label = document.createElement('div');
-        label.className = 'surgeon-suggested-label';
+        const label = document.createElement('span');
+        label.className = 'surgeon-row-label';
         label.textContent = 'Suggested';
-        labelRow.appendChild(label);
+        this._suggestedTray.appendChild(label);
+
         const sugHelp = this._createHelpBlock(
             'Colors detected in the image but missing from your palette. ' +
             'Click once to see the color isolated, click again to see a "what if" preview with it added. ' +
             'Ctrl+click toggles a checkmark — checked colors are injected into the palette at commit time.'
         );
-        labelRow.appendChild(sugHelp.btn);
-        this._suggestedTray.appendChild(labelRow);
-        this._suggestedTray.appendChild(sugHelp.text);
 
         const row = document.createElement('div');
         row.className = 'surgeon-suggested-row';
@@ -680,7 +686,10 @@ class PaletteSurgeon {
             const swatch = document.createElement('div');
             swatch.className = 'surgeon-suggested-swatch';
             swatch.style.background = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
-            swatch.title = `${suggestion.source}: ${suggestion.reason}`;
+
+            // Extract percentage from reason string (e.g. "3.2% of image")
+            const pctMatch = suggestion.reason && suggestion.reason.match(/([\d.]+)%/);
+            const pctStr = pctMatch ? pctMatch[1] + '%' : '';
 
             const isAdded = this._isSuggestionAdded(suggestion);
             if (isAdded) swatch.classList.add('added');
@@ -749,10 +758,21 @@ class PaletteSurgeon {
             };
 
 
-            row.appendChild(swatch);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'surgeon-suggested-item';
+            wrapper.appendChild(swatch);
+            if (pctStr) {
+                const pctLabel = document.createElement('span');
+                pctLabel.className = 'surgeon-suggested-pct';
+                pctLabel.textContent = pctStr;
+                wrapper.appendChild(pctLabel);
+            }
+            row.appendChild(wrapper);
         }
 
         this._suggestedTray.appendChild(row);
+        this._suggestedTray.appendChild(sugHelp.btn);
+        this._suggestedTray.appendChild(sugHelp.text);
     }
 
     // ─── Selection CSS ───────────────────────────────────────

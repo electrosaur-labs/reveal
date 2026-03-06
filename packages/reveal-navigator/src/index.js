@@ -52,20 +52,7 @@ function initPlugin() {
             sessionState
         );
 
-        // Update archetype badge on config change
-        sessionState.on('configChanged', (config) => {
-            const badge = document.getElementById('archetype-badge');
-            if (badge) {
-                const activeId = sessionState.getState().activeArchetypeId;
-                const label = activeId === 'dynamic_interpolator' ? 'Chameleon'
-                    : activeId === 'distilled' ? 'Distilled'
-                    : (config.id || activeId || '');
-                if (label) {
-                    badge.textContent = label;
-                    badge.style.display = 'block';
-                }
-            }
-        });
+        // Archetype name now shown in stats panel via updateMatchScore()
 
         // Wire Archetype Carousel (non-fatal if it fails)
         try {
@@ -134,6 +121,24 @@ function initPlugin() {
                     loupe.setZoom(factor);
                 }
             });
+        }
+
+        // Wire filter/sort help buttons (click to expand)
+        for (const id of ['filter-help-btn', 'sort-help-btn', 'hud-help-btn']) {
+            const btn = document.getElementById(id);
+            const text = document.getElementById(id.replace('-btn', '-text'));
+            if (btn && text) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isVisible = text.classList.contains('visible');
+                    document.querySelectorAll('.knob-help.visible, .hud-help-text.visible').forEach(el => el.classList.remove('visible'));
+                    document.querySelectorAll('.knob-help-btn.active').forEach(el => el.classList.remove('active'));
+                    if (!isVisible) {
+                        text.classList.add('visible');
+                        btn.classList.add('active');
+                    }
+                });
+            }
         }
 
         // Wire Reset to Defaults button (knobs + palette surgery)
@@ -281,8 +286,7 @@ function initPlugin() {
         sessionState.on('archetypeScored', (data) => {
             const state = sessionState.getState();
             if (data.id === state.activeArchetypeId) {
-                const deltaEl = document.getElementById('stat-delta');
-                if (deltaEl) deltaEl.textContent = `\u0394E ${data.meanDeltaE.toFixed(1)}`;
+                _setStatRated(document.getElementById('stat-delta'), 'deltaE', data.meanDeltaE, '\u0394E ');
             }
         });
 
@@ -291,13 +295,9 @@ function initPlugin() {
             if (carousel) carousel.sortByDisplayedDeltaE();
         });
 
-        // When the user clicks a card, update the stats panel ΔE from the stored value
+        // When the user clicks a card, update the stats panel ΔE from stored values
         sessionState.on('archetypeChanged', () => {
-            const deltaEl = document.getElementById('stat-delta');
-            const storedDE = sessionState.getArchetypeDeltaE();
-            if (deltaEl) {
-                deltaEl.textContent = storedDE != null ? `\u0394E ${storedDE.toFixed(1)}` : '';
-            }
+            _setStatRated(document.getElementById('stat-delta'), 'deltaE', sessionState.getArchetypeDeltaE(), '\u0394E ');
         });
 
         // Pulse 1: dnaReady fires ~50ms after ingest — update radar + DNA stats immediately
@@ -338,51 +338,35 @@ function initPlugin() {
             const hudPanel = document.getElementById('hud-panel');
             if (hudPanel) hudPanel.style.display = '';
             const loupeZoom = document.getElementById('loupe-zoom');
-            if (loupeZoom) loupeZoom.style.display = '';
+            if (loupeZoom) loupeZoom.setAttribute('style', 'display: inline-block;');
             const loupeHelpBtn = document.getElementById('loupe-help-btn');
-            if (loupeHelpBtn) loupeHelpBtn.style.display = '';
+            if (loupeHelpBtn) loupeHelpBtn.setAttribute('style', 'display: inline-block;');
         });
 
-        // Update stats panel below preview on every posterization
+        // Update inline stats in doc-header on every posterization
         sessionState.on('previewUpdated', (data) => {
-            const statsPanel = document.getElementById('preview-stats');
-            if (statsPanel) statsPanel.style.display = '';
+            _showHeaderStats(true);
 
-            // Row 1: Posterization results
             const colorsEl = document.getElementById('stat-colors');
             const deltaEl = document.getElementById('stat-delta');
-            const timeEl = document.getElementById('stat-time');
             if (colorsEl && data.palette) {
                 const count = data.activeColorCount != null ? data.activeColorCount : data.palette.length;
                 colorsEl.textContent = `${count} screens`;
             }
-            // ΔE comes from the single stored value (background scoring),
-            // NOT from calculateCurrentAccuracy(). Updated by archetypeScored/archetypeChanged.
-            if (deltaEl) {
-                const storedDE = sessionState.getArchetypeDeltaE();
-                if (storedDE != null) deltaEl.textContent = `\u0394E ${storedDE.toFixed(1)}`;
-            }
-            if (timeEl && data.elapsedMs != null) {
-                timeEl.textContent = `${data.elapsedMs.toFixed(0)}ms`;
-            }
+            _setStatRated(deltaEl, 'deltaE', sessionState.getArchetypeDeltaE(), '\u0394E ');
 
             // DNA Fidelity display
             const dnaFidelityEl = document.getElementById('dna-fidelity-text');
             if (dnaFidelityEl && data.dnaFidelity) {
                 const f = data.dnaFidelity;
                 const score = Math.round(f.fidelity);
-                dnaFidelityEl.textContent = `DNA ${score}`;
-                dnaFidelityEl.className = score >= 80 ? 'fidelity-good'
-                    : score >= 60 ? 'fidelity-warn' : 'fidelity-bad';
+                _setStatRated(dnaFidelityEl, 'dna', score, 'DNA ');
                 dnaFidelityEl.title = f.alerts.length
                     ? f.alerts.join('\n')
                     : 'No drift detected';
             }
 
-            // Row 2: Archetype match score + breakdown
             updateMatchScore();
-
-            // Row 3: DNA signature
             updateDNADisplay();
         });
 
@@ -419,7 +403,9 @@ function initPlugin() {
         }
 
         // Per-control help toggle: click ? button to show/hide inline help
+        const explicitHelpIds = new Set(['filter-help-btn', 'sort-help-btn', 'hud-help-btn']);
         document.querySelectorAll('.knob-help-btn').forEach(btn => {
+            if (explicitHelpIds.has(btn.id)) return;
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 // Find the associated help text: walk from the knob-row, or from the button itself
@@ -599,7 +585,7 @@ async function ingestActiveDocument(showDialog) {
         updateDocumentHeader(validation.info);
 
         // ── Phase 1: INGEST — the slow bridge call (2-3s for large docs) ──
-        _showProgress('Acquiring 16-bit Lab data\u2026', 10);
+        _showProgress('Acquiring image data\u2026', 10);
         await new Promise(r => setTimeout(r, 20)); // yield so progress bar paints
 
         // Read full-res pixels — ProxyEngine handles downsampling internally.
@@ -630,7 +616,6 @@ async function ingestActiveDocument(showDialog) {
 
 function updateDocumentHeader(info) {
     const nameEl = document.getElementById('doc-name');
-    const layerEl = document.getElementById('doc-layer');
 
     if (!info) {
         info = PhotoshopBridge.getDocumentInfo();
@@ -638,12 +623,62 @@ function updateDocumentHeader(info) {
 
     if (!info) {
         if (nameEl) nameEl.textContent = 'No document';
-        if (layerEl) layerEl.textContent = '';
         return;
     }
 
     if (nameEl) nameEl.textContent = info.name;
-    if (layerEl) layerEl.textContent = info.layerName ? `[${info.layerName}]` : '';
+}
+
+const HEADER_STAT_IDS = [
+    'stat-archetype-name', 'stat-sep-colors', 'stat-colors',
+    'stat-sep-delta', 'stat-delta',
+    'stat-sep-fidelity', 'dna-fidelity-text',
+    'stat-sep-score', 'stat-score'
+];
+
+// Color-code a metric value: green = good, yellow = ok, red = bad.
+// No labels — just the number in color. Thresholds calibrated for screen print.
+function _rateColor(value, metric) {
+    if (value == null || value !== value) return '#ccc';
+    switch (metric) {
+        case 'score':   // sortScore: lower = better
+            if (value < 5)   return '#5cd65c';
+            if (value < 8)   return '#8bd68b';
+            if (value < 12)  return '#e0c97f';
+            return '#e07f7f';
+        case 'deltaE':  // mean ΔE: lower = better
+            if (value < 6)   return '#5cd65c';
+            if (value < 10)  return '#8bd68b';
+            if (value < 15)  return '#e0c97f';
+            return '#e07f7f';
+        case 'dna':     // DNA fidelity: higher = better
+            if (value > 80)  return '#5cd65c';
+            if (value > 65)  return '#8bd68b';
+            if (value > 50)  return '#e0c97f';
+            return '#e07f7f';
+        case 'match':   // Match %: higher = better
+            if (value > 70)  return '#5cd65c';
+            if (value > 55)  return '#8bd68b';
+            if (value > 40)  return '#e0c97f';
+            return '#e07f7f';
+        default: return '#ccc';
+    }
+}
+
+function _setStatRated(el, metric, value, prefix, suffix) {
+    if (!el) return;
+    if (value == null || value !== value) { el.textContent = ''; return; }
+    const num = Number.isInteger(value) ? value.toString() : value.toFixed(1);
+    el.textContent = `${prefix}${num}${suffix || ''}`;
+    el.style.color = _rateColor(value, metric);
+}
+
+function _showHeaderStats(visible) {
+    const display = visible ? '' : 'none';
+    for (const id of HEADER_STAT_IDS) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = display;
+    }
 }
 
 function updateMatchScore() {
@@ -660,7 +695,7 @@ function updateMatchScore() {
     const match = scores.find(s => s.id === activeId);
 
     if (scoreEl && match) {
-        scoreEl.textContent = `Match ${match.score.toFixed(0)}%`;
+        _setStatRated(scoreEl, 'match', match.score, 'Match ', '%');
     }
 
     // Update archetype name in stats line
@@ -676,6 +711,7 @@ function updateMatchScore() {
             nameEl.textContent = arch ? arch.name : activeId;
         }
     }
+
 }
 
 function updateDNADisplay() {
@@ -688,15 +724,40 @@ function setStatus(text) {
     if (el) el.textContent = text;
 }
 
+// Phase swatch colors — one per progress step
+const PHASE_COLORS = ['#e06060', '#e09040', '#d0c040', '#50b070', '#4090d0', '#8060c0'];
+let _completedPhases = [];
+
 function _showProgress(label, percent) {
     const bar = document.getElementById('ingest-progress');
     const fill = document.getElementById('ingest-progress-fill');
     const placeholder = document.getElementById('preview-placeholder');
     if (bar) bar.style.display = 'block';
     if (fill && percent != null) fill.style.width = percent + '%';
-    // Show phase label in the main preview area (large, visible)
+
+    // Build swatch strip: completed phases as colored chips, current phase large
     if (placeholder && placeholder.style.display !== 'none') {
-        placeholder.textContent = label;
+        // Strip trailing ellipsis for chip labels
+        const shortLabel = label.replace(/[\u2026.]+$/, '').trim();
+
+        let html = '';
+        // Completed phase chips: inline colored swatches with label
+        for (let i = 0; i < _completedPhases.length; i++) {
+            const c = PHASE_COLORS[i % PHASE_COLORS.length];
+            html += '<span style="display:inline-block; background:' + c +
+                '; color:#fff; font-size:13px; font-weight:600; padding:3px 8px; ' +
+                'border-radius:3px; margin:3px 4px; white-space:nowrap;">' +
+                _completedPhases[i] + '</span>';
+        }
+        // Current phase: large bold text
+        const currentColor = PHASE_COLORS[_completedPhases.length % PHASE_COLORS.length];
+        html += '<div style="margin-top:12px; font-size:48px; font-weight:700; color:' +
+            currentColor + ';">' + shortLabel + '</div>';
+
+        placeholder.innerHTML = html;
+
+        // Record completed phase (will show as chip on next call)
+        _completedPhases.push(shortLabel);
     }
     setStatus(label);
 }
@@ -709,6 +770,7 @@ function _hideProgress() {
         if (bar) bar.style.display = 'none';
         if (fill) fill.style.width = '0%';
     }, 300);
+    _completedPhases = [];
     setStatus('');
 }
 
@@ -838,13 +900,8 @@ function _clearUI() {
     const carouselEl = document.getElementById('carousel');
     if (carouselEl) carouselEl.innerHTML = '';
 
-    // Hide stats panel
-    const statsPanel = document.getElementById('preview-stats');
-    if (statsPanel) statsPanel.style.display = 'none';
-
-    // Hide archetype badge
-    const badge = document.getElementById('archetype-badge');
-    if (badge) badge.style.display = 'none';
+    // Hide inline stats in header
+    _showHeaderStats(false);
 
     // Hide finalize row
     const finalizeRow = document.getElementById('finalize-row');
