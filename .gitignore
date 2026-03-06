@@ -40,9 +40,17 @@ temp/
 
 # Batch processing data (too large for GitHub - 44GB+)
 # Data can be regenerated from public domain sources using conversion scripts
-packages/reveal-batch/data/CQ100_v4/
-packages/reveal-batch/data/SP100/
-packages/reveal-batch/data/TESTIMAGES/
+packages/reveal-batch/data/CQ100_v4/*
+!packages/reveal-batch/data/CQ100_v4/README.md
+!packages/reveal-batch/data/CQ100_v4/LICENSE.md
+packages/reveal-batch/data/SP100/*
+!packages/reveal-batch/data/SP100/README.md
+!packages/reveal-batch/data/SP100/LICENSE.md
+packages/reveal-batch/data/TESTIMAGES/*
+!packages/reveal-batch/data/TESTIMAGES/README.md
+
+# Test output artifacts
+packages/reveal-psd-writer/test-output/
 
 # Claude Code session artifacts
 .claude/

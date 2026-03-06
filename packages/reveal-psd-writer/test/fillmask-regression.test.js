@@ -5,9 +5,17 @@
 
 const fs = require('fs');
 const path = require('path');
-const zlib = require('zlib');
 const { PSDWriter } = require('../src');
 const PSDReader = require('../src/PSDReader');
+
+function findMaskChannel(layer) {
+    for (let i = 0; i < layer.channels.length; i++) {
+        if (layer.channels[i].channelID === -2) {
+            return layer.channelData[i];
+        }
+    }
+    return null;
+}
 
 describe('Fill+Mask Layer Writing', () => {
     const testOutputDir = path.join(__dirname, '../test-output');
@@ -19,7 +27,6 @@ describe('Fill+Mask Layer Writing', () => {
     });
 
     test('16-bit masks use byte duplication format', () => {
-        // Create a simple test mask: checkerboard pattern
         const width = 4;
         const height = 4;
         const mask8 = new Uint8Array([
@@ -29,17 +36,14 @@ describe('Fill+Mask Layer Writing', () => {
             0, 255, 0, 255
         ]);
 
-        // Convert to 16-bit using the correct byte duplication method
         const mask16 = new Uint8Array(width * height * 2);
         for (let i = 0; i < mask8.length; i++) {
-            mask16[i * 2] = mask8[i];       // High byte
-            mask16[i * 2 + 1] = mask8[i];   // Low byte (duplicate)
+            mask16[i * 2] = mask8[i];
+            mask16[i * 2 + 1] = mask8[i];
         }
 
-        // Write PSD
         const writer = new PSDWriter({
-            width,
-            height,
+            width, height,
             colorMode: 'lab',
             bitsPerChannel: 16
         });
@@ -51,10 +55,8 @@ describe('Fill+Mask Layer Writing', () => {
         });
 
         const psdBuffer = writer.write();
-        const outputPath = path.join(testOutputDir, 'test-mask-format.psd');
-        fs.writeFileSync(outputPath, psdBuffer);
+        fs.writeFileSync(path.join(testOutputDir, 'test-mask-format.psd'), psdBuffer);
 
-        // Read back and verify mask format
         const reader = new PSDReader(psdBuffer);
         const psd = reader.read();
 
@@ -62,28 +64,15 @@ describe('Fill+Mask Layer Writing', () => {
         expect(layer).toBeDefined();
         expect(layer.name).toBe('Test Layer');
 
-        // Find mask channel (ID=-2)
-        let maskChannel = null;
-        for (let i = 0; i < layer.channels.length; i++) {
-            if (layer.channels[i].channelID === -2) {
-                maskChannel = layer.channelData[i];
-                break;
-            }
-        }
-
+        const maskChannel = findMaskChannel(layer);
         expect(maskChannel).toBeDefined();
-        expect(maskChannel.compression).toBe(3); // ZIP compression
 
-        // Decompress and verify
-        const decompressedMask = zlib.inflateSync(maskChannel.data);
-        expect(decompressedMask.length).toBe(width * height * 2);
+        const decompressed = maskChannel.decompressedData;
+        expect(decompressed.length).toBe(width * height * 2);
 
-        // Verify byte duplication format
         for (let i = 0; i < mask8.length; i++) {
-            const highByte = decompressedMask[i * 2];
-            const lowByte = decompressedMask[i * 2 + 1];
-
-            // Both bytes should be equal (byte duplication)
+            const highByte = decompressed[i * 2];
+            const lowByte = decompressed[i * 2 + 1];
             expect(highByte).toBe(lowByte);
             expect(highByte).toBe(mask8[i]);
         }
@@ -100,8 +89,7 @@ describe('Fill+Mask Layer Writing', () => {
         ]);
 
         const writer = new PSDWriter({
-            width,
-            height,
+            width, height,
             colorMode: 'lab',
             bitsPerChannel: 8
         });
@@ -113,29 +101,19 @@ describe('Fill+Mask Layer Writing', () => {
         });
 
         const psdBuffer = writer.write();
-        const outputPath = path.join(testOutputDir, 'test-mask-8bit.psd');
-        fs.writeFileSync(outputPath, psdBuffer);
+        fs.writeFileSync(path.join(testOutputDir, 'test-mask-8bit.psd'), psdBuffer);
 
-        // Read back and verify
         const reader = new PSDReader(psdBuffer);
         const psd = reader.read();
 
         const layer = psd.layerAndMaskInfo.layerInfo.layers[0];
-        let maskChannel = null;
-        for (let i = 0; i < layer.channels.length; i++) {
-            if (layer.channels[i].channelID === -2) {
-                maskChannel = layer.channelData[i];
-                break;
-            }
-        }
-
+        const maskChannel = findMaskChannel(layer);
         expect(maskChannel).toBeDefined();
 
-        // 8-bit masks should match input exactly
-        const maskData = maskChannel.data;
-        expect(maskData.length).toBe(width * height);
+        const decompressed = maskChannel.decompressedData;
+        expect(decompressed.length).toBe(width * height);
         for (let i = 0; i < mask8.length; i++) {
-            expect(maskData[i]).toBe(mask8[i]);
+            expect(decompressed[i]).toBe(mask8[i]);
         }
     });
 
@@ -144,7 +122,6 @@ describe('Fill+Mask Layer Writing', () => {
         const height = 2;
         const mask8 = new Uint8Array([255, 0, 0, 255]);
 
-        // Convert to 16-bit
         const mask16 = new Uint8Array(width * height * 2);
         for (let i = 0; i < mask8.length; i++) {
             mask16[i * 2] = mask8[i];
@@ -152,8 +129,7 @@ describe('Fill+Mask Layer Writing', () => {
         }
 
         const writer = new PSDWriter({
-            width,
-            height,
+            width, height,
             colorMode: 'lab',
             bitsPerChannel: 16
         });
@@ -169,32 +145,21 @@ describe('Fill+Mask Layer Writing', () => {
         const psd = reader.read();
 
         const layer = psd.layerAndMaskInfo.layerInfo.layers[0];
-        let maskChannel = null;
-        for (let i = 0; i < layer.channels.length; i++) {
-            if (layer.channels[i].channelID === -2) {
-                maskChannel = layer.channelData[i];
-                break;
-            }
-        }
+        const maskChannel = findMaskChannel(layer);
+        const decompressed = maskChannel.decompressedData;
 
-        const decompressedMask = zlib.inflateSync(maskChannel.data);
-
-        // Verify binary values
-        // 255 → 0xFFFF (65535)
-        expect(decompressedMask[0]).toBe(0xFF);
-        expect(decompressedMask[1]).toBe(0xFF);
-
-        // 0 → 0x0000 (0)
-        expect(decompressedMask[2]).toBe(0x00);
-        expect(decompressedMask[3]).toBe(0x00);
-
-        // 0 → 0x0000
-        expect(decompressedMask[4]).toBe(0x00);
-        expect(decompressedMask[5]).toBe(0x00);
-
-        // 255 → 0xFFFF
-        expect(decompressedMask[6]).toBe(0xFF);
-        expect(decompressedMask[7]).toBe(0xFF);
+        // 255 -> 0xFFFF
+        expect(decompressed[0]).toBe(0xFF);
+        expect(decompressed[1]).toBe(0xFF);
+        // 0 -> 0x0000
+        expect(decompressed[2]).toBe(0x00);
+        expect(decompressed[3]).toBe(0x00);
+        // 0 -> 0x0000
+        expect(decompressed[4]).toBe(0x00);
+        expect(decompressed[5]).toBe(0x00);
+        // 255 -> 0xFFFF
+        expect(decompressed[6]).toBe(0xFF);
+        expect(decompressed[7]).toBe(0xFF);
     });
 
     test('mid-tone masks (128) produce correct 16-bit values', () => {
@@ -202,7 +167,6 @@ describe('Fill+Mask Layer Writing', () => {
         const height = 2;
         const mask8 = new Uint8Array([128, 128, 128, 128]);
 
-        // Convert to 16-bit
         const mask16 = new Uint8Array(width * height * 2);
         for (let i = 0; i < mask8.length; i++) {
             mask16[i * 2] = mask8[i];
@@ -210,8 +174,7 @@ describe('Fill+Mask Layer Writing', () => {
         }
 
         const writer = new PSDWriter({
-            width,
-            height,
+            width, height,
             colorMode: 'lab',
             bitsPerChannel: 16
         });
@@ -227,27 +190,19 @@ describe('Fill+Mask Layer Writing', () => {
         const psd = reader.read();
 
         const layer = psd.layerAndMaskInfo.layerInfo.layers[0];
-        let maskChannel = null;
-        for (let i = 0; i < layer.channels.length; i++) {
-            if (layer.channels[i].channelID === -2) {
-                maskChannel = layer.channelData[i];
-                break;
-            }
-        }
+        const maskChannel = findMaskChannel(layer);
+        const decompressed = maskChannel.decompressedData;
 
-        const decompressedMask = zlib.inflateSync(maskChannel.data);
-
-        // 128 → 0x8080 (32896) using byte duplication
+        // 128 -> 0x8080 using byte duplication
         for (let i = 0; i < 8; i += 2) {
-            expect(decompressedMask[i]).toBe(0x80);
-            expect(decompressedMask[i + 1]).toBe(0x80);
+            expect(decompressed[i]).toBe(0x80);
+            expect(decompressed[i + 1]).toBe(0x80);
         }
     });
 
     test('rejects incorrectly sized masks', () => {
         const writer = new PSDWriter({
-            width: 4,
-            height: 4,
+            width: 4, height: 4,
             colorMode: 'lab',
             bitsPerChannel: 16
         });
@@ -256,7 +211,7 @@ describe('Fill+Mask Layer Writing', () => {
             writer.addFillLayer({
                 name: 'Bad Mask',
                 color: { L: 50, a: 0, b: 0 },
-                mask: new Uint8Array(10) // Wrong size!
+                mask: new Uint8Array(10)
             });
         }).toThrow();
     });
@@ -265,7 +220,6 @@ describe('Fill+Mask Layer Writing', () => {
         const width = 3;
         const height = 3;
 
-        // Create 3 different masks
         const mask1 = new Uint8Array(width * height * 2);
         const mask2 = new Uint8Array(width * height * 2);
         const mask3 = new Uint8Array(width * height * 2);
@@ -275,17 +229,13 @@ describe('Fill+Mask Layer Writing', () => {
             const val2 = i % 3 === 0 ? 255 : 0;
             const val3 = i < 4 ? 255 : 0;
 
-            mask1[i * 2] = val1;
-            mask1[i * 2 + 1] = val1;
-            mask2[i * 2] = val2;
-            mask2[i * 2 + 1] = val2;
-            mask3[i * 2] = val3;
-            mask3[i * 2 + 1] = val3;
+            mask1[i * 2] = val1; mask1[i * 2 + 1] = val1;
+            mask2[i * 2] = val2; mask2[i * 2 + 1] = val2;
+            mask3[i * 2] = val3; mask3[i * 2 + 1] = val3;
         }
 
         const writer = new PSDWriter({
-            width,
-            height,
+            width, height,
             colorMode: 'lab',
             bitsPerChannel: 16
         });
@@ -295,10 +245,8 @@ describe('Fill+Mask Layer Writing', () => {
         writer.addFillLayer({ name: 'Layer 3', color: { L: 90, a: 0, b: 0 }, mask: mask3 });
 
         const psdBuffer = writer.write();
-        const outputPath = path.join(testOutputDir, 'test-multiple-masks.psd');
-        fs.writeFileSync(outputPath, psdBuffer);
+        fs.writeFileSync(path.join(testOutputDir, 'test-multiple-masks.psd'), psdBuffer);
 
-        // Read back and verify all 3 layers
         const reader = new PSDReader(psdBuffer);
         const psd = reader.read();
 

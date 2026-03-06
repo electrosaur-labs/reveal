@@ -44,7 +44,6 @@ npm run analyze-sp100
 - **@electrosaur-labs/core** — Pure JavaScript color separation engines
 - **@electrosaur-labs/psd-reader** — PSD file reader for Lab documents
 - **@electrosaur-labs/psd-writer** — PSD file writer with Lab layer support
-- **ag-psd** — PSD file I/O
 - **sharp** — Image format conversion and resizing
 - **commander** — CLI framework
 - **chalk** — Terminal output formatting
