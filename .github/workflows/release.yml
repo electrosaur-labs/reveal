@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: |
+          npm run test:core
+          npm run test:navigator
+
+      - name: Package plugin
+        run: npm run package:navigator
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          CCX_FILE="packages/reveal-navigator/reveal-${VERSION}.ccx"
+          gh release create "$VERSION" "$CCX_FILE" \
+            --title "Reveal ${VERSION}" \
+            --notes-file CHANGELOG.md

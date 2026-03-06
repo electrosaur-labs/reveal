@@ -8,6 +8,7 @@
     "build:dev": "webpack --mode development && node scripts/copy-assets.js",
     "watch": "webpack --mode development --watch",
     "clean": "rm -rf dist",
+    "package": "npm run build && node scripts/package.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

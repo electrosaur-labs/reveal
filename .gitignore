@@ -8,6 +8,9 @@ build/
 coverage/
 *.tsbuildinfo
 
+# Plugin packages
+*.ccx
+
 # Editor
 .vscode/
 .idea/

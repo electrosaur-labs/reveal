@@ -14,7 +14,8 @@
     "build:adobe": "npm run build -w @electrosaur-labs/adobe",
     "build:navigator": "npm run build -w @electrosaur-labs/navigator",
     "test:navigator": "npm test -w @electrosaur-labs/navigator",
-    "clean": "npm run clean --workspaces --if-present"
+    "clean": "npm run clean --workspaces --if-present",
+    "package:navigator": "npm run package -w @electrosaur-labs/navigator"
   },
   "keywords": [
     "screen-printing",
