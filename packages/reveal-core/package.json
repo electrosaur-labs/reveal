@@ -24,13 +24,13 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/electrosaur-labs/reveal-project.git",
+    "url": "https://github.com/electrosaur-labs/reveal.git",
     "directory": "packages/reveal-core"
   },
   "bugs": {
-    "url": "https://github.com/electrosaur-labs/reveal-project/issues"
+    "url": "https://github.com/electrosaur-labs/reveal/issues"
   },
-  "homepage": "https://github.com/electrosaur-labs/reveal-project/tree/main/packages/reveal-core#readme",
+  "homepage": "https://github.com/electrosaur-labs/reveal/tree/main/packages/reveal-core#readme",
   "engines": {
     "node": ">=14.0.0"
   },

@@ -74,7 +74,7 @@ reveal-batch (CLI Adapter)     → Node.js batch processing + PSD I/O
 ### Monorepo Structure
 
 ```
-reveal-project/
+reveal/
 ├── packages/
 │   ├── reveal-core/          # Pure JS engines (CRITICAL: no dependencies)
 │   │   ├── lib/

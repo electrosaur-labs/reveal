@@ -4,7 +4,7 @@ Thank you for your interest in contributing to Reveal! This guide covers everyth
 
 ## Reporting Bugs
 
-Open a [GitHub Issue](https://github.com/electrosaur-labs/reveal-project/issues/new?template=bug_report.md) with:
+Open a [GitHub Issue](https://github.com/electrosaur-labs/reveal/issues/new?template=bug_report.md) with:
 
 - What you expected to happen
 - What actually happened
@@ -14,13 +14,13 @@ Open a [GitHub Issue](https://github.com/electrosaur-labs/reveal-project/issues/
 
 ## Suggesting Features
 
-Open a [Feature Request](https://github.com/electrosaur-labs/reveal-project/issues/new?template=feature_request.md). Screen printing domain context is especially welcome — we want the tool to match how printers actually work.
+Open a [Feature Request](https://github.com/electrosaur-labs/reveal/issues/new?template=feature_request.md). Screen printing domain context is especially welcome — we want the tool to match how printers actually work.
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/electrosaur-labs/reveal-project.git
-cd reveal-project
+git clone https://github.com/electrosaur-labs/reveal.git
+cd reveal
 npm install
 npm run test:core    # Verify everything works
 ```
@@ -102,4 +102,4 @@ New features must handle both 8-bit and 16-bit Lab encoding:
 
 ## Questions?
 
-Open a [Discussion](https://github.com/electrosaur-labs/reveal-project/discussions) or comment on the relevant issue.
+Open a [Discussion](https://github.com/electrosaur-labs/reveal/discussions) or comment on the relevant issue.

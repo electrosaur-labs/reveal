@@ -25,7 +25,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/electrosaur-labs/reveal-project.git",
+    "url": "https://github.com/electrosaur-labs/reveal.git",
     "directory": "packages/reveal-psd-writer"
   },
   "engines": {

@@ -36,15 +36,18 @@ to the nearest palette color, and creates one Photoshop layer per ink.
 
 ### Key Concepts
 
-- **Archetype** — A separation recipe. "Warm Photo" favors earth tones and faithful reproduction. "Bold Poster"
-  pushes contrast and saturation. "Dark Portrait" protects deep shadows. There are 26 archetypes grouped into
-  Natural, Soft, Graphic, Dramatic, Vibrant, and Specialist families, plus 3 adaptive pseudo-archetypes (Chameleon,
-  Distilled, Salamander) that tune themselves to your image automatically.
-- **DNA** — The image's fingerprint. You don't interact with it directly — it drives the automatic archetype ranking.
-- **Palette** — The set of spot colors extracted from your image. Typically 5-8 colors. You can edit, merge, delete, or
-  add colors before committing.
-- **Mechanical knobs** — Post-processing controls: ghost screen removal (eliminate weak inks), dust removal (clean up
-  speckles), shadow floor (ensure faint tones print), and trapping (overlap colors to prevent gaps on press).
+- **Archetype** — A separation recipe. "Everyday Photo" favors earth tones and faithful reproduction. "Bold Poster"
+  pushes contrast and saturation for graphic impact. "Fine Art Scan" protects subtle textures and tonal transitions.
+  There are 26 archetypes grouped into Natural, Soft, Graphic, Dramatic, Vibrant, and Specialist families, plus 3
+  adaptive pseudo-archetypes (Chameleon, Distilled, Salamander) that tune their routing logic to your image
+  automatically.
+- **DNA** — The image's structural fingerprint. It captures lightness, chroma, contrast, entropy, temperature, and hue
+  distribution. You don't interact with it directly — it drives the automatic archetype ranking.
+- **Palette** — The set of spot colors extracted from your image, typically 5-8 colors. You can edit, merge, delete, or
+  add colors using the Palette Surgeon before committing.
+- **Mechanical knobs** — Post-processing controls used for deep separation tuning. These include Ghost Screen Removal
+  (eliminate weak inks), Dust Removal (clean up speckles), Shadow Floor (ensure faint tones print), and Trapping
+  (overlap colors to prevent gaps on press).
 
 ## Requirements
 
@@ -53,7 +56,7 @@ to the nearest palette color, and creates one Photoshop layer per ink.
 
 ## Installing the Plugin
 
-1. Download the latest `.ccx` file from the [Releases](https://github.com/electrosaur-labs/reveal-project/releases) page
+1. Download the latest `.ccx` file from the [Releases](https://github.com/electrosaur-labs/reveal/releases) page
 2. Double-click the `.ccx` file to install (or drag it onto Photoshop)
 3. Restart Photoshop if prompted
 4. In Photoshop: **Plugins → Electrosaur → Reveal...**
@@ -113,9 +116,11 @@ browse a few and pick the one that looks right in the preview.
 
 ### 5. Radar HUD
 
-The multi-axis chart to the right of the preview. It visualizes the current separation parameters as a polygon. The
-blue shape shows the current archetype's settings; green shows the comparable best-fit archetype for reference. You can
-drag vertices directly to adjust parameter values — the preview updates live.
+The multi-axis chart to the right of the preview. It visualizes the current separation parameters as a polygon on
+seven axes: **L** (lightness), **C** (chroma), **Entropy** (hue diversity), **Temperature** (warm/cool bias),
+**σL** (lightness variation), **Sector** (primary hue dominance), and **K** (black content). The blue shape shows
+the current archetype's settings; green shows the comparable best-fit archetype for reference. You can drag vertices
+directly to adjust parameter values — the preview updates live.
 
 ### 6. Mechanical Knobs
 
@@ -193,6 +198,8 @@ A 20-megapixel image typically separates in 1-2 seconds.
   film-grain texture. Floyd-Steinberg is classic error diffusion. None gives hard-edged posterization.
 - **Reread Document** (top-right button) re-ingests the active document if you've made changes in Photoshop since
   opening the dialog.
+- **Shadow Floor and mud.** On press, dark tones can collapse into a single indistinct "mud" color. Use Shadow Floor to
+  set a minimum ink density so faint areas maintain enough opacity to print as distinct tones.
 
 ## Known Limitations
 
@@ -216,3 +223,5 @@ A 20-megapixel image typically separates in 1-2 seconds.
 | **Ghost screen** | An ink layer with very low coverage — may not be worth exposing a screen for                                                                  |
 | **Speckle**      | Isolated pixel clusters that won't print cleanly at typical screen printing mesh counts                                                       |
 | **Trap**         | Slight overlap between adjacent ink colors that prevents white gaps from press misregistration                                                |
+| **Posterization**| Reducing a continuous-tone image to a small number of flat colors — the core of what Reveal does                                             |
+| **Shadow floor** | Minimum ink density for faint tones — prevents dark areas from collapsing into indistinct "mud" on press                                     |

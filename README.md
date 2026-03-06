@@ -4,9 +4,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Screen printing doesn't reproduce photographs — it *interprets* them. Reveal is built on the philosophy that **reduction is revelation**: stripping an image down to 5-8 spot colors forces you to find what matters in the image. The colors that survive are the ones that carry the meaning.
+**Reduction is revelation:** stripping an image down to 5-8 spot colors forces you to find what matters in the image. The colors that survive are the ones that carry the meaning. The goal is not reproduction but *interpretation* — working within the constraints of screen printing (limited ink count, opaque spot colors, single-pass coverage, no blending on press) and embracing those limitations instead of trying to hide them.
 
-Reveal analyzes your image, selects a separation strategy from 26 built-in archetypes, and generates spot color layers ready for film output. It's not simulated process — there's no attempt at photorealism. Instead, it finds a palette that captures the essence of the image and commits to it.
+Reveal analyzes your image, selects a separation strategy from 26 built-in archetypes, and generates spot color layers ready for film output. It finds a palette that captures the essence of the image and commits to it.
 
 The Photoshop plugin gives you real-time preview, palette editing, and one-click export to separated Lab layers with masks. The core engine is **100% pure JavaScript with zero external dependencies**, so it also runs in Node.js, browsers, and batch pipelines.
 
@@ -38,6 +38,18 @@ The Photoshop plugin gives you real-time preview, palette editing, and one-click
 - **Neutral sovereignty** — Automatically isolates white/gray backgrounds to preserve the chromatic color budget
 - **8-bit and 16-bit Lab** — Full archival quality support
 - **Photoshop plugin** — Real-time archetype exploration at 800px proxy, production render to Lab fill+mask layers
+
+## Validation
+
+Reveal is validated against three benchmark datasets spanning fine art, photography, and high-chroma graphics:
+
+| Dataset | Images | Avg ΔE | Integrity | Source |
+|---------|--------|--------|-----------|--------|
+| **[CQ100](https://data.mendeley.com/datasets/vw5ys9hfxw)** | 300 | 15.19 | 100% | 100 color quantization benchmark images × 3 adaptive archetypes |
+| **[TESTIMAGES](https://testimages.org/color/)** | 40 | 11.20 | 100% | 40-image COLOR subset for image processing evaluation |
+| **SP100** | 147 | 6.99 | 100% | Fine art from [Met Museum](https://www.metmuseum.org/art/collection) (CC0), [Rijksmuseum](https://www.rijksmuseum.nl/en/rijksstudio) (CC0), [Art Institute of Chicago](https://www.artic.edu/collection) (CC0) |
+
+**ΔE** = CIE76 perceptual color distance (lower = more faithful). **Integrity** = physical printability (ink stack violations, density breaches). CQ100 citation: Celebi & Pérez-Delgado, [*J. Electronic Imaging* 32(3), 2023](https://doi.org/10.1117/1.JEI.32.3.033019). Full results in `packages/reveal-batch/data/`.
 
 ## Quick Start
 
@@ -134,4 +146,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding conventions
 
 ## License
 
-[Apache License 2.0](LICENSE) — Copyright 2026 Electrosaur
+Copyright 2026 Electrosaur Labs. Licensed under the [Apache License 2.0](LICENSE).

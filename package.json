@@ -1,5 +1,5 @@
 {
-  "name": "reveal-project",
+  "name": "reveal",
   "version": "1.0.0",
   "private": true,
   "description": "Reveal monorepo - Pure JavaScript color separation tools",
@@ -29,7 +29,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/electrosaur-labs/reveal-project.git"
+    "url": "https://github.com/electrosaur-labs/reveal.git"
   },
   "devDependencies": {
     "omggif": "^1.0.10",
