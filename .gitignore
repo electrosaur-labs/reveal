@@ -40,3 +40,12 @@ temp/
 packages/reveal-batch/data/CQ100_v4/
 packages/reveal-batch/data/SP100/
 packages/reveal-batch/data/TESTIMAGES/
+
+# Claude Code session artifacts
+.claude/
+.claude-context.md
+
+# Scratch/experiment scripts
+packages/reveal-batch/horse-*.js
+packages/reveal-batch/kmeans-*.js
+packages/reveal-batch/tune*.js
