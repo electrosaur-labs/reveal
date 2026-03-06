@@ -1504,6 +1504,19 @@ class SessionState extends EventEmitter {
         return this._scoring.getArchetypeDeltaE(id) || null;
     }
 
+    /**
+     * Get the stored sortScore for an archetype (from background scoring).
+     * @param {string} [archetypeId] - defaults to active archetype
+     * @returns {number|null}
+     */
+    getArchetypeSortScore(archetypeId) {
+        const id = archetypeId || this.state.activeArchetypeId;
+        const all = this._scoring.allScores;
+        if (!all) return null;
+        const entry = all.find(s => s.id === id);
+        return entry && entry.sortScore != null ? entry.sortScore : null;
+    }
+
     // ─── State Access ────────────────────────────────────────
 
     /**

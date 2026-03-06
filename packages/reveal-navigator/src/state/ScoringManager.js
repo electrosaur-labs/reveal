@@ -232,6 +232,7 @@ class ScoringManager extends EventEmitter {
                     edgeSurvival,
                     targetColors: colors,
                     sortScore: match.sortScore,
+                    rgbPalette: quality.rgbPalette || null,
                     computed,
                     total
                 });
