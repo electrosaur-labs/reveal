@@ -24,7 +24,7 @@ The Photoshop plugin gives you real-time preview, palette editing, and one-click
 </table>
 
 <p align="center">
-  <img src="docs/images/screenshot-navigator.jpg" width="600" alt="Reveal Navigator — Photoshop plugin">
+  <img src="docs/images/reveal-annotated.png" width="600" alt="Reveal Navigator — Photoshop plugin">
   <br><em>Navigator panel in Photoshop — archetype carousel, radar HUD, palette surgery, mechanical knobs</em>
 </p>
 
@@ -123,6 +123,10 @@ cd packages/reveal-batch
 npm run reveal              # Single image
 npm run process-cq100       # Benchmark dataset
 ```
+
+## User Guide
+
+New to Reveal? See the **[User Guide](docs/USER-GUIDE.md)** for a screen printer's walkthrough of the Photoshop plugin.
 
 ## Contributing
 
