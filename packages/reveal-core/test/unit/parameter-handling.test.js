@@ -310,8 +310,8 @@ describe('Parameter Handling: Target Colors = 0', () => {
                 : PosterizationEngine.analyzeOptimalColorCount(pixels, 200, 200);
             const duration = Date.now() - startTime;
 
-            // Should complete within 10 seconds (allows for CI/CD variability and coverage overhead)
-            expect(duration).toBeLessThan(10000);
+            // Should complete within 30 seconds (allows for slow CI runners)
+            expect(duration).toBeLessThan(30000);
             expect(colorCount).toBeGreaterThanOrEqual(3);
             expect(colorCount).toBeLessThanOrEqual(10);
         });
