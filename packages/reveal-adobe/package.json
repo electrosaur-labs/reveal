@@ -1,6 +1,6 @@
 {
   "name": "@electrosaur-labs/adobe",
-  "version": "0.13.0",
+  "version": "1.0.0",
   "description": "Photoshop UXP plugin for screen print color separation using @electrosaur-labs/core",
   "main": "dist/index.js",
   "scripts": {
