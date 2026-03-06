@@ -227,7 +227,7 @@ describe('refinementPasses option in posterize()', () => {
 describe('ParameterGenerator: refinementPasses flow-through', () => {
 
     test('should pass refinementPasses from archetype to config', () => {
-        // Use subtle_naturalist which has refinementPasses: 2
+        // Use fine_art_scan which has refinementPasses: 2
         const dna = {
             version: '2.0',
             minL: 10, maxL: 90, maxC: 30,
@@ -237,7 +237,7 @@ describe('ParameterGenerator: refinementPasses flow-through', () => {
         };
 
         const config = ParameterGenerator.generate(dna, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         expect(config.refinementPasses).toBe(2);
@@ -253,13 +253,13 @@ describe('ParameterGenerator: refinementPasses flow-through', () => {
         };
 
         const config = ParameterGenerator.generate(dna, {
-            manualArchetypeId: 'pure_graphic'
+            manualArchetypeId: 'spot_color'
         });
 
         expect(config.refinementPasses).toBe(0);
     });
 
-    test('should return refinementPasses=0 for silver_gelatin', () => {
+    test('should return refinementPasses=0 for black_and_white', () => {
         const dna = {
             version: '2.0',
             minL: 10, maxL: 95, maxC: 5,
@@ -269,7 +269,7 @@ describe('ParameterGenerator: refinementPasses flow-through', () => {
         };
 
         const config = ParameterGenerator.generate(dna, {
-            manualArchetypeId: 'silver_gelatin'
+            manualArchetypeId: 'black_and_white'
         });
 
         expect(config.refinementPasses).toBe(0);
@@ -286,9 +286,9 @@ describe('ParameterGenerator: refinementPasses flow-through', () => {
             sectors: {}
         };
 
-        // standard_balanced has refinementPasses: 1
+        // everyday_photo has refinementPasses: 1
         const config = ParameterGenerator.generate(dna, {
-            manualArchetypeId: 'standard_balanced'
+            manualArchetypeId: 'everyday_photo'
         });
 
         expect(config.refinementPasses).toBe(1);
@@ -397,7 +397,7 @@ describe('Archetype JSON: refinementPasses values', () => {
 
     test('graphic archetypes should have refinementPasses=0', () => {
         const archetypes = ArchetypeLoader.loadArchetypes();
-        const graphicIds = ['pure_graphic', 'neon_graphic', 'silver_gelatin'];
+        const graphicIds = ['spot_color', 'neon', 'black_and_white'];
 
         for (const id of graphicIds) {
             const arch = archetypes.find(a => a.id === id);
@@ -410,7 +410,7 @@ describe('Archetype JSON: refinementPasses values', () => {
 
     test('photographic archetypes should have refinementPasses=2', () => {
         const archetypes = ArchetypeLoader.loadArchetypes();
-        const photoIds = ['subtle_naturalist', 'chromatic_polyphony', 'jethro_monroe_clinical'];
+        const photoIds = ['fine_art_scan', 'full_spectrum', 'saturated_max'];
 
         for (const id of photoIds) {
             const arch = archetypes.find(a => a.id === id);

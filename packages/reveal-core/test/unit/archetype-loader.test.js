@@ -108,7 +108,7 @@ describe('ArchetypeLoader._applyDefaults', () => {
 describe('ArchetypeLoader.getFallbackArchetype', () => {
     it('returns a valid archetype with all required fields', () => {
         const fb = ArchetypeLoader.getFallbackArchetype();
-        expect(fb).toHaveProperty('id', 'standard_balanced');
+        expect(fb).toHaveProperty('id', 'everyday_photo');
         expect(fb).toHaveProperty('name');
         expect(fb).toHaveProperty('centroid');
         expect(fb).toHaveProperty('weights');

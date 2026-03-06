@@ -41,7 +41,7 @@ function loadHorseFixture() {
  * Replicates the core wiring from loadImage() without UI yields
  * or background scoring.
  */
-async function setupRealSession(archetypeId = 'standard_balanced') {
+async function setupRealSession(archetypeId = 'everyday_photo') {
     const session = new SessionState();
     const { pixels, width, height } = loadHorseFixture();
 
@@ -111,14 +111,14 @@ describe('SessionState + real ProxyEngine integration', () => {
     }, 30000);
 
     it('archetype swap changes palette through real re-posterization', async () => {
-        const session = await setupRealSession('bold_graphic');
+        const session = await setupRealSession('bold_poster');
         const paletteBefore = session.proxyEngine.separationState.palette.map(c => ({ ...c }));
         const countBefore = paletteBefore.length;
 
-        await session.swapArchetype('subtle_naturalist');
+        await session.swapArchetype('fine_art_scan');
 
         const paletteAfter = session.proxyEngine.separationState.palette;
-        expect(session.state.activeArchetypeId).toBe('subtle_naturalist');
+        expect(session.state.activeArchetypeId).toBe('fine_art_scan');
 
         // Palette should differ — check via best-match ΔE sum
         // (positional comparison fails when same colors appear in different order)
@@ -156,8 +156,8 @@ describe('SessionState + real ProxyEngine integration', () => {
     }, 30000);
 
     it('exportProductionConfig includes all required fields', async () => {
-        const session = await setupRealSession('standard_balanced');
-        await session.swapArchetype('subtle_naturalist');
+        const session = await setupRealSession('everyday_photo');
+        await session.swapArchetype('fine_art_scan');
 
         const prodConfig = session.exportProductionConfig();
 
@@ -168,7 +168,7 @@ describe('SessionState + real ProxyEngine integration', () => {
         expect(prodConfig.dna.global).toBeDefined();
 
         // Archetype
-        expect(prodConfig.activeArchetypeId).toBe('subtle_naturalist');
+        expect(prodConfig.activeArchetypeId).toBe('fine_art_scan');
 
         // Palette: array of Lab colors
         expect(Array.isArray(prodConfig.palette)).toBe(true);

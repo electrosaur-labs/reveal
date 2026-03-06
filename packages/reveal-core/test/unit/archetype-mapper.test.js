@@ -128,7 +128,7 @@ describe('ArchetypeMapper v2.2', () => {
 
     describe('Structural scoring', () => {
         it('should score exact match as 100', () => {
-            const archetype = archetypes.find(a => a.id === 'subtle_naturalist');
+            const archetype = archetypes.find(a => a.id === 'fine_art_scan');
             const dna = {
                 version: '2.0',
                 global: {
@@ -148,7 +148,7 @@ describe('ArchetypeMapper v2.2', () => {
         });
 
         it('should penalize distant matches with weighted distance', () => {
-            const archetype = archetypes.find(a => a.id === 'subtle_naturalist');
+            const archetype = archetypes.find(a => a.id === 'fine_art_scan');
             const dna = {
                 version: '2.0',
                 global: {
@@ -188,7 +188,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('structural_outlier_rescue');
+            expect(result.id).toBe('detail_recovery');
             expect(result.score).toBeGreaterThan(60);
         });
 
@@ -209,7 +209,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('silver_gelatin');
+            expect(result.id).toBe('black_and_white');
             expect(result.score).toBeGreaterThan(70);
         });
 
@@ -233,7 +233,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('blue_rescue');
+            expect(result.id).toBe('cool_recovery');
             expect(result.breakdown.sectorAffinity).toBeGreaterThan(50);
         });
 
@@ -258,7 +258,7 @@ describe('ArchetypeMapper v2.2', () => {
 
             const result = mapper.getBestMatch(dna);
             // warm_tonal_optimized retired — yellow dominance now routes to
-            // thermonuclear_yellow, warm_naturalist, or another warm archetype
+            // hot_yellow, warm_photo, or another warm archetype
             expect(result.breakdown.pattern).toBeGreaterThan(50); // Warm bias bonus
         });
 
@@ -281,7 +281,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('thermonuclear_yellow');
+            expect(result.id).toBe('hot_yellow');
             expect(result.breakdown.sectorAffinity).toBeGreaterThan(60);
         });
 
@@ -307,7 +307,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('subtle_naturalist');
+            expect(result.id).toBe('fine_art_scan');
             expect(result.breakdown.pattern).toBeGreaterThan(60); // Diversity bonus
         });
 
@@ -331,7 +331,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('neon_graphic');
+            expect(result.id).toBe('neon');
             expect(result.breakdown.sectorAffinity).toBeGreaterThan(60); // Extreme chroma
         });
 
@@ -359,7 +359,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('bold_graphic');
+            expect(result.id).toBe('bold_poster');
             expect(result.score).toBeGreaterThan(50);
         });
 
@@ -385,7 +385,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('warm_dramatic');
+            expect(result.id).toBe('sunlit');
             expect(result.score).toBeGreaterThan(50);
         });
 
@@ -411,7 +411,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('tenebrist_gold');
+            expect(result.id).toBe('old_master');
             expect(result.score).toBeGreaterThan(60);
         });
 
@@ -439,14 +439,14 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('golden_naturalist');
+            expect(result.id).toBe('painterly');
             expect(result.score).toBeGreaterThan(50);
         });
     });
 
     describe('Derived profile scoring (previously profileless archetypes)', () => {
-        it('should derive noir_shadow profile and score dark monochromatic DNA well', () => {
-            const noir = archetypes.find(a => a.id === 'noir_shadow');
+        it('should derive film_noir profile and score dark monochromatic DNA well', () => {
+            const noir = archetypes.find(a => a.id === 'film_noir');
             // noir centroid: L=25, C=10, entropy=0.15, temp=0
             // Should derive: chromaProfile='very_low', tonalRange='dark', expects_monochrome=true
             const dna = {
@@ -473,8 +473,8 @@ describe('ArchetypeMapper v2.2', () => {
             expect(patternScore).toBeGreaterThan(60);
         });
 
-        it('should derive warm_sovereign profile and fire warm/dominance bonuses', () => {
-            const ws = archetypes.find(a => a.id === 'warm_sovereign');
+        it('should derive golden_hour profile and fire warm/dominance bonuses', () => {
+            const ws = archetypes.find(a => a.id === 'golden_hour');
             // ws centroid: L=78, C=15, temp=0.75, psw=0.50
             // Should derive: chromaProfile='low', tonalRange='bright', expects_warm=true, expects_dominance=true
             const dna = {
@@ -501,8 +501,8 @@ describe('ArchetypeMapper v2.2', () => {
             expect(sectorScore).toBeGreaterThan(60);
         });
 
-        it('should derive pastel_high_key profile and score bright low-contrast DNA', () => {
-            const pastel = archetypes.find(a => a.id === 'pastel_high_key');
+        it('should derive pastel profile and score bright low-contrast DNA', () => {
+            const pastel = archetypes.find(a => a.id === 'pastel');
             // pastel centroid: L=85, C=20, entropy=0.6, temp=0.1, l_std_dev=15
             // Should derive: chromaProfile='low', tonalRange='bright'
             const dna = {
@@ -526,8 +526,8 @@ describe('ArchetypeMapper v2.2', () => {
             expect(sectorScore).toBeGreaterThan(60);
         });
 
-        it('should derive vibrant_tonal profile and score high-chroma mid-toned DNA', () => {
-            const vt = archetypes.find(a => a.id === 'vibrant_tonal');
+        it('should derive vivid_photo profile and score high-chroma mid-toned DNA', () => {
+            const vt = archetypes.find(a => a.id === 'vivid_photo');
             // vt centroid: L=50, C=45, entropy=0.4, temp=0, l_std_dev=25
             // Should derive: chromaProfile='moderate', tonalRange='mid', rewards_high_texture=true
             const dna = {

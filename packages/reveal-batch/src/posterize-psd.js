@@ -709,7 +709,7 @@ async function main() {
         console.log(`  outputDir:   Directory for output PSD and JSON files`);
         console.log(`  --archetype: Optional archetype override. Accepts:`);
         console.log(`               Pseudo-archetypes: chameleon, distilled, salamander`);
-        console.log(`               Real archetypes:   warm_naturalist, subtle_naturalist, etc.`);
+        console.log(`               Real archetypes:   warm_photo, fine_art_scan, etc.`);
         console.log(`\nExamples:`);
         console.log(`  node posterize-psd.js 16 ./input/image.psd ./output`);
         console.log(`  node posterize-psd.js 16 ./input/image.psd ./output --archetype salamander\n`);

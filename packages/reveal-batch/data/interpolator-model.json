@@ -46,22 +46,22 @@
         "primary_sector_weight": 0.639
       },
       "size": 42,
-      "sourceArchetype": "tenebrist_gold",
+      "sourceArchetype": "old_master",
       "archetypeBreakdown": [
         {
-          "archetype": "tenebrist_gold",
+          "archetype": "old_master",
           "count": 30
         },
         {
-          "archetype": "warm_dramatic",
+          "archetype": "sunlit",
           "count": 9
         },
         {
-          "archetype": "chiaroscuro",
+          "archetype": "dark_portrait",
           "count": 2
         },
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 1
         }
       ],
@@ -120,26 +120,26 @@
         "primary_sector_weight": 0.313
       },
       "size": 36,
-      "sourceArchetype": "subtle_naturalist",
+      "sourceArchetype": "fine_art_scan",
       "archetypeBreakdown": [
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 28
         },
         {
-          "archetype": "chromatic_polyphony",
+          "archetype": "full_spectrum",
           "count": 5
         },
         {
-          "archetype": "neon_graphic",
+          "archetype": "neon",
           "count": 1
         },
         {
-          "archetype": "warm_naturalist",
+          "archetype": "warm_photo",
           "count": 1
         },
         {
-          "archetype": "chiaroscuro",
+          "archetype": "dark_portrait",
           "count": 1
         }
       ],
@@ -200,26 +200,26 @@
         "primary_sector_weight": 0.491
       },
       "size": 29,
-      "sourceArchetype": "subtle_naturalist",
+      "sourceArchetype": "fine_art_scan",
       "archetypeBreakdown": [
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 13
         },
         {
-          "archetype": "chiaroscuro",
+          "archetype": "dark_portrait",
           "count": 10
         },
         {
-          "archetype": "warm_dramatic",
+          "archetype": "sunlit",
           "count": 3
         },
         {
-          "archetype": "structural_outlier_rescue",
+          "archetype": "detail_recovery",
           "count": 2
         },
         {
-          "archetype": "neon_graphic",
+          "archetype": "neon",
           "count": 1
         }
       ],
@@ -280,34 +280,34 @@
         "primary_sector_weight": 0.446
       },
       "size": 26,
-      "sourceArchetype": "warm_naturalist",
+      "sourceArchetype": "warm_photo",
       "archetypeBreakdown": [
         {
-          "archetype": "warm_naturalist",
+          "archetype": "warm_photo",
           "count": 8
         },
         {
-          "archetype": "neon_graphic",
+          "archetype": "neon",
           "count": 6
         },
         {
-          "archetype": "vibrant_tonal",
+          "archetype": "vivid_photo",
           "count": 6
         },
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 3
         },
         {
-          "archetype": "thermonuclear_yellow",
+          "archetype": "hot_yellow",
           "count": 1
         },
         {
-          "archetype": "bold_graphic",
+          "archetype": "bold_poster",
           "count": 1
         },
         {
-          "archetype": "warm_dramatic",
+          "archetype": "sunlit",
           "count": 1
         }
       ],
@@ -367,38 +367,38 @@
         "primary_sector_weight": 0.288
       },
       "size": 25,
-      "sourceArchetype": "subtle_naturalist",
+      "sourceArchetype": "fine_art_scan",
       "archetypeBreakdown": [
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 7
         },
         {
-          "archetype": "chromatic_polyphony",
+          "archetype": "full_spectrum",
           "count": 3
         },
         {
-          "archetype": "structural_outlier_rescue",
+          "archetype": "detail_recovery",
           "count": 3
         },
         {
-          "archetype": "golden_naturalist",
+          "archetype": "painterly",
           "count": 3
         },
         {
-          "archetype": "chiaroscuro",
+          "archetype": "dark_portrait",
           "count": 3
         },
         {
-          "archetype": "bold_graphic",
+          "archetype": "bold_poster",
           "count": 3
         },
         {
-          "archetype": "warm_dramatic",
+          "archetype": "sunlit",
           "count": 2
         },
         {
-          "archetype": "bright_desaturated",
+          "archetype": "bleached",
           "count": 1
         }
       ],
@@ -459,38 +459,38 @@
         "primary_sector_weight": 0.766
       },
       "size": 22,
-      "sourceArchetype": "golden_naturalist",
+      "sourceArchetype": "painterly",
       "archetypeBreakdown": [
         {
-          "archetype": "golden_naturalist",
+          "archetype": "painterly",
           "count": 7
         },
         {
-          "archetype": "chiaroscuro",
+          "archetype": "dark_portrait",
           "count": 6
         },
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 3
         },
         {
-          "archetype": "structural_outlier_rescue",
+          "archetype": "detail_recovery",
           "count": 2
         },
         {
-          "archetype": "thermonuclear_yellow",
+          "archetype": "hot_yellow",
           "count": 1
         },
         {
-          "archetype": "bold_graphic",
+          "archetype": "bold_poster",
           "count": 1
         },
         {
-          "archetype": "warm_dramatic",
+          "archetype": "sunlit",
           "count": 1
         },
         {
-          "archetype": "vibrant_tonal",
+          "archetype": "vivid_photo",
           "count": 1
         }
       ],
@@ -549,26 +549,26 @@
         "primary_sector_weight": 0.585
       },
       "size": 21,
-      "sourceArchetype": "warm_dramatic",
+      "sourceArchetype": "sunlit",
       "archetypeBreakdown": [
         {
-          "archetype": "warm_dramatic",
+          "archetype": "sunlit",
           "count": 11
         },
         {
-          "archetype": "golden_naturalist",
+          "archetype": "painterly",
           "count": 3
         },
         {
-          "archetype": "tenebrist_gold",
+          "archetype": "old_master",
           "count": 3
         },
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 2
         },
         {
-          "archetype": "chiaroscuro",
+          "archetype": "dark_portrait",
           "count": 2
         }
       ],
@@ -629,26 +629,26 @@
         "primary_sector_weight": 0.241
       },
       "size": 19,
-      "sourceArchetype": "chromatic_polyphony",
+      "sourceArchetype": "full_spectrum",
       "archetypeBreakdown": [
         {
-          "archetype": "chromatic_polyphony",
+          "archetype": "full_spectrum",
           "count": 10
         },
         {
-          "archetype": "warm_naturalist",
+          "archetype": "warm_photo",
           "count": 6
         },
         {
-          "archetype": "vibrant_tonal",
+          "archetype": "vivid_photo",
           "count": 1
         },
         {
-          "archetype": "blue_rescue",
+          "archetype": "cool_recovery",
           "count": 1
         },
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 1
         }
       ],
@@ -708,34 +708,34 @@
         "primary_sector_weight": 0.403
       },
       "size": 19,
-      "sourceArchetype": "bold_graphic",
+      "sourceArchetype": "bold_poster",
       "archetypeBreakdown": [
         {
-          "archetype": "bold_graphic",
+          "archetype": "bold_poster",
           "count": 8
         },
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 5
         },
         {
-          "archetype": "chiaroscuro",
+          "archetype": "dark_portrait",
           "count": 2
         },
         {
-          "archetype": "golden_naturalist",
+          "archetype": "painterly",
           "count": 1
         },
         {
-          "archetype": "warm_dramatic",
+          "archetype": "sunlit",
           "count": 1
         },
         {
-          "archetype": "structural_outlier_rescue",
+          "archetype": "detail_recovery",
           "count": 1
         },
         {
-          "archetype": "bright_desaturated",
+          "archetype": "bleached",
           "count": 1
         }
       ],
@@ -794,22 +794,22 @@
         "primary_sector_weight": 0.806
       },
       "size": 17,
-      "sourceArchetype": "golden_naturalist",
+      "sourceArchetype": "painterly",
       "archetypeBreakdown": [
         {
-          "archetype": "golden_naturalist",
+          "archetype": "painterly",
           "count": 11
         },
         {
-          "archetype": "chiaroscuro",
+          "archetype": "dark_portrait",
           "count": 3
         },
         {
-          "archetype": "warm_dramatic",
+          "archetype": "sunlit",
           "count": 2
         },
         {
-          "archetype": "structural_outlier_rescue",
+          "archetype": "detail_recovery",
           "count": 1
         }
       ],
@@ -868,26 +868,26 @@
         "primary_sector_weight": 0.589
       },
       "size": 16,
-      "sourceArchetype": "warm_dramatic",
+      "sourceArchetype": "sunlit",
       "archetypeBreakdown": [
         {
-          "archetype": "warm_dramatic",
+          "archetype": "sunlit",
           "count": 7
         },
         {
-          "archetype": "golden_naturalist",
+          "archetype": "painterly",
           "count": 4
         },
         {
-          "archetype": "thermonuclear_yellow",
+          "archetype": "hot_yellow",
           "count": 2
         },
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 2
         },
         {
-          "archetype": "neon_graphic",
+          "archetype": "neon",
           "count": 1
         }
       ],
@@ -948,22 +948,22 @@
         "primary_sector_weight": 0.422
       },
       "size": 15,
-      "sourceArchetype": "subtle_naturalist",
+      "sourceArchetype": "fine_art_scan",
       "archetypeBreakdown": [
         {
-          "archetype": "subtle_naturalist",
+          "archetype": "fine_art_scan",
           "count": 9
         },
         {
-          "archetype": "structural_outlier_rescue",
+          "archetype": "detail_recovery",
           "count": 3
         },
         {
-          "archetype": "blue_rescue",
+          "archetype": "cool_recovery",
           "count": 2
         },
         {
-          "archetype": "golden_naturalist",
+          "archetype": "painterly",
           "count": 1
         }
       ],

@@ -94,12 +94,12 @@ For lower-level control, all engines are available via `Reveal.engines.*`:
 
 | Group | Archetypes |
 |-------|-----------|
-| **Natural** | Warm Naturalist, Subtle Naturalist, Golden Naturalist, Standard Balanced, Chromatic Polyphony |
-| **Soft** | Soft Ethereal, Pastel High-Key, Muted Vintage, Bright Desaturated, Silver Gelatin |
-| **Graphic** | Bold Graphic, Punchy Commercial, Pure Graphic, Neon Graphic, Vibrant Graphic |
-| **Dramatic** | Warm Sovereign, Chiaroscuro, Deep Shadow Noir, Tenebrist Gold, Cinematic Moody |
-| **Vibrant** | Warm Dramatic, Thermonuclear Yellow, Vibrant Tonal, Jethro Monroe |
-| **Specialist** | Blue Rescue, Structural Outlier Rescue |
+| **Natural** | Everyday Photo, Fine Art Scan, Warm Photo, Painterly, Full Spectrum |
+| **Soft** | Pastel, Soft Light, Faded Vintage, Bleached, Black & White |
+| **Graphic** | Spot Color, Bold Poster, Commercial, Neon, Vivid Poster |
+| **Dramatic** | Dark Portrait, Old Master, Film Noir, Cinematic, Golden Hour |
+| **Vibrant** | Sunlit, Saturated Max, Vivid Photo, Hot Yellow |
+| **Specialist** | Cool Recovery, Detail Recovery |
 
 Plus 3 code-only pseudo-archetypes: **Chameleon** (DNA-interpolated), **Distilled** (over-quantize then reduce), **Salamander** (hybrid).
 

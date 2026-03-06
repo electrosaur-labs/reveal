@@ -1,7 +1,7 @@
 {
-  "id": "noir_shadow",
+  "id": "film_noir",
   "version": "1.0.0",
-  "name": "Deep Shadow / Noir",
+  "name": "Film Noir",
   "group": "dramatic",
   "engine": "direct",
   "description": "Dark, high contrast. Optimized for woodcuts and film noir aesthetics.",

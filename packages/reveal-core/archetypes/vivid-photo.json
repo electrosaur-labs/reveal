@@ -1,7 +1,7 @@
 {
-  "id": "vibrant_tonal",
+  "id": "vivid_photo",
   "version": "1.2.0",
-  "name": "Vibrant Tonal / Neon-High-Chroma",
+  "name": "Vivid Photo",
   "group": "vibrant",
   "engine": "direct",
   "description": "Finds vibrant details without crushing luminance. Balanced c-weight preserves form while boosting chroma.",

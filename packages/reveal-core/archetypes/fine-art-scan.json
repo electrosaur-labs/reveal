@@ -1,7 +1,7 @@
 {
-  "id": "subtle_naturalist",
+  "id": "fine_art_scan",
   "version": "1.0.0",
-  "name": "Subtle Naturalist / Architectural",
+  "name": "Fine Art Scan",
   "group": "natural",
   "engine": "direct",
   "description": "Baseline for 16-bit photographic scans. High entropy target protects clinical color diversity.",

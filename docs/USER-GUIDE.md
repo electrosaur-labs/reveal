@@ -36,9 +36,10 @@ to the nearest palette color, and creates one Photoshop layer per ink.
 
 ### Key Concepts
 
-- **Archetype** — A separation recipe. "Warm Naturalist" favors earth tones and faithful reproduction. "Bold Graphic"
-  pushes contrast and saturation. "Chiaroscuro" protects deep shadows. There are 26, grouped into Natural, Soft,
-  Graphic, Dramatic, Vibrant, and Specialist families.
+- **Archetype** — A separation recipe. "Warm Photo" favors earth tones and faithful reproduction. "Bold Poster"
+  pushes contrast and saturation. "Dark Portrait" protects deep shadows. There are 26 archetypes grouped into
+  Natural, Soft, Graphic, Dramatic, Vibrant, and Specialist families, plus 3 adaptive pseudo-archetypes (Chameleon,
+  Distilled, Salamander) that tune themselves to your image automatically.
 - **DNA** — The image's fingerprint. You don't interact with it directly — it drives the automatic archetype ranking.
 - **Palette** — The set of spot colors extracted from your image. Typically 5-8 colors. You can edit, merge, delete, or
   add colors before committing.

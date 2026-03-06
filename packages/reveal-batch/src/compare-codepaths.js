@@ -11,7 +11,7 @@
  *
  * Defaults:
  *   inputPSD:    /workspaces/electrosaur/fixtures/JethroAsMonroe-original-16bit.psd
- *   archetypeId: subtle_naturalist
+ *   archetypeId: fine_art_scan
  */
 
 const fs = require('fs');
@@ -86,7 +86,7 @@ function comparePalettes(labelA, paletteA, labelB, paletteB) {
 
 async function main() {
     const inputPath = process.argv[2] || '/workspaces/electrosaur/fixtures/JethroAsMonroe-original-16bit.psd';
-    const archetypeId = process.argv[3] || 'subtle_naturalist';
+    const archetypeId = process.argv[3] || 'fine_art_scan';
 
     console.log(`═══════════════════════════════════════════════════════════`);
     console.log(`  Code Path Comparison: ${path.basename(inputPath)}`);

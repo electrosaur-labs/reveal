@@ -1,7 +1,7 @@
 {
-  "id": "neon_graphic",
+  "id": "neon",
   "version": "1.0.0",
-  "name": "Neon / Fluorescent Graphic",
+  "name": "Neon",
   "group": "graphic",
   "engine": "direct",
   "description": "Aggressive hue-locking for saturated flat art. Prevents bleed between vibrant spot colors.",

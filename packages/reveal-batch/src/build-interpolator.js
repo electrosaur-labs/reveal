@@ -187,8 +187,8 @@ function main() {
         // Load archetype parameters
         let params = loadArchetypeParams(dominantArchetype);
         if (!params) {
-            console.warn(`  WARN: No archetype file for ${dominantArchetype}, using subtle_naturalist fallback`);
-            params = loadArchetypeParams('subtle_naturalist');
+            console.warn(`  WARN: No archetype file for ${dominantArchetype}, using fine_art_scan fallback`);
+            params = loadArchetypeParams('fine_art_scan');
         }
 
         // Find best-quality member for reference

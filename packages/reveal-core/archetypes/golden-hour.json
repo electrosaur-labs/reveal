@@ -1,19 +1,23 @@
 {
-  "id": "warm_sovereign",
+  "id": "golden_hour",
   "version": "1.1.0",
-  "name": "Warm Sovereign",
+  "name": "Golden Hour",
   "group": "dramatic",
   "engine": "direct",
   "description": "Single warm hue dominates a neutral canvas. High temperature, concentrated orange-yellow sector, low overall chroma from neutral majority. Golden hour scenes, chestnut horses, amber-lit interiors, autumn foliage against dark backgrounds.",
-  "preferred_sectors": ["orange", "yellow", "chartreuse"],
+  "preferred_sectors": [
+    "orange",
+    "yellow",
+    "chartreuse"
+  ],
   "centroid": {
     "l": 78,
     "c": 15,
     "k": 100,
     "l_std_dev": 30,
-    "hue_entropy": 0.50,
+    "hue_entropy": 0.5,
     "temperature_bias": 0.75,
-    "primary_sector_weight": 0.50
+    "primary_sector_weight": 0.5
   },
   "weights": {
     "l": 1.0,

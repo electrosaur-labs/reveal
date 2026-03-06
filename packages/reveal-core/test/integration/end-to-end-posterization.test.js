@@ -193,7 +193,7 @@ describe('bitDepth propagation through pipeline', () => {
         // Callers with true 16-bit source data (e.g. reveal-batch) should pass
         // bitDepth explicitly when calling PosterizationEngine.
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         expect(config.bitDepth).toBeUndefined();
@@ -265,7 +265,7 @@ describe('bitDepth propagation through pipeline', () => {
 describe('Full pipeline: DNA → ParameterGenerator → Posterize → Separate', () => {
     it('should produce a complete config from DNA analysis', () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         // Verify all critical parameters are present
@@ -288,7 +288,7 @@ describe('Full pipeline: DNA → ParameterGenerator → Posterize → Separate',
 
     it('should posterize Jethro with Subtle Naturalist and produce 6+ separable colors', () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         // Use a 400x400 center crop for test speed
@@ -409,7 +409,7 @@ describe('Golden palette regression: Jethro + Subtle Naturalist', () => {
 
     it('should produce all expected color families with tc=10', () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         // Apply bilateral filter on a copy
@@ -447,7 +447,7 @@ describe('Golden palette regression: Jethro + Subtle Naturalist', () => {
 
     it('should produce at least 6 colors with tc=8 (archetype default)', () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         const filtered = new Uint16Array(jethroPixels);
@@ -486,7 +486,7 @@ describe('Golden palette regression: Jethro + Subtle Naturalist', () => {
 describe('ProxyEngine consistency with direct PosterizationEngine', () => {
     it('ProxyEngine preserves full palette via proxy-safe overrides (no snap/prune/densityFloor)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         const engineConfig = {
             ...config,
@@ -523,7 +523,7 @@ describe('ProxyEngine consistency with direct PosterizationEngine', () => {
 
     it('ProxyEngine with explicit bitDepth=16 should produce valid palette', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         // Caller passes bitDepth explicitly (e.g. reveal-batch with true 16-bit PSD)
@@ -539,7 +539,7 @@ describe('ProxyEngine consistency with direct PosterizationEngine', () => {
 
     it('ProxyEngine rePosterize should produce same palette as initializeProxy with same config', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         const engineConfig = {
             ...config,
@@ -624,7 +624,7 @@ describe('Archetype swap produces different but valid palettes', () => {
 describe('Separation produces valid, complete masks', () => {
     it('every pixel should be assigned to exactly one palette color', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         // Use ProxyEngine for speed
@@ -663,7 +663,7 @@ describe('Separation produces valid, complete masks', () => {
 
     it('no palette color should have zero coverage (ghost plates)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         const proxyEngine = new ProxyEngine();
@@ -699,7 +699,7 @@ import MechanicalKnobs from '../../lib/engines/MechanicalKnobs.js';
 describe('ProxyEngine proxy-safe palette preservation', () => {
     it('should produce reasonable palette for Warm Naturalist tc=10 (preview=production)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'warm_naturalist'
+            manualArchetypeId: 'warm_photo'
         });
         // Warm Naturalist uses CIE2000 + enablePaletteReduction=true + paletteReduction=6.
         // ProxyEngine passes through archetype's paletteReduction so preview matches production.
@@ -723,7 +723,7 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
 
     it('should produce reasonable palette for Subtle Naturalist tc=10 (CIE2000)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         const engineConfig = {
             ...config,
@@ -743,7 +743,7 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
 
     it('rePosterize should match initializeProxy palette behavior', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'warm_naturalist'
+            manualArchetypeId: 'warm_photo'
         });
         const engineConfig = {
             ...config,
@@ -759,7 +759,7 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
 
         // Swap to a different archetype then back
         const config2 = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         await proxyEngine.rePosterize({
             ...config2,
@@ -781,7 +781,7 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
         // Without the override, PosterizationEngine uses the default threshold of 12.0,
         // which is aggressive enough to merge minority green centroids at proxy resolution.
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'warm_naturalist'
+            manualArchetypeId: 'warm_photo'
         });
         const engineConfig = {
             ...config,
@@ -807,7 +807,7 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
 
     it('ProxyEngine rePosterize must preserve GREEN across archetype swap (Subtle Naturalist)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'warm_naturalist'
+            manualArchetypeId: 'warm_photo'
         });
         const engineConfig = {
             ...config,
@@ -823,7 +823,7 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
 
         // Swap to Subtle Naturalist (CIE2000 metric — historically fragile for green)
         const config2 = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         const result = await proxyEngine.rePosterize({
             ...config2,

@@ -1,7 +1,7 @@
 {
-  "id": "silver_gelatin",
+  "id": "black_and_white",
   "version": "1.0.0",
-  "name": "Silver Gelatin / Tonal B&W",
+  "name": "Black & White",
   "group": "soft",
   "engine": "direct",
   "description": "Pure grayscale master. Hard-locks neutral centroids to prevent chromatic noise.",

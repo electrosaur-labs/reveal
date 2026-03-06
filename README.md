@@ -31,7 +31,7 @@ The Photoshop plugin gives you real-time preview, palette editing, and one-click
 ## Key Features
 
 - **Lab median cut quantization** — Recursive partitioning in perceptual color space, not RGB
-- **26 archetypes** — DNA analysis fingerprints each image and recommends separation parameters (Warm Sovereign, Punchy Commercial, Subtle Naturalist, Chiaroscuro, etc.)
+- **26 archetypes** — DNA analysis fingerprints each image and recommends separation parameters (Golden Hour, Commercial, Fine Art Scan, Dark Portrait, etc.)
 - **Three distance metrics** — CIE76 (fast), CIE94 (perceptual), CIE2000 (museum-grade)
 - **Dithering** — Floyd-Steinberg, Atkinson, blue noise, Bayer, with mesh-aware LPI scaling
 - **Mechanical knobs** — Ghost screen removal (minVolume), dust removal (speckleRescue), shadow floor (shadowClamp), color trapping

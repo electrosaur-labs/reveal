@@ -1,18 +1,24 @@
 {
-  "id": "bold_graphic",
+  "id": "bold_poster",
   "version": "1.0.0",
-  "name": "Bold Graphic / Political Poster",
+  "name": "Bold Poster",
   "group": "graphic",
   "engine": "direct",
   "description": "High-contrast graphic art with near-maximum black and strong tonal structure. Political posters, Art Nouveau lithographs, editorial graphics.",
-  "preferred_sectors": ["chartreuse", "orange", "yellow", "green", "red"],
+  "preferred_sectors": [
+    "chartreuse",
+    "orange",
+    "yellow",
+    "green",
+    "red"
+  ],
   "centroid": {
     "l": 69,
     "c": 18,
     "k": 99,
     "l_std_dev": 35,
     "hue_entropy": 0.65,
-    "temperature_bias": 0.20,
+    "temperature_bias": 0.2,
     "primary_sector_weight": 0.38
   },
   "weights": {

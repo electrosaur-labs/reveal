@@ -518,13 +518,13 @@ class ParameterGenerator {
     static _applyDNAv2Overrides(params, dna, archetype) {
         // Only apply overrides to certain archetypes that benefit from refinement
         const refinableArchetypes = [
-            'subtle_naturalist',
-            'bright_desaturated',
+            'fine_art_scan',
+            'bleached',
             'warm_tonal_optimized',
-            'structural_outlier_rescue',
-            'vibrant_tonal',          // Add vibrant tonal
-            'vibrant_hyper',          // Add vibrant graphic
-            'neon_graphic'            // Add neon graphic
+            'detail_recovery',
+            'vivid_photo',          // Add vibrant tonal
+            'vivid_poster',          // Add vibrant graphic
+            'neon'            // Add neon graphic
         ];
 
         if (!refinableArchetypes.includes(archetype.id)) {

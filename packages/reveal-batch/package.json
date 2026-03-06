@@ -10,28 +10,11 @@
     "start": "node src/cli.js",
     "test": "echo \"No tests yet\" && exit 0",
     "reveal": "node src/reveal-batch.js",
-    "reveal-preprocess": "node src/reveal-batch-preprocess.js",
-    "analyze": "node src/analyze-batch.js",
-    "convert-cq100": "node scripts/convertCQ100ToPsd.js",
-    "profile-cq100": "node src/CQ100_Profiler.js",
-    "generate-passports": "node src/CQ100_PassportGenerator.js",
-    "architect-presets": "node src/PresetArchitect.js",
-    "convert-ppm-to-tiff": "node src/convertPPMToLabTiff.js",
-    "process-cq100": "node src/processCQ100.js",
-    "process-8bit": "node src/process8bitPSD.js",
-    "analyze-cq100": "node src/CQ100_MetaAnalyzer.js",
-    "analyze-sp100": "node src/SP100_MetaAnalyzer.js",
-    "revalidate": "node src/Revalidate.js",
-    "revalidate-quality": "node src/RevalidateQuality.js",
-    "analyze-dataset": "node src/DatasetArchitect.js",
-    "test-astronaut": "node test-astronaut.js",
-    "debug-ppm": "node debug-ppm.js",
-    "debug-lab": "node debug-lab-conversion.js",
     "posterize": "node src/posterize-psd.js",
-    "harvest-dna": "node src/harvest-dna.js",
-    "cluster-explore": "node src/cluster-explore.js",
-    "build-interpolator": "node src/build-interpolator.js",
-    "ab-test": "node src/ab-test-interpolator.js"
+    "analyze": "node src/analyze-batch.js",
+    "process-cq100": "node src/processCQ100.js",
+    "analyze-cq100": "node src/CQ100_MetaAnalyzer.js",
+    "analyze-sp100": "node src/SP100_MetaAnalyzer.js"
   },
   "dependencies": {
     "@electrosaur-labs/core": "*",
@@ -51,6 +34,11 @@
   ],
   "author": "Electrosaur Labs",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/electrosaur-labs/reveal-project.git",
+    "directory": "packages/reveal-batch"
+  },
   "engines": {
     "node": ">=18.17.0"
   }

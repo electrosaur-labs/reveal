@@ -212,7 +212,7 @@ class ArchetypeLoader {
      */
     static getFallbackArchetype() {
         return {
-            id: 'standard_balanced',
+            id: 'everyday_photo',
             name: 'Standard Balanced',
             description: 'Fallback archetype',
             centroid: { l: 50, c: 25, k: 50, l_std_dev: 25 },

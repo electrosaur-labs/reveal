@@ -1,7 +1,7 @@
 {
-  "id": "jethro_monroe_clinical",
+  "id": "saturated_max",
   "version": "1.0.0",
-  "name": "Jethro Monroe / Sovereign 10-Color Lock",
+  "name": "Saturated Max",
   "group": "vibrant",
   "engine": "direct",
   "description": "Hard-coded v1 physics with Mk 1.5 stability. 10-color partition.",

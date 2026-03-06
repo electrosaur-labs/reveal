@@ -77,7 +77,7 @@ beforeAll(() => {
 describe('ProxyEngine.getPaletteWithQuality end-to-end', () => {
     it('should return valid meanDeltaE for Subtle Naturalist', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         const engineConfig = {
             ...config,
@@ -159,7 +159,7 @@ describe('ProxyEngine.getPaletteWithQuality end-to-end', () => {
 describe('meanDeltaE16 cross-validation with inline computation', () => {
     it('should match hand-computed ΔE on proxy buffer', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         const engineConfig = {
             ...config,
@@ -210,7 +210,7 @@ describe('meanDeltaE16 cross-validation with inline computation', () => {
 
     it('should match getPaletteWithQuality result on same config', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'warm_naturalist'
+            manualArchetypeId: 'warm_photo'
         });
         const engineConfig = {
             ...config,
@@ -261,7 +261,7 @@ describe('meanDeltaE16 cross-validation with inline computation', () => {
 describe('PROXY_SAFE_OVERRIDES applied consistently', () => {
     it('initializeProxy and getPaletteWithQuality should produce same palette', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         const engineConfig = {
             ...config,
@@ -288,7 +288,7 @@ describe('PROXY_SAFE_OVERRIDES applied consistently', () => {
 
     it('getPaletteForConfig and getPaletteWithQuality should produce same palette', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'warm_naturalist'
+            manualArchetypeId: 'warm_photo'
         });
         const engineConfig = {
             ...config,
@@ -316,7 +316,7 @@ describe('PROXY_SAFE_OVERRIDES applied consistently', () => {
 
     it('rePosterize should produce same palette as initializeProxy with same config', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         const engineConfig = {
             ...config,
@@ -353,7 +353,7 @@ describe('Multi-archetype quality ranking via getPaletteWithQuality', () => {
 
         // Initialize with a baseline archetype
         const baseConfig = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         await proxyEngine.initializeProxy(jethroPixels, jethroWidth, jethroHeight, {
             ...baseConfig,
@@ -363,7 +363,7 @@ describe('Multi-archetype quality ranking via getPaletteWithQuality', () => {
         });
 
         // Score 4 different archetypes
-        const archetypeIds = ['subtle_naturalist', 'warm_naturalist', 'chromatic_polyphony', 'bold_graphic'];
+        const archetypeIds = ['fine_art_scan', 'warm_photo', 'full_spectrum', 'bold_poster'];
         const scores = [];
 
         for (const id of archetypeIds) {
@@ -426,7 +426,7 @@ describe('RevelationError.meanDeltaE16 with real proxy data', () => {
 
     it('should produce reasonable ΔE on real Jethro proxy data', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         const engineConfig = {
             ...config,
@@ -457,7 +457,7 @@ describe('RevelationError.meanDeltaE16 with real proxy data', () => {
         const proxyEngine = new ProxyEngine();
 
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
 
         // Initialize with 5 colors
@@ -493,7 +493,7 @@ describe('ProxyEngine.getOriginalPreviewRGBA', () => {
 
     beforeAll(async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         proxyEngine = new ProxyEngine();
         const result = await proxyEngine.initializeProxy(jethroPixels, jethroWidth, jethroHeight, {
@@ -592,7 +592,7 @@ describe('ProxyEngine.getOriginalPreviewRGBA', () => {
 
         // Re-ingest with same data (simulates new image load)
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'subtle_naturalist'
+            manualArchetypeId: 'fine_art_scan'
         });
         await proxyEngine.initializeProxy(jethroPixels, jethroWidth, jethroHeight, {
             ...config,

@@ -1,7 +1,7 @@
 {
-  "id": "cinematic_moody",
+  "id": "cinematic",
   "version": "1.0.0",
-  "name": "Cinematic / Moody",
+  "name": "Cinematic",
   "group": "dramatic",
   "engine": "direct",
   "description": "Deep tones and heavy shadows. Prevents shadow fusion in low-exposure shots.",

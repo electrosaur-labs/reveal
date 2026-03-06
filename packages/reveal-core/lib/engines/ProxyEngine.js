@@ -109,7 +109,7 @@ class ProxyEngine {
 
         // Store raw buffer BEFORE bilateral filtering.
         // rePosterize calls derive per-archetype buffers from _rawProxyBuffer so
-        // preprocessingIntensity changes (e.g. 'auto' Chameleon → 'off' warm_sovereign)
+        // preprocessingIntensity changes (e.g. 'auto' Chameleon → 'off' golden_hour)
         // take effect immediately without requiring a full re-ingest.
         this._rawProxyBuffer = rawBuffer;
 
@@ -210,7 +210,7 @@ class ProxyEngine {
         const proxyH = this.separationState.height;
 
         // Regenerate proxyBuffer if preprocessing intensity changed between archetypes.
-        // Chameleon uses 'auto' (bilateral filter applied); warm_sovereign and similar use 'off'
+        // Chameleon uses 'auto' (bilateral filter applied); golden_hour and similar use 'off'
         // (raw pixels). Without this, an 'off' archetype runs on Chameleon's filtered buffer,
         // causing ~9% chroma reduction (bilateral averaging compresses extreme chroma).
         const newIntensity = config.preprocessingIntensity !== undefined

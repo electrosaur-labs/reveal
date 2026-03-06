@@ -27,6 +27,12 @@
     "color-separation",
     "navigator"
   ],
+  "private": true,
   "author": "Electrosaur Labs",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/electrosaur-labs/reveal-project.git",
+    "directory": "packages/reveal-navigator"
+  }
 }

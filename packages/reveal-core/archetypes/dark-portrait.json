@@ -1,11 +1,15 @@
 {
-  "id": "chiaroscuro",
+  "id": "dark_portrait",
   "version": "1.0.0",
-  "name": "Chiaroscuro / Dark Portrait",
+  "name": "Dark Portrait",
   "group": "dramatic",
   "engine": "direct",
   "description": "Dark warm paintings with dramatic light-dark contrast. Low-chroma, orange-dominant, high blackness. Rembrandt-era portraits, candlelit scenes, tenebrism.",
-  "preferred_sectors": ["orange", "red", "yellow"],
+  "preferred_sectors": [
+    "orange",
+    "red",
+    "yellow"
+  ],
   "centroid": {
     "l": 45,
     "c": 14,
@@ -13,7 +17,7 @@
     "l_std_dev": 26,
     "hue_entropy": 0.35,
     "temperature_bias": 0.45,
-    "primary_sector_weight": 0.40
+    "primary_sector_weight": 0.4
   },
   "weights": {
     "l": 2.5,

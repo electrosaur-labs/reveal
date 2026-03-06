@@ -1,7 +1,7 @@
 {
-  "id": "standard_balanced",
+  "id": "everyday_photo",
   "version": "1.0.0",
-  "name": "Standard / Balanced",
+  "name": "Everyday Photo",
   "group": "natural",
   "engine": "direct",
   "description": "Baseline metrics for standard photographic scenes.",

@@ -1,11 +1,18 @@
 {
-  "id": "golden_naturalist",
+  "id": "painterly",
   "version": "1.0.0",
-  "name": "Golden Naturalist",
+  "name": "Painterly",
   "group": "natural",
   "engine": "direct",
-  "description": "Warm-toned painterly scenes with high hue diversity. Complex multi-hue compositions where many sectors contribute — landscapes, genre scenes, Art Nouveau illustrations. Higher entropy than Warm Dramatic; warmer than Subtle Naturalist.",
-  "preferred_sectors": ["yellow", "orange", "chartreuse", "green", "cyan", "red"],
+  "description": "Warm-toned painterly scenes with high hue diversity. Complex multi-hue compositions where many sectors contribute \u2014 landscapes, genre scenes, Art Nouveau illustrations. Higher entropy than Warm Dramatic; warmer than Subtle Naturalist.",
+  "preferred_sectors": [
+    "yellow",
+    "orange",
+    "chartreuse",
+    "green",
+    "cyan",
+    "red"
+  ],
   "centroid": {
     "l": 65,
     "c": 17,
@@ -13,7 +20,7 @@
     "l_std_dev": 20,
     "hue_entropy": 0.62,
     "temperature_bias": 0.55,
-    "primary_sector_weight": 0.40
+    "primary_sector_weight": 0.4
   },
   "weights": {
     "l": 1.0,

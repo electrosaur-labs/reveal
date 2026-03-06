@@ -1,7 +1,7 @@
 {
-  "id": "hard_commercial",
+  "id": "commercial",
   "version": "1.0.0",
-  "name": "Punchy / Commercial",
+  "name": "Commercial",
   "group": "graphic",
   "engine": "direct",
   "description": "High contrast, saturated commercial photography. Optimized for edge-sharpness and vibrant results.",

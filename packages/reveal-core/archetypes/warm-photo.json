@@ -1,7 +1,7 @@
 {
-  "id": "warm_naturalist",
+  "id": "warm_photo",
   "version": "1.1.0",
-  "name": "Warm Naturalist",
+  "name": "Warm Photo",
   "group": "natural",
   "engine": "direct",
   "description": "Warm multi-hue subjects (food, toys, wildlife). Orange/red dominant with moderate chroma spread. Requires high entropy (diverse hues) and strong warm temperature bias. Yellow-dominant images belong to thermonuclear_yellow instead.",

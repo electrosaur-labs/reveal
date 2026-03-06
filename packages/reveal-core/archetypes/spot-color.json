@@ -1,7 +1,7 @@
 {
-  "id": "pure_graphic",
+  "id": "spot_color",
   "version": "1.0.0",
-  "name": "Pure Graphic / Vector",
+  "name": "Spot Color",
   "group": "graphic",
   "engine": "direct",
   "description": "Ultra-flat colors, zero gradients. High hue-locking for surgical separation of spot colors.",
