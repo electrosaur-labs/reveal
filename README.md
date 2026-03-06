@@ -23,6 +23,11 @@ The Photoshop plugin gives you real-time preview, palette editing, and one-click
   </tr>
 </table>
 
+<p align="center">
+  <img src="docs/images/screenshot-navigator.jpg" width="600" alt="Reveal Navigator — Photoshop plugin">
+  <br><em>Navigator panel in Photoshop — archetype carousel, radar HUD, palette surgery, mechanical knobs</em>
+</p>
+
 ## Key Features
 
 - **Lab median cut quantization** — Recursive partitioning in perceptual color space, not RGB
