@@ -35,8 +35,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          CCX_FILE="packages/reveal-navigator/reveal-${VERSION}.ccx"
-          gh release create "$VERSION" "$CCX_FILE" \
-            --title "Reveal ${VERSION}" \
+          TAG="${GITHUB_REF_NAME}"
+          PKG_VERSION=$(node -p "require('./packages/reveal-navigator/package.json').version")
+          CCX_FILE="packages/reveal-navigator/reveal-v${PKG_VERSION}.ccx"
+          gh release create "$TAG" "$CCX_FILE" \
+            --title "Reveal ${TAG}" \
             --notes-file CHANGELOG.md
