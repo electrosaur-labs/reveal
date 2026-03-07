@@ -1,367 +1,96 @@
 #!/usr/bin/env node
 /**
- * reveal-batch.js
- * Generic batch processor for Lab PSDs through the Reveal engine.
+ * reveal-batch.js — Generic batch posterizer for Lab PSDs
  *
- * Usage: node reveal-batch.js <input-dir> <output-dir>
+ * Processes all Lab PSDs in an input directory through the Reveal separation engine.
+ * Delegates per-file processing to posterize-psd.js.
+ *
+ * Usage: node reveal-batch.js <input-dir> <output-dir> [--archetype <id>]
  *
  * Input:  Directory containing Lab PSDs (8-bit or 16-bit)
- * Output: Directory for processed PSDs and validation JSONs
+ * Output: Directory for separated PSDs and validation JSONs
  */
 const fs = require('fs');
 const path = require('path');
-const Reveal = require('@electrosaur-labs/core');
-const { PSDWriter } = require('@electrosaur-labs/psd-writer');
-const { readPsd } = require('@electrosaur-labs/psd-reader');
-const ParameterGenerator = Reveal.ParameterGenerator;
-const MetricsCalculator = require('./MetricsCalculator');
-const { DNAFidelity, DNAGenerator } = Reveal;
 const chalk = require('chalk');
-const {
-    convert8bitTo16bitLab,
-    convertPsd16bitToEngineLab,
-    convertPsd16bitTo8bitLab,
-    rgbToHex,
-    generateThumbnail
-} = require('./batch-utils');
+const { posterizePsd } = require('./posterize-psd');
 
-/**
- * Calculate full DNA v2.0 from 8-bit Lab data using DNAGenerator.
- * Returns flattened DNA structure compatible with ArchetypeMapper.
- */
-function calculateFullDNA(lab8bit, width, height, basename) {
-    const dnaGen = new DNAGenerator();
-    const fullDNA = dnaGen.generate(lab8bit, width, height, { bitDepth: 8 });
-    // Flatten global fields to top level for ArchetypeMapper compatibility
-    return {
-        ...fullDNA.global,
-        sectors: fullDNA.sectors,
-        dominant_sector: fullDNA.dominant_sector,
-        version: fullDNA.version,
-        filename: basename
-    };
-}
-
-/**
- * Process a single Lab PSD
- */
-async function processImage(inputPath, outputDir) {
-    const basename = path.basename(inputPath, '.psd');
-    console.log(chalk.cyan(`\n[${basename}] Processing...`));
-
-    const timingStart = Date.now();
-
-    try {
-        // 1. Read Lab PSD
-        const buffer = fs.readFileSync(inputPath);
-        const psd = readPsd(buffer);
-        const { width, height, depth, data: labData } = psd;
-        const pixelCount = width * height;
-
-        console.log(`  Size: ${width}×${height} (${depth}-bit Lab)`);
-
-        // 2. Prepare engine 16-bit Lab and 8-bit Lab for metrics/thumbnail
-        let lab16bit, lab8bit;
-
-        if (depth === 8) {
-            lab8bit = labData;
-            console.log(`  Converting 8-bit Lab to engine 16-bit encoding...`);
-            lab16bit = convert8bitTo16bitLab(lab8bit, pixelCount);
-        } else {
-            console.log(`  Converting PSD 16-bit to engine 16-bit encoding...`);
-            lab16bit = convertPsd16bitToEngineLab(labData, pixelCount);
-            lab8bit = convertPsd16bitTo8bitLab(labData, pixelCount);
-        }
-
-        // 3. Calculate full DNA v2.0 (with sectors for adaptive color count)
-        console.log(`  Calculating image DNA v2.0...`);
-        const dna = calculateFullDNA(lab8bit, width, height, basename);
-
-        console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, StdDev=${dna.l_std_dev}, maxC=${dna.maxC}`);
-        if (dna.sectors) {
-            const occupied = Object.entries(dna.sectors).filter(([,s]) => s.weight > 0.03).map(([n]) => n);
-            console.log(`  Sectors: ${occupied.join(', ') || 'none >3%'}`);
-        }
-
-        // 4. Generate configuration
-        const config = ParameterGenerator.generate(dna);
-        console.log(chalk.green(`  ✓ Archetype: ${config.meta?.archetype || 'unknown'}`));
-        console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias}, Dither: ${config.ditherType}`);
-
-        // 5. Prepare params — bridge config to engine options
-        const params = ParameterGenerator.toEngineOptions(config, { bitDepth: depth });
-
-        // 6. Posterize
-        console.log(`  Posterizing to ${params.targetColorsSlider} colors...`);
-        const posterizeResult = await Reveal.posterizeImage(
-            lab16bit,
-            width, height,
-            params.targetColorsSlider,
-            params
-        );
-
-        console.log(`  ✓ Generated ${posterizeResult.paletteLab.length} colors`);
-
-        // 7. Separate into layers
-        console.log(`  Separating layers...`);
-        const separateResult = await Reveal.separateImage(
-            lab16bit,
-            posterizeResult.paletteLab,
-            width, height,
-            { ditherType: params.ditherType, distanceMetric: params.distanceMetric }
-        );
-
-        let finalPaletteLab = posterizeResult.paletteLab;
-        let finalPaletteRgb = posterizeResult.palette;
-        let colorIndices = separateResult.colorIndices;
-
-        // 7.5. Palette pruning — remove ghost plates + enforce screen cap
-        const SeparationEngine = Reveal.engines.SeparationEngine;
-        const targetColors = params.targetColorsSlider || params.targetColors || 8;
-        const minVolume = (params.minVolume !== undefined && params.minVolume > 0) ? params.minVolume : 0;
-        const needsPrune = minVolume > 0 || finalPaletteLab.length > targetColors;
-
-        if (needsPrune) {
-            const pruneResult = SeparationEngine.pruneWeakColors(
-                finalPaletteLab,
-                colorIndices,
-                width,
-                height,
-                minVolume,
-                { distanceMetric: params.distanceMetric, maxColors: targetColors + 2 }
-            );
-
-            if (pruneResult.mergedCount > 0) {
-                console.log(chalk.yellow(`  Pruned: ${finalPaletteLab.length} → ${pruneResult.prunedPalette.length} colors (minVolume=${minVolume}%, cap=${targetColors})`));
-                finalPaletteLab = pruneResult.prunedPalette;
-                const LabEnc = Reveal.LabEncoding;
-                finalPaletteRgb = finalPaletteLab.map(lab => LabEnc.labToRgb(lab));
-                colorIndices = pruneResult.remappedIndices;
-            }
-        }
-
-        // 8. Generate masks + apply mechanical knobs
-        console.log(`  Generating masks...`);
-        const MechanicalKnobs = Reveal.MechanicalKnobs;
-        const masks = MechanicalKnobs.rebuildMasks(colorIndices, finalPaletteLab.length, pixelCount);
-
-        if (params.speckleRescue !== undefined && params.speckleRescue > 0) {
-            console.log(chalk.yellow(`  SpeckleRescue=${params.speckleRescue}px`));
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, params.speckleRescue);
-        }
-
-        // 9. Reconstruct virtual composite for metrics
-        console.log(`  Reconstructing virtual composite...`);
-        const processedLab = new Uint8ClampedArray(pixelCount * 3);
-
-        for (let i = 0; i < pixelCount; i++) {
-            const colorIdx = colorIndices[i];
-            const color = finalPaletteLab[colorIdx];
-            processedLab[i * 3] = (color.L / 100) * 255;
-            processedLab[i * 3 + 1] = color.a + 128;
-            processedLab[i * 3 + 2] = color.b + 128;
-        }
-
-        // 10. Calculate metrics
-        console.log(`  Computing validation metrics...`);
-        const layers = masks.map((mask, i) => ({
-            name: `Ink ${i + 1}`,
-            color: finalPaletteLab[i],
-            mask: mask
-        }));
-
-        const metrics = MetricsCalculator.compute(
-            lab8bit,
-            processedLab,
-            layers,
-            width,
-            height
-        );
-
-        // 10.5. DNAFidelity — compare input vs posterized DNA
-        console.log(`  Computing DNA fidelity...`);
-        const dnaGen = new DNAGenerator();
-        const inputDNA = dnaGen.generate(lab8bit, width, height, { bitDepth: 8 });
-        const dnaFidelity = DNAFidelity.fromIndices(inputDNA, colorIndices, finalPaletteLab, width, height);
-        console.log(`  DNA Fidelity: ${dnaFidelity.fidelity.toFixed(1)}`);
-
-        // 11. Calculate coverage
-        const coverageCounts = new Uint32Array(finalPaletteLab.length);
-        for (let i = 0; i < pixelCount; i++) {
-            coverageCounts[colorIndices[i]]++;
-        }
-
-        const palette = finalPaletteLab.map((color, idx) => {
-            const rgbColor = finalPaletteRgb[idx];
-            const hex = rgbToHex(rgbColor.r, rgbColor.g, rgbColor.b);
-            const coverage = ((coverageCounts[idx] / pixelCount) * 100).toFixed(2);
-
-            return {
-                name: `Ink ${idx + 1} (${hex})`,
-                lab: { L: parseFloat(color.L.toFixed(2)), a: parseFloat(color.a.toFixed(2)), b: parseFloat(color.b.toFixed(2)) },
-                rgb: { r: Math.round(rgbColor.r), g: Math.round(rgbColor.g), b: Math.round(rgbColor.b) },
-                hex: hex,
-                coverage: `${coverage}%`
-            };
-        });
-
-        // 12. Write output PSD
-        console.log(`  Writing PSD...`);
-        const outputPsdPath = path.join(outputDir, `${basename}.psd`);
-        const writer = new PSDWriter({
-            width,
-            height,
-            colorMode: 'lab',
-            bitsPerChannel: 8,
-            documentName: basename
-        });
-
-        // Add original as invisible reference layer
-        console.log(`  Adding original image as reference layer...`);
-        writer.addPixelLayer({
-            name: 'Original Image (Reference)',
-            pixels: lab8bit,
-            visible: false
-        });
-
-        // Sort layers by lightness (light to dark)
-        console.log(`  Sorting layers by lightness (light→dark)...`);
-        const layersToWrite = finalPaletteLab.map((color, i) => ({
-            index: i,
-            color: color,
-            rgb: finalPaletteRgb[i],
-            mask: masks[i],
-            coverage: coverageCounts[i]
-        }));
-        layersToWrite.sort((a, b) => b.color.L - a.color.L);
-
-        console.log(`  Layer order (bottom→top):`);
-        layersToWrite.forEach((layer, idx) => {
-            const hex = rgbToHex(layer.rgb.r, layer.rgb.g, layer.rgb.b);
-            const pct = ((layer.coverage / pixelCount) * 100).toFixed(2);
-            console.log(`    ${idx + 1}. ${hex} - L=${layer.color.L.toFixed(1)}, Coverage=${pct}%`);
-        });
-
-        // Add fill+mask layers
-        for (const layer of layersToWrite) {
-            const hex = rgbToHex(layer.rgb.r, layer.rgb.g, layer.rgb.b);
-            writer.addFillLayer({
-                name: `Color ${layer.index + 1} (${hex})`,
-                color: layer.color,
-                mask: layer.mask
-            });
-        }
-
-        // Generate thumbnail
-        console.log(`  Generating thumbnail for QuickLook...`);
-        const thumbnail = await generateThumbnail(lab8bit, width, height);
-        writer.setThumbnail(thumbnail);
-
-        const psdBuffer = writer.write();
-        fs.writeFileSync(outputPsdPath, psdBuffer);
-        console.log(chalk.green(`  ✓ Saved: ${outputPsdPath} (${(psdBuffer.length / 1024).toFixed(1)} KB)`));
-
-        // 13. Write sidecar JSON
-        const jsonPath = path.join(outputDir, `${basename}.json`);
-        const sidecar = {
-            meta: {
-                filename: path.basename(inputPath),
-                timestamp: new Date().toISOString(),
-                width, height, depth,
-                outputFile: `${basename}.psd`
-            },
-            dna,
-            configuration: config,
-            input_parameters: params,
-            palette,
-            metrics: metrics,
-            dnaFidelity: dnaFidelity,
-            timing: {
-                totalMs: Date.now() - timingStart
-            }
-        };
-        fs.writeFileSync(jsonPath, JSON.stringify(sidecar, null, 2));
-        console.log(chalk.green(`  ✓ Sidecar: ${jsonPath}`));
-
-        return {
-            success: true,
-            filename: basename,
-            colors: palette.length,
-            avgDeltaE: metrics.global_fidelity.avgDeltaE,
-            timing: Date.now() - timingStart
-        };
-
-    } catch (error) {
-        console.error(chalk.red(`  ✗ Error: ${error.message}`));
-        return {
-            success: false,
-            filename: basename,
-            error: error.message
-        };
-    }
-}
-
-/**
- * Main batch processing
- */
 async function main() {
     const args = process.argv.slice(2);
 
-    if (args.length < 2) {
+    // Parse --archetype flag
+    let archetype = null;
+    const positionalArgs = [];
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--archetype' && i + 1 < args.length) {
+            archetype = args[i + 1];
+            i++;
+        } else if (args[i].startsWith('--archetype=')) {
+            archetype = args[i].split('=')[1];
+        } else {
+            positionalArgs.push(args[i]);
+        }
+    }
+
+    if (positionalArgs.length < 2) {
         console.log(chalk.yellow(`
-Usage: node reveal-batch.js <input-dir> <output-dir>
+Usage: node reveal-batch.js <input-dir> <output-dir> [--archetype <id>]
 
 Arguments:
-  input-dir   Directory containing Lab PSDs (8-bit or 16-bit)
-  output-dir  Directory for processed PSDs and validation JSONs
+  input-dir    Directory containing Lab PSDs (8-bit or 16-bit)
+  output-dir   Directory for separated PSDs and validation JSONs
+  --archetype  Optional archetype override (chameleon, distilled, salamander, or JSON id)
 
 Example:
-  node reveal-batch.js data/CQ100/input/psd/8bit data/CQ100/output/8bit
-  node reveal-batch.js data/SP100/input/met/psd/8bit data/SP100/output/met
+  node reveal-batch.js data/CQ100_v4/input/psd/16bit data/CQ100_v4/output/psd
+  node reveal-batch.js data/SP100/input/met/psd/16bit data/SP100/output/met --archetype salamander
 `));
         process.exit(1);
     }
 
-    const inputDir = path.resolve(args[0]);
-    const outputDir = path.resolve(args[1]);
+    const inputDir = path.resolve(positionalArgs[0]);
+    const outputDir = path.resolve(positionalArgs[1]);
 
-    // Validate input directory
     if (!fs.existsSync(inputDir)) {
-        console.error(chalk.red(`Error: Input directory does not exist: ${inputDir}`));
+        console.error(chalk.red(`Error: Input directory not found: ${inputDir}`));
         process.exit(1);
     }
 
-    // Ensure output directory exists
-    if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
-    }
+    fs.mkdirSync(outputDir, { recursive: true });
 
-    // Get all PSD files
-    const files = fs.readdirSync(inputDir)
-        .filter(f => f.endsWith('.psd'))
-        .sort();
-
+    const files = fs.readdirSync(inputDir).filter(f => f.endsWith('.psd')).sort();
     if (files.length === 0) {
         console.error(chalk.red(`Error: No PSD files found in ${inputDir}`));
         process.exit(1);
     }
 
-    console.log(chalk.bold(`\n🎨 Reveal Batch Processor`));
-    console.log(chalk.bold(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`));
+    console.log(chalk.bold(`\nReveal Batch Processor`));
+    console.log(chalk.bold(`${'━'.repeat(50)}\n`));
     console.log(`Input:  ${inputDir}`);
     console.log(`Output: ${outputDir}`);
-    console.log(`Files:  ${files.length} images\n`);
+    console.log(`Files:  ${files.length} images`);
+    if (archetype) console.log(`Archetype: ${archetype} (override)`);
+    console.log();
 
     const results = [];
     const startTime = Date.now();
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const inputPath = path.join(inputDir, file);
+        console.log(chalk.bold(`[${i + 1}/${files.length}] ${file}`));
 
-        console.log(chalk.bold(`\n[${i + 1}/${files.length}] ${file}`));
-        const result = await processImage(inputPath, outputDir);
-        results.push(result);
+        try {
+            const result = await posterizePsd(
+                path.join(inputDir, file),
+                outputDir,
+                null, // auto-detect bit depth
+                archetype ? { archetype } : {}
+            );
+            results.push(result);
+        } catch (error) {
+            console.error(chalk.red(`  Error: ${error.message}`));
+            results.push({ success: false, filename: file, error: error.message });
+        }
     }
 
     // Summary
@@ -369,47 +98,37 @@ Example:
     const successResults = results.filter(r => r.success);
     const failedResults = results.filter(r => !r.success);
 
-    console.log(chalk.bold(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`));
-    console.log(chalk.bold(`📊 SUMMARY`));
-    console.log(chalk.bold(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`));
-    console.log(`Total:     ${files.length} images`);
-    console.log(chalk.green(`Success:   ${successResults.length}`));
-    console.log(chalk.red(`Failed:    ${failedResults.length}`));
-    console.log(`Time:      ${elapsed}s`);
-    console.log(`Avg:       ${(elapsed / files.length).toFixed(2)}s per image\n`);
-
-    if (successResults.length > 0) {
-        const avgDeltaE = successResults.reduce((sum, r) => sum + (r.avgDeltaE || 0), 0) / successResults.length;
-        console.log(`Avg ΔE:    ${avgDeltaE.toFixed(2)}`);
-    }
+    console.log(chalk.bold(`\n${'━'.repeat(50)}`));
+    console.log(chalk.bold(`SUMMARY\n`));
+    console.log(`Total:   ${files.length} images`);
+    console.log(chalk.green(`Success: ${successResults.length}`));
+    if (failedResults.length > 0) console.log(chalk.red(`Failed:  ${failedResults.length}`));
+    console.log(`Time:    ${elapsed}s (${(elapsed / files.length).toFixed(2)}s/image)\n`);
 
     // Save batch report
     const reportPath = path.join(outputDir, 'batch-report.json');
     fs.writeFileSync(reportPath, JSON.stringify({
         timestamp: new Date().toISOString(),
-        inputDir,
-        outputDir,
+        inputDir, outputDir,
         total: files.length,
         success: successResults.length,
         failed: failedResults.length,
         elapsedSeconds: parseFloat(elapsed),
-        avgDeltaE: successResults.length > 0
-            ? successResults.reduce((sum, r) => sum + (r.avgDeltaE || 0), 0) / successResults.length
-            : 0,
-        results: successResults,
+        results: successResults.map(r => ({ filename: r.filename, colors: r.colors })),
         errors: failedResults.map(r => ({ filename: r.filename, error: r.error }))
     }, null, 2));
 
-    console.log(chalk.green(`✓ Report saved: ${reportPath}\n`));
+    console.log(chalk.green(`Report: ${reportPath}\n`));
+
+    if (failedResults.length > 0) {
+        failedResults.forEach(r => console.log(chalk.red(`  ${r.filename}: ${r.error}`)));
+        console.log();
+    }
 }
 
-// Run if called directly
 if (require.main === module) {
     main().catch(err => {
-        console.error(chalk.red(`\n❌ Fatal error: ${err.message}`));
-        console.error(err.stack);
+        console.error(chalk.red(`Fatal: ${err.message}`));
         process.exit(1);
     });
 }
-
-module.exports = { processImage };

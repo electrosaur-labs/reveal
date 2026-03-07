@@ -17,7 +17,7 @@
  *   - 16 colors: -12.0 points (massive hit)
  */
 
-const DensityScanner = require('./DensityScanner');
+const DensityScanner = require('@electrosaur-labs/core/lib/metrics/DensityScanner');
 
 // --- EFFICIENCY CONSTANTS ---
 const SCREEN_LIMIT = 8;           // No penalty at or below this

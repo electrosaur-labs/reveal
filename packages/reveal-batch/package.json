@@ -8,19 +8,28 @@
   },
   "scripts": {
     "start": "node src/cli.js",
-    "test": "echo \"No tests yet\" && exit 0",
-    "reveal": "node src/reveal-batch.js",
-    "posterize": "node src/posterize-psd.js",
-    "analyze": "node src/analyze-batch.js",
-    "process-cq100": "node src/processCQ100.js",
-    "analyze-cq100": "node src/CQ100_MetaAnalyzer.js",
-    "analyze-sp100": "node src/SP100_MetaAnalyzer.js"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "convert:cq100": "node src/convert-cq100.js",
+    "convert:testimages": "node src/convert-testimages.js",
+    "convert:sp100": "node src/convert-sp100.js",
+    "benchmark:cq100": "node src/reveal-batch.js data/CQ100_v4/input/psd/8bit data/CQ100_v4/output/psd/8bit",
+    "benchmark:testimages": "node src/reveal-batch.js data/TESTIMAGES/input/psd/16bit data/TESTIMAGES/output/psd/16bit",
+    "benchmark:sp100:met": "node src/reveal-batch.js data/SP100/input/met/psd/16bit data/SP100/output/met/psd/16bit",
+    "benchmark:sp100:rijks": "node src/reveal-batch.js data/SP100/input/rijks/psd/16bit data/SP100/output/rijks/psd/16bit",
+    "benchmark:sp100:aic": "node src/reveal-batch.js data/SP100/input/aic/psd/16bit data/SP100/output/aic/psd/16bit",
+    "benchmark:sp100:loc": "node src/reveal-batch.js data/SP100/input/loc/psd/16bit data/SP100/output/loc/psd/16bit",
+    "benchmark:sp100:minkler": "node src/reveal-batch.js data/SP100/input/minkler/psd/16bit data/SP100/output/minkler/psd/16bit",
+    "analyze:cq100": "node src/analyze-batch.js CQ100 data/CQ100_v4/output data/CQ100_v4/output/psd/8bit",
+    "analyze:testimages": "node src/analyze-batch.js TESTIMAGES data/TESTIMAGES/output data/TESTIMAGES/output/psd/16bit",
+    "analyze:sp100": "node src/analyze-batch.js SP100 data/SP100/output data/SP100/output/met/psd/16bit data/SP100/output/rijks/psd/16bit data/SP100/output/aic/psd/16bit data/SP100/output/loc/psd/16bit data/SP100/output/minkler/psd/16bit",
+    "posterize": "node src/posterize-psd.js"
   },
   "dependencies": {
     "@electrosaur-labs/core": "*",
     "@electrosaur-labs/psd-reader": "*",
     "@electrosaur-labs/psd-writer": "*",
-"chalk": "^4.1.2",
+    "chalk": "^4.1.2",
     "commander": "^11.1.0",
     "sharp": "^0.33.0"
   },
@@ -40,5 +49,8 @@
   },
   "engines": {
     "node": ">=18.17.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.1"
   }
 }
