@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
- * convert-sp100.js — JPEG/TIFF → 16-bit Lab PSD converter for SP100 dataset
+ * convert-sp100.js — JPEG/TIFF → 8-bit Lab PSD converter for SP100 dataset
  *
- * SP100 has 5 sources, each with a jpg/ subdirectory:
- *   data/SP100/input/{met,rijks,aic,loc,minkler}/jpg/*.{jpg,jpeg,tif,tiff}
+ * SP100 sources are 8-bit (JPEG/TIFF), so output is 8-bit Lab PSD.
+ *
+ * Input images can be in any of:
+ *   data/SP100/input/{source}/jpg/*.{jpg,jpeg}
+ *   data/SP100/input/{source}/tiff/8bit/*.{tif,tiff}
  *
  * Output goes to per-source PSD directories:
- *   data/SP100/input/{source}/psd/16bit/*.psd
+ *   data/SP100/input/{source}/psd/8bit/*.psd
  *
  * Usage:
  *   node convert-sp100.js              # Convert all sources
@@ -19,7 +22,7 @@ const chalk = require('chalk');
 const sharp = require('sharp');
 const { PSDWriter } = require('@electrosaur-labs/psd-writer');
 const { convertRgb8ToLab8 } = require('./rgb-to-lab');
-const { convert8bitTo16bitLab, generateThumbnail } = require('./batch-utils');
+const { generateThumbnail } = require('./batch-utils');
 
 const DATA_ROOT = path.join(__dirname, '../data/SP100');
 const ALL_SOURCES = ['met', 'rijks', 'aic', 'loc', 'minkler'];
@@ -38,15 +41,14 @@ async function convertFile(filePath, outputDir) {
     const { width, height } = info;
     const pixelCount = width * height;
 
-    // 8-bit RGB → 8-bit Lab → 16-bit Lab
+    // 8-bit RGB → 8-bit Lab
     const lab8 = convertRgb8ToLab8(rgbBuffer, pixelCount);
-    const lab16 = convert8bitTo16bitLab(lab8, pixelCount);
 
-    // Write 16-bit Lab PSD
+    // Write 8-bit Lab PSD
     const writer = new PSDWriter({
         width, height,
         colorMode: 'lab',
-        bitsPerChannel: 16,
+        bitsPerChannel: 8,
         documentName: basename
     });
 
@@ -68,17 +70,23 @@ async function convertFile(filePath, outputDir) {
 }
 
 async function convertSource(source) {
-    const jpgDir = path.join(DATA_ROOT, 'input', source, 'jpg');
-    const outputDir = path.join(DATA_ROOT, 'input', source, 'psd', '16bit');
+    // Search multiple possible input locations
+    const candidates = [
+        path.join(DATA_ROOT, 'input', source, 'jpg'),
+        path.join(DATA_ROOT, 'input', source, 'tiff', '8bit'),
+    ];
+    const inputDir = candidates.find(d => fs.existsSync(d));
+    const outputDir = path.join(DATA_ROOT, 'input', source, 'psd', '8bit');
 
-    if (!fs.existsSync(jpgDir)) {
-        console.log(chalk.yellow(`  Skipping ${source}: no jpg/ directory at ${jpgDir}`));
+    if (!inputDir) {
+        console.log(chalk.yellow(`  Skipping ${source}: no input directory found`));
+        console.log(chalk.yellow(`    Looked in: ${candidates.join(', ')}`));
         return 0;
     }
 
     fs.mkdirSync(outputDir, { recursive: true });
 
-    const files = fs.readdirSync(jpgDir)
+    const files = fs.readdirSync(inputDir)
         .filter(f => IMAGE_EXTS.includes(path.extname(f).toLowerCase()))
         .sort();
 
@@ -90,12 +98,19 @@ async function convertSource(source) {
     console.log(chalk.cyan(`\n  [${source}] Converting ${files.length} images...`));
 
     let converted = 0;
+    let skipped = 0;
     for (const file of files) {
-        const result = await convertFile(path.join(jpgDir, file), outputDir);
-        converted++;
-        console.log(`    [${converted}/${files.length}] ${result.basename} ${result.width}x${result.height} (${(result.size / 1024).toFixed(0)} KB)`);
+        try {
+            const result = await convertFile(path.join(inputDir, file), outputDir);
+            converted++;
+            console.log(`    [${converted}/${files.length}] ${result.basename} ${result.width}x${result.height} (${(result.size / 1024).toFixed(0)} KB)`);
+        } catch (err) {
+            skipped++;
+            console.log(chalk.yellow(`    [SKIP] ${file}: ${err.message}`));
+        }
     }
 
+    if (skipped > 0) console.log(chalk.yellow(`  Skipped ${skipped} files due to errors`));
     return converted;
 }
 

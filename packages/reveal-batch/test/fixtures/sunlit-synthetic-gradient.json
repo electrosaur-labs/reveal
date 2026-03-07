@@ -1,0 +1,917 @@
+{
+  "meta": {
+    "filename": "synthetic_sunlit.psd",
+    "timestamp": "2026-03-07T07:32:26.311Z",
+    "width": 256,
+    "height": 256,
+    "inputBitDepth": 8,
+    "outputFile": "synthetic_sunlit.psd"
+  },
+  "archetype": {
+    "id": "sunlit",
+    "name": "Sunlit",
+    "score": 82.87,
+    "breakdown": {
+      "structural": 65.9,
+      "sectorAffinity": 95.6,
+      "pattern": 89.8
+    }
+  },
+  "deltaE": 4.91,
+  "dnaFidelity": {
+    "fidelity": 94,
+    "sectorDrift": 1.0493,
+    "alerts": [
+      "Sector redistribution (1.05)"
+    ],
+    "global": {
+      "l": {
+        "input": 69.9,
+        "output": 69.8,
+        "delta": -0.1
+      },
+      "c": {
+        "input": 19.1,
+        "output": 18.5,
+        "delta": -0.6
+      },
+      "k": {
+        "input": 100,
+        "output": 100,
+        "delta": 0
+      },
+      "l_std_dev": {
+        "input": 25.2,
+        "output": 24.9,
+        "delta": -0.3
+      },
+      "hue_entropy": {
+        "input": 0.504,
+        "output": 0.344,
+        "delta": -0.16
+      },
+      "temperature_bias": {
+        "input": 1,
+        "output": 1,
+        "delta": 0
+      },
+      "primary_sector_weight": {
+        "input": 0.3758,
+        "output": 0.484,
+        "delta": 0.1082
+      }
+    }
+  },
+  "ranking": [
+    {
+      "id": "sunlit",
+      "score": 82.87,
+      "breakdown": {
+        "structural": 65.9,
+        "sectorAffinity": 95.6,
+        "pattern": 89.8
+      }
+    },
+    {
+      "id": "golden_hour",
+      "score": 82.4,
+      "breakdown": {
+        "structural": 58.7,
+        "sectorAffinity": 100,
+        "pattern": 92.9
+      }
+    },
+    {
+      "id": "painterly",
+      "score": 77.48,
+      "breakdown": {
+        "structural": 53.6,
+        "sectorAffinity": 94.7,
+        "pattern": 89.5
+      }
+    },
+    {
+      "id": "bold_poster",
+      "score": 69.94,
+      "breakdown": {
+        "structural": 33.2,
+        "sectorAffinity": 95.6,
+        "pattern": 90.9
+      }
+    },
+    {
+      "id": "fine_art_scan",
+      "score": 64.76,
+      "breakdown": {
+        "structural": 44.9,
+        "sectorAffinity": 80.6,
+        "pattern": 70.1
+      }
+    },
+    {
+      "id": "detail_recovery",
+      "score": 58.91,
+      "breakdown": {
+        "structural": 42.3,
+        "sectorAffinity": 71.9,
+        "pattern": 64.2
+      }
+    },
+    {
+      "id": "old_master",
+      "score": 56.49,
+      "breakdown": {
+        "structural": 1.1,
+        "sectorAffinity": 92.2,
+        "pattern": 97.1
+      }
+    },
+    {
+      "id": "dark_portrait",
+      "score": 55.2,
+      "breakdown": {
+        "structural": 13.3,
+        "sectorAffinity": 81,
+        "pattern": 89.6
+      }
+    },
+    {
+      "id": "vivid_photo",
+      "score": 51.34,
+      "breakdown": {
+        "structural": 4,
+        "sectorAffinity": 84.7,
+        "pattern": 77.5
+      }
+    },
+    {
+      "id": "faded_vintage",
+      "score": 50.19,
+      "breakdown": {
+        "structural": 3.6,
+        "sectorAffinity": 78.1,
+        "pattern": 90.7
+      }
+    },
+    {
+      "id": "pastel",
+      "score": 47.64,
+      "breakdown": {
+        "structural": 5.7,
+        "sectorAffinity": 75,
+        "pattern": 77.5
+      }
+    },
+    {
+      "id": "neon",
+      "score": 47.43,
+      "breakdown": {
+        "structural": 0.2,
+        "sectorAffinity": 77.5,
+        "pattern": 82.9
+      }
+    },
+    {
+      "id": "commercial",
+      "score": 45.72,
+      "breakdown": {
+        "structural": 13.6,
+        "sectorAffinity": 64.7,
+        "pattern": 74.5
+      }
+    },
+    {
+      "id": "vivid_poster",
+      "score": 45.66,
+      "breakdown": {
+        "structural": 5,
+        "sectorAffinity": 70.6,
+        "pattern": 79.3
+      }
+    },
+    {
+      "id": "warm_photo",
+      "score": 44.93,
+      "breakdown": {
+        "structural": 6.3,
+        "sectorAffinity": 66.9,
+        "pattern": 81.9
+      }
+    },
+    {
+      "id": "everyday_photo",
+      "score": 44.24,
+      "breakdown": {
+        "structural": 7.5,
+        "sectorAffinity": 65.6,
+        "pattern": 78.1
+      }
+    },
+    {
+      "id": "film_noir",
+      "score": 43.5,
+      "breakdown": {
+        "structural": 6.1,
+        "sectorAffinity": 71.3,
+        "pattern": 59.9
+      }
+    },
+    {
+      "id": "soft_light",
+      "score": 43.15,
+      "breakdown": {
+        "structural": 4.7,
+        "sectorAffinity": 65.6,
+        "pattern": 78.2
+      }
+    },
+    {
+      "id": "saturated_max",
+      "score": 41.69,
+      "breakdown": {
+        "structural": 2.5,
+        "sectorAffinity": 70,
+        "pattern": 61.1
+      }
+    },
+    {
+      "id": "bleached",
+      "score": 41.66,
+      "breakdown": {
+        "structural": 53.8,
+        "sectorAffinity": 20,
+        "pattern": 74.2
+      }
+    },
+    {
+      "id": "hot_yellow",
+      "score": 39.33,
+      "breakdown": {
+        "structural": 0.1,
+        "sectorAffinity": 62.5,
+        "pattern": 74.5
+      }
+    },
+    {
+      "id": "cool_recovery",
+      "score": 36.95,
+      "breakdown": {
+        "structural": 9.5,
+        "sectorAffinity": 50,
+        "pattern": 71
+      }
+    },
+    {
+      "id": "cinematic",
+      "score": 36.39,
+      "breakdown": {
+        "structural": 6.2,
+        "sectorAffinity": 50,
+        "pattern": 76
+      }
+    },
+    {
+      "id": "black_and_white",
+      "score": 33.92,
+      "breakdown": {
+        "structural": 12.9,
+        "sectorAffinity": 50,
+        "pattern": 41.7
+      }
+    },
+    {
+      "id": "spot_color",
+      "score": 27.88,
+      "breakdown": {
+        "structural": 2.9,
+        "sectorAffinity": 34.7,
+        "pattern": 74.1
+      }
+    },
+    {
+      "id": "full_spectrum",
+      "score": 19.41,
+      "breakdown": {
+        "structural": 28.7,
+        "sectorAffinity": 0,
+        "pattern": 52.8
+      }
+    }
+  ],
+  "dna": {
+    "version": "2.0",
+    "global": {
+      "l": 69.9,
+      "c": 19.1,
+      "k": 100,
+      "l_std_dev": 25.2,
+      "hue_entropy": 0.504,
+      "temperature_bias": 1,
+      "primary_sector_weight": 0.3758,
+      "minL": 0,
+      "maxL": 100,
+      "maxC": 25.5,
+      "lowChromaDensity": 0.2,
+      "warm_cool_ratio": 1
+    },
+    "dominant_sector": "orange",
+    "sectors": {
+      "red": {
+        "weight": 0,
+        "cMean": 0,
+        "cMax": 0,
+        "lMean": 0
+      },
+      "orange": {
+        "weight": 0.3758,
+        "cMean": 25.5,
+        "cMax": 25.5,
+        "lMean": 72.2
+      },
+      "yellow": {
+        "weight": 0.3125,
+        "cMean": 24.7,
+        "cMax": 24.7,
+        "lMean": 82
+      },
+      "chartreuse": {
+        "weight": 0.2485,
+        "cMean": 21.8,
+        "cMax": 21.8,
+        "lMean": 74.9
+      },
+      "green": {
+        "weight": 0.0633,
+        "cMean": 18.4,
+        "cMax": 18.4,
+        "lMean": 60
+      },
+      "cyan": {
+        "weight": 0,
+        "cMean": 0,
+        "cMax": 0,
+        "lMean": 0
+      },
+      "azure": {
+        "weight": 0,
+        "cMean": 0,
+        "cMax": 0,
+        "lMean": 0
+      },
+      "blue": {
+        "weight": 0,
+        "cMean": 0,
+        "cMax": 0,
+        "lMean": 0
+      },
+      "purple": {
+        "weight": 0,
+        "cMean": 0,
+        "cMax": 0,
+        "lMean": 0
+      },
+      "magenta": {
+        "weight": 0,
+        "cMean": 0,
+        "cMax": 0,
+        "lMean": 0
+      },
+      "pink": {
+        "weight": 0,
+        "cMean": 0,
+        "cMax": 0,
+        "lMean": 0
+      },
+      "rose": {
+        "weight": 0,
+        "cMean": 0,
+        "cMax": 0,
+        "lMean": 0
+      }
+    },
+    "l": 69.9,
+    "c": 19.1,
+    "k": 100,
+    "l_std_dev": 25.2,
+    "minL": 0,
+    "maxL": 100,
+    "maxC": 25.5,
+    "filename": "synthetic_sunlit",
+    "bitDepth": 8,
+    "archetype": "sunlit"
+  },
+  "outputDna": {
+    "version": "2.0",
+    "global": {
+      "l": 69.8,
+      "c": 18.5,
+      "k": 100,
+      "l_std_dev": 24.9,
+      "hue_entropy": 0.344,
+      "temperature_bias": 1,
+      "primary_sector_weight": 0.484
+    },
+    "dominant_sector": "yellow",
+    "sectors": {
+      "red": {
+        "weight": 0,
+        "lMean": 0,
+        "cMean": 0,
+        "cMax": 0
+      },
+      "orange": {
+        "weight": 0,
+        "lMean": 0,
+        "cMean": 0,
+        "cMax": 0
+      },
+      "yellow": {
+        "weight": 0.483856201171875,
+        "lMean": 76.60639190673828,
+        "cMean": 24.22895126498534,
+        "cMax": 24.22895126497561
+      },
+      "chartreuse": {
+        "weight": 0,
+        "lMean": 0,
+        "cMean": 0,
+        "cMax": 0
+      },
+      "green": {
+        "weight": 0.266143798828125,
+        "lMean": 74.90234375,
+        "cMean": 21.84032966784405,
+        "cMax": 21.840329667841555
+      },
+      "cyan": {
+        "weight": 0.05078125,
+        "lMean": 60.0006103515625,
+        "cMean": 18.384776310849794,
+        "cMax": 18.384776310850235
+      },
+      "azure": {
+        "weight": 0,
+        "lMean": 0,
+        "cMean": 0,
+        "cMax": 0
+      },
+      "blue": {
+        "weight": 0,
+        "lMean": 0,
+        "cMean": 0,
+        "cMax": 0
+      },
+      "purple": {
+        "weight": 0,
+        "lMean": 0,
+        "cMean": 0,
+        "cMax": 0
+      },
+      "magenta": {
+        "weight": 0,
+        "lMean": 0,
+        "cMean": 0,
+        "cMax": 0
+      },
+      "pink": {
+        "weight": 0,
+        "lMean": 0,
+        "cMean": 0,
+        "cMax": 0
+      },
+      "rose": {
+        "weight": 0,
+        "lMean": 0,
+        "cMean": 0,
+        "cMax": 0
+      }
+    },
+    "metadata": {
+      "width": 256,
+      "height": 256,
+      "totalPixels": 65536,
+      "bitDepth": "perceptual"
+    }
+  },
+  "configuration": {
+    "id": "sunlit",
+    "name": "Sunlit",
+    "engineType": "reveal-mk1.5",
+    "targetColors": 5,
+    "ditherType": "blue-noise",
+    "distanceMetric": "cie2000",
+    "lWeight": 0.8,
+    "cWeight": 3,
+    "bWeight": 2,
+    "blackBias": 6,
+    "vibrancyMode": "subtle",
+    "vibrancyBoost": 1.2,
+    "highlightThreshold": 96,
+    "highlightBoost": 1.5,
+    "paletteReduction": 6,
+    "enablePaletteReduction": true,
+    "substrateMode": "auto",
+    "substrateTolerance": 2,
+    "enableHueGapAnalysis": true,
+    "hueLockAngle": 12,
+    "shadowPoint": 8,
+    "colorMode": "color",
+    "preserveWhite": true,
+    "preserveBlack": true,
+    "ignoreTransparent": true,
+    "centroidStrategy": "SALIENCY",
+    "neutralCentroidClampThreshold": 0.5,
+    "neutralSovereigntyThreshold": 0,
+    "splitMode": "median",
+    "chromaAxisWeight": 0,
+    "neutralIsolationThreshold": 0,
+    "warmABoost": 1,
+    "peakFinderMaxPeaks": 1,
+    "peakFinderBlacklistedSectors": [
+      3,
+      4
+    ],
+    "shadowClamp": 4,
+    "chromaGate": 1,
+    "detailRescue": 0,
+    "speckleRescue": 4,
+    "medianPass": false,
+    "minVolume": 1,
+    "shadowChromaGateL": 45,
+    "preprocessingIntensity": "auto",
+    "refinementPasses": 1,
+    "rangeClamp": [
+      0,
+      100
+    ],
+    "meta": {
+      "archetype": "Sunlit",
+      "archetypeId": "sunlit",
+      "peakChroma": 25.5,
+      "isPhoto": false,
+      "isGraphic": false,
+      "isArchive": false,
+      "bitDepth": 8,
+      "matchVersion": "2.0",
+      "matchDistance": 0,
+      "matchScore": 82.87,
+      "matchBreakdown": {
+        "structural": 65.9,
+        "sectorAffinity": 95.6,
+        "pattern": 89.8
+      },
+      "matchRanking": [
+        {
+          "id": "sunlit",
+          "score": 82.87,
+          "breakdown": {
+            "structural": 65.9,
+            "sectorAffinity": 95.6,
+            "pattern": 89.8
+          }
+        },
+        {
+          "id": "golden_hour",
+          "score": 82.4,
+          "breakdown": {
+            "structural": 58.7,
+            "sectorAffinity": 100,
+            "pattern": 92.9
+          }
+        },
+        {
+          "id": "painterly",
+          "score": 77.48,
+          "breakdown": {
+            "structural": 53.6,
+            "sectorAffinity": 94.7,
+            "pattern": 89.5
+          }
+        },
+        {
+          "id": "bold_poster",
+          "score": 69.94,
+          "breakdown": {
+            "structural": 33.2,
+            "sectorAffinity": 95.6,
+            "pattern": 90.9
+          }
+        },
+        {
+          "id": "fine_art_scan",
+          "score": 64.76,
+          "breakdown": {
+            "structural": 44.9,
+            "sectorAffinity": 80.6,
+            "pattern": 70.1
+          }
+        },
+        {
+          "id": "detail_recovery",
+          "score": 58.91,
+          "breakdown": {
+            "structural": 42.3,
+            "sectorAffinity": 71.9,
+            "pattern": 64.2
+          }
+        },
+        {
+          "id": "old_master",
+          "score": 56.49,
+          "breakdown": {
+            "structural": 1.1,
+            "sectorAffinity": 92.2,
+            "pattern": 97.1
+          }
+        },
+        {
+          "id": "dark_portrait",
+          "score": 55.2,
+          "breakdown": {
+            "structural": 13.3,
+            "sectorAffinity": 81,
+            "pattern": 89.6
+          }
+        },
+        {
+          "id": "vivid_photo",
+          "score": 51.34,
+          "breakdown": {
+            "structural": 4,
+            "sectorAffinity": 84.7,
+            "pattern": 77.5
+          }
+        },
+        {
+          "id": "faded_vintage",
+          "score": 50.19,
+          "breakdown": {
+            "structural": 3.6,
+            "sectorAffinity": 78.1,
+            "pattern": 90.7
+          }
+        },
+        {
+          "id": "pastel",
+          "score": 47.64,
+          "breakdown": {
+            "structural": 5.7,
+            "sectorAffinity": 75,
+            "pattern": 77.5
+          }
+        },
+        {
+          "id": "neon",
+          "score": 47.43,
+          "breakdown": {
+            "structural": 0.2,
+            "sectorAffinity": 77.5,
+            "pattern": 82.9
+          }
+        },
+        {
+          "id": "commercial",
+          "score": 45.72,
+          "breakdown": {
+            "structural": 13.6,
+            "sectorAffinity": 64.7,
+            "pattern": 74.5
+          }
+        },
+        {
+          "id": "vivid_poster",
+          "score": 45.66,
+          "breakdown": {
+            "structural": 5,
+            "sectorAffinity": 70.6,
+            "pattern": 79.3
+          }
+        },
+        {
+          "id": "warm_photo",
+          "score": 44.93,
+          "breakdown": {
+            "structural": 6.3,
+            "sectorAffinity": 66.9,
+            "pattern": 81.9
+          }
+        },
+        {
+          "id": "everyday_photo",
+          "score": 44.24,
+          "breakdown": {
+            "structural": 7.5,
+            "sectorAffinity": 65.6,
+            "pattern": 78.1
+          }
+        },
+        {
+          "id": "film_noir",
+          "score": 43.5,
+          "breakdown": {
+            "structural": 6.1,
+            "sectorAffinity": 71.3,
+            "pattern": 59.9
+          }
+        },
+        {
+          "id": "soft_light",
+          "score": 43.15,
+          "breakdown": {
+            "structural": 4.7,
+            "sectorAffinity": 65.6,
+            "pattern": 78.2
+          }
+        },
+        {
+          "id": "saturated_max",
+          "score": 41.69,
+          "breakdown": {
+            "structural": 2.5,
+            "sectorAffinity": 70,
+            "pattern": 61.1
+          }
+        },
+        {
+          "id": "bleached",
+          "score": 41.66,
+          "breakdown": {
+            "structural": 53.8,
+            "sectorAffinity": 20,
+            "pattern": 74.2
+          }
+        },
+        {
+          "id": "hot_yellow",
+          "score": 39.33,
+          "breakdown": {
+            "structural": 0.1,
+            "sectorAffinity": 62.5,
+            "pattern": 74.5
+          }
+        },
+        {
+          "id": "cool_recovery",
+          "score": 36.95,
+          "breakdown": {
+            "structural": 9.5,
+            "sectorAffinity": 50,
+            "pattern": 71
+          }
+        },
+        {
+          "id": "cinematic",
+          "score": 36.39,
+          "breakdown": {
+            "structural": 6.2,
+            "sectorAffinity": 50,
+            "pattern": 76
+          }
+        },
+        {
+          "id": "black_and_white",
+          "score": 33.92,
+          "breakdown": {
+            "structural": 12.9,
+            "sectorAffinity": 50,
+            "pattern": 41.7
+          }
+        },
+        {
+          "id": "spot_color",
+          "score": 27.88,
+          "breakdown": {
+            "structural": 2.9,
+            "sectorAffinity": 34.7,
+            "pattern": 74.1
+          }
+        },
+        {
+          "id": "full_spectrum",
+          "score": 19.41,
+          "breakdown": {
+            "structural": 28.7,
+            "sectorAffinity": 0,
+            "pattern": 52.8
+          }
+        }
+      ]
+    },
+    "preprocessing": {
+      "enabled": false,
+      "intensity": "off",
+      "entropyScore": 0,
+      "reason": "Very low entropy (0.0, 8-bit) - already clean"
+    }
+  },
+  "palette": [
+    {
+      "name": "Ink 1 (#e1b497)",
+      "lab": {
+        "L": 76.61,
+        "a": 12.55,
+        "b": 20.72
+      },
+      "rgb": {
+        "r": 225,
+        "g": 180,
+        "b": 151
+      },
+      "hex": "#e1b497",
+      "coverage": "48.39%"
+    },
+    {
+      "name": "Ink 2 (#829779)",
+      "lab": {
+        "L": 60,
+        "a": -13,
+        "b": 13
+      },
+      "rgb": {
+        "r": 130,
+        "g": 151,
+        "b": 121
+      },
+      "hex": "#829779",
+      "coverage": "5.08%"
+    },
+    {
+      "name": "Ink 3 (#bcba92)",
+      "lab": {
+        "L": 74.9,
+        "a": -6,
+        "b": 21
+      },
+      "rgb": {
+        "r": 188,
+        "g": 186,
+        "b": 146
+      },
+      "hex": "#bcba92",
+      "coverage": "26.61%"
+    },
+    {
+      "name": "Ink 4 (#ffffff)",
+      "lab": {
+        "L": 100,
+        "a": 0,
+        "b": 0
+      },
+      "rgb": {
+        "r": 255,
+        "g": 255,
+        "b": 255
+      },
+      "hex": "#ffffff",
+      "coverage": "9.77%"
+    },
+    {
+      "name": "Ink 5 (#000000)",
+      "lab": {
+        "L": 0,
+        "a": 0,
+        "b": 0
+      },
+      "rgb": {
+        "r": 0,
+        "g": 0,
+        "b": 0
+      },
+      "hex": "#000000",
+      "coverage": "10.16%"
+    }
+  ],
+  "metrics": {
+    "global_fidelity": {
+      "avgDeltaE": 4.91,
+      "maxDeltaE": 24.34
+    },
+    "feature_preservation": {
+      "revelationScore": 62.7,
+      "baseScore": 62.7,
+      "efficiencyPenalty": 0,
+      "screenCount": 5,
+      "saliencyLoss": 14.96,
+      "edgeSurvival": 0.8219,
+      "significantEdges": 1280,
+      "survivedEdges": 1052
+    },
+    "physical_feasibility": {
+      "maxInkStack": 1,
+      "avgInkStack": 1,
+      "densityFloorBreaches": 0,
+      "breachVolume": 0,
+      "weakestPlate": "",
+      "integrityScore": 100,
+      "integrityDetails": {
+        "ink": 100,
+        "paper": 0,
+        "void": 0
+      },
+      "densityIntegrity": 100
+    }
+  },
+  "timing": {
+    "totalMs": 200
+  }
+}

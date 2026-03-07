@@ -18,13 +18,13 @@ See `LICENSE.md` for full license details per source.
 
 ### Met, Rijksmuseum, AIC, LOC
 
-These are public domain images downloadable via each institution's open access API. Place source JPEGs/TIFFs in the appropriate subdirectory:
+These are public domain images downloadable via each institution's open access API. Place source JPEGs or TIFFs in the appropriate subdirectory:
 
 ```
-input/met/jpg/
-input/rijks/jpg/
-input/aic/jpg/
-input/loc/jpg/
+input/met/jpg/           # or input/met/tiff/8bit/
+input/rijks/jpg/         # or input/rijks/tiff/8bit/
+input/aic/tiff/8bit/
+input/loc/tiff/8bit/
 ```
 
 ### Doug Minkler
@@ -33,27 +33,31 @@ input/loc/jpg/
 
 ## Preparation
 
-Source images (JPEG/TIFF) are converted to 16-bit Lab PSDs:
+Convert source images to 16-bit Lab PSDs:
 
-```
-JPEG/TIFF -> sRGB decode (via sharp) -> CIE L*a*b* (D65) -> 16-bit Lab PSD
+```bash
+npm run convert:sp100           # Convert all sources
+npm run convert:sp100 met rijks # Convert specific sources
 ```
 
-Converted PSDs are written to `input/<source>/psd/16bit/` by the conversion scripts.
+The converter searches both `jpg/` and `tiff/8bit/` input directories per source.
+Converted PSDs are written to `input/<source>/psd/8bit/`.
 
 ## Directory Structure
 
 ```
 SP100/
   input/
-    met/psd/          # 62 Met Museum images
-    rijks/psd/16bit/  # 50 Rijksmuseum images
-    aic/psd/16bit/    # 26 Art Institute of Chicago images
-    loc/psd/          # 2 Library of Congress images
-    minkler/psd/      # 10 Doug Minkler posters
-  output/             # Separation results (generated)
-  LICENSE.md          # Per-source license details
+    <source>/
+      jpg/              # Source JPEGs (not included)
+      tiff/8bit/        # Source TIFFs (not included)
+      psd/8bit/         # Converted 8-bit Lab PSDs (generated)
+  output/
+    psd/8bit/           # Posterized PSDs + JSON sidecars (generated)
+  LICENSE.md            # Per-source license details
 ```
+
+Sources: met (62), rijks (50), aic (26), loc (65), minkler (10)
 
 ## Image List
 

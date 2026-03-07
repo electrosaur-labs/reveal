@@ -15,33 +15,26 @@
 ## Acquisition
 
 1. Download the CQ100 dataset from Mendeley Data (link above)
-2. Place the PPM files in `input/ppm/`
+2. Place the PPM files in `input/ppm/8bit/`
 
 ## Preparation
 
-The source images are 8-bit RGB PPM files. Reveal works with Lab PSD files, so they need conversion:
-
-```
-8-bit RGB PPM -> 8-bit Lab -> 16-bit Lab PSD
-```
-
-The `processCQ100.js` script handles this automatically — it reads PPM, converts to Lab in memory, writes a 16-bit Lab PSD to `input/psd/`, then continues with separation:
+Convert source PPMs to 8-bit Lab PSDs:
 
 ```bash
-cd packages/reveal-batch
-npm run process-cq100
+npm run convert:cq100
 ```
 
-The PPM parser is in `src/ppmParser.js`. RGB-to-Lab conversion uses standard sRGB linearization -> D65 XYZ -> CIE L*a*b* (see `LICENSE.md` for the full formula).
+This writes 8-bit Lab PSDs to `input/psd/8bit/`.
 
 ## Directory Structure
 
 ```
 CQ100_v4/
   input/
-    ppm/          # Source PPM files (not included, ~2 GB)
-    psd/          # Converted 16-bit Lab PSDs (generated)
+    ppm/8bit/     # Source PPM files (not included, ~2 GB)
+    psd/8bit/     # Converted 8-bit Lab PSDs (generated, 100 files)
   output/
-    psd/          # Separated multi-layer PSDs (generated)
+    psd/8bit/     # Posterized PSDs + JSON sidecars (generated)
   LICENSE.md      # Dataset license and conversion details
 ```

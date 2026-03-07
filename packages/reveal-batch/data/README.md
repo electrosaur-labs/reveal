@@ -17,7 +17,7 @@ data/<DATASET>/
 |---------|-------------|-----------|--------|-------|
 | CQ100_v4 | PPM (8-bit RGB) | 8 | 100 | Color quantization benchmark, 768x512 |
 | TESTIMAGES | PNG (16-bit RGB) | 16 | 40 | SAMPLING dataset, 2400x2400 |
-| SP100 | JPEG/TIFF | 16 | ~150 | Museum fine art, 5 sources (met/rijks/aic/loc/minkler) |
+| SP100 | JPEG/TIFF | 8 | ~150 | Museum fine art, 5 sources (met/rijks/aic/loc/minkler) |
 
 ## Workflow
 
@@ -48,6 +48,7 @@ These sidecars serve as golden outputs for regression testing (see `test/fixture
 
 CQ100 fixtures are at original size (768x512, 8-bit Lab).
 TESTIMAGES fixtures are downscaled to 600x600 (16-bit Lab).
+SP100 fixtures are downscaled to 600px long side (8-bit Lab).
 
 ## .gitignore
 

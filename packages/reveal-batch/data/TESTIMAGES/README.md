@@ -17,46 +17,28 @@
 ## Acquisition
 
 1. Download the 16-bit RGB PNGs from SourceForge (link above)
-2. Place them in `download/SAMPLING/16BIT/RGB/2400x2400/C00C00/`
-
-The filenames follow the pattern: `img_2400x2400_3x16bit_C00C00_RGB_<name>.png`
+2. Strip the `img_2400x2400_3x16bit_C00C00_RGB_` prefix from filenames
+3. Place them in `input/png/16bit/`
 
 ## Preparation
 
-The source images are 16-bit RGB PNGs. Reveal works with Lab PSD files:
-
-```
-16-bit RGB PNG -> 16-bit Lab PSD
-```
-
-Convert using the batch converter:
+Convert source PNGs to 16-bit Lab PSDs:
 
 ```bash
-cd packages/reveal-batch/data/TESTIMAGES
-node batch-convert-all.js
+npm run convert:testimages
 ```
 
-This uses a LUT-accelerated sRGB-to-Lab converter and writes 16-bit Lab PSDs via `@electrosaur-labs/psd-writer` to `input/psd/16bit/`.
-
-A smaller subset of 15 selected images can be converted with `convert-to-psd.js` (see `selected-images.json` for the selection criteria: high entropy, low chroma, landscapes).
+This writes 16-bit Lab PSDs to `input/psd/16bit/`.
 
 ## Directory Structure
 
 ```
 TESTIMAGES/
-  download/                    # Raw downloads (not included, ~1.5 GB)
-    SAMPLING/16BIT/RGB/2400x2400/C00C00/
   input/
+    png/16bit/                 # Source 16-bit RGB PNGs (not included, ~1 GB)
     psd/16bit/                 # Converted 16-bit Lab PSDs (generated, 40 files)
-  output/                      # Separation results (generated)
-  selected-images.json         # Curated subset by image characteristics
-  batch-convert-all.js         # Full 40-image converter
-  convert-to-psd.js            # 15-image subset converter
-  batch-posterize-all.js       # Run separation on all converted PSDs
-  audit-testimages.js          # Audit separation quality
-  analyze-testimages.js        # Analyze results and generate CSV
-  testimages_analysis.json     # Latest analysis results
-  testimages_summary.csv       # Latest summary spreadsheet
+  output/
+    psd/16bit/                 # Posterized PSDs + JSON sidecars (generated)
 ```
 
 ## Images (40)

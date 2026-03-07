@@ -75,8 +75,21 @@ Example:
     const results = [];
     const startTime = Date.now();
 
+    let skipped = 0;
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        const basename = path.basename(file, '.psd');
+        const outputPsd = path.join(outputDir, `${basename}.psd`);
+        const outputJson = path.join(outputDir, `${basename}.json`);
+
+        // Skip if both output PSD and JSON already exist
+        if (fs.existsSync(outputPsd) && fs.existsSync(outputJson)) {
+            skipped++;
+            console.log(chalk.gray(`[${i + 1}/${files.length}] ${file} — skipped (already processed)`));
+            results.push({ success: true, filename: basename, colors: null, skipped: true });
+            continue;
+        }
+
         console.log(chalk.bold(`[${i + 1}/${files.length}] ${file}`));
 
         try {
@@ -92,6 +105,7 @@ Example:
             results.push({ success: false, filename: file, error: error.message });
         }
     }
+    if (skipped > 0) console.log(chalk.gray(`\nSkipped ${skipped} already-processed files`));
 
     // Summary
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
