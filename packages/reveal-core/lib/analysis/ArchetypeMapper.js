@@ -9,91 +9,6 @@ class ArchetypeMapper {
     constructor(archetypes) {
         this.archetypes = archetypes;
         this.decayConstant = 0.05; // Adjusts sensitivity of the decay curve
-
-        // TODO: Move these profiles into the archetype JSON files (e.g. "scoring" section)
-        // so they are auto-discovered with the archetype. _deriveProfile() handles
-        // archetypes not listed here, but the hardcoded map diverges from the JSONs.
-        this.ARCHETYPE_PROFILES = {
-            'cool_recovery': {
-                chromaProfile: 'moderate',  // cMax 20-50
-                tonalRange: 'dark',          // lMean < 50
-                expects_outlier: true        // Small weight but high chroma
-            },
-            'hot_yellow': {
-                chromaProfile: 'extreme',    // cMax > 70
-                tonalRange: 'bright',        // lMean > 55
-                expects_dominance: true      // Single sector > 40%
-            },
-            'neon': {
-                chromaProfile: 'extreme',    // cMax > 70
-                tonalRange: 'bright',        // lMean > 50
-                expects_flat: true           // Low l_std_dev
-            },
-            'dark_portrait': {
-                chromaProfile: 'low',        // cMax < 30
-                tonalRange: 'dark',          // lMean < 50
-                expects_warm: true           // temperature_bias > 0.4
-            },
-            'cinematic': {
-                chromaProfile: 'low',        // cMax < 30
-                tonalRange: 'dark',          // lMean < 45
-                expects_cool: true           // temperature_bias < 0
-            },
-            'faded_vintage': {
-                chromaProfile: 'low',        // cMax < 25
-                tonalRange: 'mid',           // lMean 50-65
-                expects_warm: true           // temperature_bias > 0
-            },
-            'detail_recovery': {
-                chromaProfile: 'very_low',   // cMax < 20
-                tonalRange: 'mid-bright',    // lMean > 50
-                expects_monochrome: true,    // hue_entropy < 0.3
-                rewards_high_texture: true   // Boost for high-relief subjects (σL > 18)
-            },
-            'black_and_white': {
-                chromaProfile: 'achromatic', // cMax < 5
-                tonalRange: 'any',
-                expects_monochrome: true     // hue_entropy < 0.1
-            },
-            'fine_art_scan': {
-                chromaProfile: 'moderate',   // cMax 15-50
-                tonalRange: 'mid',           // lMean 40-65
-                expects_diversity: true      // hue_entropy > 0.6
-            },
-            'warm_photo': {
-                chromaProfile: 'moderate',   // cMax 40-85
-                tonalRange: 'mid',           // lMean 45-65
-                expects_diversity: true      // hue_entropy > 0.7 (multi-hue subjects)
-            },
-            'full_spectrum': {
-                chromaProfile: 'any',        // No chroma preference
-                tonalRange: 'any',           // No tonal preference
-                expects_high_entropy: true,  // hue_entropy > 0.85
-                max_sector_gate: 0.25        // Hard gate: no sector can hold > 25%
-            },
-            'bold_poster': {
-                chromaProfile: 'low',        // Poster inks on paper: avg cMax ~30
-                tonalRange: 'mid-bright',    // lMean 50-70
-                expects_warm: true,          // Most posters are warm-toned
-                expects_dominance: true      // Poster color is concentrated (psw > 0.4)
-            },
-            'sunlit': {
-                chromaProfile: 'low',        // cMax < 30
-                tonalRange: 'mid-bright',    // lMean 50-70
-                expects_warm: true,          // temperature_bias > 0.4
-                max_l_std_dev_gate: 32.0     // Penalty for high-contrast posters (σL > 32)
-            },
-            'old_master': {
-                chromaProfile: 'low',        // cMax < 30 (deep shadow palette)
-                tonalRange: 'dark',          // lMean < 50
-                expects_warm: true           // temperature_bias > 0.4
-            },
-            'painterly': {
-                chromaProfile: 'moderate',   // cMax 20-50 (varied painterly chroma)
-                tonalRange: 'mid-bright',    // lMean 50-70
-                expects_diversity: true      // hue_entropy > 0.7
-            }
-        };
     }
 
     getBestMatch(dna) {
@@ -174,8 +89,7 @@ class ArchetypeMapper {
     // 45% Weight: Sector Affinity Voting (Enhanced)
     calculateSectorAffinity(dna, archetype) {
         let affinity = 50; // Baseline
-        const profile = this.ARCHETYPE_PROFILES[archetype.id]
-            || this._deriveProfile(archetype);
+        const profile = archetype.scoring || this._deriveProfile(archetype);
 
         let totalWeight = 0;
         let weightedAffinity = 0;
@@ -331,8 +245,7 @@ class ArchetypeMapper {
         score = (entropyScore * 0.4) + (tempScore * 0.3) + (sectorWeightScore * 0.3);
 
         // Pattern bonuses
-        const profile = this.ARCHETYPE_PROFILES[archetype.id]
-            || this._deriveProfile(archetype);
+        const profile = archetype.scoring || this._deriveProfile(archetype);
         if (profile) {
             if (profile.expects_monochrome && dna.global.hue_entropy < 0.3) {
                 score += 20;

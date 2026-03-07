@@ -25,8 +25,8 @@
     "k": 1.5,
     "l_std_dev": 1.5,
     "hue_entropy": 2.5,
-    "temperature_bias": 2.0,
-    "primary_sector_weight": 2.0
+    "temperature_bias": 2,
+    "primary_sector_weight": 2
   },
   "parameters": {
     "minColors": 4,
@@ -36,9 +36,9 @@
     "cWeight": 1.5,
     "blackBias": 8,
     "vibrancyMode": "subtle",
-    "vibrancyBoost": 1.0,
+    "vibrancyBoost": 1,
     "highlightThreshold": 85,
-    "highlightBoost": 2.0,
+    "highlightBoost": 2,
     "enablePaletteReduction": true,
     "paletteReduction": 7,
     "substrateMode": "auto",
@@ -56,5 +56,10 @@
     "speckleRescue": 4,
     "minVolume": 1,
     "refinementPasses": 1
+  },
+  "scoring": {
+    "chromaProfile": "low",
+    "tonalRange": "dark",
+    "expects_warm": true
   }
 }

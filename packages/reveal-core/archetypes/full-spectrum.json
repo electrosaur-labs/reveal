@@ -4,7 +4,7 @@
   "name": "Full Spectrum",
   "group": "natural",
   "engine": "direct",
-  "description": "High-entropy images with color spread across many sectors. No dominant hue \u2014 treats all colors with equal structural respect. Balanced weights prevent any single channel from hijacking separation.",
+  "description": "High-entropy images with color spread across many sectors. No dominant hue — treats all colors with equal structural respect. Balanced weights prevent any single channel from hijacking separation.",
   "preferred_sectors": [],
   "centroid": {
     "l": 50,
@@ -54,5 +54,11 @@
     "medianPass": false,
     "minVolume": 1,
     "refinementPasses": 2
+  },
+  "scoring": {
+    "chromaProfile": "any",
+    "tonalRange": "any",
+    "expects_high_entropy": true,
+    "max_sector_gate": 0.25
   }
 }

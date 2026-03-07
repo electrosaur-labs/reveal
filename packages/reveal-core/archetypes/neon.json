@@ -58,5 +58,10 @@
     "shadowClamp": 6,
     "minVolume": 0.5,
     "refinementPasses": 0
+  },
+  "scoring": {
+    "chromaProfile": "extreme",
+    "tonalRange": "bright",
+    "expects_flat": true
   }
 }

@@ -4,7 +4,7 @@
   "name": "Painterly",
   "group": "natural",
   "engine": "direct",
-  "description": "Warm-toned painterly scenes with high hue diversity. Complex multi-hue compositions where many sectors contribute \u2014 landscapes, genre scenes, Art Nouveau illustrations. Higher entropy than Warm Dramatic; warmer than Subtle Naturalist.",
+  "description": "Warm-toned painterly scenes with high hue diversity. Complex multi-hue compositions where many sectors contribute — landscapes, genre scenes, Art Nouveau illustrations. Higher entropy than Warm Dramatic; warmer than Subtle Naturalist.",
   "preferred_sectors": [
     "yellow",
     "orange",
@@ -23,11 +23,11 @@
     "primary_sector_weight": 0.4
   },
   "weights": {
-    "l": 1.0,
-    "c": 1.0,
-    "k": 1.0,
-    "l_std_dev": 1.0,
-    "hue_entropy": 3.0,
+    "l": 1,
+    "c": 1,
+    "k": 1,
+    "l_std_dev": 1,
+    "hue_entropy": 3,
     "temperature_bias": 0.5,
     "primary_sector_weight": 2.5
   },
@@ -60,5 +60,10 @@
     "speckleRescue": 4,
     "minVolume": 1,
     "refinementPasses": 1
+  },
+  "scoring": {
+    "chromaProfile": "moderate",
+    "tonalRange": "mid-bright",
+    "expects_diversity": true
   }
 }

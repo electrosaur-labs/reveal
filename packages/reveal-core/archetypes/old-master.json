@@ -22,11 +22,11 @@
   },
   "weights": {
     "l": 2.5,
-    "c": 1.0,
-    "k": 3.0,
-    "l_std_dev": 2.0,
-    "hue_entropy": 2.0,
-    "temperature_bias": 4.0,
+    "c": 1,
+    "k": 3,
+    "l_std_dev": 2,
+    "hue_entropy": 2,
+    "temperature_bias": 4,
     "primary_sector_weight": 1.5
   },
   "parameters": {
@@ -38,9 +38,9 @@
     "cWeight": 1.5,
     "blackBias": 9,
     "vibrancyMode": "subtle",
-    "vibrancyBoost": 1.0,
+    "vibrancyBoost": 1,
     "highlightThreshold": 85,
-    "highlightBoost": 2.0,
+    "highlightBoost": 2,
     "enablePaletteReduction": true,
     "paletteReduction": 6,
     "substrateMode": "auto",
@@ -58,5 +58,10 @@
     "speckleRescue": 4,
     "minVolume": 1,
     "refinementPasses": 1
+  },
+  "scoring": {
+    "chromaProfile": "low",
+    "tonalRange": "dark",
+    "expects_warm": true
   }
 }

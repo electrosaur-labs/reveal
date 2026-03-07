@@ -50,5 +50,10 @@
     "speckleRescue": 4,
     "minVolume": 0.5,
     "refinementPasses": 0
+  },
+  "scoring": {
+    "chromaProfile": "achromatic",
+    "tonalRange": "any",
+    "expects_monochrome": true
   }
 }

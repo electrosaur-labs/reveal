@@ -50,5 +50,11 @@
     "speckleRescue": 4,
     "minVolume": 1,
     "refinementPasses": 1
+  },
+  "scoring": {
+    "chromaProfile": "very_low",
+    "tonalRange": "mid-bright",
+    "expects_monochrome": true,
+    "rewards_high_texture": true
   }
 }

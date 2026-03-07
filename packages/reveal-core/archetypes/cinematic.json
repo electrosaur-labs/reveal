@@ -52,5 +52,10 @@
     "neutralSovereigntyThreshold": 5,
     "preprocessingIntensity": "heavy",
     "refinementPasses": 1
+  },
+  "scoring": {
+    "chromaProfile": "low",
+    "tonalRange": "dark",
+    "expects_cool": true
   }
 }

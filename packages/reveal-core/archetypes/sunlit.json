@@ -60,5 +60,11 @@
     "minVolume": 1,
     "refinementPasses": 1,
     "shadowChromaGateL": 45
+  },
+  "scoring": {
+    "chromaProfile": "low",
+    "tonalRange": "mid-bright",
+    "expects_warm": true,
+    "max_l_std_dev_gate": 32
   }
 }

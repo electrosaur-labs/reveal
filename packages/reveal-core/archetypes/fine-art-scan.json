@@ -60,5 +60,10 @@
     "medianPass": false,
     "minVolume": 1.5,
     "refinementPasses": 2
+  },
+  "scoring": {
+    "chromaProfile": "moderate",
+    "tonalRange": "mid",
+    "expects_diversity": true
   }
 }
