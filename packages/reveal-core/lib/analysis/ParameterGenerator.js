@@ -519,7 +519,6 @@ class ParameterGenerator {
         // Only apply overrides to certain archetypes that benefit from refinement
         const refinableArchetypes = [
             'fine_art_scan',
-            'bleached',
             'warm_tonal_optimized',
             'detail_recovery',
             'vivid_photo',          // Add vibrant tonal

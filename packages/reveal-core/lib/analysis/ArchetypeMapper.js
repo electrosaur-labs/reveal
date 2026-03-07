@@ -10,7 +10,9 @@ class ArchetypeMapper {
         this.archetypes = archetypes;
         this.decayConstant = 0.05; // Adjusts sensitivity of the decay curve
 
-        // Archetype expectations for sector affinity scoring
+        // TODO: Move these profiles into the archetype JSON files (e.g. "scoring" section)
+        // so they are auto-discovered with the archetype. _deriveProfile() handles
+        // archetypes not listed here, but the hardcoded map diverges from the JSONs.
         this.ARCHETYPE_PROFILES = {
             'cool_recovery': {
                 chromaProfile: 'moderate',  // cMax 20-50
@@ -62,11 +64,6 @@ class ArchetypeMapper {
                 chromaProfile: 'moderate',   // cMax 40-85
                 tonalRange: 'mid',           // lMean 45-65
                 expects_diversity: true      // hue_entropy > 0.7 (multi-hue subjects)
-            },
-            'bleached': {
-                chromaProfile: 'very_low',   // cMax < 20
-                tonalRange: 'bright',        // lMean > 55
-                max_l_std_dev_gate: 15.0     // Penalty-only: block high-texture subjects
             },
             'full_spectrum': {
                 chromaProfile: 'any',        // No chroma preference
