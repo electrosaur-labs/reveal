@@ -74,183 +74,6 @@ function reconstructProcessedLab16(colorIndices, paletteLab, pixelCount) {
 }
 
 /**
- * Calculate image DNA v2.0 from 8-bit Lab data
- * Returns comprehensive DNA metrics including 12-sector hue analysis
- *
- * DNA v2.0 Structure:
- * - version: "2.0"
- * - global: L/C/K metrics + derived hue values
- * - sectors: Per-sector weight, cMean, cMax, lMean for all 12 hue sectors
- * - legacy fields: Preserved for backward compatibility
- */
-function calculateImageDNA(lab8bit, width, height, sampleStep = 40) {
-    const pixelCount = width * height;
-    const CHROMA_THRESHOLD = 5; // Minimum chroma to count for hue analysis
-
-    // 12 hue sectors (30° each)
-    const SECTORS = [
-        'red', 'orange', 'yellow', 'chartreuse',
-        'green', 'cyan', 'azure', 'blue',
-        'purple', 'magenta', 'pink', 'rose'
-    ];
-
-    // Global metrics
-    let sumL = 0, sumC = 0;
-    let minL = 100, maxL = 0, maxC = 0;
-    let sampleCount = 0;
-    let lowChromaCount = 0;
-    const lValues = [];
-
-    // Per-sector data
-    const sectorData = {};
-    SECTORS.forEach(sector => {
-        sectorData[sector] = {
-            count: 0,
-            sumC: 0,
-            sumL: 0,
-            maxC: 0,
-            pixels: []
-        };
-    });
-
-    let warmCount = 0;  // Red, orange, yellow (0-90°)
-    let coolCount = 0;  // Cyan, azure, blue, purple (150-270°)
-    let chromaPixelCount = 0;  // Pixels with C > threshold
-
-    // Sample pixels
-    for (let i = 0; i < pixelCount; i += sampleStep) {
-        // Convert 8-bit to perceptual
-        const L = (lab8bit[i * 3] / 255) * 100;
-        const a = lab8bit[i * 3 + 1] - 128;
-        const b = lab8bit[i * 3 + 2] - 128;
-        const C = Math.sqrt(a * a + b * b);
-
-        // Global metrics
-        sumL += L;
-        sumC += C;
-        lValues.push(L);
-        if (L < minL) minL = L;
-        if (L > maxL) maxL = L;
-        if (C > maxC) maxC = C;
-        if (C < 15) lowChromaCount++;
-        sampleCount++;
-
-        // Hue sector analysis (only for chromatic pixels)
-        if (C > CHROMA_THRESHOLD) {
-            chromaPixelCount++;
-
-            // Calculate hue angle (0-360°)
-            let hue = Math.atan2(b, a) * (180 / Math.PI);
-            if (hue < 0) hue += 360;
-
-            // Determine sector (12 sectors of 30° each)
-            const sectorIndex = Math.floor(hue / 30) % 12;
-            const sector = SECTORS[sectorIndex];
-
-            // Update sector data
-            sectorData[sector].count++;
-            sectorData[sector].sumC += C;
-            sectorData[sector].sumL += L;
-            if (C > sectorData[sector].maxC) sectorData[sector].maxC = C;
-
-            // Warm/cool classification
-            if (hue >= 0 && hue < 90) warmCount++;        // Red, orange, yellow
-            else if (hue >= 150 && hue < 270) coolCount++; // Cyan, azure, blue, purple
-        }
-    }
-
-    // Calculate global averages
-    const avgL = sumL / sampleCount;
-    const avgC = sumC / sampleCount;
-    const lVariance = lValues.reduce((sum, l) => sum + Math.pow(l - avgL, 2), 0) / sampleCount;
-    const lStdDev = Math.sqrt(lVariance);
-    const lowChromaDensity = lowChromaCount / sampleCount;
-
-    // Process sector data into final structure
-    const sectors = {};
-    let dominantSector = null;
-    let dominantWeight = 0;
-    let hueWeights = [];
-
-    SECTORS.forEach(sector => {
-        const data = sectorData[sector];
-        const weight = chromaPixelCount > 0 ? data.count / chromaPixelCount : 0;
-
-        sectors[sector] = {
-            weight: parseFloat(weight.toFixed(4)),
-            cMean: data.count > 0 ? parseFloat((data.sumC / data.count).toFixed(1)) : 0,
-            cMax: parseFloat(data.maxC.toFixed(1)),
-            lMean: data.count > 0 ? parseFloat((data.sumL / data.count).toFixed(1)) : 0
-        };
-
-        // Track dominant sector
-        if (weight > dominantWeight) {
-            dominantWeight = weight;
-            dominantSector = sector;
-        }
-
-        // Collect weights for entropy calculation
-        if (weight > 0) hueWeights.push(weight);
-    });
-
-    // Calculate hue entropy (Shannon entropy normalized 0-1)
-    let hueEntropy = 0;
-    if (hueWeights.length > 0) {
-        const maxEntropy = Math.log2(12); // Maximum entropy for 12 sectors
-        hueEntropy = -hueWeights.reduce((sum, w) => sum + w * Math.log2(w), 0) / maxEntropy;
-    }
-
-    // Calculate warm/cool metrics
-    const warmCoolRatio = chromaPixelCount > 0
-        ? parseFloat((warmCount / (warmCount + coolCount)).toFixed(3))
-        : 0.5;
-
-    // Temperature bias: (W-C)/(W+C) scale from -1 (pure cool) to +1 (pure warm)
-    const temperatureBias = (warmCount + coolCount) > 0
-        ? parseFloat(((warmCount - coolCount) / (warmCount + coolCount)).toFixed(3))
-        : 0;
-
-    // Return DNA v2.0 structure with global object (matches ArchetypeLoader expectations)
-    return {
-        // Version marker
-        version: "2.0",
-
-        // Global metrics (7D core + extended)
-        global: {
-            l: parseFloat(avgL.toFixed(1)),
-            c: parseFloat(avgC.toFixed(1)),
-            k: parseFloat((maxL - minL).toFixed(1)),
-            l_std_dev: parseFloat(lStdDev.toFixed(1)),
-            hue_entropy: parseFloat(hueEntropy.toFixed(3)),
-            temperature_bias: temperatureBias,
-            primary_sector_weight: parseFloat(dominantWeight.toFixed(4)),
-
-            // Extended metrics (for backward compatibility and analysis)
-            minL: parseFloat(minL.toFixed(1)),
-            maxL: parseFloat(maxL.toFixed(1)),
-            maxC: parseFloat(maxC.toFixed(1)),
-            lowChromaDensity: parseFloat(lowChromaDensity.toFixed(3)),
-            warm_cool_ratio: warmCoolRatio
-        },
-
-        // Dominant hue sector
-        dominant_sector: dominantSector || 'none',
-
-        // Per-sector chromatic fingerprint (12 hue sectors)
-        sectors: sectors,
-
-        // Legacy fields (for backward compatibility with DNA v1.0 code)
-        l: parseFloat(avgL.toFixed(1)),
-        c: parseFloat(avgC.toFixed(1)),
-        k: parseFloat((maxL - minL).toFixed(1)),
-        l_std_dev: parseFloat(lStdDev.toFixed(1)),
-        minL: parseFloat(minL.toFixed(1)),
-        maxL: parseFloat(maxL.toFixed(1)),
-        maxC: parseFloat(maxC.toFixed(1))
-    };
-}
-
-/**
  * Pseudo-archetype IDs that use code-only generators instead of JSON archetypes.
  */
 const PSEUDO_ARCHETYPES = {
@@ -299,13 +122,20 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         lab8bit = convertPsd16bitTo8bitLab(labData, pixelCount);
     }
 
-    // 3. Calculate image DNA
-    console.log(`  Calculating image DNA...`);
-    const dna = calculateImageDNA(lab8bit, width, height);
+    // 3. Calculate image DNA (canonical DNAGenerator — matches Navigator UI path)
+    console.log(`  Calculating image DNA (DNAGenerator on 16-bit Lab)...`);
+    const dna = Reveal.DNAGenerator.fromPixels(lab16bit, width, height, { bitDepth: 16 });
     dna.filename = basename;
     dna.bitDepth = depth;
 
-    console.log(`  DNA: L=${dna.l}, C=${dna.c}, K=${dna.k}, StdDev=${dna.l_std_dev}, maxC=${dna.maxC}`);
+    // Legacy shim fields for downstream consumers (BilateralFilter, MedianFilter, console.log)
+    dna.l = dna.global.l;
+    dna.c = dna.global.c;
+    dna.k = dna.global.k;
+    dna.l_std_dev = dna.global.l_std_dev;
+    dna.maxC = Math.max(...Object.values(dna.sectors).map(s => s.cMax || 0));
+
+    console.log(`  DNA: L=${dna.global.l}, C=${dna.global.c}, K=${dna.global.k}, StdDev=${dna.global.l_std_dev}, maxC=${dna.maxC}`);
 
     // 4. Generate configuration
     const archetypeOverride = cliOptions.archetype;
