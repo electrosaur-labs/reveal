@@ -166,7 +166,7 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
     // Flat image (default output)
-    const flatExt = inputFormat === 'tiff' ? '.tiff' : '.png';
+    const flatExt = '.png';
     const flatPath = path.join(outputDir, `${basename}_reveal${flatExt}`);
     await writeFlat(result.colorIndices, result.paletteLab, width, height, flatPath, inputFormat);
     log(`Wrote: ${flatPath}`);
@@ -257,7 +257,7 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
         });
 
         // Write outputs in subdirectory
-        const flatExt = inputFormat === 'tiff' ? '.tiff' : '.png';
+        const flatExt = '.png';
         await writeFlat(result.colorIndices, result.paletteLab, width, height,
             path.join(subDir, `${basename}${flatExt}`), inputFormat);
 

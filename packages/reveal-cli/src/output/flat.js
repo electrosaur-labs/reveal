@@ -37,12 +37,9 @@ async function writeFlat(colorIndices, paletteLab, width, height, outputPath, in
         raw: { width, height, channels: 3 }
     });
 
-    // Match output format to input (JPEG → PNG for lossless)
-    if (inputFormat === 'tiff') {
-        pipeline = pipeline.tiff({ compression: 'lzw' });
-    } else {
-        pipeline = pipeline.png();
-    }
+    // Always output PNG — sharp's TIFF writer can produce wrong colorspace
+    // metadata when the input was a Lab TIFF, causing blue cast in viewers.
+    pipeline = pipeline.png();
 
     await pipeline.toFile(outputPath);
 }
