@@ -39,6 +39,5 @@
     "utif2": "^4.1.0"
   },
   "dependencies": {
-    "sharp": "^0.34.5"
   }
 }
