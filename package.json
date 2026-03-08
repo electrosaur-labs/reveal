@@ -15,6 +15,7 @@
     "build:navigator": "npm run build -w @electrosaur-labs/navigator",
     "test:navigator": "npm test -w @electrosaur-labs/navigator",
     "test:cli": "npm test -w @electrosaur-labs/reveal-cli",
+    "reveal": "node packages/reveal-cli/bin/reveal.js",
     "clean": "npm run clean --workspaces --if-present",
     "package:navigator": "npm run package -w @electrosaur-labs/navigator"
   },
@@ -36,5 +37,8 @@
     "omggif": "^1.0.10",
     "opentype.js": "^1.3.4",
     "utif2": "^4.1.0"
+  },
+  "dependencies": {
+    "sharp": "^0.34.5"
   }
 }

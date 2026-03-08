@@ -363,7 +363,7 @@ describe('Multi-archetype quality ranking via getPaletteWithQuality', () => {
         });
 
         // Score 4 different archetypes
-        const archetypeIds = ['fine_art_scan', 'warm_photo', 'full_spectrum', 'bold_poster'];
+        const archetypeIds = ['fine_art_scan', 'warm_photo', 'full_spectrum', 'minkler'];
         const scores = [];
 
         for (const id of archetypeIds) {

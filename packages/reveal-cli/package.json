@@ -16,7 +16,7 @@
     "@electrosaur-labs/psd-reader": "*",
     "@electrosaur-labs/psd-writer": "*",
     "commander": "^11.1.0",
-    "sharp": "^0.33.0"
+    "sharp": "^0.33.5"
   },
   "keywords": [
     "cli",

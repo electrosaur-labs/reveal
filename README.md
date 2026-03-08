@@ -90,6 +90,7 @@ const { colorIndices, masks } = await Reveal.separate(
 | **[@electrosaur-labs/core](packages/reveal-core/)** | Pure JS engines — posterization, separation, DNA analysis, archetypes. **Zero dependencies.** |
 | **[@electrosaur-labs/navigator](packages/reveal-navigator/)** | Photoshop UXP panel — real-time archetype exploration, palette surgery, production render |
 | **[@electrosaur-labs/adobe](packages/reveal-adobe/)** | Photoshop UXP command dialog (superseded by Navigator, kept for reference) |
+| **[@electrosaur-labs/reveal-cli](packages/reveal-cli/)** | Command-line tool — PNG/TIFF/JPEG input, outputs flat images, PSD, ORA, plate masks |
 | **[@electrosaur-labs/batch](packages/reveal-batch/)** | CLI batch processor for automated testing and benchmarking |
 | **[@electrosaur-labs/psd-reader](packages/reveal-psd-reader/)** | Minimal PSD reader for Lab documents |
 | **[@electrosaur-labs/psd-writer](packages/reveal-psd-writer/)** | PSD writer for 8/16-bit Lab with fill+mask and pixel layers |
@@ -100,8 +101,9 @@ const { colorIndices, masks } = await Reveal.separate(
 @electrosaur-labs/core (Pure Math)          Zero dependencies, no I/O
      │
      ├── @electrosaur-labs/navigator        Photoshop UXP panel (real-time preview + production)
+     ├── @electrosaur-labs/reveal-cli       Command-line tool (sharp, commander)
      ├── @electrosaur-labs/adobe            Photoshop UXP dialog (legacy)
-     └── @electrosaur-labs/batch            Node.js CLI (ag-psd, sharp, commander)
+     └── @electrosaur-labs/batch            Node.js CLI for benchmarking (ag-psd, sharp)
 ```
 
 The core engines are pure computation — no file system, no network, no Photoshop APIs. Adapters handle I/O for each platform. This means you can run the same separation algorithm in a Photoshop plugin, a Node.js batch pipeline, a web worker, or an AI agent's function call.
@@ -111,7 +113,7 @@ The core engines are pure computation — no file system, no network, no Photosh
 ```
 Lab pixels → DNA Analysis → Parameter Generation → Bilateral Filter
     → Median Cut Quantization → Pixel Separation → Mask Generation
-    → [Photoshop: Lab fill+mask layers] or [CLI: PSD file output]
+    → [Photoshop: Lab fill+mask layers] or [CLI: flat/PSD/ORA/plates output]
 ```
 
 ## Development
@@ -130,6 +132,10 @@ cd packages/reveal-core && npm run test:watch
 npm run build:navigator
 npm run build:adobe
 
+# Command-line separation
+npm run reveal -- photo.png --format psd,ora -o output/
+npm run reveal -- --help
+
 # Batch processing
 cd packages/reveal-batch
 npm run reveal              # Single image
@@ -138,11 +144,15 @@ npm run process-cq100       # Benchmark dataset
 
 ## User Guide
 
-New to Reveal? See the **[User Guide](docs/USER-GUIDE.md)** for a screen printer's walkthrough of the Photoshop plugin.
+New to Reveal? See the **[User Guide](docs/USER-GUIDE.md)** for a screen printer's walkthrough of the Photoshop plugin and command-line tool.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding conventions, and PR workflow.
+
+## Acknowledgments
+
+Dedicated to **[Doug Minkler](http://www.dminkler.com)**, who taught me everything I know about screen printing.
 
 ## License
 

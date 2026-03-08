@@ -26,9 +26,7 @@ program
     .option('-o, --output <path>', 'Output path or directory')
     .option('-a, --archetype <name>', 'Archetype ID (default: auto-detect)')
     .option('-c, --colors <n>', 'Target color count (2-10)', parseInt)
-    .option('--psd', 'Produce layered PSD')
-    .option('--ora', 'Produce OpenRaster (.ora) file')
-    .option('--plates', 'Produce individual plate PNGs')
+    .option('-f, --format <types...>', 'Output formats: psd, ora, plates (repeatable or comma-separated)')
     .option('--trap <pixels>', 'Trap width in pixels', parseInt)
     .option('--min-volume <percent>', 'Ghost plate threshold (0-5%)', parseFloat)
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
@@ -54,6 +52,29 @@ if (process.argv.includes('--list-archetypes')) {
     process.exit(0);
 }
 
+const VALID_FORMATS = new Set(['psd', 'ora', 'plates']);
+
+/**
+ * Normalize --format values: accept repeatable flags and comma-separated lists.
+ * e.g. ['psd', 'ora,plates'] → Set{'psd', 'ora', 'plates'}
+ */
+function parseFormats(rawFormats) {
+    if (!rawFormats) return new Set();
+    const formats = new Set();
+    for (const item of rawFormats) {
+        for (const f of item.split(',')) {
+            const trimmed = f.trim().toLowerCase();
+            if (trimmed) {
+                if (!VALID_FORMATS.has(trimmed)) {
+                    throw new Error(`Unknown format "${trimmed}". Valid: ${[...VALID_FORMATS].join(', ')}`);
+                }
+                formats.add(trimmed);
+            }
+        }
+    }
+    return formats;
+}
+
 async function run(inputFile, options) {
     const log = options.quiet ? () => {} : (msg) => process.stderr.write(msg + '\n');
     const verbose = options.verbose ? (msg) => process.stderr.write(`  [verbose] ${msg}\n`) : () => {};
@@ -68,6 +89,9 @@ async function run(inputFile, options) {
             throw new Error('Colors must be 2-10');
         }
 
+        // Normalize --format: accept repeatable and comma-separated
+        const formats = parseFormats(options.format);
+
         // Load recipe and merge with CLI
         let mergedOptions = { ...options };
         if (options.recipe) {
@@ -80,10 +104,9 @@ async function run(inputFile, options) {
                 speckleRescue: options.speckleRescue,
                 shadowClamp: options.shadowClamp,
             });
-            // Preserve CLI-only flags
-            mergedOptions.psd = options.psd || (recipe.outputs && recipe.outputs.includes('psd'));
-            mergedOptions.ora = options.ora || (recipe.outputs && recipe.outputs.includes('ora'));
-            mergedOptions.plates = options.plates || (recipe.outputs && recipe.outputs.includes('plates'));
+            // Merge recipe outputs with CLI formats
+            const recipeFormats = recipe.outputs || [];
+            mergedOptions.formats = new Set([...formats, ...recipeFormats]);
             mergedOptions.compare = options.compare;
             mergedOptions.output = options.output || recipe.outputDir;
             mergedOptions.quiet = options.quiet;
@@ -91,6 +114,8 @@ async function run(inputFile, options) {
             mergedOptions.json = options.json;
             mergedOptions.saveRecipe = options.saveRecipe;
             log(`Loaded recipe: ${options.recipe}`);
+        } else {
+            mergedOptions.formats = formats;
         }
 
         // Ingest
@@ -148,7 +173,7 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
     outputFiles.push(flatPath);
 
     // PSD
-    if (options.psd) {
+    if (options.formats.has('psd')) {
         const psdPath = path.join(outputDir, `${basename}_reveal.psd`);
         const size = await writePsd(result.paletteLab, result.paletteRgb, result.masks, result.colorIndices, width, height, psdPath);
         log(`Wrote: ${psdPath} (${(size / 1024).toFixed(1)} KB)`);
@@ -156,7 +181,7 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
     }
 
     // ORA
-    if (options.ora) {
+    if (options.formats.has('ora')) {
         const oraPath = path.join(outputDir, `${basename}_reveal.ora`);
         const size = await writeOra(result.paletteLab, result.paletteRgb, result.masks, result.colorIndices, width, height, oraPath, result.hexColors);
         log(`Wrote: ${oraPath} (${(size / 1024).toFixed(1)} KB)`);
@@ -164,7 +189,7 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
     }
 
     // Plates
-    if (options.plates) {
+    if (options.formats.has('plates')) {
         const plateDir = options.output ? path.resolve(options.output) : inputDir;
         const platePaths = await writePlates(result.masks, result.hexColors, width, height, plateDir, basename);
         for (const p of platePaths) log(`Wrote: ${p}`);
@@ -236,17 +261,17 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
         await writeFlat(result.colorIndices, result.paletteLab, width, height,
             path.join(subDir, `${basename}${flatExt}`), inputFormat);
 
-        if (options.psd) {
+        if (options.formats.has('psd')) {
             await writePsd(result.paletteLab, result.paletteRgb, result.masks, result.colorIndices, width, height,
                 path.join(subDir, `${basename}.psd`));
         }
 
-        if (options.ora) {
+        if (options.formats.has('ora')) {
             await writeOra(result.paletteLab, result.paletteRgb, result.masks, result.colorIndices, width, height,
                 path.join(subDir, `${basename}.ora`), result.hexColors);
         }
 
-        if (options.plates) {
+        if (options.formats.has('plates')) {
             await writePlates(result.masks, result.hexColors, width, height, subDir, basename);
         }
 

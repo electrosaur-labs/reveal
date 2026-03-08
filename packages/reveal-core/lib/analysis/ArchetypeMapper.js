@@ -34,7 +34,7 @@ class ArchetypeMapper {
             };
         });
 
-        return results.sort((a, b) => b.score - a.score)[0];
+        return results.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))[0];
     }
 
     /**
@@ -66,7 +66,7 @@ class ArchetypeMapper {
             };
         });
 
-        results.sort((a, b) => b.score - a.score);
+        results.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
         return results.slice(0, n);
     }
 

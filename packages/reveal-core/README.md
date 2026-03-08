@@ -96,7 +96,7 @@ For lower-level control, all engines are available via `Reveal.engines.*`:
 |-------|-----------|
 | **Natural** | Everyday Photo, Fine Art Scan, Warm Photo, Painterly, Full Spectrum |
 | **Soft** | Pastel, Soft Light, Faded Vintage, Bleached, Black & White |
-| **Graphic** | Spot Color, Bold Poster, Commercial, Neon, Vivid Poster |
+| **Graphic** | Spot Color, Minkler, Commercial, Neon, Vivid Poster |
 | **Dramatic** | Dark Portrait, Old Master, Film Noir, Cinematic, Golden Hour |
 | **Vibrant** | Sunlit, Saturated Max, Vivid Photo, Hot Yellow |
 | **Specialist** | Cool Recovery, Detail Recovery |

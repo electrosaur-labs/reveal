@@ -35,6 +35,14 @@ async function ingest(filePath) {
         return ingestPsd(filePath);
     }
 
+    // Check if TIFF is already in Lab — bypass sharp's color conversion
+    if (ext === '.tif' || ext === '.tiff') {
+        const meta = await sharp(filePath).metadata();
+        if (meta.space === 'labs' || meta.space === 'lab') {
+            return ingestLabTiff(filePath, meta);
+        }
+    }
+
     return ingestRgb(filePath, ext);
 }
 
@@ -56,6 +64,41 @@ async function ingestPsd(filePath) {
     }
 
     return { lab16bit, width, height, inputFormat: 'psd' };
+}
+
+/**
+ * Ingest a Lab TIFF directly — sharp reads native Lab data without color conversion.
+ * Handles both 8-bit and 16-bit Lab TIFFs.
+ */
+async function ingestLabTiff(filePath, meta) {
+    const { data, info } = await sharp(filePath)
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+    const { width, height, channels } = info;
+    const pixelCount = width * height;
+
+    const lab16bit = new Uint16Array(pixelCount * 3);
+
+    if (meta.depth === 'short' || meta.depth === 'ushort') {
+        // 16-bit Lab TIFF: Photoshop encoding (L: 0-65535 → 0-100, a/b: 0-65535, 32768=neutral)
+        // Convert to engine encoding (L: 0-32768, a/b: 0-32768, 16384=neutral)
+        const u16 = new Uint16Array(data.buffer, data.byteOffset, data.byteLength / 2);
+        for (let i = 0; i < pixelCount; i++) {
+            const si = i * channels;
+            const di = i * 3;
+            // L: 0-65535 → 0-32768 (halve)
+            lab16bit[di]     = Math.round(u16[si] * (32768 / 65535));
+            // a/b: 0-65535 (32768=neutral) → 0-32768 (16384=neutral)
+            lab16bit[di + 1] = Math.round(u16[si + 1] * (32768 / 65535));
+            lab16bit[di + 2] = Math.round(u16[si + 2] * (32768 / 65535));
+        }
+    } else {
+        // 8-bit Lab TIFF: same encoding as sharp's 8-bit Lab output
+        lab16bit = LabEncoding.convert8bitTo16bitLab(data, pixelCount);
+    }
+
+    return { lab16bit, width, height, inputFormat: 'tiff' };
 }
 
 /**

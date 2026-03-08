@@ -1,10 +1,10 @@
 {
-  "id": "bold_poster",
+  "id": "minkler",
   "version": "1.0.0",
-  "name": "Bold Poster",
+  "name": "Minkler",
   "group": "graphic",
   "engine": "direct",
-  "description": "High-contrast graphic art with near-maximum black and strong tonal structure. Political posters, Art Nouveau lithographs, editorial graphics.",
+  "description": "High-contrast graphic posterization with bold blocks of color. Named for Doug Minkler.",
   "preferred_sectors": [
     "chartreuse",
     "orange",

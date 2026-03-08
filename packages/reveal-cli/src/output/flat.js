@@ -2,10 +2,11 @@
  * flat.js — Flat posterized image writer
  *
  * Reconstructs the posterized image from color indices + palette,
- * converts Lab→RGB via sharp, writes as PNG or TIFF.
+ * converts Lab→RGB via reveal-core, writes as PNG or TIFF.
  */
 
 const sharp = require('sharp');
+const { LabEncoding } = require('@electrosaur-labs/core');
 
 /**
  * Write a flat posterized image.
@@ -20,21 +21,21 @@ const sharp = require('sharp');
 async function writeFlat(colorIndices, paletteLab, width, height, outputPath, inputFormat) {
     const pixelCount = width * height;
 
-    // Reconstruct as 8-bit Lab buffer for sharp
-    // Sharp expects: L: 0-255 (→ 0-100), a/b: 0-255 (128=neutral)
-    const lab8 = Buffer.alloc(pixelCount * 3);
-
+    // Build 8-bit Lab buffer, then convert to RGB via reveal-core
+    const lab8 = new Uint8Array(pixelCount * 3);
     for (let i = 0; i < pixelCount; i++) {
         const color = paletteLab[colorIndices[i]];
         const offset = i * 3;
-        lab8[offset]     = Math.max(0, Math.min(255, Math.round((color.L / 100) * 255)));
-        lab8[offset + 1] = Math.max(0, Math.min(255, Math.round(color.a + 128)));
-        lab8[offset + 2] = Math.max(0, Math.min(255, Math.round(color.b + 128)));
+        lab8[offset]     = Math.round((color.L / 100) * 255);
+        lab8[offset + 1] = Math.round(color.a + 128);
+        lab8[offset + 2] = Math.round(color.b + 128);
     }
 
-    let pipeline = sharp(lab8, {
+    const rgb = LabEncoding.lab8bitToRgb(lab8, pixelCount);
+
+    let pipeline = sharp(Buffer.from(rgb), {
         raw: { width, height, channels: 3 }
-    }).toColourspace('srgb');
+    });
 
     // Match output format to input (JPEG → PNG for lossless)
     if (inputFormat === 'tiff') {

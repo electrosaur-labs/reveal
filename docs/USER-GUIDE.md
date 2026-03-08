@@ -36,8 +36,8 @@ to the nearest palette color, and creates one Photoshop layer per ink.
 
 ### Key Concepts
 
-- **Archetype** — A separation recipe. "Everyday Photo" favors earth tones and faithful reproduction. "Bold Poster"
-  pushes contrast and saturation for graphic impact. "Fine Art Scan" protects subtle textures and tonal transitions.
+- **Archetype** — A separation recipe. "Everyday Photo" favors earth tones and faithful reproduction. "Minkler"
+  pushes contrast and saturation for bold graphic impact. "Fine Art Scan" protects subtle textures and tonal transitions.
   There are 26 archetypes grouped into Natural, Soft, Graphic, Dramatic, Vibrant, and Specialist families, plus 3
   adaptive pseudo-archetypes (Chameleon, Distilled, Salamander) that tune their routing logic to your image
   automatically.
@@ -200,6 +200,23 @@ A 20-megapixel image typically separates in 1-2 seconds.
   opening the dialog.
 - **Shadow Floor and mud.** On press, dark tones can collapse into a single indistinct "mud" color. Use Shadow Floor to
   set a minimum ink density so faint areas maintain enough opacity to print as distinct tones.
+
+## Command-Line Tool
+
+Reveal also ships as a command-line tool that accepts standard image formats (PNG, TIFF, JPEG) — no Photoshop required. It runs the same separation engine and can output flat posterized images, layered PSDs, OpenRaster files (for GIMP/Krita), individual plate masks, and JSON metadata.
+
+```bash
+# Basic separation
+npm run reveal -- photo.png -o output/
+
+# With PSD and OpenRaster output
+npm run reveal -- photo.png --format psd,ora -o output/
+
+# Compare multiple archetypes side by side
+npm run reveal -- photo.png --compare -o output/
+```
+
+See the full [CLI documentation](../packages/reveal-cli/README.md) for all flags, recipe files, and output format details.
 
 ## Known Limitations
 

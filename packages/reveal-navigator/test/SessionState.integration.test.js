@@ -111,7 +111,7 @@ describe('SessionState + real ProxyEngine integration', () => {
     }, 30000);
 
     it('archetype swap changes palette through real re-posterization', async () => {
-        const session = await setupRealSession('bold_poster');
+        const session = await setupRealSession('minkler');
         const paletteBefore = session.proxyEngine.separationState.palette.map(c => ({ ...c }));
         const countBefore = paletteBefore.length;
 

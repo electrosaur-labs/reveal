@@ -35,7 +35,7 @@ High-contrast, saturated art with bold colors and clean edges.
 | Archetype | Target Colors | Metric | Best for |
 |-----------|--------------|--------|----------|
 | **Spot Color** | 4–10 | CIE2000 | Ultra-flat colors, zero gradients — vector art, spot color separation |
-| **Bold Poster** | 5–10 | CIE76 | High-contrast graphic art — political posters, editorial graphics |
+| **Minkler** | 5–10 | CIE76 | Bold, rough-and-ready graphic style — political posters, woodcuts, editorial graphics |
 | **Commercial** | 6–10 | CIE2000 | High contrast, saturated commercial photography |
 | **Neon** | 6–12 | CIE76 | Aggressive hue-locking for saturated flat art — prevents color bleed |
 | **Vivid Poster** | 6–12 | CIE2000 | High-impact graphic style that respects luminance boundaries |

@@ -18,6 +18,20 @@ npm install @electrosaur-labs/reveal-cli
 
 ## Usage
 
+From the monorepo root:
+
+```bash
+npm run reveal -- <input> [options]
+```
+
+Or directly:
+
+```bash
+node packages/reveal-cli/bin/reveal.js <input> [options]
+```
+
+If installed globally or via `npm link`:
+
 ```bash
 reveal <input> [options]
 ```
@@ -25,19 +39,21 @@ reveal <input> [options]
 ### Basic separation
 
 ```bash
-reveal photo.png -o output/
+npm run reveal -- photo.png -o output/
 ```
 
 ### Layered PSD output
 
 ```bash
-reveal photo.png --psd -o output/
+reveal photo.png --format psd -o output/
 ```
 
-### All output formats
+### Multiple output formats
 
 ```bash
-reveal photo.png --psd --ora --plates -o output/
+reveal photo.png --format psd,ora,plates -o output/
+# or
+reveal photo.png --format psd --format ora --format plates -o output/
 ```
 
 ### Compare adaptive archetypes
@@ -52,7 +68,7 @@ reveal photo.png --compare -o output/
 
 ```bash
 # Save settings to a recipe
-reveal photo.png --psd --save-recipe settings.json -o output/
+reveal photo.png --format psd --save-recipe settings.json -o output/
 
 # Reuse settings (CLI flags override recipe values)
 reveal another.png --recipe settings.json -o output/
@@ -61,7 +77,7 @@ reveal another.png --recipe settings.json -o output/
 ### Explicit archetype
 
 ```bash
-reveal photo.png -a cinematic -c 6 --psd -o output/
+reveal photo.png -a cinematic -c 6 --format psd -o output/
 ```
 
 ## Flags
@@ -71,9 +87,7 @@ reveal photo.png -a cinematic -c 6 --psd -o output/
 | `-o, --output <path>` | Output directory |
 | `-a, --archetype <name>` | Archetype ID (default: auto-detect) |
 | `-c, --colors <n>` | Target color count (2-10) |
-| `--psd` | Produce layered PSD |
-| `--ora` | Produce OpenRaster (.ora) file |
-| `--plates` | Produce individual plate PNGs |
+| `-f, --format <types...>` | Output formats: `psd`, `ora`, `plates` (repeatable or comma-separated) |
 | `--trap <pixels>` | Trap width in pixels |
 | `--min-volume <percent>` | Ghost plate threshold (0-5%) |
 | `--speckle-rescue <pixels>` | Despeckle threshold (0-10px) |
@@ -90,11 +104,11 @@ reveal photo.png -a cinematic -c 6 --psd -o output/
 
 **Flat image** (default) — Posterized image as PNG or TIFF (matches input format). Always produced.
 
-**PSD** (`--psd`) — Layered Photoshop file with fill+mask layers sorted by lightness. Includes composite thumbnail.
+**PSD** (`--format psd`) — Layered Photoshop file with fill+mask layers sorted by lightness. Includes composite thumbnail.
 
-**OpenRaster** (`--ora`) — ZIP archive of colorized RGBA layer PNGs with `stack.xml`. Opens in GIMP, Krita, and other ORA-compatible editors.
+**OpenRaster** (`--format ora`) — ZIP archive of colorized RGBA layer PNGs with `stack.xml`. Opens in GIMP, Krita, and other ORA-compatible editors.
 
-**Plates** (`--plates`) — Individual grayscale PNGs per ink color (255 = ink, 0 = no ink). Named with plate number and hex color.
+**Plates** (`--format plates`) — Individual grayscale PNGs per ink color (255 = ink, 0 = no ink). Named with plate number and hex color.
 
 **JSON sidecar** (default, suppress with `--no-json`) — Metadata including palette (Lab, RGB, hex, coverage), archetype info, DNA analysis, and processing parameters.
 

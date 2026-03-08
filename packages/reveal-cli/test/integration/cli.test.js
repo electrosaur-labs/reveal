@@ -70,7 +70,7 @@ describe('CLI basics', () => {
         const { stdout } = runCli(['--help']);
         expect(stdout).toContain('Color separation engine');
         expect(stdout).toContain('--archetype');
-        expect(stdout).toContain('--psd');
+        expect(stdout).toContain('--format');
     });
 
     it('--list-archetypes lists groups', () => {
@@ -135,9 +135,9 @@ describe('single mode', () => {
         expect(fs.existsSync(jsonPath)).toBe(false);
     });
 
-    it('produces PSD with --psd', () => {
+    it('produces PSD with --format psd', () => {
         const outDir = path.join(tmpDir, 'single-psd');
-        runCli([testImage, '-o', outDir, '-q', '--psd', '--no-json']);
+        runCli([testImage, '-o', outDir, '-q', '--format', 'psd', '--no-json']);
 
         const psdPath = path.join(outDir, 'test_reveal.psd');
         expect(fs.existsSync(psdPath)).toBe(true);
@@ -146,9 +146,9 @@ describe('single mode', () => {
         expect(magic).toBe('8BPS');
     });
 
-    it('produces ORA with --ora', () => {
+    it('produces ORA with --format ora', () => {
         const outDir = path.join(tmpDir, 'single-ora');
-        runCli([testImage, '-o', outDir, '-q', '--ora', '--no-json']);
+        runCli([testImage, '-o', outDir, '-q', '--format', 'ora', '--no-json']);
 
         const oraPath = path.join(outDir, 'test_reveal.ora');
         expect(fs.existsSync(oraPath)).toBe(true);
@@ -161,9 +161,9 @@ describe('single mode', () => {
         expect(name).toBe('mimetype');
     });
 
-    it('produces plates with --plates', () => {
+    it('produces plates with --format plates', () => {
         const outDir = path.join(tmpDir, 'single-plates');
-        runCli([testImage, '-o', outDir, '-q', '--plates', '--no-json']);
+        runCli([testImage, '-o', outDir, '-q', '--format', 'plates', '--no-json']);
 
         const plates = fs.readdirSync(outDir).filter(f => f.includes('_plate_'));
         expect(plates.length).toBeGreaterThan(0);
@@ -191,6 +191,29 @@ describe('single mode', () => {
         const jsonPath = path.join(outDir, 'test_reveal.json');
         const sidecar = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
         expect(sidecar.archetype.id).toBe('chameleon');
+    });
+
+    it('accepts comma-separated --format', () => {
+        const outDir = path.join(tmpDir, 'single-comma');
+        runCli([testImage, '-o', outDir, '-q', '--format', 'psd,ora', '--no-json']);
+
+        expect(fs.existsSync(path.join(outDir, 'test_reveal.psd'))).toBe(true);
+        expect(fs.existsSync(path.join(outDir, 'test_reveal.ora'))).toBe(true);
+    });
+
+    it('accepts repeated --format flags', () => {
+        const outDir = path.join(tmpDir, 'single-repeat');
+        runCli([testImage, '-o', outDir, '-q', '--format', 'psd', '--format', 'plates', '--no-json']);
+
+        expect(fs.existsSync(path.join(outDir, 'test_reveal.psd'))).toBe(true);
+        const plates = fs.readdirSync(outDir).filter(f => f.includes('_plate_'));
+        expect(plates.length).toBeGreaterThan(0);
+    });
+
+    it('rejects unknown format', () => {
+        const { stderr, exitCode } = runCli([testImage, '-q', '--format', 'svg']);
+        expect(exitCode).not.toBe(0);
+        expect(stderr).toContain('Unknown format "svg"');
     });
 });
 

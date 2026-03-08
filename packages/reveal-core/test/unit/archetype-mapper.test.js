@@ -359,7 +359,7 @@ describe('ArchetypeMapper v2.2', () => {
             };
 
             const result = mapper.getBestMatch(dna);
-            expect(result.id).toBe('bold_poster');
+            expect(result.id).toBe('minkler');
             expect(result.score).toBeGreaterThan(50);
         });
 

@@ -11,6 +11,38 @@
 const Reveal = require('@electrosaur-labs/core');
 const { LabEncoding } = Reveal;
 
+/**
+ * Stride subsample — picks every Nth pixel, no interpolation.
+ * Exactly matches ProxyEngine._strideSubsample() for output parity.
+ */
+function strideSubsample(src, srcW, srcH, targetSize) {
+    const longEdge = Math.max(srcW, srcH);
+    const s = Math.max(1, Math.ceil(longEdge / targetSize));
+    const dstW = Math.ceil(srcW / s);
+    const dstH = Math.ceil(srcH / s);
+    const dst = new Uint16Array(dstW * dstH * 3);
+
+    let dp = 0;
+    for (let y = 0; y < srcH; y += s) {
+        for (let x = 0; x < srcW; x += s) {
+            const sp = (y * srcW + x) * 3;
+            dst[dp++] = src[sp];
+            dst[dp++] = src[sp + 1];
+            dst[dp++] = src[sp + 2];
+        }
+    }
+    return { buffer: dst, width: dstW, height: dstH };
+}
+
+// Proxy-safe overrides — must match ProxyEngine's PROXY_SAFE_OVERRIDES exactly.
+const PROXY_SAFE_OVERRIDES = Object.freeze({
+    format: 'lab',
+    bitDepth: 16,
+    snapThreshold: 0,
+    densityFloor: 0,
+    preservedUnifyThreshold: 0.5,
+});
+
 const PSEUDO_ARCHETYPES = {
     'chameleon':   dna => Reveal.generateConfigurationMk2(dna),
     'distilled':   dna => Reveal.generateConfigurationDistilled(dna),
@@ -114,42 +146,38 @@ async function processSingle(lab16bit, width, height, options = {}) {
     if (options.speckleRescue !== undefined) config.speckleRescue = options.speckleRescue;
     if (options.shadowClamp !== undefined) config.shadowClamp = options.shadowClamp;
 
-    // 3. Bilateral prefilter
-    const BilateralFilter = Reveal.BilateralFilter;
-    // Work on a copy so we don't mutate the shared buffer in compare mode
-    let workLab = options.dna ? new Uint16Array(lab16bit) : lab16bit;
+    // 3. Stride subsample to proxy (matches ProxyEngine._strideSubsample exactly)
+    const proxy = strideSubsample(lab16bit, width, height, 1000);
+    const proxyW = proxy.width;
+    const proxyH = proxy.height;
+    let proxyLab = new Uint16Array(proxy.buffer); // copy — bilateral mutates in place
+    progress('proxy', `Stride subsample ${width}x${height} → ${proxyW}x${proxyH}`);
 
-    if (config.preprocessingIntensity === 'off') {
+    // 4. Bilateral prefilter (matches ProxyEngine: radius 3/5, sigmaR 5000)
+    const BilateralFilter = Reveal.BilateralFilter;
+    const preprocessingIntensity = config.preprocessingIntensity || 'auto';
+
+    if (preprocessingIntensity === 'off') {
         progress('preprocess', 'Preprocessing skipped');
     } else {
-        const entropyScore = BilateralFilter.calculateEntropyScoreLab(workLab, width, height);
-        const decision = BilateralFilter.shouldPreprocess(dna, entropyScore, true);
-        if (decision.shouldProcess) {
-            progress('preprocess', `Bilateral filter: radius=${decision.radius}, sigmaR=${decision.sigmaR}`);
-            BilateralFilter.applyBilateralFilterLab(workLab, width, height, decision.radius, decision.sigmaR);
-        } else {
-            progress('preprocess', `Preprocessing skipped: ${decision.reason}`);
-        }
+        const isHeavy = preprocessingIntensity === 'heavy';
+        const radius = isHeavy ? 5 : 3;
+        progress('preprocess', `Bilateral filter: radius=${radius}, sigmaR=5000`);
+        BilateralFilter.applyBilateralFilterLab(proxyLab, proxyW, proxyH, radius, 5000);
     }
 
-    // 4. Median filter
-    const MedianFilter = Reveal.MedianFilter;
-    if (MedianFilter.shouldApply(dna, config)) {
-        progress('median', 'Median filter applied');
-        workLab = MedianFilter.apply3x3(workLab, width, height);
-    }
-
-    // 5. Posterize
+    // 5. Posterize on proxy with PROXY_SAFE_OVERRIDES (matches ProxyEngine exactly)
     const params = Reveal.ParameterGenerator.toEngineOptions(config, { bitDepth: 16 });
-    progress('posterize', `Posterizing to ${params.targetColorsSlider} colors...`);
-    const posterizeResult = await Reveal.posterizeImage(workLab, width, height, params.targetColorsSlider, params);
+    const proxyConfig = { ...params, ...PROXY_SAFE_OVERRIDES };
+    progress('posterize', `Posterizing ${proxyW}x${proxyH} proxy to ${proxyConfig.targetColorsSlider || proxyConfig.targetColors} colors...`);
+    const posterizeResult = await Reveal.posterizeImage(proxyLab, proxyW, proxyH, proxyConfig.targetColorsSlider || proxyConfig.targetColors, proxyConfig);
     progress('posterize', `Generated ${posterizeResult.paletteLab.length} colors`);
 
-    // 6. Map pixels to palette
-    progress('map', 'Mapping pixels to palette...');
+    // 7. Map full-res pixels to locked palette (nearest-neighbor, no re-posterize)
+    progress('map', `Mapping ${width}x${height} full-res pixels to palette...`);
     const SeparationEngine = Reveal.engines.SeparationEngine;
     let colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
-        workLab, posterizeResult.paletteLab, null, width, height,
+        lab16bit, posterizeResult.paletteLab, null, width, height,
         { ditherType: config.ditherType, distanceMetric: config.distanceMetric }
     );
 
