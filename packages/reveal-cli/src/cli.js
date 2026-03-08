@@ -165,11 +165,11 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
     const outputDir = options.output ? path.resolve(options.output) : inputDir;
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-    // Flat image (default output)
-    const flatExt = '.png';
-    const flatPath = path.join(outputDir, `${basename}_reveal${flatExt}`);
-    await writeFlat(result.colorIndices, result.paletteLab, width, height, flatPath, inputFormat);
-    log(`Wrote: ${flatPath}`);
+    // Flat image (default output) — preserve 16-bit depth for PSD/TIFF input
+    const sixteenBit = inputFormat === 'psd' || inputFormat === 'tiff';
+    const flatPath = path.join(outputDir, `${basename}_reveal.png`);
+    await writeFlat(result.colorIndices, result.paletteLab, width, height, flatPath, { sixteenBit });
+    log(`Wrote: ${flatPath}${sixteenBit ? ' (16-bit)' : ''}`);
     outputFiles.push(flatPath);
 
     // PSD
@@ -256,10 +256,10 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
             onProgress: (phase, msg) => verbose(`[${archId}/${phase}] ${msg}`),
         });
 
-        // Write outputs in subdirectory
-        const flatExt = '.png';
+        // Write outputs in subdirectory — preserve 16-bit depth for PSD/TIFF input
+        const sixteenBit = inputFormat === 'psd' || inputFormat === 'tiff';
         await writeFlat(result.colorIndices, result.paletteLab, width, height,
-            path.join(subDir, `${basename}${flatExt}`), inputFormat);
+            path.join(subDir, `${basename}.png`), { sixteenBit });
 
         if (options.formats.has('psd')) {
             await writePsd(result.paletteLab, result.paletteRgb, result.masks, result.colorIndices, width, height,
