@@ -1,0 +1,42 @@
+{
+  "name": "@electrosaur-labs/reveal-cli",
+  "version": "1.0.0",
+  "description": "Command-line color separation tool — accepts PNG/TIFF/JPEG, outputs posterized images, layered PSDs, OpenRaster, and plate masks",
+  "main": "src/cli.js",
+  "bin": {
+    "reveal": "bin/reveal.js"
+  },
+  "scripts": {
+    "start": "node bin/reveal.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@electrosaur-labs/core": "*",
+    "@electrosaur-labs/psd-reader": "*",
+    "@electrosaur-labs/psd-writer": "*",
+    "commander": "^11.1.0",
+    "sharp": "^0.33.0"
+  },
+  "keywords": [
+    "cli",
+    "color-separation",
+    "screen-printing",
+    "posterize",
+    "openraster",
+    "image-processing"
+  ],
+  "author": "Electrosaur Labs",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/electrosaur-labs/reveal.git",
+    "directory": "packages/reveal-cli"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.1"
+  }
+}

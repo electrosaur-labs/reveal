@@ -14,6 +14,7 @@
     "build:adobe": "npm run build -w @electrosaur-labs/adobe",
     "build:navigator": "npm run build -w @electrosaur-labs/navigator",
     "test:navigator": "npm test -w @electrosaur-labs/navigator",
+    "test:cli": "npm test -w @electrosaur-labs/reveal-cli",
     "clean": "npm run clean --workspaces --if-present",
     "package:navigator": "npm run package -w @electrosaur-labs/navigator"
   },
