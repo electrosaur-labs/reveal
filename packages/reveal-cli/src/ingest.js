@@ -35,14 +35,18 @@ async function ingest(filePath) {
         return ingestPsd(filePath);
     }
 
-    // Lab TIFFs: sharp cannot handle these (wrong colorspace conversion,
-    // channel inflation, silent 16→8 bit downgrade). Reject with clear message.
+    // 16-bit TIFFs: sharp silently downgrades to 8-bit and mangles channel data.
+    // Only 8-bit TIFFs work reliably through sharp.
     if (ext === '.tif' || ext === '.tiff') {
         const meta = await sharp(filePath).metadata();
         if (meta.space === 'labs' || meta.space === 'lab') {
             throw new Error(
-                'Lab TIFF not yet supported — sharp cannot read Lab TIFFs correctly. ' +
-                'Please convert to PSD (File → Save As → Photoshop) or export as RGB TIFF/PNG.'
+                'Lab TIFF not supported. Please save as PSD or export as 8-bit RGB PNG.'
+            );
+        }
+        if (meta.depth === 'short' || meta.depth === 'ushort') {
+            throw new Error(
+                '16-bit TIFF not supported. Please save as PSD or export as 8-bit RGB PNG.'
             );
         }
     }
