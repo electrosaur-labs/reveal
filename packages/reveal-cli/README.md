@@ -7,7 +7,7 @@ Command-line color separation tool for screen printing. Accepts PNG, TIFF, JPEG,
 ```bash
 git clone https://github.com/electrosaur-labs/reveal.git
 cd reveal
-npm install
+npm install --omit=dev
 ```
 
 ## Usage
