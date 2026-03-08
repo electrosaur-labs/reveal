@@ -4,36 +4,16 @@ Command-line color separation tool for screen printing. Accepts PNG, TIFF, JPEG,
 
 ## Installation
 
-From the monorepo root:
-
 ```bash
+git clone https://github.com/electrosaur-labs/reveal.git
+cd reveal
 npm install
-```
-
-Or standalone:
-
-```bash
-npm install @electrosaur-labs/reveal-cli
 ```
 
 ## Usage
 
-From the monorepo root:
-
-```bash
-npm run reveal -- <input> [options]
-```
-
-Or directly:
-
 ```bash
 node packages/reveal-cli/bin/reveal.js <input> [options]
-```
-
-If installed globally or via `npm link`:
-
-```bash
-reveal <input> [options]
 ```
 
 ### Basic separation
@@ -56,12 +36,12 @@ reveal photo.png --format psd,ora,plates -o output/
 reveal photo.png --format psd --format ora --format plates -o output/
 ```
 
-### Compare adaptive archetypes
+### Single archetype mode
 
-Runs chameleon, distilled, salamander, and the top-scoring archetype side by side:
+By default, the CLI compares 3 adaptive archetypes (chameleon, distilled, salamander) plus the top-scoring archetype. To run a single archetype instead:
 
 ```bash
-reveal photo.png --compare -o output/
+reveal photo.png --archetype cinematic --single -o output/
 ```
 
 ### Using a recipe
@@ -92,7 +72,7 @@ reveal photo.png -a cinematic -c 6 --format psd -o output/
 | `--min-volume <percent>` | Ghost plate threshold (0-5%) |
 | `--speckle-rescue <pixels>` | Despeckle threshold (0-10px) |
 | `--shadow-clamp <percent>` | Ink body clamp (0-20%) |
-| `--compare` | Compare 3 adaptive + top-scoring archetype |
+| `--single` | Single archetype mode (requires `--archetype`) |
 | `--recipe <path>` | Load settings from recipe JSON |
 | `--save-recipe <path>` | Save effective settings to recipe JSON |
 | `--list-archetypes` | Print available archetypes and exit |
@@ -102,7 +82,7 @@ reveal photo.png -a cinematic -c 6 --format psd -o output/
 
 ## Output Formats
 
-**Flat image** (default) — Posterized image as PNG or TIFF (matches input format). Always produced.
+**Flat image** (default) — Posterized image as PNG. 16-bit output for PSD/TIFF input, 8-bit otherwise. Always produced.
 
 **PSD** (`--format psd`) — Layered Photoshop file with fill+mask layers sorted by lightness. Includes composite thumbnail.
 
