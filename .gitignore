@@ -22,6 +22,7 @@ coverage/
 .DS_Store
 Thumbs.db
 *.log
+core
 
 # Test artifacts
 test-results/
