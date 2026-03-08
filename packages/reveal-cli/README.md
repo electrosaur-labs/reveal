@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../../docs/images/electrosaur-logo.png" width="500" alt="Electrosaur">
+</p>
+
 # reveal-cli
 
 Command-line color separation tool for screen printing. Accepts PNG, TIFF, JPEG, or Lab PSD files and outputs posterized images, layered PSDs, OpenRaster files, plate masks, and JSON metadata.
