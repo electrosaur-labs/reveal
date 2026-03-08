@@ -35,13 +35,15 @@ async function ingest(filePath) {
         return ingestPsd(filePath);
     }
 
-    // Lab TIFFs need special handling — sharp's toColourspace('lab') on a Lab
-    // input produces wrong encoding (10 channels, non-standard value ranges).
-    // Force through sRGB first, then convert to Lab ourselves.
+    // Lab TIFFs: sharp cannot handle these (wrong colorspace conversion,
+    // channel inflation, silent 16→8 bit downgrade). Reject with clear message.
     if (ext === '.tif' || ext === '.tiff') {
         const meta = await sharp(filePath).metadata();
         if (meta.space === 'labs' || meta.space === 'lab') {
-            return ingestLabTiff(filePath);
+            throw new Error(
+                'Lab TIFF not yet supported — sharp cannot read Lab TIFFs correctly. ' +
+                'Please convert to PSD (File → Save As → Photoshop) or export as RGB TIFF/PNG.'
+            );
         }
     }
 
@@ -66,36 +68,6 @@ async function ingestPsd(filePath) {
     }
 
     return { lab16bit, width, height, inputFormat: 'psd' };
-}
-
-/**
- * Ingest a Lab TIFF by forcing sharp to convert to sRGB first.
- * Sharp's toColourspace('lab') on Lab input produces wrong encoding,
- * so we read as sRGB and convert to Lab ourselves.
- */
-async function ingestLabTiff(filePath) {
-    const { data, info } = await sharp(filePath)
-        .removeAlpha()
-        .toColourspace('srgb')
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-
-    const { width, height } = info;
-    const pixelCount = width * height;
-
-    // Convert sRGB to engine 16-bit Lab
-    const lab16bit = new Uint16Array(pixelCount * 3);
-    for (let i = 0; i < pixelCount; i++) {
-        const si = i * 3;
-        const di = i * 3;
-        const lab = LabEncoding.rgbToLab({ r: data[si], g: data[si + 1], b: data[si + 2] });
-        // Perceptual Lab → engine encoding: L: 0-100 → 0-32768, a/b: -128..127 → 0-32768 (16384=neutral)
-        lab16bit[di]     = Math.round((lab.L / 100) * 32768);
-        lab16bit[di + 1] = Math.round(((lab.a + 128) / 256) * 32768);
-        lab16bit[di + 2] = Math.round(((lab.b + 128) / 256) * 32768);
-    }
-
-    return { lab16bit, width, height, inputFormat: 'tiff' };
 }
 
 /**
