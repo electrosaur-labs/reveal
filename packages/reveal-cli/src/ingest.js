@@ -68,6 +68,65 @@ async function ingestPsd(filePath) {
 }
 
 /**
+ * TIFF pixel conversion functions — exported for unit testing.
+ * Each converts raw TIFF pixel bytes to engine Lab16 encoding.
+ */
+
+/** 16-bit CIELab TIFF → engine Lab. L: unsigned 0-65535, a/b: signed Int16. */
+function convertCieLab16(rawData, lab16bit, pixelCount, samplesPerPixel) {
+    const u16 = new Uint16Array(rawData.buffer, rawData.byteOffset, rawData.byteLength / 2);
+    const i16 = new Int16Array(rawData.buffer, rawData.byteOffset, rawData.byteLength / 2);
+    for (let i = 0; i < pixelCount; i++) {
+        const si = i * samplesPerPixel;
+        const di = i * 3;
+        lab16bit[di]     = Math.round(u16[si] * (32768 / 65535));  // L: unsigned
+        lab16bit[di + 1] = Math.round(i16[si + 1] / 2 + 16384);   // a: signed, 0=neutral → 16384
+        lab16bit[di + 2] = Math.round(i16[si + 2] / 2 + 16384);   // b: signed, 0=neutral → 16384
+    }
+}
+
+/** 8-bit CIELab TIFF → engine Lab. L: unsigned 0-255, a/b: signed byte. */
+function convertCieLab8(rawData, lab16bit, pixelCount, samplesPerPixel) {
+    for (let i = 0; i < pixelCount; i++) {
+        const si = i * samplesPerPixel;
+        const di = i * 3;
+        lab16bit[di] = Math.round(rawData[si] * (32768 / 255));
+        const a_signed = (rawData[si + 1] > 127 ? rawData[si + 1] - 256 : rawData[si + 1]);
+        const b_signed = (rawData[si + 2] > 127 ? rawData[si + 2] - 256 : rawData[si + 2]);
+        lab16bit[di + 1] = Math.round(a_signed * (32768 / 256) + 16384);
+        lab16bit[di + 2] = Math.round(b_signed * (32768 / 256) + 16384);
+    }
+}
+
+/** 16-bit RGB TIFF → engine Lab. RGB unsigned 0-65535, converted via rgbToLab. */
+function convertRgb16(rawData, lab16bit, pixelCount, samplesPerPixel) {
+    const u16 = new Uint16Array(rawData.buffer, rawData.byteOffset, rawData.byteLength / 2);
+    for (let i = 0; i < pixelCount; i++) {
+        const si = i * samplesPerPixel;
+        const di = i * 3;
+        const r = Math.round(u16[si]     * (255 / 65535));
+        const g = Math.round(u16[si + 1] * (255 / 65535));
+        const b = Math.round(u16[si + 2] * (255 / 65535));
+        const lab = LabEncoding.rgbToLab({ r, g, b });
+        lab16bit[di]     = Math.round((lab.L / 100) * 32768);
+        lab16bit[di + 1] = Math.round(((lab.a + 128) / 256) * 32768);
+        lab16bit[di + 2] = Math.round(((lab.b + 128) / 256) * 32768);
+    }
+}
+
+/** 8-bit RGB TIFF → engine Lab. RGB unsigned 0-255, converted via rgbToLab. */
+function convertRgb8(rawData, lab16bit, pixelCount, samplesPerPixel) {
+    for (let i = 0; i < pixelCount; i++) {
+        const si = i * samplesPerPixel;
+        const di = i * 3;
+        const lab = LabEncoding.rgbToLab({ r: rawData[si], g: rawData[si + 1], b: rawData[si + 2] });
+        lab16bit[di]     = Math.round((lab.L / 100) * 32768);
+        lab16bit[di + 1] = Math.round(((lab.a + 128) / 256) * 32768);
+        lab16bit[di + 2] = Math.round(((lab.b + 128) / 256) * 32768);
+    }
+}
+
+/**
  * Ingest a TIFF via utif2 (pure JS). Handles Lab and RGB, 8-bit and 16-bit.
  * Sharp is unreliable for TIFFs (mangles 16-bit data, inflates channels).
  */
@@ -90,53 +149,16 @@ function ingestTiff(filePath) {
     const lab16bit = new Uint16Array(pixelCount * 3);
 
     if (photometric === 8) {
-        // CIELab TIFF
         if (bitsPerSample === 16) {
-            // 16-bit Lab: Photoshop encoding (L: 0-65535, a/b: 0-65535, 32768=neutral)
-            const u16 = new Uint16Array(ifd.data.buffer, ifd.data.byteOffset, ifd.data.byteLength / 2);
-            for (let i = 0; i < pixelCount; i++) {
-                const si = i * samplesPerPixel;
-                const di = i * 3;
-                lab16bit[di]     = Math.round(u16[si]     * (32768 / 65535));
-                lab16bit[di + 1] = Math.round(u16[si + 1] * (32768 / 65535));
-                lab16bit[di + 2] = Math.round(u16[si + 2] * (32768 / 65535));
-            }
+            convertCieLab16(ifd.data, lab16bit, pixelCount, samplesPerPixel);
         } else {
-            // 8-bit Lab: L: 0-255 → 0-100, a/b: 0-255 (128=neutral)
-            const data = ifd.data;
-            for (let i = 0; i < pixelCount; i++) {
-                const si = i * samplesPerPixel;
-                const di = i * 3;
-                lab16bit[di]     = Math.round(data[si]     * (32768 / 255));
-                lab16bit[di + 1] = Math.round(data[si + 1] * (32768 / 255));
-                lab16bit[di + 2] = Math.round(data[si + 2] * (32768 / 255));
-            }
+            convertCieLab8(ifd.data, lab16bit, pixelCount, samplesPerPixel);
         }
     } else {
-        // RGB TIFF (photometric 2 or other)
         if (bitsPerSample === 16) {
-            const u16 = new Uint16Array(ifd.data.buffer, ifd.data.byteOffset, ifd.data.byteLength / 2);
-            for (let i = 0; i < pixelCount; i++) {
-                const si = i * samplesPerPixel;
-                const di = i * 3;
-                const r = Math.round(u16[si]     * (255 / 65535));
-                const g = Math.round(u16[si + 1] * (255 / 65535));
-                const b = Math.round(u16[si + 2] * (255 / 65535));
-                const lab = LabEncoding.rgbToLab({ r, g, b });
-                lab16bit[di]     = Math.round((lab.L / 100) * 32768);
-                lab16bit[di + 1] = Math.round(((lab.a + 128) / 256) * 32768);
-                lab16bit[di + 2] = Math.round(((lab.b + 128) / 256) * 32768);
-            }
+            convertRgb16(ifd.data, lab16bit, pixelCount, samplesPerPixel);
         } else {
-            const data = ifd.data;
-            for (let i = 0; i < pixelCount; i++) {
-                const si = i * samplesPerPixel;
-                const di = i * 3;
-                const lab = LabEncoding.rgbToLab({ r: data[si], g: data[si + 1], b: data[si + 2] });
-                lab16bit[di]     = Math.round((lab.L / 100) * 32768);
-                lab16bit[di + 1] = Math.round(((lab.a + 128) / 256) * 32768);
-                lab16bit[di + 2] = Math.round(((lab.b + 128) / 256) * 32768);
-            }
+            convertRgb8(ifd.data, lab16bit, pixelCount, samplesPerPixel);
         }
     }
 
@@ -145,27 +167,26 @@ function ingestTiff(filePath) {
 
 /**
  * Ingest a standard image (PNG/JPEG) via sharp.
- * Sharp converts to Lab, then we normalize to engine 16-bit encoding.
+ * Read raw RGB, then convert to Lab ourselves via LabEncoding.rgbToLab().
+ * Sharp's .toColourspace('lab') is unreliable — same issues as with TIFFs.
  */
 async function ingestRgb(filePath, ext) {
     const { data, info } = await sharp(filePath)
-        .toColourspace('lab')
+        .removeAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
 
     const { width, height, channels } = info;
     const pixelCount = width * height;
-
-    // Sharp raw Lab: L: 0-255, a/b: 0-255 (128=neutral)
-    // Engine encoding: L: 0-32768, a/b: 0-32768 (16384=neutral)
     const lab16bit = new Uint16Array(pixelCount * 3);
 
     for (let i = 0; i < pixelCount; i++) {
         const si = i * channels;
         const di = i * 3;
-        lab16bit[di]     = Math.round(data[si]     * (32768 / 255));
-        lab16bit[di + 1] = Math.round(data[si + 1] * (32768 / 255));
-        lab16bit[di + 2] = Math.round(data[si + 2] * (32768 / 255));
+        const lab = LabEncoding.rgbToLab({ r: data[si], g: data[si + 1], b: data[si + 2] });
+        lab16bit[di]     = Math.round((lab.L / 100) * 32768);
+        lab16bit[di + 1] = Math.round(((lab.a + 128) / 256) * 32768);
+        lab16bit[di + 2] = Math.round(((lab.b + 128) / 256) * 32768);
     }
 
     let inputFormat;
@@ -175,4 +196,8 @@ async function ingestRgb(filePath, ext) {
     return { lab16bit, width, height, inputFormat };
 }
 
-module.exports = { ingest, SUPPORTED_EXTENSIONS };
+module.exports = {
+    ingest, SUPPORTED_EXTENSIONS,
+    // Exported for unit testing (pure conversion functions, no I/O)
+    convertCieLab16, convertCieLab8, convertRgb16, convertRgb8,
+};

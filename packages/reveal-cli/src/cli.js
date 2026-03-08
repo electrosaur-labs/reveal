@@ -31,7 +31,7 @@ program
     .option('--min-volume <percent>', 'Ghost plate threshold (0-5%)', parseFloat)
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
     .option('--shadow-clamp <percent>', 'Ink body clamp (0-20%)', parseFloat)
-    .option('--compare', 'Compare 3 adaptive + top-scoring archetype')
+    .option('--single', 'Single archetype mode (default: compare 3 adaptive + top-scoring)')
     .option('--recipe <path>', 'Load settings from recipe JSON')
     .option('--save-recipe <path>', 'Save effective settings to recipe JSON')
     .option('--list-archetypes', 'Print available archetypes and exit')
@@ -82,8 +82,8 @@ async function run(inputFile, options) {
 
     try {
         // Validation
-        if (options.compare && options.archetype) {
-            throw new Error('Cannot use --compare with --archetype (mutually exclusive)');
+        if (options.single && !options.archetype) {
+            throw new Error('--single requires --archetype (which archetype to use?)');
         }
         if (options.colors !== undefined && (options.colors < 2 || options.colors > 10)) {
             throw new Error('Colors must be 2-10');
@@ -107,7 +107,7 @@ async function run(inputFile, options) {
             // Merge recipe outputs with CLI formats
             const recipeFormats = recipe.outputs || [];
             mergedOptions.formats = new Set([...formats, ...recipeFormats]);
-            mergedOptions.compare = options.compare;
+            mergedOptions.single = options.single;
             mergedOptions.output = options.output || recipe.outputDir;
             mergedOptions.quiet = options.quiet;
             mergedOptions.verbose = options.verbose;
@@ -127,10 +127,10 @@ async function run(inputFile, options) {
         const basename = path.basename(inputFile, path.extname(inputFile));
         const inputDir = path.dirname(path.resolve(inputFile));
 
-        if (mergedOptions.compare) {
-            await runCompare(lab16bit, width, height, basename, inputDir, inputFormat, mergedOptions, log, verbose);
-        } else {
+        if (mergedOptions.single || mergedOptions.archetype) {
             await runSingle(lab16bit, width, height, basename, inputDir, inputFormat, mergedOptions, log, verbose, inputFile);
+        } else {
+            await runCompare(lab16bit, width, height, basename, inputDir, inputFormat, mergedOptions, log, verbose);
         }
 
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
