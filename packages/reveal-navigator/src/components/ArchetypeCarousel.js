@@ -156,13 +156,8 @@ class ArchetypeCarousel {
                 return bDna - aDna;
             }
 
-            // Pinned cards always sort to top
-            if (aPinned && bPinned) {
-                const aSort = parseFloat(a.dataset.sortScore);
-                const bSort = parseFloat(b.dataset.sortScore);
-                if (!isNaN(aSort) && !isNaN(bSort)) return aSort - bSort;
-                return aPin - bPin;
-            }
+            // Pinned cards always sort to top in fixed order
+            if (aPinned && bPinned) return aPin - bPin;
             if (aPinned) return -1;
             if (bPinned) return 1;
 
@@ -357,8 +352,15 @@ class ArchetypeCarousel {
         this._expanded = false;
         this._pendingCards = [];
 
-        for (let i = 0; i < scores.length; i++) {
-            const match = scores[i];
+        // Pin synthetic order: Chameleon first (matches PIN_ORDER in _sortCards)
+        const PIN_INITIAL = { 'dynamic_interpolator': 0, 'distilled': 1, 'salamander': 2 };
+        const synthScores = scores.filter(s => SYNTHETIC_IDS.has(s.id));
+        const regularScores = scores.filter(s => !SYNTHETIC_IDS.has(s.id));
+        synthScores.sort((a, b) => (PIN_INITIAL[a.id] || 0) - (PIN_INITIAL[b.id] || 0));
+        const orderedScores = [...synthScores, ...regularScores];
+
+        for (let i = 0; i < orderedScores.length; i++) {
+            const match = orderedScores[i];
             // Chameleon is synthetic — not in ArchetypeLoader
             const archetype = archetypeMap.get(match.id) || match._synthetic;
             if (!archetype) continue;
@@ -481,8 +483,22 @@ class ArchetypeCarousel {
         // the first click for focus, requiring a double-click to activate.
         card.addEventListener('pointerup', (e) => {
             if (match.id !== this._activeId) {
-                this._session.swapArchetype(match.id)
-                    .catch(err => logger.error(`[ArchetypeCarousel] swapArchetype failed: ${err.message}`));
+                const overlay = document.getElementById('processing-overlay');
+                if (overlay) overlay.classList.add('visible');
+                card.classList.add('scoring');
+                // Yield to let overlay paint before heavy work
+                setTimeout(() => {
+                    this._session.swapArchetype(match.id)
+                        .then(() => {
+                            card.classList.remove('scoring');
+                            if (overlay) overlay.classList.remove('visible');
+                        })
+                        .catch(err => {
+                            card.classList.remove('scoring');
+                            if (overlay) overlay.classList.remove('visible');
+                            logger.error(`[ArchetypeCarousel] swapArchetype failed: ${err.message}`);
+                        });
+                }, 30);
             }
         });
 

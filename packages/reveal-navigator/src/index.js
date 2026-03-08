@@ -731,32 +731,36 @@ let _completedPhases = [];
 function _showProgress(label, percent) {
     const bar = document.getElementById('ingest-progress');
     const fill = document.getElementById('ingest-progress-fill');
-    const placeholder = document.getElementById('preview-placeholder');
+    const progressEl = document.getElementById('splash-progress');
     if (bar) bar.style.display = 'block';
     if (fill && percent != null) fill.style.width = percent + '%';
 
-    // Build swatch strip: completed phases as colored chips, current phase large
-    if (placeholder && placeholder.style.display !== 'none') {
-        // Strip trailing ellipsis for chip labels
+    if (progressEl) {
         const shortLabel = label.replace(/[\u2026.]+$/, '').trim();
+        const pct = percent != null ? percent : 0;
 
-        let html = '';
-        // Completed phase chips: inline colored swatches with label
+        let html = '<div class="splash-header">REVEAL CORE PROCESS LOG [v1.0.1]</div>';
+
+        // Completed phases with [OK]
         for (let i = 0; i < _completedPhases.length; i++) {
-            const c = PHASE_COLORS[i % PHASE_COLORS.length];
-            html += '<span style="display:inline-block; background:' + c +
-                '; color:#fff; font-size:13px; font-weight:600; padding:3px 8px; ' +
-                'border-radius:3px; margin:3px 4px; white-space:nowrap;">' +
-                _completedPhases[i] + '</span>';
+            html += '<div class="splash-line">' +
+                _completedPhases[i].toUpperCase() + ': <span class="splash-ok">[OK]</span></div>';
         }
-        // Current phase: large bold text
-        const currentColor = PHASE_COLORS[_completedPhases.length % PHASE_COLORS.length];
-        html += '<div style="margin-top:12px; font-size:48px; font-weight:700; color:' +
-            currentColor + ';">' + shortLabel + '</div>';
 
-        placeholder.innerHTML = html;
+        // Current phase with [IN PROGRESS...]
+        html += '<div class="splash-line">' +
+            shortLabel.toUpperCase() + ': <span class="splash-active">[IN PROGRESS...]</span></div>';
 
-        // Record completed phase (will show as chip on next call)
+        // Progress bar
+        html += '<div class="splash-bar"><div class="splash-bar-fill" style="width:' + pct + '%"></div></div>';
+
+        // Date
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase() +
+            ' | ' + now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        html += '<div class="splash-date">' + dateStr + '</div>';
+
+        progressEl.innerHTML = html;
         _completedPhases.push(shortLabel);
     }
     setStatus(label);
@@ -891,9 +895,14 @@ function _clearUI() {
     const placeholder = document.getElementById('preview-placeholder');
     if (img) img.style.display = 'none';
     if (placeholder) {
-        placeholder.style.display = 'block';
-        placeholder.textContent = 'Loading\u2026';
-        placeholder.style.color = '';  // reset error styling
+        placeholder.style.display = 'flex';
+        placeholder.style.color = '';
+        // Restore splash structure if it was replaced by an error message
+        if (!placeholder.querySelector('#splash-progress')) {
+            placeholder.innerHTML = '<div id="splash-progress"></div>';
+        }
+        const progress = placeholder.querySelector('#splash-progress');
+        if (progress) progress.textContent = 'Loading\u2026';
     }
 
     // Clear carousel cards

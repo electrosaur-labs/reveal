@@ -1,7 +1,7 @@
 {
   "id": "org.electrosaur.navigator",
-  "name": "Electrosaur",
-  "version": "1.0.0",
+  "name": "Electrosaur: Reveal",
+  "version": "1.0.1",
   "main": "index.html",
   "host": {
     "app": "PS",

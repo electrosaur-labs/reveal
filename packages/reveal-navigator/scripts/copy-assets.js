@@ -25,8 +25,6 @@ if (fs.existsSync(htmlSrc)) {
     console.log('✓ Copied index.html');
 }
 
-// squeegee.gif removed — splash screen eliminated
-
 // Copy src/Anton-Regular.ttf → dist/
 const fontSrc = path.join(srcDir, 'Anton-Regular.ttf');
 const fontDst = path.join(distDir, 'Anton-Regular.ttf');
