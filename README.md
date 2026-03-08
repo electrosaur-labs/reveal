@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/electrosaur-logo.png" width="500" alt="Electrosaur">
+</p>
+
 # Reveal
 
 **Pure JavaScript color separation for screen printing**
