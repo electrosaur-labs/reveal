@@ -100,22 +100,22 @@ describe('Distilled posterization — horse regression', () => {
             densityFloor: 0,
         });
 
-        // Golden palette captured from horse-350x512-lab16 fixture.
+        // Golden palette captured from horse-350x512-lab16 fixture (16-bit source PSD).
         // Each entry must have a best-match ΔE < 2 in the actual palette.
         // Order may vary — matching is by nearest neighbor, not positional.
         const golden = [
-            { L: 99.8, a:  0.0, b:   0.0 },  // near-white
-            { L: 78.0, a: 59.5, b: 116.9 },  // bright orange
-            { L: 16.5, a:  3.0, b:   1.7 },  // near-black
-            { L: 70.8, a:-27.0, b:  60.9 },  // green/olive
-            { L: 53.8, a: 42.4, b:  62.0 },  // warm brown
-            { L: 55.0, a:-12.9, b: -34.1 },  // slate blue
-            { L: 90.1, a: 21.5, b:  76.4 },  // golden yellow
-            { L: 63.8, a: 19.5, b:  26.0 },  // muted earth
-            { L: 47.3, a:  0.7, b:  -4.5 },  // neutral gray
-            { L: 91.9, a: 30.6, b: 114.7 },  // vivid yellow
-            { L: 68.9, a: 51.4, b:  84.6 },  // deep orange
-            { L: 21.8, a: 17.5, b:  23.6 },  // dark brown
+            { L: 99.8, a: -0.1, b:  -0.3 },  // near-white
+            { L: 77.7, a: 55.3, b: 114.8 },  // bright orange
+            { L: 16.1, a:  3.3, b:   1.9 },  // near-black
+            { L: 83.3, a:-37.1, b: -80.6 },  // sky blue
+            { L: 72.3, a:-23.6, b:  60.6 },  // green/olive
+            { L: 54.7, a: 41.6, b:  61.7 },  // warm brown
+            { L: 62.5, a: 19.1, b:  26.2 },  // muted earth
+            { L: 90.6, a: 23.7, b:  76.7 },  // golden yellow
+            { L: 54.3, a:  1.7, b:  -3.0 },  // neutral gray
+            { L: 92.5, a: 25.8, b: 120.7 },  // vivid yellow
+            { L: 35.1, a: 25.8, b:  35.9 },  // dark brown
+            { L: 68.9, a: 50.2, b:  83.1 },  // deep orange
         ];
 
         const palette = result.paletteLab;

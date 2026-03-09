@@ -24,6 +24,6 @@
     "preserveBlack": true,
     "ignoreTransparent": true,
     "enableHueGapAnalysis": true,
-    "ditherType": "BlueNoise"
+    "ditherType": "atkinson"
   }
 }

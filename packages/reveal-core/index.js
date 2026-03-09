@@ -202,16 +202,24 @@ function generateConfigurationDistilled(dna) {
 function generateConfigurationSalamander(dna) {
     const config = generateConfigurationMk2(dna);
 
-    // SALIENCY centroid inherited from Chameleon — DNA-driven color selection
-    // Color count stays DNA-driven from the interpolator (not fixed like Distilled's 12)
+    // Use distilled engine: over-quantize → FPS selection.
+    // Volume-based median cut alone starves minority chromatic colors
+    // (background eats the budget). Distilled's over-quantize + FPS
+    // generates 3× candidates then picks the most perceptually diverse subset.
+    config.engineType = 'distilled';
 
-    // Disable palette reduction — all distilled colors survive
+    // Disable palette reduction — all FPS-selected colors survive
     config.enablePaletteReduction = false;
     config.snapThreshold = 0;
     config.densityFloor = 0;
 
     // Raw signal preservation — no bilateral filter (like Distilled)
     config.preprocessingIntensity = 'off';
+
+    // Atkinson dither — blue-noise (inherited from Chameleon) creates isolated
+    // speckles that conflict with speckleRescue, causing white spots.
+    // Atkinson diffuses 3/4 error to neighbors: sharp boundaries, no orphan islands.
+    config.ditherType = 'atkinson';
 
     // Tag metadata
     config.meta = { ...config.meta, engine: 'salamander' };

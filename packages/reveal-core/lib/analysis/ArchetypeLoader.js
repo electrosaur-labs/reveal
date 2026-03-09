@@ -220,7 +220,7 @@ class ArchetypeLoader {
             parameters: {
                 minColors: 4,
                 maxColors: 10,
-                ditherType: 'blue-noise',
+                ditherType: 'atkinson',
                 distanceMetric: 'cie76',
                 lWeight: 1.2,
                 cWeight: 2.0,

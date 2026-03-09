@@ -98,7 +98,7 @@
         "paletteReduction": { "type": "number", "minimum": 0, "maximum": 20 },
         "hueLockAngle": { "type": "number", "minimum": 0, "maximum": 90 },
         "neutralSovereigntyThreshold": { "type": "number", "minimum": 0, "maximum": 100 },
-        "ditherType": { "type": "string", "enum": ["BlueNoise", "Atkinson", "none"] },
+        "ditherType": { "type": "string", "enum": ["atkinson", "none", "floyd-steinberg", "stucki", "bayer"] },
         "shadowClamp": {
           "type": "number",
           "minimum": 0,

@@ -70,7 +70,7 @@
       "parameters": {
         "minColors": 4,
         "maxColors": 8,
-        "ditherType": "blue-noise",
+        "ditherType": "atkinson",
         "distanceMetric": "cie2000",
         "lWeight": 1.8,
         "cWeight": 1.5,
@@ -148,7 +148,7 @@
       "parameters": {
         "minColors": 4,
         "maxColors": 10,
-        "ditherType": "blue-noise",
+        "ditherType": "atkinson",
         "distanceMetric": "cie2000",
         "lWeight": 1.4,
         "cWeight": 4.5,
@@ -228,7 +228,7 @@
       "parameters": {
         "minColors": 4,
         "maxColors": 10,
-        "ditherType": "blue-noise",
+        "ditherType": "atkinson",
         "distanceMetric": "cie2000",
         "lWeight": 1.4,
         "cWeight": 4.5,
@@ -316,7 +316,7 @@
       "parameters": {
         "minColors": 4,
         "maxColors": 10,
-        "ditherType": "blue-noise",
+        "ditherType": "atkinson",
         "distanceMetric": "cie94",
         "lWeight": 0.6,
         "cWeight": 2.2,
@@ -407,7 +407,7 @@
       "parameters": {
         "minColors": 4,
         "maxColors": 10,
-        "ditherType": "blue-noise",
+        "ditherType": "atkinson",
         "distanceMetric": "cie2000",
         "lWeight": 1.4,
         "cWeight": 4.5,
@@ -577,7 +577,7 @@
       "parameters": {
         "minColors": 4,
         "maxColors": 10,
-        "ditherType": "blue-noise",
+        "ditherType": "atkinson",
         "distanceMetric": "cie94",
         "lWeight": 0.8,
         "cWeight": 3,
@@ -657,7 +657,7 @@
       "parameters": {
         "minColors": 10,
         "maxColors": 12,
-        "ditherType": "blue-noise",
+        "ditherType": "atkinson",
         "distanceMetric": "cie94",
         "lWeight": 1.5,
         "cWeight": 1.5,
@@ -896,7 +896,7 @@
       "parameters": {
         "minColors": 4,
         "maxColors": 10,
-        "ditherType": "blue-noise",
+        "ditherType": "atkinson",
         "distanceMetric": "cie94",
         "lWeight": 0.8,
         "cWeight": 3,
@@ -972,7 +972,7 @@
       "parameters": {
         "minColors": 4,
         "maxColors": 10,
-        "ditherType": "blue-noise",
+        "ditherType": "atkinson",
         "distanceMetric": "cie2000",
         "lWeight": 1.4,
         "cWeight": 4.5,

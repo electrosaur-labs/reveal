@@ -32,7 +32,7 @@
   "parameters": {
     "minColors": 4,
     "maxColors": 8,
-    "ditherType": "blue-noise",
+    "ditherType": "atkinson",
     "distanceMetric": "cie2000",
     "lWeight": 1.8,
     "cWeight": 1.5,
