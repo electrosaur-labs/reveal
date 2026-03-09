@@ -58,6 +58,15 @@ class ProductionWorker {
         logger.log(`[ProductionWorker]   targetColors: ${prodConfig.targetColors}`);
         logger.log(`[ProductionWorker]   preprocessing: ${prodConfig.preprocessingIntensity}, dither: ${prodConfig.ditherType}`);
         logger.log(`[ProductionWorker]   knobs: minVol=${prodConfig.minVolume} spkl=${prodConfig.speckleRescue} shd=${prodConfig.shadowClamp} trap=${prodConfig.trapSize || 0}`);
+        logger.log(`[ProductionWorker]   separationPalette: ${prodConfig.separationPalette ? prodConfig.separationPalette.length + ' colors' : 'MISSING'}`);
+        if (prodConfig.separationPalette) {
+            for (let i = 0; i < prodConfig.separationPalette.length; i++) {
+                const c = prodConfig.separationPalette[i];
+                const p = labPalette[i];
+                const match = p ? (c.L === p.L && c.a === p.a && c.b === p.b ? 'SAME' : 'DIFFERS') : 'no-fill';
+                logger.log(`[ProductionWorker]   sepPal[${i}]: L=${c.L.toFixed(1)} a=${c.a.toFixed(1)} b=${c.b.toFixed(1)} vs fill: ${match}`);
+            }
+        }
         logger.log(`[ProductionWorker]   paletteOverrides: ${JSON.stringify(prodConfig.paletteOverrides)}`);
         for (let i = 0; i < labPalette.length; i++) {
             const c = labPalette[i];

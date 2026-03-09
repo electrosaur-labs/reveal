@@ -105,7 +105,7 @@ function generateConfigurationMk2(dna) {
         config.targetColorsSlider = config.targetColors;
     }
 
-    // Pseudo-archetype default: despeckle masks for print-ready output
+    // Pseudo-archetype defaults for print-ready output
     config.speckleRescue = 5;
 
     // Attach blend info for diagnostics
