@@ -97,6 +97,7 @@ class SessionState extends EventEmitter {
         this.imageDNA = null;               // DNA v2.0 snapshot
         this.imageWidth = 0;                // Proxy dimensions
         this.imageHeight = 0;
+        this.imageResolution = 72;          // Document PPI (pixels per inch)
         this.originalWidth = 0;             // Full document dimensions (for loupe coord mapping)
         this.originalHeight = 0;
 
@@ -161,6 +162,7 @@ class SessionState extends EventEmitter {
         this.imageDNA = null;
         this.imageWidth = 0;
         this.imageHeight = 0;
+        this.imageResolution = 72;
         this.originalWidth = 0;
         this.originalHeight = 0;
         this._archetypeDefaults = null;
@@ -1407,6 +1409,7 @@ class SessionState extends EventEmitter {
             // Source metadata
             width: this.imageWidth,
             height: this.imageHeight,
+            resolution: this.imageResolution,
             dna: this.imageDNA,
 
             // ALL posterization + knob parameters (generic from ALL_KNOBS)

@@ -600,6 +600,7 @@ async function ingestActiveDocument(showDialog) {
         // ── Phases 2-3 are driven by SessionState.loadImage progress events ──
         // Progress bar hides when preview is ready. Background ΔE scoring continues asynchronously.
         await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
+        sessionState.imageResolution = validation.info.resolution || 72;
         _hideProgress();
 
     } catch (err) {

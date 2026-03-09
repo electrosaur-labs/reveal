@@ -57,7 +57,7 @@ class ProductionWorker {
         logger.log(`[ProductionWorker]   distanceMetric: ${prodConfig.distanceMetric}`);
         logger.log(`[ProductionWorker]   targetColors: ${prodConfig.targetColors}`);
         logger.log(`[ProductionWorker]   preprocessing: ${prodConfig.preprocessingIntensity}, dither: ${prodConfig.ditherType}`);
-        logger.log(`[ProductionWorker]   knobs: minVol=${prodConfig.minVolume} spkl=${prodConfig.speckleRescue} shd=${prodConfig.shadowClamp} trap=${prodConfig.trapSize || 0}`);
+        logger.log(`[ProductionWorker]   knobs: minVol=${prodConfig.minVolume} spkl=${prodConfig.speckleRescue} shd=${prodConfig.shadowClamp} trap=${prodConfig.trapSize || 0}pt (${Math.round((prodConfig.trapSize || 0) * (prodConfig.resolution || 72) / 72)}px @ ${prodConfig.resolution || 72}dpi)`);
         logger.log(`[ProductionWorker]   separationPalette: ${prodConfig.separationPalette ? prodConfig.separationPalette.length + ' colors' : 'MISSING'}`);
         if (prodConfig.separationPalette) {
             for (let i = 0; i < prodConfig.separationPalette.length; i++) {
@@ -187,11 +187,15 @@ class ProductionWorker {
             // ── Step 3: Build masks ──
             self._onProgress(3, 4, 'Building masks...');
 
+            // Convert trap size from points (UI) to pixels using document DPI
+            const dpi = prodConfig.resolution || 72;
+            const trapPx = Math.round((prodConfig.trapSize || 0) * dpi / 72);
+
             const knobs = {
                 minVolume: prodConfig.minVolume,
                 speckleRescue: prodConfig.speckleRescue,
                 shadowClamp: prodConfig.shadowClamp,
-                trapSize: prodConfig.trapSize || 0,
+                trapSize: trapPx,
             };
             const layers = self._buildLayers(
                 colorIndices, labPalette, hexColors,
@@ -365,10 +369,12 @@ class ProductionWorker {
             MechanicalKnobs.applyShadowClamp(masks, colorIndices, labPalette, width, height, knobs.shadowClamp);
         }
 
-        // Apply trapping — loupe is native resolution so trap pixels are correct
-        if (knobs.trapSize > 0) {
+        // Apply trapping — convert points → pixels using document DPI
+        const dpi = this._sessionState.imageResolution || 72;
+        const trapPx = Math.round((knobs.trapSize || 0) * dpi / 72);
+        if (trapPx > 0) {
             const TrapEngine = Reveal.TrapEngine;
-            TrapEngine.applyTrapping(masks, labPalette, width, height, knobs.trapSize);
+            TrapEngine.applyTrapping(masks, labPalette, width, height, trapPx);
         }
 
         // Compute E_rev (Revelation Error) for this tile
@@ -443,7 +449,7 @@ class ProductionWorker {
         if (trapSize > 0) {
             const TrapEngine = Reveal.TrapEngine;
             const trapResult = TrapEngine.applyTrapping(masks, labPalette, width, height, trapSize);
-            logger.log(`[ProductionWorker] Trapping: ${trapResult.trappedCount} colors trapped (max=${trapSize}px)`);
+            logger.log(`[ProductionWorker] Trapping: ${trapResult.trappedCount} colors trapped (max=${trapSize}px dilation)`);
         }
 
         // Build layer objects — every palette color gets a layer.

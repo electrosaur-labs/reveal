@@ -41,6 +41,7 @@ class PhotoshopBridge {
             mode: String(doc.mode),
             width: doc.width,
             height: doc.height,
+            resolution: doc.resolution || 72,  // PPI (pixels per inch)
             layerCount: doc.layers ? doc.layers.length : 1
         };
     }
