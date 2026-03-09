@@ -7,7 +7,7 @@ describe('ParameterGenerator.toEngineOptions', () => {
     // Minimal config that resembles ParameterGenerator.generate() output
     const mockConfig = {
         targetColors: 8,
-        ditherType: 'blue-noise',
+        ditherType: 'atkinson',
         distanceMetric: 'cie94',
         engineType: 'reveal-mk1.5',
         centroidStrategy: 'SALIENCY',
@@ -60,7 +60,7 @@ describe('ParameterGenerator.toEngineOptions', () => {
         const opts = ParameterGenerator.toEngineOptions(mockConfig);
 
         expect(opts.distanceMetric).toBe('cie94');
-        expect(opts.ditherType).toBe('blue-noise');
+        expect(opts.ditherType).toBe('atkinson');
         expect(opts.lWeight).toBe(1.2);
         expect(opts.cWeight).toBe(2.0);
         expect(opts.blackBias).toBe(3.0);

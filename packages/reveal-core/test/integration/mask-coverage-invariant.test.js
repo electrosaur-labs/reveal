@@ -181,7 +181,7 @@ describe('Mask coverage invariant — dither types + speckleRescue (jethro)', ()
         fixture = loadFixture('jethro-800-lab16.labbin.gz');
     });
 
-    const DITHER_TYPES = ['none', 'atkinson', 'floyd-steinberg', 'stucki', 'blue-noise', 'bayer'];
+    const DITHER_TYPES = ['none', 'atkinson', 'floyd-steinberg', 'stucki', 'bayer'];
 
     for (const dither of DITHER_TYPES) {
         test(`${dither} + speckleRescue=5: every pixel covered`, async () => {
@@ -205,9 +205,9 @@ describe('Mask coverage invariant — dither types + speckleRescue (jethro)', ()
         expect(countUncoveredPixels(masks, pixelCount)).toBe(0);
     }, 30000);
 
-    test('blue-noise + cie94 + speckleRescue=5 + all knobs: every pixel covered', async () => {
+    test('atkinson + cie94 + speckleRescue=5 + all knobs: every pixel covered', async () => {
         const { masks, pixelCount } = await runPipelineWithKnobs(fixture, {
-            ditherType: 'blue-noise',
+            ditherType: 'atkinson',
             distanceMetric: 'cie94',
             minVolume: 2,
             speckleRescue: 5,

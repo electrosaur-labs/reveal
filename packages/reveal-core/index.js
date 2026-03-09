@@ -149,7 +149,7 @@ function generateConfigurationDistilled(dna) {
         splitMode: 'median',
         preprocessingIntensity: 'off', // no bilateral filter — matches batch pipeline exactly
         distanceMetric: 'cie76',       // explicit — prevents state leakage from previous archetype
-        ditherType: 'none',            // explicit — blue-noise causes speckles on colorful images
+        ditherType: 'none',            // explicit — dithering causes speckles on colorful images
         speckleRescue: 5,              // despeckle masks for print-ready output
 
         // Saliency weights (ParameterGenerator defaults)
@@ -216,9 +216,8 @@ function generateConfigurationSalamander(dna) {
     // Raw signal preservation — no bilateral filter (like Distilled)
     config.preprocessingIntensity = 'off';
 
-    // Atkinson dither — blue-noise (inherited from Chameleon) creates isolated
-    // speckles that conflict with speckleRescue, causing white spots.
-    // Atkinson diffuses 3/4 error to neighbors: sharp boundaries, no orphan islands.
+    // Atkinson dither — diffuses 3/4 error to neighbors: sharp boundaries,
+    // no orphan islands that conflict with speckleRescue.
     config.ditherType = 'atkinson';
 
     // Tag metadata
@@ -361,7 +360,7 @@ async function posterizeImage(labPixels, width, height, colorCount, parameters =
  * @param {number} width - Image width (required for dithering)
  * @param {number} height - Image height (required for dithering)
  * @param {Object} [parameters] - Separation parameters
- * @param {string} [parameters.ditherType='none'] - 'none', 'floyd-steinberg', 'blue-noise', 'bayer', 'atkinson', 'stucki'
+ * @param {string} [parameters.ditherType='none'] - 'none', 'floyd-steinberg', 'bayer', 'atkinson', 'stucki'
  * @param {string} [parameters.distanceMetric='cie76'] - 'cie76' or 'cie94'
  * @param {Object} [parameters.cie94Params] - CIE94 parameters { kL, k1, k2 }
  * @param {number} [parameters.lWeight=1.5] - Lightness weight for distance (CIE76 only)

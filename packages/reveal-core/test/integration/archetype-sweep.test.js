@@ -121,7 +121,7 @@ const PSEUDO_ARCHETYPES = [
     { name: 'winning', gen: (dna) => generateConfiguration(dna) },
 ];
 
-const DITHER_TYPES = ['none', 'atkinson', 'floyd-steinberg', 'stucki', 'blue-noise', 'bayer'];
+const DITHER_TYPES = ['none', 'atkinson', 'floyd-steinberg', 'stucki', 'bayer'];
 
 // ─── Jethro sweep ───────────────────────────────────────────────
 

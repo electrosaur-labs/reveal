@@ -6,7 +6,7 @@
  *
  * Algorithms:
  * - Error Diffusion: Floyd-Steinberg, Atkinson, Stucki
- * - Ordered Dithering: Blue Noise, Bayer 8x8 (both LPI-aware)
+ * - Ordered Dithering: Bayer 8x8 (LPI-aware)
  *
  * Extracted from SeparationEngine for modularity.
  * Distance calculations use centralized LabDistance module.
@@ -14,53 +14,6 @@
 
 const logger = require("../utils/logger");
 const { cie76SquaredInline } = require("../color/LabDistance");
-
-/**
- * Cached Blue Noise LUT (64x64)
- * @private
- */
-let _cachedBlueNoiseLUT = null;
-
-/**
- * Returns the 64x64 Blue Noise Look-Up Table for ordered dithering.
- *
- * Blue noise provides spatially distributed threshold values with
- * minimal low-frequency artifacts (unlike Bayer matrices).
- *
- * NOTE: This is a pseudo-random approximation. For production use,
- * replace with a proper blue noise texture from Christoph Peters or
- * generated using void-and-cluster algorithm.
- *
- * Values range from 0-255.
- *
- * @returns {Uint8Array} - 64x64 blue noise mask (4096 values)
- */
-function getBlueNoiseLUT() {
-    // Cache the LUT to avoid regenerating it every time
-    if (_cachedBlueNoiseLUT) {
-        return _cachedBlueNoiseLUT;
-    }
-
-    const size = 64;
-    const lut = new Uint8Array(size * size);
-
-    // Simple pseudo-random blue noise approximation using hash function
-    // This creates reasonably dispersed patterns, though not perfect blue noise
-    // A proper implementation would use pre-generated blue noise textures
-    for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-            const idx = y * size + x;
-            // Hash function to generate pseudo-random values
-            let hash = (x * 374761393) + (y * 668265263);
-            hash = (hash ^ (hash >> 13)) * 1274126177;
-            hash = hash ^ (hash >> 16);
-            lut[idx] = Math.abs(hash) % 256;
-        }
-    }
-
-    _cachedBlueNoiseLUT = lut;
-    return lut;
-}
 
 /**
  * Standard 8x8 Bayer Matrix (values 0-63)
@@ -475,88 +428,6 @@ async function stucki(rawBytes, labPalette, width, height, onProgress) {
 }
 
 /**
- * Blue Noise Ordered Dithering (LPI-Aware / Clustered)
- * Uses pre-computed 64x64 threshold map for dispersed dot patterns.
- * Better than Floyd-Steinberg for screen printing (prevents "worming").
- *
- * LPI-AWARE MODE (Rule of 7):
- * When scale > 1, blue noise is sampled at Macro-Cell coordinates.
- * This "clusters" the stochastic dots into groups that won't fall
- * through screen mesh openings (prevents "Sieve Effect").
- *
- * @param {Uint16Array} rawBytes - 16-bit Lab data (L: 0-32768, a/b: 0-32768 neutral=16384)
- * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab ranges
- * @param {number} width - Image width
- * @param {number} height - Image height
- * @param {Function} onProgress - Progress callback
- * @param {number} scale - Macro-Cell size in pixels (1 = no clustering, >1 = LPI-aware)
- * @returns {Promise<Uint8Array>} - Palette indices
- */
-async function blueNoise(rawBytes, labPalette, width, height, onProgress, scale = 1) {
-    const pixelCount = rawBytes.length / 3;
-    const colorIndices = new Uint8Array(pixelCount);
-
-    // Handle empty palette gracefully
-    if (!labPalette || labPalette.length === 0) {
-        return colorIndices;
-    }
-
-    // Handle single-color palette (no dithering needed)
-    if (labPalette.length === 1) {
-        return colorIndices; // Already filled with zeros
-    }
-
-    // Get the 64x64 Blue Noise Threshold Mask
-    const blueNoiseLUT = getBlueNoiseLUT();
-    const maskSize = 64;
-    const CHUNK_SIZE = 65536; // 64k pixels per UI yield
-
-
-    for (let i = 0; i < pixelCount; i++) {
-        const pxIdx = i * 3;
-        const x = i % width;
-        const y = Math.floor(i / width);
-
-        // Unpack 16-bit Lab to perceptual ranges
-        const L = (rawBytes[pxIdx] / 32768) * 100;
-        const a = (rawBytes[pxIdx + 1] - 16384) * (128 / 16384);
-        const b = (rawBytes[pxIdx + 2] - 16384) * (128 / 16384);
-
-        // Find the TWO closest palette colors using SQUARED distances (faster)
-        const { i1, i2, d1, d2 } = getTwoNearest(L, a, b, labPalette);
-
-        // Blue Noise Decision Logic
-        // Calculate relative closeness ratio (0.0 to 1.0)
-        // ratio = 0.5 means equidistant from both colors
-        const totalDist = d1 + d2;
-        const ratio = totalDist === 0 ? 0 : d1 / totalDist;
-
-        // LPI-AWARE: Sample Blue Noise mask at Macro-Cell coordinates
-        // When scale > 1, multiple pixels share the same threshold value
-        // This "clusters" the stochastic dots into stable groups on screen mesh
-        const cellX = Math.floor(x / scale);
-        const cellY = Math.floor(y / scale);
-
-        // Lookup threshold from Blue Noise LUT (tiled across Macro-Cells)
-        const threshold = blueNoiseLUT[(cellY % maskSize) * maskSize + (cellX % maskSize)] / 255;
-
-        // Decide which palette index to assign
-        // If ratio > threshold, use second-closest color
-        // This creates dispersed dot patterns instead of banding
-        colorIndices[i] = (ratio > threshold) ? i2 : i1;
-
-        // UI Yielding (every CHUNK_SIZE pixels)
-        if (i % CHUNK_SIZE === 0 && onProgress) {
-            onProgress(Math.round((i / pixelCount) * 100));
-            await new Promise(resolve => setTimeout(resolve, 0));
-        }
-    }
-
-    if (onProgress) onProgress(100);
-    return colorIndices;
-}
-
-/**
  * Bayer 8x8 Ordered Dithering (LPI-Aware)
  * Uses classic Bayer matrix for retro crosshatch pattern
  *
@@ -639,7 +510,6 @@ const DitheringStrategies = {
     'floyd-steinberg': floydSteinberg,
     'atkinson': atkinson,
     'stucki': stucki,
-    'blue-noise': blueNoise,
     'bayer': bayer
 };
 
@@ -648,11 +518,9 @@ module.exports = {
     floydSteinberg,
     atkinson,
     stucki,
-    blueNoise,
     bayer,
     // Helpers (exposed for testing)
     getNearest,
     getTwoNearest,
-    getBlueNoiseLUT,
     BAYER_MATRIX
 };

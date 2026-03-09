@@ -49,16 +49,6 @@ describe('DitheringStrategies Module', () => {
             expect(result.d1).toBeLessThan(result.d2);
         });
 
-        test('getBlueNoiseLUT should return cached 64x64 array', () => {
-            const lut1 = DitheringStrategies.getBlueNoiseLUT();
-            const lut2 = DitheringStrategies.getBlueNoiseLUT();
-
-            expect(lut1).toBe(lut2);  // Same cached instance
-            expect(lut1.length).toBe(64 * 64);  // 4096 values
-            expect(lut1[0]).toBeGreaterThanOrEqual(0);
-            expect(lut1[0]).toBeLessThanOrEqual(255);
-        });
-
         test('BAYER_MATRIX should be 8x8', () => {
             expect(DitheringStrategies.BAYER_MATRIX.length).toBe(8);
             expect(DitheringStrategies.BAYER_MATRIX[0].length).toBe(8);
@@ -95,28 +85,6 @@ describe('DitheringStrategies Module', () => {
         test('should handle null palette gracefully', async () => {
             const pixels = createLabPixels16([{ L: 50, a: 0, b: 0 }]);
             const result = await DitheringStrategies.stucki(pixels, null, 1, 1, null);
-            expect(result.length).toBe(1);
-            expect(result[0]).toBe(0);
-        });
-    });
-
-    describe('Blue Noise Edge Cases', () => {
-        test('should handle single-color palette', async () => {
-            const pixels = createLabPixels16([
-                { L: 50, a: 0, b: 0 },
-                { L: 60, a: 10, b: 10 }
-            ]);
-            const palette = [{ L: 50, a: 0, b: 0 }];
-
-            const result = await DitheringStrategies.blueNoise(pixels, palette, 2, 1, null, 1);
-            expect(result.length).toBe(2);
-            expect(result[0]).toBe(0);  // All map to only color
-            expect(result[1]).toBe(0);
-        });
-
-        test('should handle empty palette gracefully', async () => {
-            const pixels = createLabPixels16([{ L: 50, a: 0, b: 0 }]);
-            const result = await DitheringStrategies.blueNoise(pixels, [], 1, 1, null, 1);
             expect(result.length).toBe(1);
             expect(result[0]).toBe(0);
         });
@@ -173,7 +141,6 @@ describe('DitheringStrategies Module', () => {
             expect(DitheringStrategies.DitheringStrategies['floyd-steinberg']).toBe(DitheringStrategies.floydSteinberg);
             expect(DitheringStrategies.DitheringStrategies['atkinson']).toBe(DitheringStrategies.atkinson);
             expect(DitheringStrategies.DitheringStrategies['stucki']).toBe(DitheringStrategies.stucki);
-            expect(DitheringStrategies.DitheringStrategies['blue-noise']).toBe(DitheringStrategies.blueNoise);
             expect(DitheringStrategies.DitheringStrategies['bayer']).toBe(DitheringStrategies.bayer);
         });
     });

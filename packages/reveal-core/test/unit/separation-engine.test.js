@@ -247,53 +247,6 @@ describe('SeparationEngine - Dithering', () => {
         });
     });
 
-    describe('Blue Noise Dithering', () => {
-        test('should apply blue noise dithering with two-nearest threshold', async () => {
-            // Test that blue noise produces valid palette indices
-            const rawBytes = createLab16Pixels([
-                { L: 10, a: 0, b: 0 },  // close to black
-                { L: 90, a: 0, b: 0 }   // close to white
-            ]);
-
-            const result = await SeparationEngine.mapPixelsToPaletteAsync(
-                rawBytes,
-                testPalette,
-                null,
-                2,
-                1,
-                { ditherType: 'blue-noise' }
-            );
-
-            // Blue noise uses two-nearest with threshold comparison
-            // Both results can vary based on the blue noise threshold at each position
-            // This is expected - blue noise intentionally adds stochastic variation
-            expect(result.length).toBe(2);
-            expect([0, 1]).toContain(result[0]);
-            expect([0, 1]).toContain(result[1]);
-        });
-
-        test('should accept LPI-aware scale parameter', async () => {
-            const rawBytes = createLab16Pixels([
-                { L: 10, a: 0, b: 0 },
-                { L: 90, a: 0, b: 0 }
-            ]);
-
-            // Test that meshCount option is accepted and creates Macro-Cells
-            const result = await SeparationEngine.mapPixelsToPaletteAsync(
-                rawBytes,
-                testPalette,
-                null,
-                2,
-                1,
-                { ditherType: 'blue-noise', meshCount: 230, dpi: 300 }
-            );
-
-            // Should produce valid palette indices
-            expect([0, 1]).toContain(result[0]);
-            expect([0, 1]).toContain(result[1]);
-        });
-    });
-
     describe('Bayer 8x8 Dithering', () => {
         test('should apply ordered dithering', async () => {
             // 2x2 gradient: 2 black, 2 white

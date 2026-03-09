@@ -73,7 +73,7 @@ const BilateralFilter = require('../preprocessing/BilateralFilter');
  * PRODUCTION — affects production render only:
  * @property {number} [trapSize] - Trap size (set at session level, not by archetype)
  * @property {number} [meshSize] - Screen mesh TPI (set at session level, default 230)
- * @property {string} ditherType - Dither algorithm ('blue-noise'|'floyd-steinberg'|'atkinson'|'bayer'|'none')
+ * @property {string} ditherType - Dither algorithm ('atkinson'|'floyd-steinberg'|'bayer'|'stucki'|'none')
  *
  * STRUCTURAL (preprocessing):
  * @property {number} detailRescue - BilateralFilter entropy threshold reduction (0-20)
@@ -198,19 +198,17 @@ class ParameterGenerator {
         }
 
         // 5. Normalize archetype values to engine-canonical forms
-        // Dither types: archetypes may use PascalCase ("BlueNoise", "Atkinson")
-        // but SeparationEngine expects kebab-case ("blue-noise", "atkinson")
+        // Dither types: archetypes may use PascalCase ("FloydSteinberg", "Atkinson")
+        // but SeparationEngine expects kebab-case ("floyd-steinberg", "atkinson")
         const DITHER_NORMALIZE = {
-            'bluenoise': 'blue-noise',
             'floydsteinberg': 'floyd-steinberg',
             'floyd-steinberg': 'floyd-steinberg',
-            'blue-noise': 'blue-noise',
             'atkinson': 'atkinson',
             'stucki': 'stucki',
             'bayer': 'bayer',
             'none': 'none'
         };
-        const rawDither = (params.ditherType || 'blue-noise').toLowerCase();
+        const rawDither = (params.ditherType || 'atkinson').toLowerCase();
         const normalizedDither = DITHER_NORMALIZE[rawDither] || rawDither;
 
         // Preprocessing: normalize "none" → "off" (canonical off state)
@@ -636,7 +634,7 @@ class ParameterGenerator {
 
             // Distance metric
             distanceMetric: config.distanceMetric || 'cie76',
-            ditherType: config.ditherType || 'blue-noise',
+            ditherType: config.ditherType || 'atkinson',
 
             // Saliency weights
             lWeight: config.lWeight,
@@ -729,7 +727,7 @@ class ParameterGenerator {
     static getStrategy(archetype, dna) {
         console.warn('⚠️ getStrategy() is deprecated. Parameters are now in archetype JSON files.');
         return {
-            dither: 'blue-noise',
+            dither: 'atkinson',
             bias: 3.0
         };
     }

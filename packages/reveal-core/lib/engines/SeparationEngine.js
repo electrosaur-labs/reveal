@@ -45,7 +45,7 @@ const {
 
 /**
  * @typedef {Object} SeparateOptions
- * @property {string} [ditherType='none'] - 'none'|'floyd-steinberg'|'blue-noise'|'bayer'|'atkinson'|'stucki'
+ * @property {string} [ditherType='none'] - 'none'|'floyd-steinberg'|'bayer'|'atkinson'|'stucki'
  * @property {string} [distanceMetric='cie76'] - 'cie76'|'cie94'|'cie2000'
  * @property {number} [meshCount] - Screen mesh TPI (e.g., 230, 305) for LPI-aware Macro-Cell dithering
  * @property {number} [dpi=300] - Image DPI for dither scale calculation
@@ -65,7 +65,7 @@ class SeparationEngine {
      *
      * DITHERING SUPPORT:
      * - Supports Floyd-Steinberg error diffusion (requires width/height)
-     * - Supports Blue Noise ordered dithering (requires width/height)
+     * - Supports Bayer ordered dithering (requires width/height)
      * - Defaults to nearest-neighbor (fast, posterized look)
      *
      * LPI-AWARE DITHERING (Rule of 7):
@@ -83,7 +83,7 @@ class SeparationEngine {
      * @param {number} width - Image width (required for dithering)
      * @param {number} height - Image height (required for dithering)
      * @param {Object} options - Options object:
-     *   - ditherType: 'none'|'floyd-steinberg'|'blue-noise'|'bayer'|'atkinson'|'stucki'
+     *   - ditherType: 'none'|'floyd-steinberg'|'bayer'|'atkinson'|'stucki'
      *   - meshCount: Screen mesh TPI (e.g., 230, 305) - enables LPI-aware Macro-Cell clustering
      *   - dpi: Image DPI (default: 300) - used with meshCount for scale calculation
      *   - distanceMetric: 'cie76' (default) or 'cie94'
@@ -123,8 +123,8 @@ class SeparationEngine {
         // Route to appropriate dithering strategy
         const strategy = DitheringStrategies.DitheringStrategies[ditherType];
         if (strategy) {
-            // Ordered dithering (blue-noise, bayer) needs scale parameter
-            if (ditherType === 'blue-noise' || ditherType === 'bayer') {
+            // Ordered dithering (bayer) needs scale parameter
+            if (ditherType === 'bayer') {
                 return strategy(rawBytes, labPalette, width, height, onProgress, scale);
             }
             // Error diffusion (floyd-steinberg, atkinson, stucki) doesn't need scale

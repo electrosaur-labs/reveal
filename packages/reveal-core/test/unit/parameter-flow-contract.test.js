@@ -261,7 +261,7 @@ describe('Parameter Flow Contracts', () => {
             // This should not throw — meshCount is read correctly
             const indices = await SeparationEngine.mapPixelsToPaletteAsync(
                 labPixels, palette, null, 3, 1,
-                { ditherType: 'blue-noise', meshCount: 230, dpi: 300 }
+                { ditherType: 'atkinson', meshCount: 230, dpi: 300 }
             );
             expect(indices).toBeInstanceOf(Uint8Array);
             expect(indices.length).toBe(3);
@@ -273,7 +273,7 @@ describe('Parameter Flow Contracts', () => {
 
             const indices = await SeparationEngine.mapPixelsToPaletteAsync(
                 labPixels, palette, null, 1, 1,
-                { ditherType: 'blue-noise', mesh: 230 }
+                { ditherType: 'atkinson', mesh: 230 }
             );
             expect(indices).toBeInstanceOf(Uint8Array);
         });

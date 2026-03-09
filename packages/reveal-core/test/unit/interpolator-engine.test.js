@@ -20,7 +20,7 @@ const MOCK_MODEL = {
                 minColors: 4, maxColors: 8,
                 vibrancyMode: 'subtle', vibrancyBoost: 1.0,
                 preprocessingIntensity: 'medium',
-                ditherType: 'blue-noise', distanceMetric: 'cie2000',
+                ditherType: 'atkinson', distanceMetric: 'cie2000',
                 enablePaletteReduction: true, paletteReduction: 6,
                 preserveWhite: true, preserveBlack: true,
                 highlightThreshold: 85, highlightBoost: 2,
@@ -232,7 +232,7 @@ describe('InterpolatorEngine', () => {
             const engine = new InterpolatorEngine(MOCK_MODEL);
             const { parameters } = engine.interpolate(DNA_NEAR_CLUSTER1);
             expect(parameters.distanceMetric).toBe('cie2000');
-            expect(parameters.ditherType).toBe('blue-noise');
+            expect(parameters.ditherType).toBe('atkinson');
             expect(parameters.preserveBlack).toBe(true);
         });
 
