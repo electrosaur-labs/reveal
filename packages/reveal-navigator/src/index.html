@@ -1649,8 +1649,8 @@
                 <details id="advanced-panel">
                     <summary>Advanced</summary>
 
-                    <!-- Group: Method -->
-                    <div class="knob-group-label">Method</div>
+                    <!-- Group: Algorithm -->
+                    <div class="knob-group-label">Algorithm</div>
 
                     <div class="knob-row">
                         <span class="knob-label">Starting Palette</span>
@@ -1662,6 +1662,17 @@
                         <button class="knob-help-btn" title="Help">?</button>
                     </div>
                     <span class="knob-help">How median cut partitions color space. Detail Priority (variance) splits where error is highest — best for photographic work. Color Priority (median) splits where color count is highest — preserves more distinct hues in graphic art.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Quantizer</span>
+                        <button class="knob-revert" id="revert-quantizer">&#x21BA;</button>
+                        <select id="picker-quantizer">
+                            <option value="median-cut">Median Cut</option>
+                            <option value="wu">Wu (Variance Optimal)</option>
+                        </select>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help">Color quantization algorithm. Median Cut splits at median position (equal population). Wu splits to minimize total color error (mathematically optimal) — typically produces lower mean ΔE.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Color Matching</span>

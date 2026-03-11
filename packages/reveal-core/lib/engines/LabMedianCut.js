@@ -481,53 +481,64 @@ class LabMedianCut {
 
         // Split until we have targetColors boxes
         const splitMode = tuning?.split?.splitMode || 'median';
+        const quantizer = tuning?.split?.quantizer || 'median-cut';
+        logger.log(`[medianCut] quantizer=${quantizer}, splitMode=${splitMode}, targetColors=${targetColors}, colors=${colors.length}`);
         let splitIteration = 0;
-        while (boxes.length < targetColors) {
-            splitIteration++;
 
-            if (splitMode === 'variance') {
-                // WU MODE: Sort by pure SSE — split the box with highest internal error
-                boxes.sort((a, b) => this._calculateBoxSSE(b, tuning) - this._calculateBoxSSE(a, tuning));
-            } else {
-                // DEFAULT: HUE-AWARE PRIORITY: Sort by priority (variance × hue hunger × vibrancy)
-                boxes.sort((a, b) => {
-                    const priorityB = this._calculateSplitPriority(b, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                    const priorityA = this._calculateSplitPriority(a, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                    return priorityB - priorityA;
-                });
-            }
+        if (quantizer === 'wu' && !grayscaleOnly) {
+            // ── WU HISTOGRAM-BASED SPLITTING ──
+            // Build 3D histogram in Lab space, compute cumulative moments,
+            // then split by maximizing variance reduction (O(1) per candidate).
+            boxes = this._splitLoopWu(colors, targetColors, tuning, sectorEnergy, coveredSectors, boxes);
+        } else {
+            // ── ORIGINAL MEDIAN CUT SPLITTING ──
+            while (boxes.length < targetColors) {
+                splitIteration++;
 
-            // If largest box has only 1 color, can't split further
-            if (boxes[0].colors.length === 1) {
-                break;
-            }
-
-            // Split the highest-priority box
-            const box = boxes.shift();
-            const [box1, box2] = this._splitBoxLab(box, grayscaleOnly, tuning);
-
-            if (box1 && box2) {
-                boxes.push(box1, box2);
-
-                // Track which hue sectors are now covered
-                if (!grayscaleOnly && sectorEnergy) {
-                    const COVERAGE_CHROMA_MIN = 10.0;
-                    const meta1 = this._calculateBoxMetadata(box1, grayscaleOnly, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                    const meta2 = this._calculateBoxMetadata(box2, grayscaleOnly, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
-                    if (meta1.sector >= 0) {
-                        const c1 = Math.sqrt(meta1.meanA ** 2 + meta1.meanB ** 2);
-                        if (c1 >= COVERAGE_CHROMA_MIN) coveredSectors.add(meta1.sector);
-                    }
-                    if (meta2.sector >= 0) {
-                        const c2 = Math.sqrt(meta2.meanA ** 2 + meta2.meanB ** 2);
-                        if (c2 >= COVERAGE_CHROMA_MIN) coveredSectors.add(meta2.sector);
-                    }
+                if (splitMode === 'variance') {
+                    // VARIANCE MODE: Sort by pure SSE — split the box with highest internal error
+                    boxes.sort((a, b) => this._calculateBoxSSE(b, tuning) - this._calculateBoxSSE(a, tuning));
+                } else {
+                    // DEFAULT: HUE-AWARE PRIORITY: Sort by priority (variance × hue hunger × vibrancy)
+                    boxes.sort((a, b) => {
+                        const priorityB = this._calculateSplitPriority(b, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
+                        const priorityA = this._calculateSplitPriority(a, sectorEnergy, coveredSectors, grayscaleOnly, 5.0, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
+                        return priorityB - priorityA;
+                    });
                 }
 
-            } else {
-                // Split failed, put box back
-                boxes.push(box);
-                break;
+                // If largest box has only 1 color, can't split further
+                if (boxes[0].colors.length === 1) {
+                    break;
+                }
+
+                // Split the highest-priority box
+                const box = boxes.shift();
+                const [box1, box2] = this._splitBoxLab(box, grayscaleOnly, tuning);
+
+                if (box1 && box2) {
+                    boxes.push(box1, box2);
+
+                    // Track which hue sectors are now covered
+                    if (!grayscaleOnly && sectorEnergy) {
+                        const COVERAGE_CHROMA_MIN = 10.0;
+                        const meta1 = this._calculateBoxMetadata(box1, grayscaleOnly, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
+                        const meta2 = this._calculateBoxMetadata(box2, grayscaleOnly, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost, tuning);
+                        if (meta1.sector >= 0) {
+                            const c1 = Math.sqrt(meta1.meanA ** 2 + meta1.meanB ** 2);
+                            if (c1 >= COVERAGE_CHROMA_MIN) coveredSectors.add(meta1.sector);
+                        }
+                        if (meta2.sector >= 0) {
+                            const c2 = Math.sqrt(meta2.meanA ** 2 + meta2.meanB ** 2);
+                            if (c2 >= COVERAGE_CHROMA_MIN) coveredSectors.add(meta2.sector);
+                        }
+                    }
+
+                } else {
+                    // Split failed, put box back
+                    boxes.push(box);
+                    break;
+                }
             }
         }
 
@@ -616,12 +627,426 @@ class LabMedianCut {
             return PaletteOps._calculateLabCentroid(box.colors, grayscaleOnly, strategy, tuning);
         });
 
+        // NaN check — catch bad centroids before they propagate
+        for (let i = 0; i < palette.length; i++) {
+            const c = palette[i];
+            if (!c || isNaN(c.L) || isNaN(c.a) || isNaN(c.b)) {
+                logger.error(`[medianCut] NaN palette entry at index ${i}: L=${c?.L} a=${c?.a} b=${c?.b}, box had ${boxes[i]?.colors?.length} colors`);
+            }
+        }
+
         // Store colors array in palette for later hue gap analysis
         // This allows us to force-include gap colors AFTER perceptual snap
         palette._allColors = colors;
         palette._labPixels = labPixels;
 
         return palette;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WU HISTOGRAM-BASED QUANTIZATION
+    // Xiaolin Wu, "Efficient Statistical Computations for Optimal Color
+    // Quantization," Graphics Gems vol. II, Academic Press, 1991.
+    //
+    // Operates on a 3D Lab histogram with cumulative moment tables.
+    // Splits minimize total within-box variance (SSE), unlike median cut
+    // which splits at the median position.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Wu histogram-based splitting loop.
+     * Replaces the median cut loop when quantizer === 'wu'.
+     *
+     * @param {Array<{L, a, b, count}>} colors - Deduplicated, culled colors
+     * @param {number} targetColors - Desired box count
+     * @param {Object} tuning - Tuning parameters
+     * @param {Float32Array|null} sectorEnergy - 12-element hue sector energy
+     * @param {Set<number>} coveredSectors - Already-covered hue sectors
+     * @param {Array} initialBoxes - Pre-split boxes (from neutral isolation)
+     * @returns {Array} boxes - Array of {colors} box objects
+     */
+    static _splitLoopWu(colors, targetColors, tuning, sectorEnergy, coveredSectors, initialBoxes) {
+        const BINS = 33; // 0 = boundary, 1-32 = data bins
+        const BIN_COUNT = 32;
+
+        const vibrancyBoost = tuning?.split?.vibrancyBoost ?? 0;
+
+        // ── Step 1: Build 3D histogram ──
+        // 5 moment arrays: count, sumL, sumA, sumB, sumSq
+        const size = BINS * BINS * BINS;
+        const wt = new Float64Array(size);  // pixel count
+        const mL = new Float64Array(size);  // sum of L
+        const mA = new Float64Array(size);  // sum of a
+        const mB = new Float64Array(size);  // sum of b
+        const m2 = new Float64Array(size);  // sum of weighted L² + a² + b²
+
+        // Find Lab ranges for binning
+        let minL = Infinity, maxL = -Infinity;
+        let minA = Infinity, maxA = -Infinity;
+        let minB = Infinity, maxB = -Infinity;
+        for (let i = 0; i < colors.length; i++) {
+            const c = colors[i];
+            if (c.L < minL) minL = c.L;
+            if (c.L > maxL) maxL = c.L;
+            if (c.a < minA) minA = c.a;
+            if (c.a > maxA) maxA = c.a;
+            if (c.b < minB) minB = c.b;
+            if (c.b > maxB) maxB = c.b;
+        }
+
+        // Bin width (avoid division by zero for uniform channels)
+        const rangeL = maxL - minL || 1;
+        const rangeA = maxA - minA || 1;
+        const rangeB = maxB - minB || 1;
+
+        // Map color to histogram bin indices (1-32)
+        const colorBins = new Uint8Array(colors.length * 3);
+        for (let i = 0; i < colors.length; i++) {
+            const c = colors[i];
+            const bl = Math.min(BIN_COUNT, Math.max(1, 1 + Math.floor((c.L - minL) / rangeL * (BIN_COUNT - 1))));
+            const ba = Math.min(BIN_COUNT, Math.max(1, 1 + Math.floor((c.a - minA) / rangeA * (BIN_COUNT - 1))));
+            const bb = Math.min(BIN_COUNT, Math.max(1, 1 + Math.floor((c.b - minB) / rangeB * (BIN_COUNT - 1))));
+            colorBins[i * 3] = bl;
+            colorBins[i * 3 + 1] = ba;
+            colorBins[i * 3 + 2] = bb;
+
+            const idx = bl * BINS * BINS + ba * BINS + bb;
+            const w = c.count || 1;
+
+            // Chroma-weighted variance: bias toward vivid colors
+            let chromaW = 1.0;
+            if (vibrancyBoost > 0) {
+                const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
+                chromaW = 1.0 + vibrancyBoost * chroma / 128;
+            }
+
+            wt[idx] += w;
+            mL[idx] += c.L * w;
+            mA[idx] += c.a * w;
+            mB[idx] += c.b * w;
+            m2[idx] += chromaW * w * (c.L * c.L + c.a * c.a + c.b * c.b);
+        }
+
+        // ── Step 2: Compute 3D cumulative moments ──
+        this._wuCumulativeMoments(wt, mL, mA, mB, m2, BINS);
+
+        // ── Step 3: Initialize Wu boxes ──
+        // If neutral isolation created multiple initial boxes, map them to Wu box bounds
+        let wuBoxes;
+        if (initialBoxes.length > 1) {
+            // Multiple initial boxes from neutral isolation — find bounds per box
+            wuBoxes = initialBoxes.map(ibox => {
+                let r0 = BIN_COUNT, r1 = 0, g0 = BIN_COUNT, g1 = 0, b0 = BIN_COUNT, b1 = 0;
+                for (let i = 0; i < colors.length; i++) {
+                    const c = colors[i];
+                    const inBox = ibox.colors.some(ic => ic.L === c.L && ic.a === c.a && ic.b === c.b);
+                    if (inBox) {
+                        const bl = colorBins[i * 3], ba = colorBins[i * 3 + 1], bb = colorBins[i * 3 + 2];
+                        if (bl < r0) r0 = bl; if (bl > r1) r1 = bl;
+                        if (ba < g0) g0 = ba; if (ba > g1) g1 = ba;
+                        if (bb < b0) b0 = bb; if (bb > b1) b1 = bb;
+                    }
+                }
+                return { r0: r0 - 1, r1, g0: g0 - 1, g1, b0: b0 - 1, b1 };
+            });
+        } else {
+            // Single box spanning full range
+            wuBoxes = [{ r0: 0, r1: BIN_COUNT, g0: 0, g1: BIN_COUNT, b0: 0, b1: BIN_COUNT }];
+        }
+
+        // Compute initial variances
+        const variances = wuBoxes.map(box => this._wuVariance(box, wt, mL, mA, mB, m2, BINS));
+
+        // ── Step 4: Iterative splitting ──
+        while (wuBoxes.length < targetColors) {
+            // Find box with highest variance
+            let bestIdx = -1, bestVar = 0;
+            for (let i = 0; i < wuBoxes.length; i++) {
+                // Apply hue-sector priority boost
+                let priority = variances[i];
+                if (sectorEnergy && priority > 0) {
+                    const centroid = this._wuBoxCentroid(wuBoxes[i], wt, mL, mA, mB, BINS);
+                    const chroma = Math.sqrt(centroid.a * centroid.a + centroid.b * centroid.b);
+                    if (chroma >= 10) {
+                        const hue = ((Math.atan2(centroid.b, centroid.a) * 180 / Math.PI) + 360) % 360;
+                        const sector = Math.floor(hue / 30) % 12;
+                        if (!coveredSectors.has(sector) && sectorEnergy[sector] > 0) {
+                            priority *= 5.0; // Boost uncovered sectors
+                        }
+                    }
+                }
+                if (priority > bestVar) {
+                    bestVar = priority;
+                    bestIdx = i;
+                }
+            }
+
+            if (bestIdx < 0 || bestVar <= 0) break;
+
+            // Try to cut this box
+            const cut = this._wuCut(wuBoxes[bestIdx], wt, mL, mA, mB, m2, BINS);
+            if (!cut) {
+                // Can't split — mark variance as 0 and try next
+                variances[bestIdx] = 0;
+                continue;
+            }
+
+            const [box1, box2] = cut;
+            wuBoxes[bestIdx] = box1;
+            variances[bestIdx] = this._wuVariance(box1, wt, mL, mA, mB, m2, BINS);
+            wuBoxes.push(box2);
+            variances.push(this._wuVariance(box2, wt, mL, mA, mB, m2, BINS));
+
+            // Track hue sector coverage
+            if (sectorEnergy) {
+                for (const box of [box1, box2]) {
+                    const cent = this._wuBoxCentroid(box, wt, mL, mA, mB, BINS);
+                    const c = Math.sqrt(cent.a * cent.a + cent.b * cent.b);
+                    if (c >= 10) {
+                        const h = ((Math.atan2(cent.b, cent.a) * 180 / Math.PI) + 360) % 360;
+                        coveredSectors.add(Math.floor(h / 30) % 12);
+                    }
+                }
+            }
+        }
+
+        // ── Step 5: Map Wu boxes back to color arrays ──
+        // Each color gets assigned to its containing Wu box.
+        // Use >= on lower bound to avoid boundary cracks from splitting.
+        const boxColors = wuBoxes.map(() => []);
+        for (let i = 0; i < colors.length; i++) {
+            const bl = colorBins[i * 3], ba = colorBins[i * 3 + 1], bb = colorBins[i * 3 + 2];
+            let assigned = false;
+            for (let j = 0; j < wuBoxes.length; j++) {
+                const box = wuBoxes[j];
+                if (bl > box.r0 && bl <= box.r1 &&
+                    ba > box.g0 && ba <= box.g1 &&
+                    bb > box.b0 && bb <= box.b1) {
+                    boxColors[j].push(colors[i]);
+                    assigned = true;
+                    break;
+                }
+            }
+            // Fallback: color fell through boundary crack — assign to nearest box
+            if (!assigned) {
+                const c = colors[i];
+                let bestJ = 0, bestDist = Infinity;
+                for (let j = 0; j < wuBoxes.length; j++) {
+                    const cent = this._wuBoxCentroid(wuBoxes[j], wt, mL, mA, mB, BINS);
+                    const dL = c.L - cent.L, da = c.a - cent.a, db = c.b - cent.b;
+                    const dist = dL * dL + da * da + db * db;
+                    if (dist < bestDist) { bestDist = dist; bestJ = j; }
+                }
+                boxColors[bestJ].push(c);
+            }
+        }
+
+        // Diagnostics: check for unassigned colors
+        let unassignedCount = 0;
+        const totalColorCount = colors.reduce((s, c) => s + (c.count || 1), 0);
+        const assignedColorCount = boxColors.reduce((s, bc) => s + bc.reduce((s2, c) => s2 + (c.count || 1), 0), 0);
+        if (assignedColorCount < totalColorCount) {
+            unassignedCount = totalColorCount - assignedColorCount;
+            logger.warn(`[Wu] WARNING: ${unassignedCount} pixels in unassigned colors (${colors.length} deduped colors, ${wuBoxes.length} boxes)`);
+        }
+        const emptyBoxes = boxColors.filter(bc => bc.length === 0).length;
+        if (emptyBoxes > 0) {
+            logger.warn(`[Wu] ${emptyBoxes} empty boxes out of ${wuBoxes.length}`);
+        }
+        logger.log(`[Wu] Split into ${wuBoxes.length} boxes, ${boxColors.filter(bc => bc.length > 0).length} non-empty, ${colors.length} deduped colors`);
+
+        // Convert to the box format expected by downstream code
+        return boxColors
+            .filter(c => c.length > 0)
+            .map(c => ({ colors: c, depth: 0, grayscaleOnly: false }));
+    }
+
+    /**
+     * Compute 3D cumulative moment tables (prefix sums).
+     * After this, Vol() queries return sums for any sub-box in O(1).
+     */
+    static _wuCumulativeMoments(wt, mL, mA, mB, m2, BINS) {
+        // Running area and line accumulators for each moment
+        const areaWt = new Float64Array(BINS);
+        const areaL = new Float64Array(BINS);
+        const areaA = new Float64Array(BINS);
+        const areaB = new Float64Array(BINS);
+        const area2 = new Float64Array(BINS);
+
+        for (let r = 1; r < BINS; r++) {
+            areaWt.fill(0); areaL.fill(0); areaA.fill(0); areaB.fill(0); area2.fill(0);
+
+            for (let g = 1; g < BINS; g++) {
+                let lineWt = 0, lineL = 0, lineA = 0, lineB = 0, line2 = 0;
+
+                for (let b = 1; b < BINS; b++) {
+                    const idx = r * BINS * BINS + g * BINS + b;
+                    const prevR = (r - 1) * BINS * BINS + g * BINS + b;
+
+                    lineWt += wt[idx]; lineL += mL[idx]; lineA += mA[idx]; lineB += mB[idx]; line2 += m2[idx];
+                    areaWt[b] += lineWt; areaL[b] += lineL; areaA[b] += lineA; areaB[b] += lineB; area2[b] += line2;
+
+                    wt[idx] = wt[prevR] + areaWt[b];
+                    mL[idx] = mL[prevR] + areaL[b];
+                    mA[idx] = mA[prevR] + areaA[b];
+                    mB[idx] = mB[prevR] + areaB[b];
+                    m2[idx] = m2[prevR] + area2[b];
+                }
+            }
+        }
+    }
+
+    /**
+     * 3D inclusion-exclusion volume query.
+     * Returns the sum of moment array `mmt` over the box region.
+     */
+    static _wuVol(box, mmt, BINS) {
+        const { r0, r1, g0, g1, b0, b1 } = box;
+        const S = BINS * BINS;
+        return mmt[r1 * S + g1 * BINS + b1]
+             - mmt[r1 * S + g1 * BINS + b0]
+             - mmt[r1 * S + g0 * BINS + b1]
+             + mmt[r1 * S + g0 * BINS + b0]
+             - mmt[r0 * S + g1 * BINS + b1]
+             + mmt[r0 * S + g1 * BINS + b0]
+             + mmt[r0 * S + g0 * BINS + b1]
+             - mmt[r0 * S + g0 * BINS + b0];
+    }
+
+    /**
+     * Compute variance (SSE) of a Wu box using moment tables.
+     * Variance = m2 - (mL² + mA² + mB²) / wt
+     */
+    static _wuVariance(box, wt, mL, mA, mB, m2, BINS) {
+        const vol = this._wuVol(box, wt, BINS);
+        if (vol <= 0) return 0;
+        const sL = this._wuVol(box, mL, BINS);
+        const sA = this._wuVol(box, mA, BINS);
+        const sB = this._wuVol(box, mB, BINS);
+        const s2 = this._wuVol(box, m2, BINS);
+        return s2 - (sL * sL + sA * sA + sB * sB) / vol;
+    }
+
+    /**
+     * Compute weighted centroid of a Wu box from moment tables.
+     */
+    static _wuBoxCentroid(box, wt, mL, mA, mB, BINS) {
+        const vol = this._wuVol(box, wt, BINS);
+        if (vol <= 0) return { L: 50, a: 0, b: 0 };
+        return {
+            L: this._wuVol(box, mL, BINS) / vol,
+            a: this._wuVol(box, mA, BINS) / vol,
+            b: this._wuVol(box, mB, BINS) / vol
+        };
+    }
+
+    /**
+     * Find the best split for a Wu box across all 3 axes.
+     * Returns [box1, box2] or null if no valid split exists.
+     */
+    static _wuCut(box, wt, mL, mA, mB, m2, BINS) {
+        const { r0, r1, g0, g1, b0, b1 } = box;
+
+        // Try each axis, pick the one with best variance reduction
+        let bestAxis = -1, bestPos = -1, bestMetric = -Infinity;
+
+        // Axis 0: L (r)
+        if (r1 > r0 + 1) {
+            const result = this._wuMaximize(box, 0, wt, mL, mA, mB, m2, BINS);
+            if (result && result.metric > bestMetric) {
+                bestMetric = result.metric; bestAxis = 0; bestPos = result.pos;
+            }
+        }
+        // Axis 1: a (g)
+        if (g1 > g0 + 1) {
+            const result = this._wuMaximize(box, 1, wt, mL, mA, mB, m2, BINS);
+            if (result && result.metric > bestMetric) {
+                bestMetric = result.metric; bestAxis = 1; bestPos = result.pos;
+            }
+        }
+        // Axis 2: b (b)
+        if (b1 > b0 + 1) {
+            const result = this._wuMaximize(box, 2, wt, mL, mA, mB, m2, BINS);
+            if (result && result.metric > bestMetric) {
+                bestMetric = result.metric; bestAxis = 2; bestPos = result.pos;
+            }
+        }
+
+        if (bestAxis < 0) return null;
+
+        // Create two child boxes
+        const box1 = { r0, r1, g0, g1, b0, b1 };
+        const box2 = { r0, r1, g0, g1, b0, b1 };
+
+        if (bestAxis === 0) { box1.r1 = bestPos; box2.r0 = bestPos; }
+        else if (bestAxis === 1) { box1.g1 = bestPos; box2.g0 = bestPos; }
+        else { box1.b1 = bestPos; box2.b0 = bestPos; }
+
+        return [box1, box2];
+    }
+
+    /**
+     * Find the best split position along one axis using Wu's Bottom/Top decomposition.
+     * Maximizes sum of (channel_sum² / count) across both halves.
+     *
+     * @param {Object} box - Wu box bounds
+     * @param {number} axis - 0=L(r), 1=a(g), 2=b(b)
+     * @returns {{pos, metric}|null} Best split position and metric, or null
+     */
+    static _wuMaximize(box, axis, wt, mL, mA, mB, m2, BINS) {
+        const { r0, r1, g0, g1, b0, b1 } = box;
+
+        // Total moments for the whole box
+        const wholeWt = this._wuVol(box, wt, BINS);
+        const wholeL = this._wuVol(box, mL, BINS);
+        const wholeA = this._wuVol(box, mA, BINS);
+        const wholeB = this._wuVol(box, mB, BINS);
+
+        if (wholeWt <= 0) return null;
+
+        // Determine sweep range
+        let lo, hi;
+        if (axis === 0) { lo = r0 + 1; hi = r1; }
+        else if (axis === 1) { lo = g0 + 1; hi = g1; }
+        else { lo = b0 + 1; hi = b1; }
+
+        let bestMetric = -Infinity, bestPos = -1;
+
+        // Sweep through candidate split positions
+        for (let pos = lo; pos < hi; pos++) {
+            // Build a temporary "bottom half" box: [original low .. pos]
+            const half = { r0, r1, g0, g1, b0, b1 };
+            if (axis === 0) half.r1 = pos;
+            else if (axis === 1) half.g1 = pos;
+            else half.b1 = pos;
+
+            const halfWt = this._wuVol(half, wt, BINS);
+            if (halfWt <= 0) continue;
+
+            const halfL = this._wuVol(half, mL, BINS);
+            const halfA = this._wuVol(half, mA, BINS);
+            const halfB = this._wuVol(half, mB, BINS);
+
+            // Top half is whole minus bottom
+            const topWt = wholeWt - halfWt;
+            if (topWt <= 0) continue;
+
+            const topL = wholeL - halfL;
+            const topA = wholeA - halfA;
+            const topB = wholeB - halfB;
+
+            // Metric: sum of (channel_sum² / count) for both halves
+            // Maximizing this minimizes total within-box variance
+            const metric = (halfL * halfL + halfA * halfA + halfB * halfB) / halfWt
+                         + (topL * topL + topA * topA + topB * topB) / topWt;
+
+            if (metric > bestMetric) {
+                bestMetric = metric;
+                bestPos = pos;
+            }
+        }
+
+        return bestPos >= 0 ? { pos: bestPos, metric: bestMetric } : null;
     }
 
     /**

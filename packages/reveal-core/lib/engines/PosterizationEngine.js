@@ -158,7 +158,8 @@ class PosterizationEngine {
                 chromaAxisWeight: options.chromaAxisWeight !== undefined ? options.chromaAxisWeight : this.TUNING.split.chromaAxisWeight,
                 neutralIsolationThreshold: options.neutralIsolationThreshold !== undefined ? options.neutralIsolationThreshold : this.TUNING.split.neutralIsolationThreshold,
                 warmABoost: options.warmABoost !== undefined ? options.warmABoost : 1.0,
-                splitMode: options.splitMode || 'median'
+                splitMode: options.splitMode || 'median',
+                quantizer: options.quantizer || 'median-cut'
             },
             prune: {
                 threshold: options.paletteReduction !== undefined ? options.paletteReduction : this.TUNING.prune.threshold,

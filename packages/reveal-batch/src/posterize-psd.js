@@ -172,6 +172,12 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         console.log(chalk.green(`  Archetype: ${config.meta?.archetype || 'unknown'} (DNA auto-match)`));
     }
 
+    // Apply quantizer override if specified
+    if (cliOptions.quantizer) {
+        config.quantizer = cliOptions.quantizer;
+        console.log(chalk.green(`  Quantizer: ${cliOptions.quantizer} (override)`));
+    }
+
     dna.archetype = config.meta?.archetypeId;
     console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias || 'n/a'}, Dither: ${config.ditherType || 'none'}`);
 

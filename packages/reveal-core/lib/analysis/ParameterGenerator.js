@@ -108,7 +108,7 @@ class ParameterGenerator {
             'preserveWhite', 'preserveBlack', 'ignoreTransparent',
             'neutralSovereigntyThreshold',
             'chromaGate', 'preprocessingIntensity',
-            'refinementPasses', 'splitMode',
+            'refinementPasses', 'splitMode', 'quantizer',
             'detailRescue', 'medianPass',
         ],
         /** Post-separation knobs — mask/preview re-render only (fast path) */
@@ -704,6 +704,7 @@ class ParameterGenerator {
 
             // Median cut split strategy
             splitMode: config.splitMode || 'median',
+            quantizer: config.quantizer || 'median-cut',
 
             // Screen mesh — passed through if caller provides it (session-level, not archetype).
             // Maps meshSize (config/UI name) → meshCount (SeparationEngine name).

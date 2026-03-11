@@ -18,8 +18,9 @@ const { posterizePsd } = require('./posterize-psd');
 async function main() {
     const args = process.argv.slice(2);
 
-    // Parse --archetype flag
+    // Parse --archetype and --quantizer flags
     let archetype = null;
+    let quantizer = null;
     const positionalArgs = [];
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--archetype' && i + 1 < args.length) {
@@ -27,6 +28,11 @@ async function main() {
             i++;
         } else if (args[i].startsWith('--archetype=')) {
             archetype = args[i].split('=')[1];
+        } else if (args[i] === '--quantizer' && i + 1 < args.length) {
+            quantizer = args[i + 1];
+            i++;
+        } else if (args[i].startsWith('--quantizer=')) {
+            quantizer = args[i].split('=')[1];
         } else {
             positionalArgs.push(args[i]);
         }
@@ -34,12 +40,13 @@ async function main() {
 
     if (positionalArgs.length < 2) {
         console.log(chalk.yellow(`
-Usage: node reveal-batch.js <input-dir> <output-dir> [--archetype <id>]
+Usage: node reveal-batch.js <input-dir> <output-dir> [--archetype <id>] [--quantizer <type>]
 
 Arguments:
   input-dir    Directory containing Lab PSDs (8-bit or 16-bit)
   output-dir   Directory for separated PSDs and validation JSONs
   --archetype  Optional archetype override (chameleon, distilled, salamander, or JSON id)
+  --quantizer  Optional quantizer override (median-cut or wu)
 
 Example:
   node reveal-batch.js data/CQ100_v4/input/psd/16bit data/CQ100_v4/output/psd
@@ -97,7 +104,7 @@ Example:
                 path.join(inputDir, file),
                 outputDir,
                 null, // auto-detect bit depth
-                archetype ? { archetype } : {}
+                { ...(archetype ? { archetype } : {}), ...(quantizer ? { quantizer } : {}) }
             );
             results.push(result);
         } catch (error) {

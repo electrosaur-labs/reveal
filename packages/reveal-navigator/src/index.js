@@ -158,7 +158,7 @@ function initPlugin() {
         // ─── Advanced Panel: Dropdowns & Checkboxes ───────────────
         // Wire all <select> dropdowns (change → updateParameter)
         const PICKER_DEFS = [
-            'engineType', 'splitMode', 'distanceMetric', 'centroidStrategy', 'vibrancyMode',
+            'engineType', 'splitMode', 'quantizer', 'distanceMetric', 'centroidStrategy', 'vibrancyMode',
             'substrateMode', 'ditherType', 'colorMode', 'preprocessingIntensity',
             'meshSize'
         ];
@@ -209,6 +209,9 @@ function initPlugin() {
                 const val = source[key];
                 if (val !== undefined) {
                     picker.value = String(val);
+                } else {
+                    // Reset to first option when config doesn't specify (prevents stale browser cache)
+                    picker.selectedIndex = 0;
                 }
             }
 
