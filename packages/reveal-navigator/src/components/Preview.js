@@ -312,11 +312,8 @@ class Preview {
         const base64 = uint8ToBase64(jpegData.data);
         this._img.src = `data:image/jpeg;base64,${base64}`;
 
-        // Make image visible, hide placeholder
-        this._img.style.display = 'block';
-        if (this._placeholder) {
-            this._placeholder.style.display = 'none';
-        }
+        // Image visibility is controlled by index.js scoringComplete handler.
+        // Don't force display here — it bypasses the splash gate.
     }
 
     _setStatus(text) {

@@ -295,10 +295,29 @@ function initPlugin() {
             _updateScoringProgress(data.computed, data.total);
         });
 
-        // Background scoring done — hide progress, re-sort carousel.
-        sessionState.on('scoringComplete', () => {
+        // Background scoring done — reveal everything at once.
+        sessionState.on('scoringComplete', (data) => {
             if (carousel) carousel.sortByDisplayedDeltaE();
-            _hideProgress();
+            // Let carousel re-sort and card swatches render before revealing
+            setTimeout(() => {
+                // Show preview image
+                const img = document.getElementById('preview-img');
+                if (img) img.style.display = 'block';
+                // Hide splash
+                const placeholder = document.getElementById('preview-placeholder');
+                if (placeholder) placeholder.style.display = 'none';
+                // Show finalize button
+                const finalizeRow = document.getElementById('finalize-row');
+                if (finalizeRow) finalizeRow.style.display = '';
+                // Show right panel and header controls
+                const hudPanel = document.getElementById('hud-panel');
+                if (hudPanel) hudPanel.style.display = '';
+                const loupeZoom = document.getElementById('loupe-zoom');
+                if (loupeZoom) loupeZoom.setAttribute('style', 'display: inline-block;');
+                const loupeHelpBtn = document.getElementById('loupe-help-btn');
+                if (loupeHelpBtn) loupeHelpBtn.setAttribute('style', 'display: inline-block;');
+                _hideProgress();
+            }, 250);
         });
 
         // When the user clicks a card, update the stats panel ΔE from stored values
@@ -329,24 +348,10 @@ function initPlugin() {
             }
         });
 
-        // Show preview image, hide placeholder on proxy ready
+        // proxyReady: image is posterized but scoring still in progress.
+        // Don't show UI yet — wait for scoringComplete to reveal everything together.
         sessionState.on('proxyReady', () => {
-            const img = document.getElementById('preview-img');
-            const placeholder = document.getElementById('preview-placeholder');
-            if (img) img.style.display = 'block';
-            if (placeholder) placeholder.style.display = 'none';
-
-            // Show finalize button
-            const finalizeRow = document.getElementById('finalize-row');
-            if (finalizeRow) finalizeRow.style.display = '';
-
-            // Show right panel and header controls (hidden during loading)
-            const hudPanel = document.getElementById('hud-panel');
-            if (hudPanel) hudPanel.style.display = '';
-            const loupeZoom = document.getElementById('loupe-zoom');
-            if (loupeZoom) loupeZoom.setAttribute('style', 'display: inline-block;');
-            const loupeHelpBtn = document.getElementById('loupe-help-btn');
-            if (loupeHelpBtn) loupeHelpBtn.setAttribute('style', 'display: inline-block;');
+            // Sync controls but keep UI hidden until scoring completes
         });
 
         // Update inline stats in doc-header on every posterization
@@ -944,9 +949,9 @@ function _clearUI() {
     const loupeHelpBtn = document.getElementById('loupe-help-btn');
     if (loupeHelpBtn) loupeHelpBtn.style.display = 'none';
 
-    // Reset all advanced pickers to first option (prevents stale browser/UXP cache)
-    document.querySelectorAll('#advanced-panel select').forEach(sel => { sel.selectedIndex = 0; });
-    document.querySelectorAll('#advanced-panel input[type="checkbox"]').forEach(chk => {
+    // Reset all pickers to first option (prevents stale browser/UXP cache)
+    document.querySelectorAll('#knobs-panel select, #advanced-panel select').forEach(sel => { sel.selectedIndex = 0; });
+    document.querySelectorAll('#knobs-panel input[type="checkbox"], #advanced-panel input[type="checkbox"]').forEach(chk => {
         chk.checked = chk.defaultChecked;
     });
 
