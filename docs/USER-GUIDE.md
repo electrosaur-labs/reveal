@@ -194,8 +194,7 @@ A 20-megapixel image typically separates in 1-2 seconds.
   consider deleting it or increasing Ghost Screen Removal.
 - **Use suggested colors** when the palette is missing an obvious hue — the engine spots these automatically.
 - **16-bit input** produces better results for photographic images, especially greens and subtle tonal gradations.
-- **Dithering** (in Advanced controls) adds halftone-style transitions between colors. Blue Noise gives organic
-  film-grain texture. Floyd-Steinberg is classic error diffusion. None gives hard-edged posterization.
+- **Dithering** (in Advanced controls) adds halftone-style transitions between colors. Floyd-Steinberg is classic error diffusion. Atkinson is sharp and clean. None gives hard-edged posterization.
 - **Reread Document** (top-right button) re-ingests the active document if you've made changes in Photoshop since
   opening the dialog.
 - **Shadow Floor and mud.** On press, dark tones can collapse into a single indistinct "mud" color. Use Shadow Floor to

@@ -54,7 +54,7 @@
 22. **enableHueGapAnalysis** - Force hue diversity (checkbox, default: true)
 
 ### Category 9: Dithering (1 parameter)
-23. **ditherType** - none, floyd-steinberg, blue-noise, bayer, atkinson, stucki
+23. **ditherType** - none, floyd-steinberg, bayer, atkinson, stucki
 
 ### Category 10: Edge Quality (1 parameter)
 24. **maskProfile** - Gray Gamma 2.2, Dot Gain 20%, Gray Gamma 1.8, sGray
@@ -100,7 +100,7 @@
 ### SeparationEngine.mapPixelsToPaletteAsync() - Used Parameters (1)
 
 **Dithering:**
-- ✅ `ditherType` - Algorithm selection (none/floyd-steinberg/blue-noise/bayer/atkinson/stucki)
+- ✅ `ditherType` - Algorithm selection (none/floyd-steinberg/bayer/atkinson/stucki)
 
 ### PhotoshopAPI (Adobe Plugin Only) - Used Parameters (1)
 
@@ -158,7 +158,7 @@
 
 ## Preset File Structure
 
-**Location:** `/workspaces/electrosaur/reveal-project/packages/reveal-core/presets/*.json`
+**Location:** `/workspaces/electrosaur/reveal/packages/reveal-core/presets/*.json`
 
 **Format:**
 ```json
@@ -317,16 +317,16 @@ PosterizationEngine.posterize(pixels, width, height, colorCount, {
 
 ## Quick Reference: Parameter Locations
 
-**UI Definition:** `/workspaces/electrosaur/reveal-project/packages/reveal-adobe/src/index.html`
+**UI Definition:** `/workspaces/electrosaur/reveal/packages/reveal-adobe/src/index.html`
 - Lines 884-1375: All 24 input controls
 
-**Parameter Collection:** `/workspaces/electrosaur/reveal-project/packages/reveal-adobe/src/index.js`
+**Parameter Collection:** `/workspaces/electrosaur/reveal/packages/reveal-adobe/src/index.js`
 - Lines 1572-1593: `gatherParameters()` function
 
-**Engine Signature:** `/workspaces/electrosaur/reveal-project/packages/reveal-core/lib/engines/PosterizationEngine.js`
+**Engine Signature:** `/workspaces/electrosaur/reveal/packages/reveal-core/lib/engines/PosterizationEngine.js`
 - Lines 144-217: `posterize()` method
 
-**Preset Storage:** `/workspaces/electrosaur/reveal-project/packages/reveal-core/presets/`
+**Preset Storage:** `/workspaces/electrosaur/reveal/packages/reveal-core/presets/`
 - 10 JSON files with 8 parameters each
 
 ---

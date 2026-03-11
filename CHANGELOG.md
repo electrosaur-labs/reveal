@@ -9,7 +9,7 @@ Initial public release.
 - Lab median cut quantization with SALIENCY centroid strategy
 - 26 archetypes with DNA-based automatic matching (40/45/15 scoring)
 - Three distance metrics: CIE76, CIE94, CIE2000
-- Dithering: Floyd-Steinberg, Atkinson, blue noise, Bayer
+- Dithering: Floyd-Steinberg, Atkinson, Bayer, Stucki
 - Mechanical knobs: ghost screen removal, speckle rescue, shadow clamp, trapping
 - Neutral sovereignty for white/gray background isolation
 - Bilateral filter preprocessing (edge-preserving noise reduction)

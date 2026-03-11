@@ -143,7 +143,7 @@ reveal/
 
 **Features:**
 - Configurable distance metrics (CIE76, CIE94, CIE2000)
-- Multiple dithering algorithms (Floyd-Steinberg, Blue Noise, Bayer)
+- Multiple dithering algorithms (Floyd-Steinberg, Atkinson, Bayer, Stucki)
 - LPI-aware dithering (scales patterns based on mesh TPI)
 - Spatial locality optimization (checks last winner first)
 
@@ -260,7 +260,7 @@ INPUT: Lab pixels (8-bit or 16-bit encoding)
   ↓
 6. Separate Image (SeparationEngine)
    - Map pixels to nearest palette color
-   - Optional dithering (Floyd-Steinberg, Blue Noise, etc.)
+   - Optional dithering (Floyd-Steinberg, Atkinson, etc.)
    - Output: Uint8Array of palette indices
   ↓
 7. Generate Masks (SeparationEngine)

@@ -135,9 +135,9 @@
             width: 100%;
         }
 
-        #splash-brand .brand-logo {
-            width: 120%;
-            margin-left: -10%;
+        #preview-placeholder .brand-logo {
+            width: 100%;
+            display: block;
             border-radius: 0;
         }
 
@@ -1379,6 +1379,7 @@
             <div id="preview-container">
                 <img id="preview-img" style="display:none;" />
                 <div id="preview-placeholder">
+                    <img class="brand-logo" src="electrosaur.png" alt="Electrosaur" />
                     <div id="splash-brand">
                         <div class="brand-separator"></div>
                         <div class="brand-reveal">REVEAL</div>
@@ -1388,8 +1389,6 @@
                         <div class="splash-header">PROCESS LOG [v1.0.1]</div>
                         <div class="splash-line" style="color:#888;">AWAITING DOCUMENT...</div>
                     </div>
-                    <div style="flex:1;"></div>
-                    <img class="brand-logo" src="electrosaur.png" alt="Electrosaur" />
                 </div>
                 <!-- 1:1 Loupe overlay (hidden until activated) -->
                 <div id="loupe-container">
@@ -1634,7 +1633,6 @@
                     <button class="knob-revert" id="revert-ditherType">&#x21BA;</button>
                     <select id="picker-ditherType">
                         <option value="none">None</option>
-                        <option value="blue-noise">Blue Noise</option>
                         <option value="floyd-steinberg">Floyd-Steinberg</option>
                         <option value="bayer">Bayer</option>
                         <option value="atkinson">Atkinson</option>
@@ -1642,7 +1640,7 @@
                     </select>
                     <button class="knob-help-btn" title="Help">?</button>
                 </div>
-                <span class="knob-help">Dithering pattern to simulate gradients with solid inks. None = hard edges. Blue Noise = organic, film-like grain. Floyd-Steinberg = classic error diffusion. Bayer = ordered grid pattern.</span>
+                <span class="knob-help">Dithering pattern to simulate gradients with solid inks. None = hard edges. Floyd-Steinberg = classic error diffusion. Atkinson = sharp, clean. Bayer = ordered grid pattern.</span>
 
                 <!-- ─── Advanced (Engine Room) ─── -->
                 <details id="advanced-panel">

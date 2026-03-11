@@ -51,7 +51,6 @@ Only needed after dither-related changes.
 
 | Dither | Expected |
 |--------|----------|
-| blue-noise | Sharp, may have minor spots at boundaries |
 | atkinson | Sharp, clean (recommended for Salamander) |
 | none | Slightly softer, fully clean |
 | floyd-steinberg | Smooth gradients, clean |
@@ -69,7 +68,6 @@ Only needed after dither-related changes.
 
 | Symptom | Cause | Workaround |
 |---------|-------|------------|
-| White/black dots at color boundaries | blue-noise dither + speckleRescue conflict | Switch dither to `atkinson` or `none` |
 | Green cast on Salamander | CIE94 + `none` dither shifts boundaries at full res | Use `atkinson` dither |
 | Detail loss with `none` dither | No error diffusion to smooth color transitions | Use `atkinson` dither |
 
