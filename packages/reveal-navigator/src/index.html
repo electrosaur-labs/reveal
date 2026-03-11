@@ -123,24 +123,22 @@
             height: 100%;
             display: flex;
             flex-direction: column;
-            justify-content: center;
+            justify-content: flex-start;
             align-items: center;
             background: radial-gradient(ellipse at 40% 40%, #d0d0d0 0%, #a8a8a8 30%, #787878 70%, #505050 100%);
+            padding-top: 0;
         }
 
         #splash-brand {
             text-align: center;
             margin-bottom: 24px;
+            width: 100%;
         }
 
-        #splash-brand .brand-electrosaur {
-            font-family: 'Anton', sans-serif;
-            font-size: 42px;
-            font-weight: 400;
-            color: #222;
-            letter-spacing: 6px;
-            text-transform: uppercase;
-            text-shadow: 0 1px 2px rgba(255,255,255,0.4), 0 -1px 1px rgba(0,0,0,0.2);
+        #splash-brand .brand-logo {
+            width: 120%;
+            margin-left: -10%;
+            border-radius: 0;
         }
 
         #splash-brand .brand-reveal {
@@ -1382,7 +1380,6 @@
                 <img id="preview-img" style="display:none;" />
                 <div id="preview-placeholder">
                     <div id="splash-brand">
-                        <div class="brand-electrosaur">ELECTROSAUR</div>
                         <div class="brand-separator"></div>
                         <div class="brand-reveal">REVEAL</div>
                         <div class="brand-tagline">Color Separation Engine</div>
@@ -1391,6 +1388,8 @@
                         <div class="splash-header">PROCESS LOG [v1.0.1]</div>
                         <div class="splash-line" style="color:#888;">AWAITING DOCUMENT...</div>
                     </div>
+                    <div style="flex:1;"></div>
+                    <img class="brand-logo" src="electrosaur.png" alt="Electrosaur" />
                 </div>
                 <!-- 1:1 Loupe overlay (hidden until activated) -->
                 <div id="loupe-container">

@@ -33,4 +33,12 @@ if (fs.existsSync(fontSrc)) {
     console.log('✓ Copied Anton-Regular.ttf');
 }
 
+// Copy src/electrosaur.png → dist/
+const logoSrc = path.join(srcDir, 'electrosaur.png');
+const logoDst = path.join(distDir, 'electrosaur.png');
+if (fs.existsSync(logoSrc)) {
+    fs.copyFileSync(logoSrc, logoDst);
+    console.log('✓ Copied electrosaur.png');
+}
+
 console.log('Asset copying complete!');
