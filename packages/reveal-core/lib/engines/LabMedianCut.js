@@ -713,18 +713,17 @@ class LabMedianCut {
             const idx = bl * BINS * BINS + ba * BINS + bb;
             const w = c.count || 1;
 
-            // Chroma-weighted variance: bias toward vivid colors
-            let chromaW = 1.0;
-            if (vibrancyBoost > 0) {
-                const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
-                chromaW = 1.0 + vibrancyBoost * chroma / 128;
-            }
-
             wt[idx] += w;
             mL[idx] += c.L * w;
             mA[idx] += c.a * w;
             mB[idx] += c.b * w;
-            m2[idx] += chromaW * w * (c.L * c.L + c.a * c.a + c.b * c.b);
+            // Wu's variance formula requires m2 to be unweighted:
+            //   variance = m2 - (mL² + mA² + mB²) / wt
+            // Applying vibrancyBoost here but not to mL/mA/mB breaks
+            // this identity, producing bogus variance values.
+            // vibrancyBoost is harmless for median-cut (doesn't use m2)
+            // but catastrophic for Wu. Keep m2 pure.
+            m2[idx] += w * (c.L * c.L + c.a * c.a + c.b * c.b);
         }
 
         // ── Step 2: Compute 3D cumulative moments ──
