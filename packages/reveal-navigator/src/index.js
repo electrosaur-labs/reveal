@@ -285,17 +285,20 @@ function initPlugin() {
             // Cards are built by ArchetypeCarousel._rebuild().
         });
 
-        // Background scoring progress — update stats panel ΔE for active archetype.
+        // Background scoring progress — update splash + stats panel ΔE.
         sessionState.on('archetypeScored', (data) => {
             const state = sessionState.getState();
             if (data.id === state.activeArchetypeId) {
                 _setStatRated(document.getElementById('stat-delta'), 'deltaE', data.meanDeltaE, '\u0394E ');
             }
+            // Update splash progress with scoring count
+            _updateScoringProgress(data.computed, data.total);
         });
 
-        // Background scoring done — re-sort carousel by ΔE now that badges are filled.
+        // Background scoring done — hide progress, re-sort carousel.
         sessionState.on('scoringComplete', () => {
             if (carousel) carousel.sortByDisplayedDeltaE();
+            _hideProgress();
         });
 
         // When the user clicks a card, update the stats panel ΔE from stored values
@@ -601,10 +604,10 @@ async function ingestActiveDocument(showDialog) {
         logger.log(`[Navigator] Ingested ${width}x${height} from ${validation.info.name}`);
 
         // ── Phases 2-3 are driven by SessionState.loadImage progress events ──
-        // Progress bar hides when preview is ready. Background ΔE scoring continues asynchronously.
+        // Progress screen stays visible until background scoring completes (scoringComplete event).
         await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
         sessionState.imageResolution = validation.info.resolution || 72;
-        _hideProgress();
+        _showProgress('Scoring archetypes\u2026', 85);
 
     } catch (err) {
         logger.log(`[Navigator] Ingest failed: ${err.message}`);
@@ -770,6 +773,19 @@ function _showProgress(label, percent) {
     setStatus(label);
 }
 
+function _updateScoringProgress(computed, total) {
+    const progressEl = document.getElementById('splash-progress');
+    if (!progressEl) return;
+    const pct = total > 0 ? Math.round(85 + (computed / total) * 15) : 90;
+    const fill = document.getElementById('ingest-progress-fill');
+    if (fill) fill.style.width = pct + '%';
+    // Update just the progress bar and active line inside splash
+    const barFill = progressEl.querySelector('.splash-bar-fill');
+    if (barFill) barFill.style.width = pct + '%';
+    const activeLine = progressEl.querySelector('.splash-active');
+    if (activeLine) activeLine.textContent = `[${computed}/${total}]`;
+}
+
 function _hideProgress() {
     const bar = document.getElementById('ingest-progress');
     const fill = document.getElementById('ingest-progress-fill');
@@ -927,6 +943,12 @@ function _clearUI() {
     if (loupeZoom) loupeZoom.style.display = 'none';
     const loupeHelpBtn = document.getElementById('loupe-help-btn');
     if (loupeHelpBtn) loupeHelpBtn.style.display = 'none';
+
+    // Reset all advanced pickers to first option (prevents stale browser/UXP cache)
+    document.querySelectorAll('#advanced-panel select').forEach(sel => { sel.selectedIndex = 0; });
+    document.querySelectorAll('#advanced-panel input[type="checkbox"]').forEach(chk => {
+        chk.checked = chk.defaultChecked;
+    });
 
     // Clear status
     setStatus('');

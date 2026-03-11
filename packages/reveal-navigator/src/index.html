@@ -38,7 +38,7 @@
             transition: width 0.3s ease;
         }
 
-        /* ─── Dialog fills its allocation ─── */
+/* ─── Dialog fills its allocation ─── */
         #navigatorDialog {
             width: 100%;
             height: 100%;
@@ -1667,12 +1667,12 @@
                         <span class="knob-label">Quantizer</span>
                         <button class="knob-revert" id="revert-quantizer">&#x21BA;</button>
                         <select id="picker-quantizer">
+                            <option value="wu">Wu (Vibrance)</option>
                             <option value="median-cut">Median Cut</option>
-                            <option value="wu">Wu (Variance Optimal)</option>
                         </select>
                         <button class="knob-help-btn" title="Help">?</button>
                     </div>
-                    <span class="knob-help">Color quantization algorithm. Median Cut splits at median position (equal population). Wu splits to minimize total color error (mathematically optimal) — typically produces lower mean ΔE.</span>
+                    <span class="knob-help">Color quantization algorithm. Wu (Vibrance) minimizes total color error via variance-optimal splitting. Median Cut splits by equal population — legacy option.</span>
 
                     <div class="knob-row">
                         <span class="knob-label">Color Matching</span>

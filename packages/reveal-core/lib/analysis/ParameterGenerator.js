@@ -702,9 +702,9 @@ class ParameterGenerator {
             // K-means refinement
             refinementPasses: config.refinementPasses,
 
-            // Median cut split strategy
+            // Quantization strategy
             splitMode: config.splitMode || 'median',
-            quantizer: config.quantizer || 'median-cut',
+            quantizer: config.quantizer || 'wu',
 
             // Screen mesh — passed through if caller provides it (session-level, not archetype).
             // Maps meshSize (config/UI name) → meshCount (SeparationEngine name).
