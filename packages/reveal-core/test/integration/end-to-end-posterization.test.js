@@ -510,14 +510,20 @@ describe('ProxyEngine consistency with direct PosterizationEngine', () => {
         const directResult = PosterizationEngine.posterize(
             proxyBuf, proxyW, proxyH,
             10,
-            { ...engineConfig, format: 'lab' }
+            {
+                ...engineConfig,
+                format: 'lab',
+                bitDepth: 16,
+                snapThreshold: 0,
+                densityFloor: 0,
+                enablePaletteReduction: false,
+                preservedUnifyThreshold: 0.5,
+            }
         );
         const paletteC = directResult.paletteLab;
 
-        // Preview = Production: ProxyEngine should match direct posterize output.
-        // ProxyEngine passes through the archetype's paletteReduction (ΔE-based,
-        // resolution-independent) so similar colors merge in both preview and production.
-        // Only resolution-dependent thresholds (snapThreshold, densityFloor) are zeroed.
+        // Preview = Production: ProxyEngine should match direct posterize output
+        // when using the same proxy-safe overrides (no snap/prune/densityFloor).
         expect(paletteB.length).toBe(paletteC.length);
     }, 30000);
 
