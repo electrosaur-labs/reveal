@@ -202,21 +202,27 @@ describe('SessionState + real ProxyEngine integration', () => {
         const proxyBuf = proxy.proxyBuffer;
         const sep = proxy.separationState;
 
-        // Direct posterize on same proxy buffer WITH proxy-safe overrides
-        // (ProxyEngine zeros snapThreshold, densityFloor, disables paletteReduction)
+        // Direct posterize on same proxy buffer WITH exact proxy-safe overrides.
+        // Must match ProxyEngine's PROXY_SAFE_OVERRIDES exactly:
+        // format, bitDepth, snapThreshold, densityFloor, enablePaletteReduction, preservedUnifyThreshold
         const directResult = PosterizationEngine.posterize(
             proxyBuf, sep.width, sep.height,
             session.currentConfig.targetColors,
             {
                 ...session.currentConfig,
                 format: 'lab',
+                bitDepth: 16,
                 snapThreshold: 0,
                 densityFloor: 0,
-                enablePaletteReduction: false
+                enablePaletteReduction: false,
+                preservedUnifyThreshold: 0.5
             }
         );
 
-        // Palette counts should match — same input, same config, same overrides
-        expect(sep.palette.length).toBe(directResult.paletteLab.length);
+        // Compare against baseline palette (pre-knob application).
+        // updateProxy() applies maxColors cap even with minVolume=0,
+        // which can reduce the palette; baseline is the clean posterize output.
+        const baselinePaletteCount = proxy._baselineState.palette.length;
+        expect(baselinePaletteCount).toBe(directResult.paletteLab.length);
     }, 30000);
 });
