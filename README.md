@@ -50,16 +50,29 @@ Reveal is validated against three benchmark datasets spanning fine art, photogra
 | Dataset | Images | Avg ΔE | Integrity | Source |
 |---------|--------|--------|-----------|--------|
 | **[CQ100](https://data.mendeley.com/datasets/vw5ys9hfxw)** | 300 | 15.19 | 100% | 100 color quantization benchmark images × 3 adaptive archetypes |
-| **[TESTIMAGES](https://testimages.org/color/)** | 40 | 11.20 | 100% | 40-image COLOR subset for image processing evaluation |
+| **[TESTIMAGES](https://testimages.org/color/)** | 40 | 11.03 | 100% | 40-image COLOR subset for image processing evaluation |
 | **SP100** | 147 | 6.99 | 100% | Fine art from [Met Museum](https://www.metmuseum.org/art/collection) (CC0), [Rijksmuseum](https://www.rijksmuseum.nl/en/rijksstudio) (CC0), [Art Institute of Chicago](https://www.artic.edu/collection) (CC0) |
 
 **ΔE** = CIE76 perceptual color distance (lower = more faithful). **Integrity** = physical printability (ink stack violations, density breaches). CQ100 citation: Celebi & Pérez-Delgado, [*J. Electronic Imaging* 32(3), 2023](https://doi.org/10.1117/1.JEI.32.3.033019). Full results in `packages/reveal-batch/data/`.
 
 ## Install
 
+### Photoshop Plugin
+
 1. Download `reveal-*.ccx` from the [latest release](https://github.com/electrosaur-labs/reveal/releases/latest)
 2. Double-click the `.ccx` file to install (or use the Creative Cloud desktop app)
 3. In Photoshop: Plugins → Electrosaur: Reveal → Reveal
+
+### Web App (no Photoshop required)
+
+```bash
+git clone https://github.com/electrosaur-labs/reveal.git
+cd reveal
+npm install --omit=dev
+npm run server
+```
+
+Open http://localhost:3700. See the [Web App README](packages/reveal-app/README.md) for details.
 
 ## Packages
 
@@ -68,6 +81,7 @@ Reveal is validated against three benchmark datasets spanning fine art, photogra
 | **[@electrosaur-labs/core](packages/reveal-core/)** | Pure JS engines — posterization, separation, DNA analysis, archetypes. **Zero dependencies.** |
 | **[@electrosaur-labs/navigator](packages/reveal-navigator/)** | Photoshop UXP panel — real-time archetype exploration, palette surgery, production render |
 | **[@electrosaur-labs/adobe](packages/reveal-adobe/)** | Photoshop UXP command dialog (superseded by Navigator, kept for reference) |
+| **[@electrosaur-labs/reveal-app](packages/reveal-app/)** | Standalone web UI — no Photoshop required (`npm run server`) |
 | **[@electrosaur-labs/batch](packages/reveal-batch/)** | CLI batch processor for automated testing and benchmarking |
 | **[@electrosaur-labs/psd-reader](packages/reveal-psd-reader/)** | Minimal PSD reader for Lab documents |
 | **[@electrosaur-labs/psd-writer](packages/reveal-psd-writer/)** | PSD writer for 8/16-bit Lab with fill+mask and pixel layers |
@@ -78,6 +92,7 @@ Reveal is validated against three benchmark datasets spanning fine art, photogra
 @electrosaur-labs/core (Pure Math)          Zero dependencies, no I/O
      │
      ├── @electrosaur-labs/navigator        Photoshop UXP panel (real-time preview + production)
+     ├── @electrosaur-labs/reveal-app       Standalone web UI (Express, no Photoshop required)
      ├── @electrosaur-labs/adobe            Photoshop UXP dialog (legacy)
      └── @electrosaur-labs/batch            Node.js CLI for benchmarking (ag-psd, sharp)
 ```

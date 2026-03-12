@@ -1,0 +1,21 @@
+{
+  "name": "@electrosaur-labs/reveal-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone web UI for Reveal color separation — platform independent, no Photoshop required",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js --open"
+  },
+  "dependencies": {
+    "@electrosaur-labs/core": "*",
+    "@electrosaur-labs/psd-reader": "*",
+    "@electrosaur-labs/psd-writer": "*",
+    "express": "^4.21.0",
+    "multer": "^2.0.0",
+    "sharp": "^0.33.5",
+    "utif2": "^4.1.0",
+    "ws": "^8.18.0"
+  }
+}

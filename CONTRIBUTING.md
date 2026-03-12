@@ -100,6 +100,12 @@ New features must handle both 8-bit and 16-bit Lab encoding:
 - Test framework: [Vitest](https://vitest.dev/)
 - Don't break existing tests — if a test needs updating, explain why in the PR
 
+## Porting to Other Languages
+
+If you're porting the Reveal engine to Python, Rust, or another language, read the [Mathematical Parity Guide](dev/MATHEMATICAL_PARITY.md) first. It defines the validation criteria, internal encoding requirements, and reference implementations for each stage of the pipeline.
+
+The JS implementation is the source of truth. Ports must produce equivalent output — same palette sizes, visually identical masks, per-pixel deltaE < 0.5 — validated against the benchmark datasets (CQ100, TESTIMAGES, SP100).
+
 ## Questions?
 
 Open a [Discussion](https://github.com/electrosaur-labs/reveal/discussions) or comment on the relevant issue.
