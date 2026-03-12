@@ -22,6 +22,7 @@
 
 const ArchetypeLoader = require('./ArchetypeLoader');
 const BilateralFilter = require('../preprocessing/BilateralFilter');
+const ExpressionEvaluator = require('./ExpressionEvaluator');
 
 /**
  * @typedef {Object} RevealConfig
@@ -161,7 +162,17 @@ class ParameterGenerator {
         const archetype = ArchetypeLoader.matchArchetype(dna, options.manualArchetypeId);
 
         // 2. Clone archetype parameters (deep copy to avoid mutations)
-        const params = JSON.parse(JSON.stringify(archetype.parameters));
+        let params = JSON.parse(JSON.stringify(archetype.parameters));
+
+        // 2.3. Evaluate dynamic expressions in archetype parameters
+        // String values like "channels + 2" are evaluated against image context.
+        // Non-string values pass through unchanged.
+        if (options.image) {
+            params = ExpressionEvaluator.evaluate(params, {
+                image: options.image,
+                channels: params.targetColors
+            });
+        }
 
         // 2.5. DNA v2.0 CONDITIONAL OVERRIDES
         // Apply chromatic fingerprint-based adjustments for specific scenarios

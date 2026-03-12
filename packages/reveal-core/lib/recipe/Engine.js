@@ -214,7 +214,15 @@ class Engine {
         // If an archetype is set, generate config from DNA
         if (this._archetypeName) {
             config = ParameterGenerator.generate(image.dna, {
-                manualArchetypeId: this._archetypeName
+                manualArchetypeId: this._archetypeName,
+                image: {
+                    width: image.width,
+                    height: image.height,
+                    bitDepth: image.bitDepth,
+                    dna: image.dna,
+                    sectors: image.sectors,
+                    filename: image.filename
+                }
             });
         }
 
