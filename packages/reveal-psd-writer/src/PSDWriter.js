@@ -417,6 +417,28 @@ class PSDWriter {
      * @returns {Buffer} Complete PSD file data
      */
     write() {
+        // Guard: refuse to write PSDs without composite + thumbnail.
+        // Silently omitting these produces files with no QuickLook preview
+        // and no Finder icon. This has caused repeated bugs — enforce it.
+        if (!this.compositePixels) {
+            throw new Error(
+                'PSDWriter: setComposite() must be called before write(). ' +
+                'Without composite data, QuickLook shows a blank preview.'
+            );
+        }
+        if (!this.thumbnail) {
+            throw new Error(
+                'PSDWriter: setThumbnail() must be called before write(). ' +
+                'Without a thumbnail, Finder shows a generic file icon.'
+            );
+        }
+        if (this.layers.length === 0 && !this.flatMode) {
+            throw new Error(
+                'PSDWriter: at least one layer (addFillLayer or addPixelLayer) is required. ' +
+                'Use { flat: true } for layerless composite-only PSDs.'
+            );
+        }
+
         const writer = new BinaryWriter();
 
         // PSD file has 5 sections:
@@ -450,9 +472,11 @@ class PSDWriter {
             writer.writeUint8(0);
         }
 
-        // Channels: 3 for Lab (L,a,b) + alpha channels for layer masks (up to 4)
-        // Photoshop requires extra channels in header and Section 5 for layered documents
-        const channelCount = this.layers.length > 0 ? 3 + Math.min(this.layers.length, 4) : 3;
+        // Channels: 3 for Lab (L,a,b) + extra alpha channels for layered documents.
+        // Photoshop requires Section 5 image data to match this channel count exactly.
+        // Extra channels are opaque alpha (255) — they don't affect the composite image.
+        const extraAlphaCount = this.layers.length > 0 ? Math.min(this.layers.length, 4) : 0;
+        const channelCount = 3 + extraAlphaCount;
         writer.writeUint16(channelCount);
         writer.writeUint32(this.height);
         writer.writeUint32(this.width);
@@ -1085,7 +1109,8 @@ class PSDWriter {
     _writeImageData(writer) {
         const pixelCount = this.width * this.height;
 
-        // Calculate how many extra alpha channels we need (same formula as header)
+        // Extra alpha channels must match what the header declares.
+        // Photoshop requires header channel count == Section 5 channel count.
         const extraAlphaCount = this.layers.length > 0 ? Math.min(this.layers.length, 4) : 0;
 
         // Find the pixel source: explicit composite (preferred) or first pixel layer

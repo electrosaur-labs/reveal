@@ -128,6 +128,18 @@ function parsePsdStructure(buffer) {
     return result;
 }
 
+// --- Helper: add minimum composite + thumbnail so write() doesn't throw ---
+
+const MIN_JPEG = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9]);
+
+function addPreviewData(writer) {
+    const pixelCount = writer.width * writer.height;
+    const composite = new Uint8Array(pixelCount * 3);
+    composite.fill(128);
+    writer.setComposite(composite);
+    writer.setThumbnail({ jpegData: MIN_JPEG, width: 2, height: 2 });
+}
+
 // --- Helper: create a layered PSD like posterize-psd.js does ---
 
 function createLayeredPsd(opts = {}) {
@@ -297,6 +309,7 @@ describe('addFillLayer - 16-bit', () => {
         expect(writer.layers.length).toBe(1);
         expect(writer.layers[0].mask.length).toBe(100);
         expect(writer.layers[0].maskIs8bit).toBe(true);
+        addPreviewData(writer);
         const buffer = writer.write();
         expect(buffer.toString('ascii', 0, 4)).toBe('8BPS');
     });
@@ -328,6 +341,7 @@ describe('addFillLayer - 16-bit', () => {
         expect(writer.layers[0].maskIs8bit).toBe(true);
         expect(writer.layers[0].mask.length).toBe(4);
 
+        addPreviewData(writer);
         const buffer = writer.write();
         expect(buffer.toString('ascii', 0, 4)).toBe('8BPS');
         expect(buffer.length).toBeGreaterThan(100);
@@ -347,6 +361,7 @@ describe('write', () => {
             mask: mask
         });
 
+        addPreviewData(writer);
         const buffer = writer.write();
         expect(buffer.toString('ascii', 0, 4)).toBe('8BPS');
         expect(buffer.readUInt16BE(4)).toBe(1);
@@ -363,6 +378,7 @@ describe('write', () => {
             mask: mask
         });
 
+        addPreviewData(writer);
         const buffer = writer.write();
         expect(buffer.toString('ascii', 0, 4)).toBe('8BPS');
         expect(buffer.readUInt16BE(4)).toBe(1);
@@ -378,6 +394,7 @@ describe('write', () => {
         writer.addFillLayer({ name: 'Layer 2', color: { L: 70, a: -15, b: 25 }, mask });
         writer.addFillLayer({ name: 'Layer 3', color: { L: 50, a: 0, b: 0 }, mask });
 
+        addPreviewData(writer);
         const buffer = writer.write();
         expect(buffer.toString('ascii', 0, 4)).toBe('8BPS');
         expect(buffer.length).toBeGreaterThan(1000);
@@ -394,15 +411,31 @@ describe('write', () => {
             mask: mask
         });
 
+        addPreviewData(writer);
         const buffer = writer.write();
         expect(buffer.toString('ascii', 0, 4)).toBe('8BPS');
         expect(buffer.readUInt16BE(22)).toBe(16);
     });
 
-    it('generates empty PSD (no layers)', () => {
-        const writer = new PSDWriter({ width: 100, height: 100 });
-        const buffer = writer.write();
-        expect(buffer.toString('ascii', 0, 4)).toBe('8BPS');
+    it('throws without composite', () => {
+        const writer = new PSDWriter({ width: 10, height: 10 });
+        writer.addFillLayer({ name: 'L1', color: { L: 50, a: 0, b: 0 }, mask: new Uint8Array(100) });
+        writer.setThumbnail({ jpegData: MIN_JPEG, width: 2, height: 2 });
+        expect(() => writer.write()).toThrow(/setComposite/);
+    });
+
+    it('throws without thumbnail', () => {
+        const writer = new PSDWriter({ width: 10, height: 10 });
+        writer.addFillLayer({ name: 'L1', color: { L: 50, a: 0, b: 0 }, mask: new Uint8Array(100) });
+        writer.setComposite(new Uint8Array(300).fill(128));
+        expect(() => writer.write()).toThrow(/setThumbnail/);
+    });
+
+    it('throws without layers', () => {
+        const writer = new PSDWriter({ width: 10, height: 10 });
+        writer.setComposite(new Uint8Array(300).fill(128));
+        writer.setThumbnail({ jpegData: MIN_JPEG, width: 2, height: 2 });
+        expect(() => writer.write()).toThrow(/at least one layer/);
     });
 });
 
@@ -436,10 +469,9 @@ describe('REGRESSION: Resource 1036 (Finder Icon)', () => {
         const writer = new PSDWriter({
             width: 10, height: 10,
             colorMode: 'lab', bitsPerChannel: 16,
-            compression: 'none'
+            compression: 'none', flat: true
         });
-        const minJpeg = Buffer.from([0xFF, 0xD8, 0xFF, 0xD9]);
-        writer.setThumbnail({ jpegData: minJpeg, width: 5, height: 5 });
+        writer.setThumbnail({ jpegData: MIN_JPEG, width: 5, height: 5 });
         const composite = new Uint8Array(300);
         composite.fill(128);
         writer.setComposite(composite);
@@ -532,6 +564,7 @@ describe('REGRESSION: Header Channel Count', () => {
         });
         const composite = new Uint8Array(300);
         writer.setComposite(composite);
+        writer.setThumbnail({ jpegData: MIN_JPEG, width: 2, height: 2 });
 
         const buffer = writer.write();
         const info = parsePsdStructure(buffer);

@@ -85,54 +85,54 @@ This package implements a minimal subset of the Adobe PSD specification:
 - [Adobe PSD Specification](https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/)
 - [PSD Format on FileFormat.info](https://www.fileformat.info/format/psd/egff.htm)
 
-## macOS QuickLook Compatibility
+## macOS QuickLook & Finder Thumbnail
 
-For QuickLook previews to work with Lab PSDs, three things are required:
+`write()` **throws** if you haven't provided all three required pieces. This is enforced
+because silently producing PSDs without previews has caused repeated bugs.
 
-### 1. Header: Declare exactly 3 channels (L, a, b)
-Do NOT add extra alpha channels for layers. Layer masks are stored separately in Section 4.
-```javascript
-// CORRECT: Always 3 channels for Lab
-writer.writeUint16(3);
+### Required before calling `write()`:
 
-// WRONG: Adding alpha channels breaks QuickLook
-channelCount = 3 + layers.length;  // Don't do this!
-```
+| # | Method | What it provides |
+|---|--------|-----------------|
+| 1 | `setComposite(lab8bit)` | Section 5 merged image data — QuickLook reads this |
+| 2 | `setThumbnail({ jpegData, width, height })` | Resource 1036 JPEG — Finder icon + Adobe Open dialog |
+| 3 | At least one layer (`addFillLayer` or `addPixelLayer`) | The actual separation data |
 
-### 2. Section 5: Write composite image data from a pixel source
-QuickLook reads the merged/composite image from Section 5. Provide pixel data via:
-- `setComposite(labPixels)` for flat files (no layers), OR
-- `addPixelLayer({ pixels: labPixels })` when you have layers
+### Complete example:
 
 ```javascript
-// Option A: Flat mode (no layers, best QuickLook support)
-writer.setComposite(labPixels);
+const writer = new PSDWriter({ width, height, colorMode: 'lab', bitsPerChannel: 16 });
 
-// Option B: With layers (add pixel layer as composite source)
-writer.addPixelLayer({
-  name: 'Original Image (Reference)',
-  pixels: lab8bitData,  // 8-bit Lab encoding (3 bytes/pixel)
-  visible: false
-});
-writer.addFillLayer({ ... });  // Add your ink layers
+// 1. Composite (8-bit Lab: L 0-255, a/b 0-255 with 128=neutral)
+const lab8bit = new Uint8Array(pixelCount * 3);
+for (let i = 0; i < pixelCount; i++) {
+    lab8bit[i * 3]     = Math.round((color.L / 100) * 255);
+    lab8bit[i * 3 + 1] = Math.round(color.a + 128);
+    lab8bit[i * 3 + 2] = Math.round(color.b + 128);
+}
+writer.setComposite(lab8bit);
+
+// 2. Thumbnail (RGB JPEG, max 256px)
+const rgb = LabEncoding.lab8bitToRgb(lab8bit, pixelCount);
+const jpegData = await sharp(Buffer.from(rgb), { raw: { width, height, channels: 3 } })
+    .resize(thumbW, thumbH).jpeg({ quality: 80 }).toBuffer();
+writer.setThumbnail({ jpegData, width: thumbW, height: thumbH });
+
+// 3. Layers
+writer.addFillLayer({ name: 'Ink 1', color: { L: 50, a: 30, b: -10 }, mask: maskData });
+
+// Write — throws if any of the above are missing
+const buffer = writer.write();
 ```
 
-### 3. Resource 1036: Add JPEG thumbnail
-The thumbnail appears in Finder icons and Adobe dialogs:
-```javascript
-writer.setThumbnail({
-  jpegData: jpegBuffer,  // RGB JPEG, max 160px
-  width: thumbWidth,
-  height: thumbHeight
-});
-```
+### What NOT to do
 
-### Summary
-| Requirement | What to do |
-|-------------|-----------|
-| Header channels | Always 3 (L, a, b) |
-| Section 5 composite | Use `setComposite()` or `addPixelLayer()` |
-| Thumbnail | Call `setThumbnail()` with RGB JPEG |
+- Do NOT set header channels to 3 for layered documents. Photoshop requires
+  `3 + min(layerCount, 4)` channels in both the header and Section 5, or it
+  reports "premature EOF". The extra channels are opaque alpha (255).
+- Do NOT skip `setComposite()` — without it, Section 5 writes neutral white
+  and QuickLook shows a blank preview.
+- Do NOT skip `setThumbnail()` — without it, Finder shows a generic icon.
 
 ## Limitations
 

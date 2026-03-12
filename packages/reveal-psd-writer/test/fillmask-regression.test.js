@@ -8,6 +8,15 @@ const path = require('path');
 const { PSDWriter } = require('../src');
 const PSDReader = require('../src/PSDReader');
 
+const MIN_JPEG = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9]);
+
+function addPreviewData(writer) {
+    const composite = new Uint8Array(writer.width * writer.height * 3);
+    composite.fill(128);
+    writer.setComposite(composite);
+    writer.setThumbnail({ jpegData: MIN_JPEG, width: 2, height: 2 });
+}
+
 function findMaskChannel(layer) {
     for (let i = 0; i < layer.channels.length; i++) {
         if (layer.channels[i].channelID === -2) {
@@ -54,6 +63,7 @@ describe('Fill+Mask Layer Writing', () => {
             mask: mask16
         });
 
+        addPreviewData(writer);
         const psdBuffer = writer.write();
         fs.writeFileSync(path.join(testOutputDir, 'test-mask-format.psd'), psdBuffer);
 
@@ -100,6 +110,7 @@ describe('Fill+Mask Layer Writing', () => {
             mask: mask8
         });
 
+        addPreviewData(writer);
         const psdBuffer = writer.write();
         fs.writeFileSync(path.join(testOutputDir, 'test-mask-8bit.psd'), psdBuffer);
 
@@ -140,6 +151,7 @@ describe('Fill+Mask Layer Writing', () => {
             mask: mask16
         });
 
+        addPreviewData(writer);
         const psdBuffer = writer.write();
         const reader = new PSDReader(psdBuffer);
         const psd = reader.read();
@@ -185,6 +197,7 @@ describe('Fill+Mask Layer Writing', () => {
             mask: mask16
         });
 
+        addPreviewData(writer);
         const psdBuffer = writer.write();
         const reader = new PSDReader(psdBuffer);
         const psd = reader.read();
@@ -244,6 +257,7 @@ describe('Fill+Mask Layer Writing', () => {
         writer.addFillLayer({ name: 'Layer 2', color: { L: 60, a: -10, b: 20 }, mask: mask2 });
         writer.addFillLayer({ name: 'Layer 3', color: { L: 90, a: 0, b: 0 }, mask: mask3 });
 
+        addPreviewData(writer);
         const psdBuffer = writer.write();
         fs.writeFileSync(path.join(testOutputDir, 'test-multiple-masks.psd'), psdBuffer);
 
