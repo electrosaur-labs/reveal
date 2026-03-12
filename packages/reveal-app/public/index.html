@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reveal</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Reveal</h1>
+        <span class="subtitle">Color Separation Engine</span>
+    </header>
+
+    <main>
+        <!-- Drop zone -->
+        <div id="drop-zone" class="drop-zone">
+            <div class="drop-zone-content">
+                <p class="drop-icon">+</p>
+                <p>Drop an image here or <label for="file-input" class="file-label">browse</label></p>
+                <p class="formats">PNG, TIFF, JPEG, PSD</p>
+                <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.tif,.tiff,.psd" hidden>
+            </div>
+        </div>
+
+        <!-- Status bar -->
+        <div id="status-bar" class="status-bar" hidden></div>
+
+        <!-- Archetype cards -->
+        <div id="cards" class="cards" hidden></div>
+
+        <!-- User pick -->
+        <div id="user-pick" class="user-pick" hidden>
+            <label for="archetype-select">Compare with:</label>
+            <select id="archetype-select">
+                <option value="">Choose an archetype...</option>
+            </select>
+        </div>
+
+        <!-- Large preview -->
+        <div id="preview-section" class="preview-section" hidden>
+            <div class="preview-header">
+                <h2 id="preview-title"></h2>
+                <div class="export-controls">
+                    <select id="format-select" class="format-select">
+                        <option value="ora">OpenRaster (.ora)</option>
+                        <option value="png">Flat PNG (.png)</option>
+                        <option value="psd">Photoshop (.psd)</option>
+                    </select>
+                    <button id="export-btn" class="export-btn">Export</button>
+                </div>
+            </div>
+            <canvas id="preview-canvas"></canvas>
+            <div id="preview-palette" class="preview-palette"></div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
