@@ -723,8 +723,10 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
         );
 
         // Should produce a usable palette (at least 6 distinct colors)
+        // Upper bound is tc+2 because ProxyEngine disables pruning, and
+        // hue gap recovery + forced slots (white/black/peaks) can exceed targetColors
         expect(result.palette.length).toBeGreaterThanOrEqual(6);
-        expect(result.palette.length).toBeLessThanOrEqual(10);
+        expect(result.palette.length).toBeLessThanOrEqual(12);
     }, 30000);
 
     it('should produce reasonable palette for Subtle Naturalist tc=10 (CIE2000)', async () => {
@@ -744,7 +746,7 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
         );
 
         expect(result.palette.length).toBeGreaterThanOrEqual(6);
-        expect(result.palette.length).toBeLessThanOrEqual(10);
+        expect(result.palette.length).toBeLessThanOrEqual(12);
     }, 30000);
 
     it('rePosterize should match initializeProxy palette behavior', async () => {
@@ -778,7 +780,7 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
         const result = await proxyEngine.rePosterize(engineConfig);
 
         expect(result.palette.length).toBeGreaterThanOrEqual(6);
-        expect(result.palette.length).toBeLessThanOrEqual(10);
+        expect(result.palette.length).toBeLessThanOrEqual(12);
     }, 60000);
 
     it('ProxyEngine palette must contain GREEN for Jethro at tc=10 (preservedUnifyThreshold regression)', async () => {

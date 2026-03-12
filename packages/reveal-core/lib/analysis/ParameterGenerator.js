@@ -285,6 +285,9 @@ class ParameterGenerator {
             // Median cut split strategy: 'variance' (Wu SSE-minimizing) or 'median' (standard)
             splitMode: params.splitMode || 'median',
 
+            // Quantizer algorithm: 'wu' (default) or 'median-cut'
+            quantizer: params.quantizer || 'wu',
+
             // Chroma split axis + neutral isolation (median cut enhancements)
             chromaAxisWeight: params.chromaAxisWeight !== undefined ? params.chromaAxisWeight : 0,
             neutralIsolationThreshold: params.neutralIsolationThreshold !== undefined ? params.neutralIsolationThreshold : 0,

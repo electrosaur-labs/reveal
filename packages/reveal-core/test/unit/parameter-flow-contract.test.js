@@ -75,6 +75,9 @@ const POSTERIZATION_ENGINE_READS = new Set([
     // Median cut split strategy
     'splitMode',
 
+    // Quantizer algorithm (wu or median-cut)
+    'quantizer',
+
     // Distance metric (for palette operations inside posterization)
     'distanceMetric',
 ]);
@@ -329,7 +332,7 @@ describe('Parameter Flow Contracts', () => {
             'chromaGate',
             'ditherType',
             'preprocessingIntensity', 'ignoreTransparent',
-            'refinementPasses', 'splitMode',
+            'refinementPasses', 'splitMode', 'quantizer',
         ]);
 
         it('no param is in both STRUCTURAL and PRODUCTION', () => {
