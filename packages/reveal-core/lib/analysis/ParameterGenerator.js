@@ -170,7 +170,8 @@ class ParameterGenerator {
         if (options.image) {
             params = ExpressionEvaluator.evaluate(params, {
                 image: options.image,
-                channels: params.targetColors
+                channels: params.targetColors,
+                press: options.press
             });
         }
 

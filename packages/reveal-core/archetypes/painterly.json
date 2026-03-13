@@ -1,6 +1,6 @@
 {
   "id": "painterly",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Painterly",
   "group": "natural",
   "engine": "direct",
@@ -37,12 +37,12 @@
     "ditherType": "atkinson",
     "distanceMetric": "cie2000",
     "lWeight": 1.2,
-    "cWeight": 2.5,
+    "cWeight": "2.5 + (image.dna.global.hue_entropy * 2)",
     "blackBias": 6,
     "vibrancyMode": "moderate",
     "vibrancyBoost": 1.3,
     "highlightThreshold": 95,
-    "highlightBoost": 1.3,
+    "highlightBoost": "image.dna.global.temperature_bias > 0.5 ? 1.5 : 1.3",
     "enablePaletteReduction": true,
     "paletteReduction": 6,
     "substrateMode": "auto",
@@ -56,10 +56,10 @@
     "ignoreTransparent": true,
     "neutralSovereigntyThreshold": 0,
     "preprocessingIntensity": "light",
-    "shadowClamp": 4,
+    "shadowClamp": "Math.max(4, press.mesh / 75)",
     "speckleRescue": 4,
     "minVolume": 1,
-    "refinementPasses": 1
+    "refinementPasses": "image.dna.global.hue_entropy > 0.7 ? 2 : 1"
   },
   "scoring": {
     "chromaProfile": "moderate",

@@ -671,7 +671,9 @@ class SessionState extends EventEmitter {
                 this.currentConfig = Reveal.generateConfigurationSalamander(this.imageDNA);
             } else {
                 this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
-                    manualArchetypeId: archetypeId
+                    manualArchetypeId: archetypeId,
+                    image: { dna: this.imageDNA, width: this.imageWidth, height: this.imageHeight, bitDepth: 16 },
+                    press: { mesh: this.state.meshSize || 230 }
                 });
             }
             this._applyConfigToState(this.currentConfig);

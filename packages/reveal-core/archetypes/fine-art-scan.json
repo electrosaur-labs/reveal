@@ -1,6 +1,6 @@
 {
   "id": "fine_art_scan",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Fine Art Scan",
   "group": "natural",
   "engine": "direct",
@@ -35,7 +35,7 @@
     "ditherType": "atkinson",
     "distanceMetric": "cie2000",
     "lWeight": 1.4,
-    "cWeight": 4.5,
+    "cWeight": "4.0 + (image.dna.global.hue_entropy * 2)",
     "blackBias": 6.5,
     "vibrancyMode": "subtle",
     "vibrancyBoost": 1.05,
@@ -54,12 +54,12 @@
     "ignoreTransparent": true,
     "neutralSovereigntyThreshold": 0,
     "preprocessingIntensity": "light",
-    "shadowClamp": 6,
-    "detailRescue": 5,
+    "shadowClamp": "Math.max(6, press.mesh / 50)",
+    "detailRescue": "image.dna.global.l_std_dev / 5",
     "speckleRescue": 4,
     "medianPass": false,
     "minVolume": 1.5,
-    "refinementPasses": 2
+    "refinementPasses": "image.bitDepth == 16 ? 3 : 2"
   },
   "scoring": {
     "chromaProfile": "moderate",

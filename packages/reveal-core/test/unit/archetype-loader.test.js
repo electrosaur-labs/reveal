@@ -307,8 +307,19 @@ describe('Archetype JSON files - structural integrity', () => {
     it('every archetype has parameters with minColors and maxColors', () => {
         for (const arch of archetypes) {
             expect(arch.parameters, `${arch.id} missing parameters`).toBeDefined();
-            expect(arch.parameters.minColors, `${arch.id}.parameters.minColors`).toBeGreaterThanOrEqual(3);
-            expect(arch.parameters.maxColors, `${arch.id}.parameters.maxColors`).toBeGreaterThan(arch.parameters.minColors);
+            const min = arch.parameters.minColors;
+            const max = arch.parameters.maxColors;
+            // minColors/maxColors can be numbers or expression strings
+            if (typeof min === 'number') {
+                expect(min, `${arch.id}.parameters.minColors`).toBeGreaterThanOrEqual(3);
+            } else {
+                expect(typeof min, `${arch.id}.parameters.minColors should be number or string`).toBe('string');
+            }
+            if (typeof max === 'number' && typeof min === 'number') {
+                expect(max, `${arch.id}.parameters.maxColors`).toBeGreaterThan(min);
+            } else {
+                expect(max !== undefined, `${arch.id}.parameters.maxColors`).toBe(true);
+            }
         }
     });
 

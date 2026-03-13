@@ -193,7 +193,9 @@ describe('bitDepth propagation through pipeline', () => {
         // Callers with true 16-bit source data (e.g. reveal-batch) should pass
         // bitDepth explicitly when calling PosterizationEngine.
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
 
         expect(config.bitDepth).toBeUndefined();
@@ -265,7 +267,9 @@ describe('bitDepth propagation through pipeline', () => {
 describe('Full pipeline: DNA → ParameterGenerator → Posterize → Separate', () => {
     it('should produce a complete config from DNA analysis', () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
 
         // Verify all critical parameters are present
@@ -288,7 +292,9 @@ describe('Full pipeline: DNA → ParameterGenerator → Posterize → Separate',
 
     it('should posterize Jethro with Subtle Naturalist and produce 6+ separable colors', () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
 
         // Use a 400x400 center crop for test speed
@@ -409,7 +415,9 @@ describe('Golden palette regression: Jethro + Subtle Naturalist', () => {
 
     it('should produce all expected color families with tc=10', () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
 
         // Apply bilateral filter on a copy
@@ -447,7 +455,9 @@ describe('Golden palette regression: Jethro + Subtle Naturalist', () => {
 
     it('should produce at least 6 colors with tc=8 (archetype default)', () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
 
         const filtered = new Uint16Array(jethroPixels);
@@ -486,7 +496,9 @@ describe('Golden palette regression: Jethro + Subtle Naturalist', () => {
 describe('ProxyEngine consistency with direct PosterizationEngine', () => {
     it('ProxyEngine preserves full palette via proxy-safe overrides (no snap/prune/densityFloor)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
         const engineConfig = {
             ...config,
@@ -529,7 +541,9 @@ describe('ProxyEngine consistency with direct PosterizationEngine', () => {
 
     it('ProxyEngine with explicit bitDepth=16 should produce valid palette', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
 
         // Caller passes bitDepth explicitly (e.g. reveal-batch with true 16-bit PSD)
@@ -545,7 +559,9 @@ describe('ProxyEngine consistency with direct PosterizationEngine', () => {
 
     it('ProxyEngine rePosterize should produce same palette as initializeProxy with same config', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
         const engineConfig = {
             ...config,
@@ -630,7 +646,9 @@ describe('Archetype swap produces different but valid palettes', () => {
 describe('Separation produces valid, complete masks', () => {
     it('every pixel should be assigned to exactly one palette color', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
 
         // Use ProxyEngine for speed
@@ -669,7 +687,9 @@ describe('Separation produces valid, complete masks', () => {
 
     it('no palette color should have zero coverage (ghost plates)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
 
         const proxyEngine = new ProxyEngine();
@@ -731,7 +751,9 @@ describe('ProxyEngine proxy-safe palette preservation', () => {
 
     it('should produce reasonable palette for Subtle Naturalist tc=10 (CIE2000)', async () => {
         const config = ParameterGenerator.generate(jethroDNA, {
-            manualArchetypeId: 'fine_art_scan'
+            manualArchetypeId: 'fine_art_scan',
+            image: { dna: jethroDNA, width: jethroWidth, height: jethroHeight, bitDepth: 16 },
+            press: { mesh: 230 }
         });
         const engineConfig = {
             ...config,

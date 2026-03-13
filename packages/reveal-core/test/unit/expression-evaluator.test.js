@@ -223,11 +223,38 @@ describe('ExpressionEvaluator', () => {
         });
     });
 
+    describe('press context', () => {
+        it('accesses press.mesh', () => {
+            const result = ExpressionEvaluator.evaluate(
+                { speckleRescue: 'press.mesh > 300 ? 6 : 4' },
+                { image: IMAGE_CONTEXT, press: { mesh: 305 } }
+            );
+            expect(result.speckleRescue).toBe(6);
+        });
+
+        it('uses press.mesh in arithmetic', () => {
+            const result = ExpressionEvaluator.evaluate(
+                { shadowClamp: 'Math.max(4.0, (press.mesh / 100) * 1.5)' },
+                { image: IMAGE_CONTEXT, press: { mesh: 305 } }
+            );
+            expect(result.shadowClamp).toBeCloseTo(4.575);
+        });
+
+        it('defaults press.mesh to 230 when no press context', () => {
+            const result = ExpressionEvaluator.evaluate(
+                { speckleRescue: 'press.mesh > 300 ? 6 : 4' },
+                { image: IMAGE_CONTEXT }
+            );
+            expect(result.speckleRescue).toBe(4); // 230 < 300
+        });
+    });
+
     describe('_isExpression', () => {
         it('identifies expressions', () => {
             expect(ExpressionEvaluator._isExpression('channels + 2')).toBe(true);
             expect(ExpressionEvaluator._isExpression('image.dna.c > 40 ? 2.5 : 2.0')).toBe(true);
             expect(ExpressionEvaluator._isExpression('Math.min(10, 5)')).toBe(true);
+            expect(ExpressionEvaluator._isExpression('press.mesh > 300 ? 6 : 4')).toBe(true);
             expect(ExpressionEvaluator._isExpression('1 + 1')).toBe(true);
         });
 

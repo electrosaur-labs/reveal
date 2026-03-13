@@ -53,7 +53,9 @@ async function setupRealSession(archetypeId = 'everyday_photo') {
 
     // Phase 2: Config generation
     session.currentConfig = Reveal.generateConfiguration(session.imageDNA, {
-        manualArchetypeId: archetypeId
+        manualArchetypeId: archetypeId,
+        image: { dna: session.imageDNA, width, height, bitDepth: 16 },
+        press: { mesh: session.state.meshSize || 230 }
     });
     session._applyConfigToState(session.currentConfig);
     session.state.activeArchetypeId = archetypeId;

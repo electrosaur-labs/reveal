@@ -158,7 +158,9 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
             width,
             height,
             preprocessingIntensity: 'auto',
-            manualArchetypeId: archetypeOverride
+            manualArchetypeId: archetypeOverride,
+            image: { dna, width, height, bitDepth: depth },
+            press: { mesh: 230 }
         });
         console.log(chalk.green(`  Archetype: ${config.meta?.archetype || archetypeOverride} (manual override)`));
     } else {
@@ -167,7 +169,9 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
             imageData: null,
             width,
             height,
-            preprocessingIntensity: 'auto'
+            preprocessingIntensity: 'auto',
+            image: { dna, width, height, bitDepth: depth },
+            press: { mesh: 230 }
         });
         console.log(chalk.green(`  Archetype: ${config.meta?.archetype || 'unknown'} (DNA auto-match)`));
     }

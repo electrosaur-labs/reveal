@@ -25,8 +25,15 @@ const DUMMY_DNA = new Reveal.DNAGenerator().generate(
 /**
  * Get the default config value for a knob on a given archetype.
  */
+// Image context for expression evaluation in archetypes
+const DUMMY_IMAGE = { dna: DUMMY_DNA, width: 4, height: 4, bitDepth: 16 };
+
 function getArchetypeDefault(archetypeId, key) {
-    const config = Reveal.generateConfiguration(DUMMY_DNA, { manualArchetypeId: archetypeId });
+    const config = Reveal.generateConfiguration(DUMMY_DNA, {
+        manualArchetypeId: archetypeId,
+        image: DUMMY_IMAGE,
+        press: { mesh: 230 }
+    });
     return config[key];
 }
 
@@ -38,7 +45,9 @@ function setupSession(archetypeId = ARCHETYPE_A) {
 
     session.imageDNA = DUMMY_DNA;
     session.currentConfig = Reveal.generateConfiguration(session.imageDNA, {
-        manualArchetypeId: archetypeId
+        manualArchetypeId: archetypeId,
+        image: DUMMY_IMAGE,
+        press: { mesh: session.state.meshSize || 230 }
     });
     session._applyConfigToState(session.currentConfig);
     session.state.activeArchetypeId = archetypeId;
@@ -469,7 +478,7 @@ describe('_applyConfigToState injects production knob defaults into config', () 
     it('sets trapSize in config even though generateConfiguration omits it', () => {
         const session = new SessionState();
         session.imageDNA = DUMMY_DNA;
-        const config = Reveal.generateConfiguration(DUMMY_DNA, { manualArchetypeId: ARCHETYPE_A });
+        const config = Reveal.generateConfiguration(DUMMY_DNA, { manualArchetypeId: ARCHETYPE_A, image: DUMMY_IMAGE, press: { mesh: 230 } });
 
         // generateConfiguration does NOT include trapSize
         expect(config.trapSize).toBeUndefined();

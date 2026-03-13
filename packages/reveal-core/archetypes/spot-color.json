@@ -1,6 +1,6 @@
 {
   "id": "spot_color",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Spot Color",
   "group": "graphic",
   "engine": "direct",
@@ -26,7 +26,7 @@
     "maxColors": 10,
     "ditherType": "none",
     "distanceMetric": "cie2000",
-    "lWeight": 0.5,
+    "lWeight": "channels > 6 ? 0.8 : 0.5",
     "cWeight": 1.5,
     "blackBias": 1,
     "vibrancyMode": "linear",
@@ -37,15 +37,15 @@
     "paletteReduction": 6,
     "substrateMode": "auto",
     "substrateTolerance": 2,
-    "shadowPoint": 2,
+    "shadowPoint": "Math.max(2, image.dna.global.k / 20)",
     "enableHueGapAnalysis": true,
-    "hueLockAngle": 60,
+    "hueLockAngle": "image.dna.global.hue_entropy > 0.6 ? 60 : 45",
     "colorMode": "color",
     "preserveWhite": true,
     "preserveBlack": true,
     "ignoreTransparent": true,
     "neutralSovereigntyThreshold": 10,
     "preprocessingIntensity": "none",
-    "refinementPasses": 0
+    "refinementPasses": "image.dna.global.hue_entropy > 0.8 ? 1 : 0"
   }
 }

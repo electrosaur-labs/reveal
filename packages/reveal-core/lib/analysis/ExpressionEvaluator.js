@@ -7,6 +7,7 @@
  * Evaluation context:
  *   - image: { width, height, bitDepth, dna, sectors }
  *   - channels: current targetColors value
+ *   - press: { mesh } — physical press/screen parameters (user-supplied)
  *   - Math: standard JS Math object
  *
  * Expressions are pure — no assignments, no side effects, no imports.
@@ -25,16 +26,18 @@ class ExpressionEvaluator {
      * @param {Object} context - Evaluation context
      * @param {Object} context.image - { width, height, bitDepth, dna, sectors, filename }
      * @param {number} [context.channels] - Current targetColors (for self-referencing expressions)
+     * @param {Object} [context.press] - Physical press parameters { mesh }
      * @returns {Object} New params object with expressions resolved to values
      */
     static evaluate(params, context = {}) {
         const result = {};
         const image = context.image || {};
         const channels = context.channels || params.targetColors || 8;
+        const press = context.press || { mesh: 230 };
 
         for (const [key, value] of Object.entries(params)) {
             if (typeof value === 'string' && this._isExpression(value)) {
-                result[key] = this._evalExpression(value, image, channels, key);
+                result[key] = this._evalExpression(value, image, channels, press, key);
             } else {
                 result[key] = value;
             }
@@ -49,20 +52,21 @@ class ExpressionEvaluator {
      * @param {string} expr - Expression string
      * @param {Object} image - Image context
      * @param {number} channels - Current targetColors
+     * @param {Object} press - Physical press parameters
      * @param {string} paramName - Parameter name (for error messages)
      * @returns {*} Evaluated value
      */
-    static _evalExpression(expr, image, channels, paramName) {
+    static _evalExpression(expr, image, channels, press, paramName) {
         try {
             // Build a function with restricted scope
-            // Only image, channels, and Math are available
-            const fn = new Function('image', 'channels', 'Math',
+            const fn = new Function('image', 'channels', 'press', 'Math',
                 `"use strict"; return (${expr});`
             );
 
             const value = fn(
                 Object.freeze({ ...image }),
                 channels,
+                Object.freeze({ ...press }),
                 Math
             );
 
@@ -90,6 +94,7 @@ class ExpressionEvaluator {
         // If it references known context variables, it's an expression
         if (/\bimage\b/.test(value)) return true;
         if (/\bchannels\b/.test(value)) return true;
+        if (/\bpress\b/.test(value)) return true;
         if (/\bMath\b/.test(value)) return true;
 
         // If it contains operators or grouping, it's an expression
