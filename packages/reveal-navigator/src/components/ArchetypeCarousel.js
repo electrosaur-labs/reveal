@@ -136,15 +136,7 @@ class ArchetypeCarousel {
         const axis = this._activeSort;
         const asc = this._sortAscending;
 
-        // Pin order for meta-archetypes (always at top regardless of sort axis)
-        const PIN_ORDER = { 'dynamic_interpolator': 0, 'distilled': 1, 'salamander': 2 };
-
         cards.sort((a, b) => {
-            const aPin = PIN_ORDER[a.dataset.id];
-            const bPin = PIN_ORDER[b.dataset.id];
-            const aPinned = aPin !== undefined;
-            const bPinned = bPin !== undefined;
-
             // Unscored (grayed) cards sink to bottom, preserving DNA order among themselves
             const aUnscored = a.classList.contains('unscored');
             const bUnscored = b.classList.contains('unscored');
@@ -155,11 +147,6 @@ class ArchetypeCarousel {
                 const bDna = parseFloat(b.dataset.dnaScore) || 0;
                 return bDna - aDna;
             }
-
-            // Pinned cards always sort to top in fixed order
-            if (aPinned && bPinned) return aPin - bPin;
-            if (aPinned) return -1;
-            if (bPinned) return 1;
 
             let aVal, bVal;
             if (axis === 'score') {
@@ -352,12 +339,8 @@ class ArchetypeCarousel {
         this._expanded = false;
         this._pendingCards = [];
 
-        // Pin synthetic order: Chameleon first (matches PIN_ORDER in _sortCards)
-        const PIN_INITIAL = { 'dynamic_interpolator': 0, 'distilled': 1, 'salamander': 2 };
-        const synthScores = scores.filter(s => SYNTHETIC_IDS.has(s.id));
-        const regularScores = scores.filter(s => !SYNTHETIC_IDS.has(s.id));
-        synthScores.sort((a, b) => (PIN_INITIAL[a.id] || 0) - (PIN_INITIAL[b.id] || 0));
-        const orderedScores = [...synthScores, ...regularScores];
+        // Score-ordered: all archetypes sorted by DNA score descending (no synthetic pinning)
+        const orderedScores = scores.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
 
         for (let i = 0; i < orderedScores.length; i++) {
             const match = orderedScores[i];
@@ -376,17 +359,21 @@ class ArchetypeCarousel {
 
             if (isSynth) {
                 card.classList.add('synthetic');
+            }
+
+            if (isTier1) {
+                // Curated shortlist: show immediately
                 this._container.appendChild(card);
             } else {
-                // Stash non-synthetic cards; revealed on "More" click
+                // Remaining cards; revealed on "Show All" click
                 this._pendingCards.push(card);
             }
         }
 
-        // Add "More" button after synthetic cards
+        // Add "Show All" button after curated shortlist
         this._moreBtn = document.createElement('div');
         this._moreBtn.className = 'carousel-card carousel-more';
-        this._moreBtn.innerHTML = `<div class="card-name">More\u2026</div>`;
+        this._moreBtn.innerHTML = `<div class="card-name">Show All</div>`;
         this._moreBtn.addEventListener('pointerup', () => this._expandCarousel());
         this._container.appendChild(this._moreBtn);
 
@@ -677,8 +664,6 @@ class ArchetypeCarousel {
         this._activeSort = 'score';
         this._sortAscending = true;
         this._applySortChipState();
-        // If not expanded, auto-expand now that scoring is complete
-        if (!this._expanded) this._expandCarousel();
         this._sortCards();
     }
 

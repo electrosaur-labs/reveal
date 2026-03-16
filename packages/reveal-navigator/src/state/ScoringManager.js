@@ -112,15 +112,29 @@ class ScoringManager extends EventEmitter {
     // ─── Tier Selection ──────────────────────────────────────
 
     /**
-     * Select the carousel-visible set: 3 pseudo-archetypes + top 3 DNA-scored regular.
-     * Scores array must already be DNA-ranked descending with _group injected.
-     * Only these 6 archetypes appear in the carousel and get background-scored.
+     * Select the curated shortlist: 3 pseudo-archetypes + top 3 regular archetypes
+     * by DNA score. Gives 6 cards max in the collapsed view.
      *
-     * @param {Array} scores - DNA-ranked score array
+     * @param {Array} scores - DNA-ranked score array (descending by score)
      * @returns {Set<string>} IDs to show in carousel and eager-score
      */
     selectEagerSet(scores) {
-        const eager = new Set(['dynamic_interpolator', 'distilled', 'salamander']);
+        const SYNTHETIC_IDS = new Set(['dynamic_interpolator', 'distilled', 'salamander']);
+        const eager = new Set();
+
+        // All 3 pseudo-archetypes
+        for (const s of scores) {
+            if (SYNTHETIC_IDS.has(s.id)) eager.add(s.id);
+        }
+
+        // Top 3 regular archetypes by DNA score
+        let regularCount = 0;
+        for (const s of scores) {
+            if (SYNTHETIC_IDS.has(s.id)) continue;
+            eager.add(s.id);
+            if (++regularCount >= 3) break;
+        }
+
         this._eagerSet = eager;
         return eager;
     }
