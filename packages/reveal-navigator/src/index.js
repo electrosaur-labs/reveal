@@ -90,6 +90,10 @@ function initPlugin() {
                 document.getElementById('palette-surgeon'),
                 sessionState
             );
+            surgeon.setPickerStateCallback((open) => {
+                const panel = document.getElementById('main-panel');
+                if (panel) panel.classList.toggle('picker-modal-active', open);
+            });
         } catch (err) {
             logger.log('[Navigator] PaletteSurgeon init failed: ' + err.message);
         }
@@ -116,27 +120,16 @@ function initPlugin() {
                 logger.log(`[Navigator] Proxy resolution changed to ${size}`);
                 if (!sessionState || !size) return;
                 Reveal.ProxyEngine.setProxyTargetSize(size);
-                // Show progress bar and status
-                const bar = document.getElementById('ingest-progress');
-                const fill = document.getElementById('ingest-progress-fill');
-                if (bar) bar.style.display = 'block';
-                if (fill) fill.style.width = '30%';
-                const statusEl = document.getElementById('status-text');
-                if (statusEl) statusEl.textContent = `Resampling at ${size}px\u2026`;
-                await new Promise(r => setTimeout(r, 30)); // yield for repaint
+                _completedPhases = [];
+                _showProgress(`Resampling at ${size}px`, 5);
+                await new Promise(r => setTimeout(r, 80)); // yield — let splash paint before CPU work
                 try {
-                    if (fill) fill.style.width = '60%';
                     await sessionState.reinitializeProxy();
-                    if (fill) fill.style.width = '100%';
                     logger.log(`[Navigator] Proxy reinitialized at ${size}px`);
                 } catch (err) {
                     logger.log(`[Navigator] Proxy reinitialize failed: ${err.message}`);
-                    if (statusEl) statusEl.textContent = `Resolution change failed`;
                 } finally {
-                    setTimeout(() => {
-                        if (bar) bar.style.display = 'none';
-                        if (fill) fill.style.width = '0%';
-                    }, 300);
+                    _hideProgress();
                 }
             });
         }

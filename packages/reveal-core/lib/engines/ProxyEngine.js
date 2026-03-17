@@ -789,25 +789,30 @@ class ProxyEngine {
     }
 
     /**
-     * Stride subsample — picks every Nth pixel, no interpolation.
-     * Stride computed dynamically to target PROXY_TARGET_SIZE (800px long edge).
-     * For small images already under target, stride=1 (no downsampling).
+     * Float-scale nearest-neighbor downsample to exactly PROXY_TARGET_SIZE on the long edge.
+     * Produces consistent output dimensions for every target value — unlike integer-stride
+     * sampling where ceil() collapses multiple targets to the same stride.
      * @private
      */
     _strideSubsample(labPixels, srcWidth, srcHeight) {
         const longEdge = Math.max(srcWidth, srcHeight);
-        const s = Math.max(1, Math.ceil(longEdge / ProxyEngine.PROXY_TARGET_SIZE));
-        const dstWidth = Math.ceil(srcWidth / s);
-        const dstHeight = Math.ceil(srcHeight / s);
+        if (longEdge <= ProxyEngine.PROXY_TARGET_SIZE) {
+            return { buffer: labPixels, width: srcWidth, height: srcHeight };
+        }
+        const scale = ProxyEngine.PROXY_TARGET_SIZE / longEdge;
+        const dstWidth = Math.round(srcWidth * scale);
+        const dstHeight = Math.round(srcHeight * scale);
         const dstBuffer = new Uint16Array(dstWidth * dstHeight * 3);
 
-        let dp = 0;
-        for (let y = 0; y < srcHeight; y += s) {
-            for (let x = 0; x < srcWidth; x += s) {
-                const sp = (y * srcWidth + x) * 3;
-                dstBuffer[dp++] = labPixels[sp];
-                dstBuffer[dp++] = labPixels[sp + 1];
-                dstBuffer[dp++] = labPixels[sp + 2];
+        for (let y = 0; y < dstHeight; y++) {
+            const sy = Math.min(Math.round(y / scale), srcHeight - 1);
+            for (let x = 0; x < dstWidth; x++) {
+                const sx = Math.min(Math.round(x / scale), srcWidth - 1);
+                const sp = (sy * srcWidth + sx) * 3;
+                const dp = (y * dstWidth + x) * 3;
+                dstBuffer[dp]     = labPixels[sp];
+                dstBuffer[dp + 1] = labPixels[sp + 1];
+                dstBuffer[dp + 2] = labPixels[sp + 2];
             }
         }
 

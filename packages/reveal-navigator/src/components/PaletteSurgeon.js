@@ -469,6 +469,14 @@ class PaletteSurgeon {
 
     isPickerOpen() { return this._pickerOpen; }
 
+    /** Register a callback invoked with `true` when picker opens, `false` when it closes. */
+    setPickerStateCallback(fn) { this._onPickerStateChange = fn; }
+
+    _setPickerOpen(val) {
+        this._pickerOpen = val;
+        if (this._onPickerStateChange) this._onPickerStateChange(val);
+    }
+
     // ─── Color Picker ────────────────────────────────────────
 
     async _openColorPicker(i) {
@@ -478,7 +486,7 @@ class PaletteSurgeon {
         const rgb = sep.rgbPalette[i];
         if (!rgb) return;
 
-        this._pickerOpen = true;
+        this._setPickerOpen(true);
         this._headerText.textContent = 'Opening color picker...';
 
         try {
@@ -515,7 +523,7 @@ class PaletteSurgeon {
             // Modal is done — release the picker lock immediately so the
             // dialog close handler stops re-showing.  The async processing
             // below (overridePaletteColor) must not hold this lock.
-            this._pickerOpen = false;
+            this._setPickerOpen(false);
 
             // Reset to IDLE before applying so the rebuild sees clean state
             this._state = 'IDLE';
@@ -535,7 +543,7 @@ class PaletteSurgeon {
             this._selectedIndex = -1;
             this._headerText.textContent = 'Click a color to isolate';
         } finally {
-            this._pickerOpen = false;  // belt-and-suspenders for error paths
+            this._setPickerOpen(false);  // belt-and-suspenders for error paths
         }
     }
 
@@ -544,7 +552,7 @@ class PaletteSurgeon {
     async _openAddColorPicker() {
         if (this._pickerOpen) return;
 
-        this._pickerOpen = true;
+        this._setPickerOpen(true);
         this._headerText.textContent = 'Pick a color to add...';
 
         try {
@@ -582,7 +590,7 @@ class PaletteSurgeon {
             // Modal is done — release the picker lock immediately so the
             // dialog close handler stops re-showing.  The async processing
             // below (addPaletteColor) must not hold this lock.
-            this._pickerOpen = false;
+            this._setPickerOpen(false);
 
             if (result) {
                 const lab = Reveal.rgbToLab(result.r, result.g, result.b);
@@ -595,7 +603,7 @@ class PaletteSurgeon {
             logger.log(`[PaletteSurgeon] Add color picker error: ${err.message}`);
             this._headerText.textContent = 'Click a color to isolate';
         } finally {
-            this._pickerOpen = false;  // belt-and-suspenders for error paths
+            this._setPickerOpen(false);  // belt-and-suspenders for error paths
         }
     }
 

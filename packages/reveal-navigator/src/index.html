@@ -856,6 +856,9 @@
         /* ─── Palette Surgeon ─── */
         /* Fixed height prevents layout reflow when color count or
            suggested tray changes (e.g. switching split modes). */
+        /* Block all panel input while Photoshop color picker modal is open */
+        #main-panel.picker-modal-active { pointer-events: none; }
+
         #palette-surgeon {
             flex-shrink: 0;
             display: none;

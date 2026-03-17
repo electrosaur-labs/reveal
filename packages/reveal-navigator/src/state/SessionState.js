@@ -161,6 +161,7 @@ class SessionState extends EventEmitter {
         this.previewBuffer = null;
         this.imageDNA = null;
         this._sourceLabPixels = null;
+        this._proxyTargetSize = 1000;
         this.imageWidth = 0;
         this.imageHeight = 0;
         this.imageResolution = 72;
@@ -274,6 +275,7 @@ class SessionState extends EventEmitter {
         this.emit('imageLoaded', { width, height, dna: this.imageDNA });
         this.emit('configChanged', this.currentConfig);
 
+        this._proxyTargetSize = Reveal.ProxyEngine.PROXY_TARGET_SIZE;
         this.proxyEngine = new Reveal.ProxyEngine();
         const proxyResult = await this.proxyEngine.initializeProxy(
             labPixels, width, height, this.currentConfig
@@ -818,6 +820,7 @@ class SessionState extends EventEmitter {
         this._scoring.cancelScoring();
         this._archetypeStateCache.clear();
 
+        this._proxyTargetSize = Reveal.ProxyEngine.PROXY_TARGET_SIZE;
         this.proxyEngine = new Reveal.ProxyEngine();
         const proxyResult = await this.proxyEngine.initializeProxy(
             this._sourceLabPixels, this.imageWidth, this.imageHeight, this.currentConfig
