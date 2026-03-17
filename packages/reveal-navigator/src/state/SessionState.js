@@ -160,6 +160,7 @@ class SessionState extends EventEmitter {
         this.currentConfig = null;
         this.previewBuffer = null;
         this.imageDNA = null;
+        this._sourceLabPixels = null;
         this.imageWidth = 0;
         this.imageHeight = 0;
         this.imageResolution = 72;
@@ -226,6 +227,7 @@ class SessionState extends EventEmitter {
 
     /** @private */
     async _loadImageImpl(labPixels, width, height, originalWidth, originalHeight) {
+        this._sourceLabPixels = labPixels; // Retained for proxy re-initialization at different resolutions
         this.imageWidth = width;
         this.imageHeight = height;
         this.originalWidth = originalWidth || width;
@@ -246,16 +248,25 @@ class SessionState extends EventEmitter {
 
         this.emit('dnaReady', this.imageDNA);
 
-        // ── Phase 2: Chameleon posterization (~400ms) ──
-        // No archetype scoring at startup — just DNA → Chameleon → preview.
-        // Other archetypes are scored on-demand when the user clicks their card.
+        // ── Phase 2: Initial posterization (~400ms) ──
+        // Use top DNA match as the initial archetype (best fit for this image).
+        // Chameleon config is still generated for ScoringManager injection.
         this.emit('progress', { phase: 'visual', label: 'Initializing navigator\u2026', percent: 55 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
         this._chameleonConfig = Reveal.generateConfigurationMk2(this.imageDNA);
-        this.currentConfig = this._chameleonConfig;
+        this._salamanderConfig = Reveal.generateConfigurationSalamander(this.imageDNA);
+
+        // Find top DNA match
+        const archetypes = Reveal.ArchetypeLoader.loadArchetypes();
+        const mapper = new Reveal.ArchetypeMapper(archetypes);
+        const topMatch = mapper.getBestMatch(this.imageDNA);
+
+        this.currentConfig = Reveal.generateConfiguration(this.imageDNA, {
+            manualArchetypeId: topMatch.id
+        });
         this._applyConfigToState(this.currentConfig);
-        this.state.activeArchetypeId = 'dynamic_interpolator';
+        this.state.activeArchetypeId = topMatch.id;
         if (!this.currentConfig.engineType) {
             this.currentConfig.engineType = this.state.engineType;
         }
@@ -268,7 +279,7 @@ class SessionState extends EventEmitter {
             labPixels, width, height, this.currentConfig
         );
 
-        logger.log(`[SessionState] Chameleon posterized: ${proxyResult.palette.length} colors, ${proxyResult.dimensions.width}x${proxyResult.dimensions.height} in ${proxyResult.elapsedMs.toFixed(0)}ms`);
+        logger.log(`[SessionState] ${topMatch.id} posterized: ${proxyResult.palette.length} colors, ${proxyResult.dimensions.width}x${proxyResult.dimensions.height} in ${proxyResult.elapsedMs.toFixed(0)}ms`);
         this.emit('proxyReady', proxyResult);
         this.emit('progress', { phase: 'visual', label: 'Applying knobs\u2026', percent: 85 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
@@ -379,13 +390,14 @@ class SessionState extends EventEmitter {
         // Select tier-1 eager set: 3 pseudo + top-1 per group
         const eagerSet = this._scoring.selectEagerSet(allScores);
 
-        this.emit('carouselReady', { scores: allScores, eagerSet, topMatchId: 'dynamic_interpolator' });
-        logger.log(`[SessionState] Carousel ready — ${allScores.length} archetypes, ${eagerSet.size} eager (tier-1), Chameleon ΔE=${initialAccuracy != null ? initialAccuracy.toFixed(1) : '?'}`);
+        const initialArchId = this.state.activeArchetypeId;
+        this.emit('carouselReady', { scores: allScores, eagerSet, topMatchId: initialArchId });
+        logger.log(`[SessionState] Carousel ready — ${allScores.length} archetypes, ${eagerSet.size} eager (tier-1), ${initialArchId} ΔE=${initialAccuracy != null ? initialAccuracy.toFixed(1) : '?'}`);
 
         // Launch background ΔE scoring for eager set only (tier-1)
         const generation = this._scoring.scoringGeneration;
         const knobs = this.getMechanicalKnobs();
-        this._scoring.scoreArchetypes(allScores, 'dynamic_interpolator', generation, eagerSet, knobs);
+        this._scoring.scoreArchetypes(allScores, initialArchId, generation, eagerSet, knobs);
 
         return proxyResult;
     }
@@ -791,6 +803,44 @@ class SessionState extends EventEmitter {
                 this.swapArchetype(queuedId);
             }
         }
+    }
+
+    /**
+     * Re-initialize the proxy at the current PROXY_TARGET_SIZE.
+     * Call after ProxyEngine.setProxyTargetSize() to re-downsample
+     * and re-posterize the current archetype at the new resolution.
+     */
+    async reinitializeProxy() {
+        if (!this._sourceLabPixels || !this.proxyEngine || !this.currentConfig) {
+            throw new Error('No image loaded — cannot reinitialize proxy');
+        }
+
+        this._scoring.cancelScoring();
+        this._archetypeStateCache.clear();
+
+        this.proxyEngine = new Reveal.ProxyEngine();
+        const proxyResult = await this.proxyEngine.initializeProxy(
+            this._sourceLabPixels, this.imageWidth, this.imageHeight, this.currentConfig
+        );
+
+        const knobResult = await this.proxyEngine.updateProxy({
+            minVolume: this.state.minVolume,
+            speckleRescue: this.state.speckleRescue,
+            shadowClamp: this.state.shadowClamp
+        });
+
+        this.previewBuffer = knobResult.previewBuffer;
+        this._scoring.initialize(this.proxyEngine, this.imageDNA, this._chameleonConfig, this._salamanderConfig);
+
+        // Emit proxyReady (not previewUpdated) so Preview picks up new dimensions
+        this.emit('proxyReady', {
+            previewBuffer: knobResult.previewBuffer,
+            palette: knobResult.palette,
+            dimensions: proxyResult.dimensions,
+            elapsedMs: proxyResult.elapsedMs + knobResult.elapsedMs
+        });
+
+        logger.log(`[SessionState] Proxy reinitialized at ${proxyResult.dimensions.width}x${proxyResult.dimensions.height} in ${proxyResult.elapsedMs.toFixed(0)}ms`);
     }
 
     /** Get ranked archetype scores for the current image DNA. */

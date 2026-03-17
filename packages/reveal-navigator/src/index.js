@@ -108,6 +108,39 @@ function initPlugin() {
             logger.log('[Navigator] Loupe init failed: ' + err.message);
         }
 
+        // Wire proxy resolution dropdown
+        const proxyRes = document.getElementById('proxy-resolution');
+        if (proxyRes) {
+            proxyRes.addEventListener('change', async (e) => {
+                const size = parseInt(e.target.value, 10);
+                logger.log(`[Navigator] Proxy resolution changed to ${size}`);
+                if (!sessionState || !size) return;
+                Reveal.ProxyEngine.setProxyTargetSize(size);
+                // Show progress bar and status
+                const bar = document.getElementById('ingest-progress');
+                const fill = document.getElementById('ingest-progress-fill');
+                if (bar) bar.style.display = 'block';
+                if (fill) fill.style.width = '30%';
+                const statusEl = document.getElementById('status-text');
+                if (statusEl) statusEl.textContent = `Resampling at ${size}px\u2026`;
+                await new Promise(r => setTimeout(r, 30)); // yield for repaint
+                try {
+                    if (fill) fill.style.width = '60%';
+                    await sessionState.reinitializeProxy();
+                    if (fill) fill.style.width = '100%';
+                    logger.log(`[Navigator] Proxy reinitialized at ${size}px`);
+                } catch (err) {
+                    logger.log(`[Navigator] Proxy reinitialize failed: ${err.message}`);
+                    if (statusEl) statusEl.textContent = `Resolution change failed`;
+                } finally {
+                    setTimeout(() => {
+                        if (bar) bar.style.display = 'none';
+                        if (fill) fill.style.width = '0%';
+                    }, 300);
+                }
+            });
+        }
+
         // Wire Loupe zoom dropdown
         const loupeZoom = document.getElementById('loupe-zoom');
         if (loupeZoom) {
@@ -312,6 +345,10 @@ function initPlugin() {
                 // Show right panel and header controls
                 const hudPanel = document.getElementById('hud-panel');
                 if (hudPanel) hudPanel.style.display = '';
+                const proxyResLabel = document.getElementById('proxy-resolution-label');
+                if (proxyResLabel) proxyResLabel.setAttribute('style', 'display: inline; color:#888; font-size:10px; margin-left:4px;');
+                const proxyResEl = document.getElementById('proxy-resolution');
+                if (proxyResEl) proxyResEl.setAttribute('style', 'display: inline-block;');
                 const loupeZoom = document.getElementById('loupe-zoom');
                 if (loupeZoom) loupeZoom.setAttribute('style', 'display: inline-block;');
                 const loupeHelpBtn = document.getElementById('loupe-help-btn');
@@ -944,8 +981,13 @@ function _clearUI() {
     // Hide right panel and header controls (shown on proxyReady)
     const hudPanel = document.getElementById('hud-panel');
     if (hudPanel) hudPanel.style.display = 'none';
+    const proxyResEl = document.getElementById('proxy-resolution');
+    if (proxyResEl) { proxyResEl.style.display = 'none'; proxyResEl.value = '1000'; }
+    Reveal.ProxyEngine.setProxyTargetSize(1000);
+    const proxyResLabel = document.getElementById('proxy-resolution-label');
+    if (proxyResLabel) proxyResLabel.style.display = 'none';
     const loupeZoom = document.getElementById('loupe-zoom');
-    if (loupeZoom) loupeZoom.style.display = 'none';
+    if (loupeZoom) { loupeZoom.style.display = 'none'; loupeZoom.selectedIndex = 0; }
     const loupeHelpBtn = document.getElementById('loupe-help-btn');
     if (loupeHelpBtn) loupeHelpBtn.style.display = 'none';
 

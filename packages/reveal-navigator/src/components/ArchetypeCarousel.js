@@ -381,8 +381,9 @@ class ArchetypeCarousel {
         const filterRow = document.getElementById('carousel-filter-row');
         if (filterRow) filterRow.setAttribute('style', 'display: none;');
 
-        // Scroll active card into view
-        this._scrollToActive();
+        // Scroll to first card (top-scored) on initial build
+        const firstCard = this._container.querySelector('.carousel-card');
+        if (firstCard) firstCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
     }
 
     /**

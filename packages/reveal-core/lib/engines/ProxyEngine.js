@@ -66,6 +66,15 @@ const PROXY_SAFE_OVERRIDES = Object.freeze({
 class ProxyEngine {
     static PROXY_TARGET_SIZE = 1000; // Target long edge in pixels
 
+    /**
+     * Set the proxy resolution target (long edge in pixels).
+     * Takes effect on the next initializeProxy() call.
+     * @param {number} size
+     */
+    static setProxyTargetSize(size) {
+        ProxyEngine.PROXY_TARGET_SIZE = size;
+    }
+
     constructor() {
         this.proxyBuffer = null;        // 512px 16-bit LAB buffer (may be bilaterally filtered)
         this._rawProxyBuffer = null;    // 512px unfiltered stride-3 buffer — canonical source for re-filtering
