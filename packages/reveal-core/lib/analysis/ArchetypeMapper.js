@@ -6,9 +6,19 @@
  * - 15%: Pattern/Signature (Entropy & Temperature)
  */
 class ArchetypeMapper {
-    constructor(archetypes) {
+    /**
+     * @param {Array} archetypes
+     * @param {Object} [options]
+     * @param {number} [options.wStructural=0.40] - Weight for structural score
+     * @param {number} [options.wSector=0.45]     - Weight for sector affinity score
+     * @param {number} [options.wPattern=0.15]    - Weight for pattern score
+     */
+    constructor(archetypes, options = {}) {
         this.archetypes = archetypes;
         this.decayConstant = 0.05; // Adjusts sensitivity of the decay curve
+        this.wStructural = options.wStructural ?? 0.40;
+        this.wSector     = options.wSector     ?? 0.45;
+        this.wPattern    = options.wPattern    ?? 0.15;
     }
 
     getBestMatch(dna) {
@@ -19,9 +29,9 @@ class ArchetypeMapper {
             const patternScore = this.calculatePatternScore(dna, archetype);
 
             // Final Weighted Score (Normalized to 0-100)
-            const totalScore = (structuralScore * 0.40) +
-                               (sectorScore * 0.45) +
-                               (patternScore * 0.15);
+            const totalScore = (structuralScore * this.wStructural) +
+                               (sectorScore * this.wSector) +
+                               (patternScore * this.wPattern);
 
             return {
                 id: archetype.id,
@@ -51,9 +61,9 @@ class ArchetypeMapper {
             const sectorScore = this.calculateSectorAffinity(dna, archetype);
             const patternScore = this.calculatePatternScore(dna, archetype);
 
-            const totalScore = (structuralScore * 0.40) +
-                               (sectorScore * 0.45) +
-                               (patternScore * 0.15);
+            const totalScore = (structuralScore * this.wStructural) +
+                               (sectorScore * this.wSector) +
+                               (patternScore * this.wPattern);
 
             return {
                 id: archetype.id,

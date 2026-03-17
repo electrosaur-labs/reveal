@@ -16,6 +16,7 @@
     "downconvert:sp100": "node src/downconvert-sp100.js",
     "benchmark:cq100": "node src/reveal-batch.js data/CQ100_v4/input/psd/8bit data/CQ100_v4/output/psd/8bit",
     "benchmark:testimages": "node src/reveal-batch.js data/TESTIMAGES/input/psd/16bit data/TESTIMAGES/output/psd/16bit",
+    "benchmark:weights": "node src/benchmark-weights.js data/TESTIMAGES/input/psd/16bit data/TESTIMAGES/output/weight-benchmark",
     "benchmark:sp100:met": "node src/reveal-batch.js data/SP100/input/met/psd/8bit data/SP100/output/met/psd/8bit",
     "benchmark:sp100:rijks": "node src/reveal-batch.js data/SP100/input/rijks/psd/8bit data/SP100/output/rijks/psd/8bit",
     "benchmark:sp100:aic": "node src/reveal-batch.js data/SP100/input/aic/psd/8bit data/SP100/output/aic/psd/8bit",
