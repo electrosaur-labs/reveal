@@ -130,7 +130,7 @@ class MechanicalKnobs {
             this._updateAllRevertIcons();
         });
 
-        // External parameter change (e.g. radar HUD drag) — keep sliders in sync
+        // External parameter change — keep sliders in sync
         this._session.on('parameterChanged', ({ key, value }) => {
             const entry = this._sliders[key];
             if (!entry) return;

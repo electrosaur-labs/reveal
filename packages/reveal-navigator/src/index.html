@@ -49,7 +49,7 @@
             overflow: hidden;
         }
 
-        /* ─── Two-Column Root: Main (left) | HUD (right) ─── */
+        /* ─── Two-Column Root: Main (left) | Knobs (right) ─── */
         #root {
             width: 100%;
             height: 100%;
@@ -395,21 +395,6 @@
             color: #4da6ff;
         }
         .knob-help.visible {
-            display: block;
-        }
-        .hud-help-text {
-            display: none;
-            font-size: 12px;
-            color: #1a1a1a;
-            background: #fff3b0;
-            border: 1px solid #e0c860;
-            border-radius: 4px;
-            padding: 6px 8px;
-            margin: 4px 0 6px 0;
-            line-height: 1.5;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-        }
-        .hud-help-text.visible {
             display: block;
         }
 
@@ -1198,7 +1183,7 @@
             text-align: center;
         }
 
-        /* ─── Right Panel: Knobs + HUD ─── */
+        /* ─── Right Panel: Knobs ─── */
         #hud-panel {
             flex: 0 0 320px;
             display: flex;
@@ -1216,18 +1201,6 @@
             flex: 1 1 0;
             overflow-y: auto;
             min-height: 0;
-        }
-
-        #radar-container {
-            flex: 0 0 auto;
-            position: relative;
-            width: 300px;
-            height: 300px;
-        }
-
-        #radar-img {
-            display: block;
-            image-rendering: pixelated;
         }
 
         #hud-info {
@@ -1482,7 +1455,7 @@
             </div>
         </div>
 
-        <!-- Right Panel: Knobs + HUD -->
+        <!-- Right Panel: Knobs -->
         <div id="hud-panel" style="display:none;">
             <!-- Mechanical Knobs -->
             <div id="knobs-panel" style="display:none;">
@@ -1495,15 +1468,6 @@
                         <button id="btn-help-toggle" title="Toggle help descriptions">?</button>
                     </div>
 
-                    <div style="display: flex; align-items: flex-start; justify-content: space-between;">
-                        <div id="radar-container">
-                            <img id="radar-img" width="300" height="300" />
-                            <button class="knob-help-btn" id="hud-help-btn" title="What is the HUD?" style="position:absolute; top:2px; right:2px; margin:0; z-index:10; color:#aaa;">?</button>
-                        </div>
-                        <button class="knob-help-btn" id="radar-help-btn" title="Help">?</button>
-                    </div>
-                    <span class="hud-help-text" id="hud-help-text">The HUD (Heads-Up Display) gives you full control over the separation. The radar shows tuning parameters as a polygon — drag vertices to adjust. Mechanical knobs control post-processing: ghost removal, speckle cleanup, shadow density, mesh size, and trapping. Advanced controls let you fine-tune the color science engine, preprocessing, and quantization strategy.</span>
-                    <span class="knob-help" id="radar-help-text">Parameter radar — each axis shows a tuning parameter. The green polygon is your current settings, blue dots show the archetype DNA baseline. Drag any vertex to adjust that parameter in real time. The preview updates as you drag.</span>
                 </div>
 
                 <div id="knobs-scroll">
@@ -1908,7 +1872,6 @@
                 </div><!-- /knobs-scroll -->
             </div>
 
-            <!-- radar moved above Advanced panel -->
             <div id="hud-info">
                 <div id="status-bar">
                     <span id="status-text">Waiting for document...</span>

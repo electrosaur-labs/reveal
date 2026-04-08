@@ -10,7 +10,7 @@
 /** Dim color for non-highlighted / non-captured pixels (#282828) */
 const DIM_COLOR = 0x28;
 
-/** Background color for radar/panel (#323232) */
+/** Background color for panel (#323232) */
 const BG_COLOR = 0x32;
 
 // ─── 16-bit Lab Encoding ─────────────────────────────────

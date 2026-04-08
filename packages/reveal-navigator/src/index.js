@@ -14,7 +14,6 @@ const PhotoshopBridge = require("./bridge/PhotoshopBridge");
 const ProductionWorker = require("./bridge/ProductionWorker");
 const Preview = require("./components/Preview");
 const ArchetypeCarousel = require("./components/ArchetypeCarousel");
-const RadarHUD = require("./components/RadarHUD");
 const MechanicalKnobs = require("./components/MechanicalKnobs");
 const PaletteSurgeon = require("./components/PaletteSurgeon");
 const Loupe = require("./components/Loupe");
@@ -24,7 +23,6 @@ const logger = Reveal.logger;
 let sessionState = null;
 let preview = null;
 let carousel = null;
-let radar = null;
 let knobs = null;
 let surgeon = null;
 let loupe = null;
@@ -62,16 +60,6 @@ function initPlugin() {
             );
         } catch (err) {
             logger.log('[Navigator] Carousel init failed: ' + err.message);
-        }
-
-        // Wire 7D Radar HUD (non-fatal if SVG not supported)
-        try {
-            radar = new RadarHUD(
-                document.getElementById('radar-container'),
-                sessionState
-            );
-        } catch (err) {
-            logger.log('[Navigator] Radar init failed: ' + err.message);
         }
 
         // Wire Mechanical Knobs (non-fatal)
@@ -161,14 +149,14 @@ function initPlugin() {
         }
 
         // Wire filter/sort help buttons (click to expand)
-        for (const id of ['filter-help-btn', 'sort-help-btn', 'hud-help-btn']) {
+        for (const id of ['filter-help-btn', 'sort-help-btn']) {
             const btn = document.getElementById(id);
             const text = document.getElementById(id.replace('-btn', '-text'));
             if (btn && text) {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const isVisible = text.classList.contains('visible');
-                    document.querySelectorAll('.knob-help.visible, .hud-help-text.visible').forEach(el => el.classList.remove('visible'));
+                    document.querySelectorAll('.knob-help.visible').forEach(el => el.classList.remove('visible'));
                     document.querySelectorAll('.knob-help-btn.active').forEach(el => el.classList.remove('active'));
                     if (!isVisible) {
                         text.classList.add('visible');
@@ -368,22 +356,16 @@ function initPlugin() {
             _setStatRated(document.getElementById('stat-delta'), 'deltaE', sessionState.getArchetypeDeltaE(), '\u0394E ');
         });
 
-        // Pulse 1: dnaReady fires ~50ms after ingest — update radar + DNA stats immediately
+        // Pulse 1: dnaReady fires ~50ms after ingest — update DNA stats immediately
         sessionState.on('dnaReady', (dna) => {
             const sectorEl = document.getElementById('dominant-sector');
             if (sectorEl && dna && dna.dominant_sector) {
                 sectorEl.textContent = `Dominant: ${dna.dominant_sector}`;
             }
-            // Refresh radar HUD immediately with DNA data
-            if (radar) {
-                try { radar.render(); } catch (_) {}
-            }
-            // Show DNA stats immediately
             updateDNADisplay();
-
         });
 
-        // Show dominant sector in HUD info (kept for backward compat with imageLoaded)
+        // Show dominant sector (kept for backward compat with imageLoaded)
         sessionState.on('imageLoaded', (data) => {
             const sectorEl = document.getElementById('dominant-sector');
             if (sectorEl && data.dna && data.dna.dominant_sector) {
@@ -457,7 +439,7 @@ function initPlugin() {
         }
 
         // Per-control help toggle: click ? button to show/hide inline help
-        const explicitHelpIds = new Set(['filter-help-btn', 'sort-help-btn', 'hud-help-btn']);
+        const explicitHelpIds = new Set(['filter-help-btn', 'sort-help-btn']);
         document.querySelectorAll('.knob-help-btn').forEach(btn => {
             if (explicitHelpIds.has(btn.id)) return;
             btn.addEventListener('click', (e) => {
