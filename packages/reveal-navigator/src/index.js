@@ -84,6 +84,17 @@ function initPlugin() {
             logger.log('[Navigator] Knobs init failed: ' + err.message);
         }
 
+        // Wire Advanced panel toggle (native <details> can be unreliable in some UXP environments)
+        const advPanel = document.getElementById('advanced-panel');
+        if (advPanel) {
+            const trigger = document.getElementById('advanced-panel-trigger');
+            if (trigger) {
+                trigger.addEventListener('click', () => {
+                    advPanel.classList.toggle('is-open');
+                });
+            }
+        }
+
         // Wire Palette Surgeon (non-fatal)
         try {
             surgeon = new PaletteSurgeon(
@@ -342,6 +353,8 @@ function initPlugin() {
                 if (proxyResLabel) proxyResLabel.setAttribute('style', 'display: inline; color:#888; font-size:10px; margin-left:4px;');
                 const proxyResEl = document.getElementById('proxy-resolution');
                 if (proxyResEl) proxyResEl.setAttribute('style', 'display: inline-block;');
+                const loupeLabel = document.getElementById('loupe-label');
+                if (loupeLabel) loupeLabel.setAttribute('style', 'display: inline; color:#e0e0e0; font-size:10px;');
                 const loupeZoom = document.getElementById('loupe-zoom');
                 if (loupeZoom) loupeZoom.setAttribute('style', 'display: inline-block;');
                 const loupeHelpBtn = document.getElementById('loupe-help-btn');
@@ -979,6 +992,8 @@ function _clearUI() {
     Reveal.ProxyEngine.setProxyTargetSize(1000);
     const proxyResLabel = document.getElementById('proxy-resolution-label');
     if (proxyResLabel) proxyResLabel.style.display = 'none';
+    const loupeLabel = document.getElementById('loupe-label');
+    if (loupeLabel) loupeLabel.style.display = 'none';
     const loupeZoom = document.getElementById('loupe-zoom');
     if (loupeZoom) { loupeZoom.style.display = 'none'; loupeZoom.selectedIndex = 0; }
     const loupeHelpBtn = document.getElementById('loupe-help-btn');

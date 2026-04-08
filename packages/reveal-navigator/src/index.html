@@ -421,8 +421,28 @@
             user-select: none;
         }
 
-        #advanced-panel summary:hover {
+        #advanced-panel-trigger:hover {
             color: #bbb;
+        }
+
+        #advanced-panel-trigger::before {
+            content: '▶';
+            display: inline-block;
+            margin-right: 6px;
+            font-size: 8px;
+            transition: transform 0.1s;
+        }
+
+        #advanced-panel.is-open #advanced-panel-trigger::before {
+            transform: rotate(90deg);
+        }
+
+        #advanced-panel-content {
+            display: none;
+        }
+
+        #advanced-panel.is-open #advanced-panel-content {
+            display: block;
         }
 
         #knobs-panel select {
@@ -1374,8 +1394,9 @@
                     <option value="2000">2000px</option>
                 </select>
                 <span style="display:inline-block; width:12px;"></span>
+                <span style="color:#e0e0e0; font-size:10px; display:none;" id="loupe-label">Loupe</span>
                 <select id="loupe-zoom" title="Loupe zoom level" style="display:none;">
-                    <option value="0" selected>Loupe</option>
+                    <option value="0" selected>None</option>
                     <option value="1">1:1</option>
                     <option value="2">1:2</option>
                     <option value="4">1:4</option>
@@ -1552,94 +1573,8 @@
                 <sp-slider id="knob-trapSize" min="0" max="10" step="1" value="0" variant="filled"></sp-slider>
                 <span class="knob-help">Expand lighter colors under darker neighbors to prevent white gaps from misregistration on press. Measured in points. 0 = no trapping.</span>
 
-                <!-- Group: Method -->
-                <div class="knob-group-label">Method</div>
-
                 <div class="knob-row">
-                    <span class="knob-label">Separation Method</span>
-                    <button class="knob-revert" id="revert-engineType">&#x21BA;</button>
-                    <select id="picker-engineType">
-                        <option value="reveal-mk1.5">Standard</option>
-                        <option value="distilled">Adaptive</option>
-                        <option value="reveal">Hue-Aware</option>
-                        <option value="balanced">Fast</option>
-                        <option value="classic">Classic</option>
-                        <option value="stencil">Stencil</option>
-                    </select>
-                    <button class="knob-help-btn" title="Help">?</button>
-                </div>
-                <span class="knob-help">Standard: full Mk 1.5 engine with neutral sovereignty and highlight rescue. Adaptive: over-quantize then distil to target count. Hue-Aware: Mk 1.0 with hue gap recovery. Fast: Mk 1.0 without hue analysis. Classic: simple RGB median cut. Stencil: luminance-only for single-color work.</span>
-
-                <div class="knob-row">
-                    <span class="knob-label">Color Mode</span>
-                    <button class="knob-revert" id="revert-colorMode">&#x21BA;</button>
-                    <select id="picker-colorMode">
-                        <option value="color">Color</option>
-                        <option value="bw">B/W</option>
-                        <option value="grayscale">Grayscale</option>
-                    </select>
-                    <button class="knob-help-btn" title="Help">?</button>
-                </div>
-                <span class="knob-help">Color: full chromatic separation. B/W: two-tone black and white only. Grayscale: luminance-only separation across multiple gray levels.</span>
-
-                <!-- Group: Print Surface -->
-                <div class="knob-group-label">Print Surface</div>
-
-                <div class="knob-row">
-                    <span class="knob-label">Surface</span>
-                    <button class="knob-revert" id="revert-substrateMode">&#x21BA;</button>
-                    <select id="picker-substrateMode">
-                        <option value="auto">Auto</option>
-                        <option value="white">White</option>
-                        <option value="dark">Dark</option>
-                        <option value="black">Black</option>
-                        <option value="none">None</option>
-                        <option value="transparent">Transparent</option>
-                    </select>
-                    <button class="knob-help-btn" title="Help">?</button>
-                </div>
-                <span class="knob-help">What you're printing on. Auto detects from the image. White/Dark/Black set the substrate color explicitly. Transparent treats the substrate as see-through. Affects how background pixels are handled in the separation.</span>
-
-                <div class="knob-row">
-                    <span class="knob-label">Tolerance</span>
-                    <button class="knob-revert" id="revert-substrateTolerance">&#x21BA;</button>
-                    <span class="knob-val" id="substrateTolerance-val">2.0</span>
-                    <button class="knob-help-btn" title="Help">?</button>
-                </div>
-                <sp-slider id="knob-substrateTolerance" min="0" max="5" step="0.5" value="2" variant="filled"></sp-slider>
-                <span class="knob-help">How close a pixel's color must be to the substrate before it's treated as background and skipped. Higher = more aggressive background removal. Lower = only exact matches are skipped.</span>
-
-                <div class="knob-check-group">
-                    <div class="knob-row">
-                        <span class="knob-label">Keep White</span>
-                        <button class="knob-revert" id="revert-preserveWhite">&#x21BA;</button>
-                        <input type="checkbox" id="chk-preserveWhite" class="adv-checkbox" checked>
-                        <button class="knob-help-btn" title="Help">?</button>
-                    </div>
-                    <span class="knob-help">Guarantee a pure white screen in the palette. Essential when printing on dark substrates where white ink provides the base layer.</span>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Keep Black</span>
-                        <button class="knob-revert" id="revert-preserveBlack">&#x21BA;</button>
-                        <input type="checkbox" id="chk-preserveBlack" class="adv-checkbox" checked>
-                        <button class="knob-help-btn" title="Help">?</button>
-                    </div>
-                    <span class="knob-help">Guarantee a pure black screen in the palette. Keeps crisp outlines and text sharp instead of mixing from other dark colors.</span>
-
-                    <div class="knob-row">
-                        <span class="knob-label">Skip Transparent</span>
-                        <button class="knob-revert" id="revert-ignoreTransparent">&#x21BA;</button>
-                        <input type="checkbox" id="chk-ignoreTransparent" class="adv-checkbox" checked>
-                        <button class="knob-help-btn" title="Help">?</button>
-                    </div>
-                    <span class="knob-help">Skip fully transparent pixels so they don't influence color selection. Turn off if your image uses transparency as a design element.</span>
-                </div>
-
-                <!-- Group: Output -->
-                <div class="knob-group-label">Output</div>
-
-                <div class="knob-row">
-                    <span class="knob-label">Halftone</span>
+                    <span class="knob-label">Dither</span>
                     <button class="knob-revert" id="revert-ditherType">&#x21BA;</button>
                     <select id="picker-ditherType">
                         <option value="none">None</option>
@@ -1652,10 +1587,95 @@
                 </div>
                 <span class="knob-help">Dithering pattern to simulate gradients with solid inks. None = hard edges. Floyd-Steinberg = classic error diffusion. Atkinson = sharp, clean. Bayer = ordered grid pattern.</span>
 
-                <!-- ─── Advanced (Engine Room) ─── -->
-                <details id="advanced-panel">
-                    <summary>Advanced</summary>
+                <div class="knob-check-group">
+                    <div class="knob-row">
+                        <span class="knob-label">Preserve White</span>
+                        <button class="knob-revert" id="revert-preserveWhite">&#x21BA;</button>
+                        <input type="checkbox" id="chk-preserveWhite" class="adv-checkbox" checked>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help">Guarantee a pure white screen in the palette. Essential when printing on dark substrates where white ink provides the base layer.</span>
 
+                    <div class="knob-row">
+                        <span class="knob-label">Preserve Black</span>
+                        <button class="knob-revert" id="revert-preserveBlack">&#x21BA;</button>
+                        <input type="checkbox" id="chk-preserveBlack" class="adv-checkbox" checked>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help">Guarantee a pure black screen in the palette. Keeps crisp outlines and text sharp instead of mixing from other dark colors.</span>
+                </div>
+
+                <!-- ─── Advanced (Engine Room) ─── -->
+                <div id="advanced-panel" style="margin-bottom: 8px;">
+                    <div id="advanced-panel-trigger" style="font-size: 14px; font-weight: 600; color: #e0e0e0; cursor: pointer; padding: 8px 0 12px 0; user-select: none; display: flex; align-items: center; letter-spacing: 0.5px;">Advanced</div>
+                    <div id="advanced-panel-content">
+
+                    <!-- Group: Method -->
+                    <div class="knob-group-label">Method</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Separation Method</span>
+                        <button class="knob-revert" id="revert-engineType">&#x21BA;</button>
+                        <select id="picker-engineType">
+                            <option value="reveal-mk1.5">Standard</option>
+                            <option value="distilled">Adaptive</option>
+                            <option value="reveal">Hue-Aware</option>
+                            <option value="balanced">Fast</option>
+                            <option value="classic">Classic</option>
+                            <option value="stencil">Stencil</option>
+                        </select>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help">Standard: full Mk 1.5 engine with neutral sovereignty and highlight rescue. Adaptive: over-quantize then distil to target count. Hue-Aware: Mk 1.0 with hue gap recovery. Fast: Mk 1.0 without hue analysis. Classic: simple RGB median cut. Stencil: luminance-only for single-color work.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Color Mode</span>
+                        <button class="knob-revert" id="revert-colorMode">&#x21BA;</button>
+                        <select id="picker-colorMode">
+                            <option value="color">Color</option>
+                            <option value="bw">B/W</option>
+                            <option value="grayscale">Grayscale</option>
+                        </select>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help">Color: full chromatic separation. B/W: two-tone black and white only. Grayscale: luminance-only separation across multiple gray levels.</span>
+
+                    <!-- Group: Print Surface -->
+                    <div class="knob-group-label">Print Surface</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Surface</span>
+                        <button class="knob-revert" id="revert-substrateMode">&#x21BA;</button>
+                        <select id="picker-substrateMode">
+                            <option value="auto">Auto</option>
+                            <option value="white">White</option>
+                            <option value="dark">Dark</option>
+                            <option value="black">Black</option>
+                            <option value="none">None</option>
+                            <option value="transparent">Transparent</option>
+                        </select>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <span class="knob-help">What you're printing on. Auto detects from the image. White/Dark/Black set the substrate color explicitly. Transparent treats the substrate as see-through. Affects how background pixels are handled in the separation.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Tolerance</span>
+                        <button class="knob-revert" id="revert-substrateTolerance">&#x21BA;</button>
+                        <span class="knob-val" id="substrateTolerance-val">2.0</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-substrateTolerance" min="0" max="5" step="0.5" value="2" variant="filled"></sp-slider>
+                    <span class="knob-help">How close a pixel's color must be to the substrate before it's treated as background and skipped. Higher = more aggressive background removal. Lower = only exact matches are skipped.</span>
+
+                    <div class="knob-check-group">
+                        <div class="knob-row">
+                            <span class="knob-label">Skip Transparent</span>
+                            <button class="knob-revert" id="revert-ignoreTransparent">&#x21BA;</button>
+                            <input type="checkbox" id="chk-ignoreTransparent" class="adv-checkbox" checked>
+                            <button class="knob-help-btn" title="Help">?</button>
+                        </div>
+                        <span class="knob-help">Skip fully transparent pixels so they don't influence color selection. Turn off if your image uses transparency as a design element.</span>
+                    </div>
                     <!-- Group: Algorithm -->
                     <div class="knob-group-label">Algorithm</div>
 
@@ -1883,7 +1903,8 @@
                     <sp-slider id="knob-detailRescue" min="0" max="20" step="1" value="0" variant="filled"></sp-slider>
                     <span class="knob-help">Counterbalances smoothing by restoring fine detail that the median filter might erase. Higher values = more detail preserved at the cost of noisier boundaries.</span>
 
-                </details>
+                    </div><!-- /advanced-panel-content -->
+                </div><!-- /advanced-panel -->
                 </div><!-- /knobs-scroll -->
             </div>
 
