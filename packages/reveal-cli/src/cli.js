@@ -25,10 +25,10 @@ program
     .argument('<input>', 'Input image (PNG, TIFF, JPEG, or Lab PSD)')
     .option('-o, --output <path>', 'Output path or directory')
     .option('-a, --archetype <name>', 'Archetype ID (default: auto-detect)')
-    .option('-c, --colors <n>', 'Target color count (2-10)', parseInt)
+    .option('-c, --colors <n>', 'Target color count (2-12)', parseInt)
     .option('-f, --format <types...>', 'Output formats: psd, ora, plates (repeatable or comma-separated)')
     .option('--trap <pixels>', 'Trap width in pixels', parseInt)
-    .option('--min-volume <percent>', 'Ghost plate threshold (0-5%)', parseFloat)
+    .option('--min-volume <percent>', 'Minimum coverage threshold (0-5%)', parseFloat)
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
     .option('--shadow-clamp <percent>', 'Ink body clamp (0-20%)', parseFloat)
     .option('--single', 'Single archetype mode (default: compare 3 adaptive + top-scoring)')
@@ -85,8 +85,8 @@ async function run(inputFile, options) {
         if (options.single && !options.archetype) {
             throw new Error('--single requires --archetype (which archetype to use?)');
         }
-        if (options.colors !== undefined && (options.colors < 2 || options.colors > 10)) {
-            throw new Error('Colors must be 2-10');
+        if (options.colors !== undefined && (options.colors < 2 || options.colors > 12)) {
+            throw new Error('Colors must be 2-12');
         }
 
         // Normalize --format: accept repeatable and comma-separated

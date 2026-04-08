@@ -360,9 +360,9 @@ Three user-facing parameters in the separation pipeline, applied per-layer after
 
 | Knob | Range | Purpose | Code Location |
 |------|-------|---------|---------------|
-| **minVolume** | 0-5% | Ghost plate removal — merges colors below coverage threshold into nearest strong neighbor | `SeparationEngine.pruneWeakColors()` |
-| **speckleRescue** | 0-10px | Halftone solidity — morphological despeckle removes isolated pixel clusters below threshold | `SeparationEngine.generateSeparations()` → `_despeckleMask()` |
-| **shadowClamp** | 0-20% | Ink body control — clamps barely-visible mask values to printable minimum density | `SeparationEngine.generateSeparations()` |
+| **minVolume** | 0-5% | Minimum coverage — merges colors below coverage threshold into nearest strong neighbor | `SeparationEngine.pruneWeakColors()` |
+| **speckleRescue** | 0-10px | Despeckle — morphological removal of isolated pixel clusters below threshold | `SeparationEngine.generateSeparations()` → `_despeckleMask()` |
+| **shadowClamp** | 0-20% | Minimum opacity — clamps barely-visible mask values to a visible minimum density | `SeparationEngine.generateSeparations()` |
 
 ## Known Pitfalls
 

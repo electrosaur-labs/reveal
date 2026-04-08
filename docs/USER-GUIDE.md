@@ -45,9 +45,9 @@ to the nearest palette color, and creates one Photoshop layer per ink.
   distribution. You don't interact with it directly — it drives the automatic archetype ranking.
 - **Palette** — The set of spot colors extracted from your image, typically 5-8 colors. You can edit, merge, delete, or
   add colors using the Palette Surgeon before committing.
-- **Mechanical knobs** — Post-processing controls used for deep separation tuning. These include Ghost Screen Removal
-  (eliminate weak inks), Dust Removal (clean up speckles), Shadow Floor (ensure faint tones print), and Trapping
-  (overlap colors to prevent gaps on press).
+- **Mechanical knobs** — Post-processing controls used for deep separation tuning. These include Minimum Coverage
+  (eliminate weak colors), Despeckle (clean up isolated pixels), Minimum Opacity (ensure faint tones remain visible),
+  and Trapping (overlap colors to prevent gaps).
 
 ## Requirements
 
@@ -128,11 +128,12 @@ The controls in the right panel. These affect the final output without changing 
 
 | Knob                     | What it does                                          | When to use it                                          |
 |--------------------------|-------------------------------------------------------|---------------------------------------------------------|
-| **Target Colors**        | Number of ink screens                                 | More colors = more detail, more screens to expose       |
-| **Ghost Screen Removal** | Merges colors covering less than X% of the image      | Turn up to eliminate weak ink layers not worth a screen |
-| **Dust Removal**         | Removes isolated pixel clusters smaller than X pixels | Turn up if you see speckles that won't hold on mesh     |
-| **Shadow Floor**         | Sets minimum ink density for faint areas              | Turn up if light tones will disappear on press          |
-| **Trap Size**            | Color trapping overlap width                          | Set based on your press registration tolerance          |
+| **Colors**               | Target number of colors in the palette                | More colors = more fidelity but more complexity         |
+| **Minimum Coverage**     | Merges colors covering less than X% of the image      | Turn up to eliminate weak colors not worth keeping       |
+| **Despeckle**            | Removes isolated pixel clusters smaller than X pixels | Turn up if you see stray dots that appear as noise      |
+| **Minimum Opacity**      | Sets minimum mask density for faint areas             | Turn up if faint tones are barely visible in output     |
+| **Detail Floor**         | Minimum reproducible detail size (mesh TPI)           | Set based on your output resolution                     |
+| **Trap Width**           | Color trapping overlap width                          | Set based on registration tolerance                     |
 
 **Advanced panels** (click section headers to expand) expose deeper controls: chroma boost, palette reduction threshold,
 hue lock, lightness/chroma weights, highlight/shadow points, substrate tolerance, and noise. Most users won't need
@@ -236,8 +237,8 @@ See the full [CLI documentation](../packages/reveal-cli/README.md) for all flags
 | **ΔE (Delta-E)** | Perceptual color distance — how far a separated pixel drifts from its original color. Lower is better.                                        |
 | **Separation**   | The final output — a set of fill layers with masks, one per ink color                                                                         |
 | **Palette**      | The set of spot colors extracted from your image                                                                                              |
-| **Ghost screen** | An ink layer with very low coverage — may not be worth exposing a screen for                                                                  |
-| **Speckle**      | Isolated pixel clusters that won't print cleanly at typical screen printing mesh counts                                                       |
-| **Trap**         | Slight overlap between adjacent ink colors that prevents white gaps from press misregistration                                                |
+| **Minimum coverage** | A color covering very little of the image — may not be worth keeping in the palette                                                   |
+| **Speckle**      | Isolated pixel clusters that appear as noise in the output                                                                                    |
+| **Trap**         | Slight overlap between adjacent colors that prevents gaps from misregistration                                                                |
 | **Posterization**| Reducing a continuous-tone image to a small number of flat colors — the core of what Reveal does                                             |
-| **Shadow floor** | Minimum ink density for faint tones — prevents dark areas from collapsing into indistinct "mud" on press                                     |
+| **Minimum opacity** | Minimum mask density for faint tones — prevents areas from being so faint they're effectively invisible                                   |

@@ -219,7 +219,7 @@ class ArchetypeLoader {
             weights: { l: 0.5, c: 1.5, k: 1.0, l_std_dev: 2.0 },
             parameters: {
                 minColors: 4,
-                maxColors: 10,
+                maxColors: 12,
                 ditherType: 'atkinson',
                 distanceMetric: 'cie76',
                 lWeight: 1.2,

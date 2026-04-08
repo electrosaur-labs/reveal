@@ -387,7 +387,7 @@ function initPlugin() {
             const deltaEl = document.getElementById('stat-delta');
             if (colorsEl && data.palette) {
                 const count = data.activeColorCount != null ? data.activeColorCount : data.palette.length;
-                colorsEl.textContent = `${count} screens`;
+                colorsEl.textContent = `${count} colors`;
             }
             _setStatRated(deltaEl, 'deltaE', sessionState.getArchetypeDeltaE(), '\u0394E ');
 

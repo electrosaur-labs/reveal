@@ -122,9 +122,9 @@ Three knobs shared between ProxyEngine (preview) and ProductionWorker (commit):
 
 | Knob | Range | Purpose |
 |------|-------|---------|
-| `minVolume` | 0–5% | Ghost plate removal — merges weak colors into nearest neighbor (sector-aware rescue) |
-| `speckleRescue` | 0–10px | Morphological despeckle — removes isolated pixel clusters |
-| `shadowClamp` | 0–20% | Minimum mask density — clamps barely-visible regions to printable floor |
+| `minVolume` | 0–5% | Minimum coverage — merges weak colors into nearest neighbor (sector-aware rescue) |
+| `speckleRescue` | 0–10px | Despeckle — morphological removal of isolated pixel clusters |
+| `shadowClamp` | 0–20% | Minimum opacity — clamps barely-visible mask regions to a visible floor |
 
 ### Key Source Files
 

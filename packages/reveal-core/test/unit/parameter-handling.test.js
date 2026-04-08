@@ -36,7 +36,7 @@ describe('Parameter Handling: Target Colors = 0', () => {
             // Should have auto-detected (not used 0)
             expect(colorCount).toBeGreaterThan(0);
             expect(colorCount).toBeGreaterThanOrEqual(3); // Minimum
-            expect(colorCount).toBeLessThanOrEqual(10);   // Maximum
+            expect(colorCount).toBeLessThanOrEqual(12);   // Maximum
         });
 
         test('targetColors = -1 should use auto-detection', () => {
@@ -163,10 +163,10 @@ describe('Parameter Handling: Target Colors = 0', () => {
 
             // Complex gradient should recommend more colors
             expect(colorCount).toBeGreaterThan(3);
-            expect(colorCount).toBeLessThanOrEqual(10); // Still capped at max
+            expect(colorCount).toBeLessThanOrEqual(12); // Still capped at max
         });
 
-        test('high-complexity image with targetColors=0 should cap at 10', () => {
+        test('high-complexity image with targetColors=0 should cap at 12', () => {
             // Create highly complex image
             const pixels = new Uint8ClampedArray(50 * 50 * 4);
             for (let i = 0; i < 2500; i++) {
@@ -186,8 +186,8 @@ describe('Parameter Handling: Target Colors = 0', () => {
                 colorCount = PosterizationEngine.analyzeOptimalColorCount(pixels, 50, 50);
             }
 
-            // Should cap at screen printing maximum
-            expect(colorCount).toBe(10);
+            // Should cap at maximum
+            expect(colorCount).toBe(12);
         });
     });
 
@@ -212,7 +212,7 @@ describe('Parameter Handling: Target Colors = 0', () => {
 
             // Step 2: Verify count is valid for posterization
             expect(colorCount).toBeGreaterThanOrEqual(3);  // MIN_COLORS
-            expect(colorCount).toBeLessThanOrEqual(10);    // MAX_COLORS
+            expect(colorCount).toBeLessThanOrEqual(12);    // MAX_COLORS
 
             // Step 3: Verify posterization works with auto-detected count
             expect(() => {
@@ -313,7 +313,7 @@ describe('Parameter Handling: Target Colors = 0', () => {
             // Should complete within 30 seconds (allows for slow CI runners)
             expect(duration).toBeLessThan(30000);
             expect(colorCount).toBeGreaterThanOrEqual(3);
-            expect(colorCount).toBeLessThanOrEqual(10);
+            expect(colorCount).toBeLessThanOrEqual(12);
         });
     });
 

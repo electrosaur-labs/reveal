@@ -28,7 +28,7 @@
   "parameters": {
     "centroidStrategy": "SALIENCY",
     "minColors": 6,
-    "maxColors": 10,
+    "maxColors": 12,
     "distanceMetric": "cie76",
     "lWeight": 1,
     "cWeight": 2.5,

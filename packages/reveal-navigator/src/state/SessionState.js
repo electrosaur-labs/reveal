@@ -450,19 +450,12 @@ class SessionState extends EventEmitter {
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
         this.emit('configChanged', this.currentConfig);  // triggers MechanicalKnobs sync
 
-        // If user had added colors, rePosterize to get a fresh baseline palette
-        // (added colors are baked into the baseline — clearing the Set isn't enough)
-        if (hadAddedColors && this.proxyEngine && this.currentConfig) {
-            this.proxyEngine.rePosterize(this.currentConfig).then(result => {
-                this.previewBuffer = result.previewBuffer;
-                this.state.proxyBufferReady = true;
-                this._emitPreviewUpdated(result);
-            }).catch(err => {
-                logger.log(`[SessionState.resetToDefaults] rePosterize failed: ${err.message}`);
-            });
-        } else {
-            this._scheduleProxyUpdate();
-        }
+        // Force full re-posterize so the palette and suggested colors are
+        // regenerated from the reset default params. Without this, the fast
+        // path would restore a stale baseline built with the user's modified
+        // structural params (e.g. different targetColors).
+        this.state.isArchetypeDirty = true;
+        this._scheduleProxyUpdate();
     }
 
     /**

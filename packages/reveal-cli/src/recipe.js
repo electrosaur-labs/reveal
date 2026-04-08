@@ -54,7 +54,7 @@ function loadRecipe(filePath) {
 
     if (raw.colors !== undefined) {
         const c = Number(raw.colors);
-        if (!Number.isInteger(c) || c < 2 || c > 10) throw new Error('Recipe "colors" must be 2-10');
+        if (!Number.isInteger(c) || c < 2 || c > 12) throw new Error('Recipe "colors" must be 2-12');
         recipe.colors = c;
     }
 

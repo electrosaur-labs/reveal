@@ -133,23 +133,23 @@ Reveal supports several dithering algorithms:
 
 After the initial separation, four knobs let you refine the result:
 
-### Ghost Screen Removal (minVolume)
+### Minimum Coverage (minVolume)
 
-If a palette color covers only 0.3% of the image, that's a "ghost screen" — it would require burning a screen, mixing an ink, and running a pass for almost nothing visible. MinVolume sets a coverage threshold: colors below it get merged into their nearest neighbor. The pixels don't disappear; they get reassigned to the next closest color.
+If a palette color covers only 0.3% of the image, it's too weak to justify keeping. MinVolume sets a coverage threshold: colors below it get merged into their nearest neighbor. The pixels don't disappear; they get reassigned to the next closest color.
 
-### Speckle Rescue (speckleRescue)
+### Despeckle (speckleRescue)
 
-After separation, some colors may appear as isolated single pixels scattered across the image. These would print as dust — visible specks that serve no purpose. Speckle rescue uses morphological operations (examining the neighborhood of each pixel) to clean up clusters smaller than the threshold.
+After separation, some colors may appear as isolated single pixels scattered across the image. These appear as noise — visible specks that serve no purpose. Despeckle uses morphological operations (examining the neighborhood of each pixel) to clean up clusters smaller than the threshold.
 
-### Shadow Clamp (shadowClamp)
+### Minimum Opacity (shadowClamp)
 
-Some mask values end up barely visible — 2% or 3% coverage in a region. On press, this prints as a patchy, inconsistent whisper of ink. Shadow clamp sets a minimum: any mask value below the threshold gets pushed up to a printable floor, giving the ink enough body to print cleanly.
+Some mask values end up barely visible — 2% or 3% coverage in a region. At such low opacity, the color is effectively invisible. Shadow clamp sets a minimum: any mask value below the threshold gets pushed up to a visible floor, ensuring the color has enough presence to be meaningful in the output.
 
 ### Trapping (trapSize)
 
-When two ink colors meet, any misregistration on press creates a white gap between them. Trapping expands the lighter color slightly under the darker one, so a small registration error is hidden by overlap rather than exposed as white paper.
+When two colors meet, any misregistration creates a gap between them. Trapping expands the lighter color slightly under the darker one, so a small registration error is hidden by overlap rather than exposed as a gap.
 
-Reveal's trapping works by iterative morphological dilation — the lighter color's mask grows outward pixel by pixel, but only into regions occupied by darker colors. The trap width is specified in points (the prepress standard unit) and converted to pixels using the document's DPI.
+Reveal's trapping works by iterative morphological dilation — the lighter color's mask grows outward pixel by pixel, but only into regions occupied by darker colors. The trap width is specified in points and converted to pixels using the document's DPI.
 
 ## The Proxy Pipeline: Interactive Preview
 

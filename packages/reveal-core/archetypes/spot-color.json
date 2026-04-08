@@ -23,7 +23,7 @@
   },
   "parameters": {
     "minColors": 4,
-    "maxColors": 10,
+    "maxColors": 12,
     "ditherType": "none",
     "distanceMetric": "cie2000",
     "lWeight": 0.5,

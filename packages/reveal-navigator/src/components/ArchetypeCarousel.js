@@ -453,7 +453,7 @@ class ArchetypeCarousel {
         card.dataset.hueHtml = hueIndicator;
 
         const sortStr = match.sortScore != null ? Math.round(Math.min(100, Math.max(0, 100 - match.sortScore / 9))) : '';
-        card.title = `\u0394E ${deStr} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?'} screens \u00b7 DNA ${dnaStr}`;
+        card.title = `\u0394E ${deStr} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?'} colors \u00b7 DNA ${dnaStr}`;
         card.innerHTML =
             `<div class="card-name">${archetype.name}</div>` +
             `<div class="card-score-row">` +
@@ -569,7 +569,7 @@ class ArchetypeCarousel {
             sortLabel.textContent = Math.round(inverted);
         }
         // Update tooltip with full details
-        card.title = `\u0394E ${de} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?'} screens`;
+        card.title = `\u0394E ${de} \u00b7 Edge ${edgeStr} \u00b7 ${colorsStr || '?'} colors`;
     }
 
     /**

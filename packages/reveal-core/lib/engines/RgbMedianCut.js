@@ -96,7 +96,7 @@ class RgbMedianCut {
         } else if (clusterCount <= 35) {
             recommendedSize = 9;
         } else {
-            recommendedSize = 10; // Cap at screen printing maximum
+            recommendedSize = 12;
         }
 
         return recommendedSize;
