@@ -39,12 +39,12 @@ const MECHANICAL_KNOB_DEFAULTS = KNOB_DEFAULTS.MECHANICAL;
 const PRODUCTION_KNOB_DEFAULTS = KNOB_DEFAULTS.PRODUCTION;
 
 // Parameters that require full re-posterization (slow path via ProxyEngine.initializeProxy).
-const STRUCTURAL_PARAMS = new Set(CONFIG_CATEGORIES.STRUCTURAL);
+const STRUCTURAL_PARAMS = new Set([...CONFIG_CATEGORIES.STRUCTURAL, 'meshSize']);
 
 // Union of all user-facing knobs (for snapshot/restore/reset/dirty loops).
 // Includes mechanical, production, and structural params.
 const ALL_KNOBS = new Set([
-    ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS
+    ...MECHANICAL_KNOBS, ...PRODUCTION_KNOBS, ...STRUCTURAL_PARAMS, 'meshSize'
 ]);
 
 // Pseudo-archetypes (Chameleon, Distilled, Salamander) are ΔE-scored at startup.
@@ -268,6 +268,7 @@ class SessionState extends EventEmitter {
         });
         this._applyConfigToState(this.currentConfig);
         this.state.activeArchetypeId = topMatch.id;
+        this.state.initialArchetypeId = topMatch.id;
         if (!this.currentConfig.engineType) {
             this.currentConfig.engineType = this.state.engineType;
         }
@@ -539,7 +540,8 @@ class SessionState extends EventEmitter {
         this.emit('parameterChanged', { key, value });
 
         // Production-only knobs don't affect the 512px proxy preview
-        if (PRODUCTION_KNOBS.has(key)) return;
+        // Exception: if it's also a structural param (like meshSize), we MUST update.
+        if (PRODUCTION_KNOBS.has(key) && !STRUCTURAL_PARAMS.has(key)) return;
 
         this._scheduleProxyUpdate();
     }
@@ -1856,6 +1858,18 @@ class SessionState extends EventEmitter {
     }
 
     // _buildOverriddenPalette → delegated to this._paletteSurgery.buildOverriddenPalette()
+
+    /** Returns the ID of the archetype originally matched by DNA. */
+    getInitialArchetypeId() {
+        return this.state.initialArchetypeId;
+    }
+
+    /** Reverts to the DNA-matched archetype. */
+    async resetArchetype() {
+        if (this.state.initialArchetypeId) {
+            await this.swapArchetype(this.state.initialArchetypeId);
+        }
+    }
 }
 
 module.exports = SessionState;

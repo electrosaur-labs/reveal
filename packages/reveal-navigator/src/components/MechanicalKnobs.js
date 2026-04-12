@@ -21,6 +21,9 @@ const logger = require('@electrosaur-labs/core').logger;
 const KNOB_DEFS = [
     // Primary knobs
     { key: 'targetColors',   sliderId: 'knob-targetColors',   valId: 'targetColors-val',   revertId: 'revert-targetColors',   decimals: 0, unit: ''   },
+    { key: 'preserveWhite',  sliderId: 'chk-preserveWhite',    valId: null,                revertId: 'revert-preserveWhite',  decimals: 0, unit: ''   },
+    { key: 'preserveBlack',  sliderId: 'chk-preserveBlack',    valId: null,                revertId: 'revert-preserveBlack',  decimals: 0, unit: ''   },
+    { key: 'ditherType',     sliderId: 'picker-ditherType',    valId: null,                revertId: 'revert-ditherType',     decimals: 0, unit: ''   },
     { key: 'minVolume',      sliderId: 'knob-minVolume',      valId: 'minVolume-val',      revertId: 'revert-minVolume',      decimals: 1, unit: '%'  },
     { key: 'speckleRescue',  sliderId: 'knob-speckleRescue',  valId: 'speckleRescue-val',  revertId: 'revert-speckleRescue',  decimals: 0, unit: 'px' },
     { key: 'shadowClamp',    sliderId: 'knob-shadowClamp',    valId: 'shadowClamp-val',    revertId: 'revert-shadowClamp',    decimals: 1, unit: '%'  },
@@ -28,10 +31,13 @@ const KNOB_DEFS = [
 
     // Advanced: Chroma
     { key: 'vibrancyBoost',      sliderId: 'knob-vibrancyBoost',      valId: 'vibrancyBoost-val',      revertId: 'revert-vibrancyBoost',      decimals: 2, unit: '×' },
+    { key: 'vibrancyMode',       sliderId: 'picker-vibrancyMode',    valId: null,                revertId: 'revert-vibrancyMode',       decimals: 0, unit: ''   },
     { key: 'chromaGate',         sliderId: 'knob-chromaGate',         valId: 'chromaGate-val',         revertId: 'revert-chromaGate',         decimals: 1, unit: '×' },
 
     // Advanced: Palette
     { key: 'paletteReduction',   sliderId: 'knob-paletteReduction',   valId: 'paletteReduction-val',   revertId: 'revert-paletteReduction',   decimals: 1, unit: ''  },
+    { key: 'enablePaletteReduction', sliderId: 'chk-enablePaletteReduction', valId: null,          revertId: 'revert-enablePaletteReduction', decimals: 0, unit: '' },
+    { key: 'enableHueGapAnalysis', sliderId: 'chk-enableHueGapAnalysis', valId: null,              revertId: 'revert-enableHueGapAnalysis', decimals: 0, unit: '' },
     { key: 'hueLockAngle',       sliderId: 'knob-hueLockAngle',       valId: 'hueLockAngle-val',       revertId: 'revert-hueLockAngle',       decimals: 0, unit: '°' },
 
     // Advanced: Weights
@@ -45,12 +51,23 @@ const KNOB_DEFS = [
     { key: 'shadowPoint',        sliderId: 'knob-shadowPoint',        valId: 'shadowPoint-val',        revertId: 'revert-shadowPoint',        decimals: 0, unit: ' L' },
 
     // Advanced: Substrate
+    { key: 'substrateMode',      sliderId: 'picker-substrateMode',   valId: null,                     revertId: 'revert-substrateMode',      decimals: 0, unit: ''  },
     { key: 'substrateTolerance', sliderId: 'knob-substrateTolerance', valId: 'substrateTolerance-val', revertId: 'revert-substrateTolerance', decimals: 1, unit: ''  },
+    { key: 'ignoreTransparent',  sliderId: 'chk-ignoreTransparent',  valId: null,                     revertId: 'revert-ignoreTransparent',  decimals: 0, unit: ''  },
+    { key: 'meshSize',           sliderId: 'picker-meshSize',         valId: null,                     revertId: 'revert-meshSize',          decimals: 0, unit: ''  },
 
     // Advanced: Noise
+    { key: 'preprocessingIntensity', sliderId: 'picker-preprocessingIntensity', valId: null,          revertId: 'revert-preprocessingIntensity', decimals: 0, unit: '' },
     { key: 'detailRescue',       sliderId: 'knob-detailRescue',       valId: 'detailRescue-val',       revertId: 'revert-detailRescue',       decimals: 0, unit: ''  },
+    { key: 'medianPass',         sliderId: 'chk-medianPass',          valId: null,                     revertId: 'revert-medianPass',         decimals: 0, unit: ''  },
 
     // Advanced: Engine
+    { key: 'engineType',         sliderId: 'picker-engineType',      valId: null,                     revertId: 'revert-engineType',         decimals: 0, unit: ''  },
+    { key: 'colorMode',          sliderId: 'picker-colorMode',       valId: null,                     revertId: 'revert-colorMode',          decimals: 0, unit: ''  },
+    { key: 'splitMode',          sliderId: 'picker-splitMode',       valId: null,                     revertId: 'revert-splitMode',          decimals: 0, unit: ''  },
+    { key: 'quantizer',          sliderId: 'picker-quantizer',       valId: null,                     revertId: 'revert-quantizer',          decimals: 0, unit: ''  },
+    { key: 'distanceMetric',     sliderId: 'picker-distanceMetric',  valId: null,                     revertId: 'revert-distanceMetric',     decimals: 0, unit: ''  },
+    { key: 'centroidStrategy',   sliderId: 'picker-centroidStrategy', valId: null,                    revertId: 'revert-centroidStrategy',   decimals: 0, unit: ''  },
     { key: 'neutralSovereigntyThreshold',   sliderId: 'knob-neutralSovereigntyThreshold',   valId: 'neutralSovereigntyThreshold-val',   revertId: 'revert-neutralSovereigntyThreshold',   decimals: 0, unit: '' }
 ];
 
@@ -63,10 +80,10 @@ class MechanicalKnobs {
     constructor(container, sessionState) {
         this._container = container;
         this._session = sessionState;
-        this._sliders = {};  // key → { slider, valEl, revertEl, def }
+        this._elements = {};  // key → { el, valEl, revertEl, def }
 
         this._resolveElements();
-        this._bindSliderEvents();
+        this._bindEvents();
         this._bindStateEvents();
     }
 
@@ -74,23 +91,30 @@ class MechanicalKnobs {
 
     _resolveElements() {
         for (const def of KNOB_DEFS) {
-            const slider = document.getElementById(def.sliderId);
+            const el = document.getElementById(def.sliderId);
             const valEl = document.getElementById(def.valId);
             const revertEl = document.getElementById(def.revertId);
 
-            if (!slider) continue;
+            if (!el) continue;
 
-            this._sliders[def.key] = { slider, valEl, revertEl, def };
+            this._elements[def.key] = { el, valEl, revertEl, def };
         }
     }
 
-    _bindSliderEvents() {
-        for (const [key, entry] of Object.entries(this._sliders)) {
-            entry.slider.addEventListener('input', () => {
-                const value = parseFloat(entry.slider.value);
-                if (key === 'targetColors') {
-                    logger.log(`[Knobs] targetColors input: slider.value=${entry.slider.value} parsed=${value}`);
+    _bindEvents() {
+        for (const [key, entry] of Object.entries(this._elements)) {
+            const eventType = entry.el.tagName === 'SP-SLIDER' ? 'input' : 'change';
+
+            entry.el.addEventListener(eventType, () => {
+                let value;
+                if (entry.el.type === 'checkbox') {
+                    value = entry.el.checked;
+                } else if (entry.el.tagName === 'SELECT') {
+                    value = isNaN(entry.el.value) ? entry.el.value : parseFloat(entry.el.value);
+                } else {
+                    value = parseFloat(entry.el.value);
                 }
+
                 this._updateDisplay(entry, value);
                 this._session.updateParameter(key, value);
                 this._updateRevertIcon(key, entry);
@@ -102,12 +126,20 @@ class MechanicalKnobs {
                     this._session.resetKnob(key);
                     const dflt = this._session.getKnobDefault(key);
                     if (dflt !== null) {
-                        entry.slider.value = dflt;
+                        this._setValue(entry, dflt);
                         this._updateDisplay(entry, dflt);
                     }
                     this._updateRevertIcon(key, entry);
                 });
             }
+        }
+    }
+
+    _setValue(entry, value) {
+        if (entry.el.type === 'checkbox') {
+            entry.el.checked = !!value;
+        } else {
+            entry.el.value = value;
         }
     }
 
@@ -132,10 +164,20 @@ class MechanicalKnobs {
 
         // External parameter change — keep sliders in sync
         this._session.on('parameterChanged', ({ key, value }) => {
-            const entry = this._sliders[key];
+            const entry = this._elements[key];
             if (!entry) return;
-            if (parseFloat(entry.slider.value) !== value) {
-                entry.slider.value = value;
+            
+            let current;
+            if (entry.el.type === 'checkbox') {
+                current = entry.el.checked;
+            } else if (entry.el.tagName === 'SELECT') {
+                current = isNaN(entry.el.value) ? entry.el.value : parseFloat(entry.el.value);
+            } else {
+                current = parseFloat(entry.el.value);
+            }
+
+            if (current !== value) {
+                this._setValue(entry, value);
                 this._updateDisplay(entry, value);
                 this._updateRevertIcon(key, entry);
             }
@@ -159,12 +201,25 @@ class MechanicalKnobs {
             entry.revertEl.style.display = 'none';
             return;
         }
-        const current = parseFloat(entry.slider.value);
-        entry.revertEl.style.display = (current !== dflt) ? 'inline-block' : 'none';
+
+        let current;
+        if (entry.el.type === 'checkbox') {
+            current = entry.el.checked;
+        } else if (entry.el.tagName === 'SELECT') {
+            current = entry.el.value;
+        } else {
+            current = parseFloat(entry.el.value);
+        }
+
+        const isDirty = (typeof dflt === 'number') 
+            ? Math.abs(current - dflt) > 0.0001 
+            : current.toString() !== dflt.toString();
+
+        entry.revertEl.style.display = isDirty ? 'inline-block' : 'none';
     }
 
     _updateAllRevertIcons() {
-        for (const [key, entry] of Object.entries(this._sliders)) {
+        for (const [key, entry] of Object.entries(this._elements)) {
             this._updateRevertIcon(key, entry);
         }
     }
@@ -172,10 +227,10 @@ class MechanicalKnobs {
     // ─── Sync ─────────────────────────────────────────────────
 
     _syncFromConfig(config) {
-        for (const [key, entry] of Object.entries(this._sliders)) {
+        for (const [key, entry] of Object.entries(this._elements)) {
             if (config[key] !== undefined) {
                 const value = config[key];
-                entry.slider.value = value;
+                this._setValue(entry, value);
                 this._updateDisplay(entry, value);
             }
         }
@@ -183,10 +238,10 @@ class MechanicalKnobs {
 
     _syncFromState() {
         const state = this._session.getState();
-        for (const [key, entry] of Object.entries(this._sliders)) {
+        for (const [key, entry] of Object.entries(this._elements)) {
             if (state[key] !== undefined) {
                 const value = state[key];
-                entry.slider.value = value;
+                this._setValue(entry, value);
                 this._updateDisplay(entry, value);
             }
         }

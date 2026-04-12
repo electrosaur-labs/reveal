@@ -83,6 +83,17 @@ function initPlugin() {
             }
         }
 
+        // Wire Screen Printing panel toggle
+        const spPanel = document.getElementById('screen-printing-panel');
+        if (spPanel) {
+            const trigger = document.getElementById('screen-printing-panel-trigger');
+            if (trigger) {
+                trigger.addEventListener('click', () => {
+                    spPanel.classList.toggle('is-open');
+                });
+            }
+        }
+
         // Wire Palette Surgeon (non-fatal)
         try {
             surgeon = new PaletteSurgeon(
@@ -383,6 +394,10 @@ function initPlugin() {
         sessionState.on('previewUpdated', (data) => {
             _showHeaderStats(true);
 
+            // Hide processing overlay if active
+            const overlay = document.getElementById('processing-overlay');
+            if (overlay) overlay.classList.remove('visible');
+
             const colorsEl = document.getElementById('stat-colors');
             const deltaEl = document.getElementById('stat-delta');
             if (colorsEl && data.palette) {
@@ -404,6 +419,18 @@ function initPlugin() {
 
             updateMatchScore();
             updateDNADisplay();
+        });
+
+        sessionState.on('processingStart', () => {
+            const overlay = document.getElementById('processing-overlay');
+            if (overlay) overlay.classList.add('visible');
+        });
+
+        sessionState.on('error', (err) => {
+            const overlay = document.getElementById('processing-overlay');
+            if (overlay) overlay.classList.remove('visible');
+            _hideProgress();
+            _showError(err.message || 'An unknown error occurred', err.stack);
         });
 
         // Wire Reread Document button — re-ingests from Photoshop
