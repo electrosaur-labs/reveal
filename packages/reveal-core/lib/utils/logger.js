@@ -5,6 +5,9 @@
  * Drop-in replacement for console.log/warn/error.
  */
 
+// Detect silent mode from environment
+const isSilent = typeof process !== 'undefined' && (process.env.REVEAL_SILENT === 'true' || process.env.REVEAL_SILENT === '1');
+
 /**
  * Format timestamp as HH:MM:SS.mmm
  */
@@ -21,6 +24,7 @@ function getTimestamp() {
  * Log with timestamp prefix
  */
 function log(...args) {
+    if (isSilent) return;
     console.log(`[${getTimestamp()}]`, ...args);
 }
 
@@ -28,6 +32,7 @@ function log(...args) {
  * Warn with timestamp prefix
  */
 function warn(...args) {
+    if (isSilent) return;
     console.warn(`[${getTimestamp()}]`, ...args);
 }
 
@@ -35,6 +40,7 @@ function warn(...args) {
  * Error with timestamp prefix
  */
 function error(...args) {
+    if (isSilent) return;
     console.error(`[${getTimestamp()}]`, ...args);
 }
 
@@ -42,6 +48,7 @@ function error(...args) {
  * Group with timestamp (for console.group)
  */
 function group(...args) {
+    if (isSilent) return;
     console.group(`[${getTimestamp()}]`, ...args);
 }
 
@@ -49,6 +56,7 @@ function group(...args) {
  * Group end
  */
 function groupEnd() {
+    if (isSilent) return;
     console.groupEnd();
 }
 
