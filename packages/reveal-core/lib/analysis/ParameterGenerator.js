@@ -672,6 +672,7 @@ class ParameterGenerator {
 
             // Color mode
             colorMode: config.colorMode || 'color',
+            grayscaleOnly: (config.colorMode === 'bw' || config.colorMode === 'grayscale'),
 
             // Preservation
             preserveWhite: config.preserveWhite,

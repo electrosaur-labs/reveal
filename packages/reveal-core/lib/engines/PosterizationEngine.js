@@ -871,8 +871,8 @@ class PosterizationEngine {
 
                 for (const preserved of preservedColors) {
                     const dL = substrateLab.L - preserved.L;
-                    const da = substrateLab.a - preserved.a;
-                    const db = substrateLab.b - preserved.b;
+                    const da = grayscaleOnly ? 0 : (substrateLab.a - preserved.a);
+                    const db = grayscaleOnly ? 0 : (substrateLab.b - preserved.b);
                     const deltaE = Math.sqrt(dL * dL + da * da + db * db);
 
                     if (deltaE < DUPLICATE_THRESHOLD) {
@@ -882,7 +882,10 @@ class PosterizationEngine {
                 }
 
                 if (!isDuplicate) {
-                    substrateColors.push(substrateLab);
+                    const finalSubstrate = grayscaleOnly
+                        ? { L: substrateLab.L, a: 0, b: 0 }
+                        : substrateLab;
+                    substrateColors.push(finalSubstrate);
                 }
             }
         }

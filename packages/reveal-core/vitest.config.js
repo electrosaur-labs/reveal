@@ -6,8 +6,15 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.test.js'],
     pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleThread: true,
+      },
+    },
     testTimeout: 120_000,
     hookTimeout: 60_000,
+    teardownTimeout: 120_000,
+    rpcTimeout: 120_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

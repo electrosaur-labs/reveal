@@ -18,6 +18,7 @@ class PixelAssignment {
      * @param {string} options.distanceMetric - Distance metric (cie76, cie94, cie2000, or squared)
      * @param {number} options.lWeight - Lightness weight for distance calculation
      * @param {number} options.cWeight - Chroma weight for distance calculation
+     * @param {boolean} options.grayscaleOnly - Use L-only distance
      * @returns {Uint16Array} - Pixel-to-palette assignments
      */
     static reassignWithStride(labPixels, paletteLab, width, height, stride = 1, bitDepth = 16, options = {}) {
@@ -28,6 +29,7 @@ class PixelAssignment {
         const distanceMetric = options.distanceMetric || 'squared';
         const lWeight = options.lWeight !== undefined ? options.lWeight : 1.0;
         const cWeight = options.cWeight !== undefined ? options.cWeight : 1.0;
+        const grayscaleOnly = !!options.grayscaleOnly;
 
         // 16-BIT INTEGER PRECISION FIX:
         // Pre-convert palette to 16-bit integer space ONCE to preserve precision.
@@ -71,7 +73,10 @@ class PixelAssignment {
                     const target = paletteFloat[j];
 
                     let dist;
-                    if (distanceMetric === 'cie76') {
+                    if (grayscaleOnly) {
+                        const dL = pixelLab.L - target.L;
+                        dist = dL * dL;
+                    } else if (distanceMetric === 'cie76') {
                         dist = LabDistance.cie76SquaredInline(pixelLab.L, pixelLab.a, pixelLab.b, target.L, target.a, target.b);
                     } else if (distanceMetric === 'cie94') {
                         const C1 = Math.sqrt(pixelLab.a * pixelLab.a + pixelLab.b * pixelLab.b);

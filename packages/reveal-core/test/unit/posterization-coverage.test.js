@@ -379,11 +379,10 @@ describe('PosterizationEngine - Coverage Tests', () => {
             });
 
             expect(result.paletteLab).toBeDefined();
-            // Grayscale mode should produce colors with reduced chroma
-            // (engine averages within L-partitions, so a/b may not be zero)
+            // Grayscale mode must produce strictly neutral colors (a=0, b=0)
             for (const color of result.paletteLab) {
-                expect(Math.abs(color.a)).toBeLessThan(25);
-                expect(Math.abs(color.b)).toBeLessThan(25);
+                expect(color.a).toBe(0);
+                expect(color.b).toBe(0);
             }
         });
     });
