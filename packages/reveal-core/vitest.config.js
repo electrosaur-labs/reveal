@@ -5,13 +5,14 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/**/*.test.js'],
-    pool: 'threads',
+    pool: 'forks',
     poolOptions: {
-      threads: {
+      forks: {
         singleThread: true,
-        isolate: false,
       },
     },
+    maxWorkers: 1,
+    minWorkers: 1,
     testTimeout: 120_000,
     hookTimeout: 60_000,
     teardownTimeout: 120_000,
