@@ -5,9 +5,9 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/**/*.test.js'],
-    pool: 'forks',
+    pool: 'threads',
     poolOptions: {
-      forks: {
+      threads: {
         singleThread: true,
       },
     },
