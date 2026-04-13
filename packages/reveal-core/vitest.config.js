@@ -5,7 +5,13 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/**/*.test.js'],
-    pool: 'none',
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: true,
+        isolate: false,
+      },
+    },
     testTimeout: 120_000,
     hookTimeout: 60_000,
     teardownTimeout: 120_000,
