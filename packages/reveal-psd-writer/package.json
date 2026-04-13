@@ -9,7 +9,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node test/PSDWriter.test.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:generate": "node test/generate-16bit-test.js"
   },
   "dependencies": {},
