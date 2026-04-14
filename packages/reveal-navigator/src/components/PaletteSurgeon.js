@@ -79,9 +79,7 @@ class PaletteSurgeon {
         this._grid = document.createElement('div');
         this._grid.className = 'surgeon-grid';
         this._paletteRow.appendChild(this._grid);
-        this._paletteRow.appendChild(this._paletteHelp.btn);
         this._container.appendChild(this._paletteRow);
-        this._container.appendChild(this._paletteHelp.text);
 
         // Suggested colors tray (rendered below the palette grid)
         this._suggestedTray = document.createElement('div');
@@ -360,8 +358,9 @@ class PaletteSurgeon {
             this._swatchElements.set(i, swatch);
         }
 
-        // "+" add button — always available unless at hard max (20 screens)
-        if (rgbPalette.length < 20) {
+        // "+" add button — hide in B/W mode
+        const colorMode = this._session.state.colorMode;
+        if (rgbPalette.length < 20 && colorMode !== 'bw') {
             const addBtn = document.createElement('div');
             addBtn.className = 'surgeon-swatch surgeon-add';
             const addColor = document.createElement('span');
@@ -374,8 +373,12 @@ class PaletteSurgeon {
 
         this._container.style.display = 'block';
 
-        // Render suggested colors below the palette
-        this._renderSuggestedColors();
+        // Render suggested colors below the palette — hide in monochromatic modes
+        if (colorMode === 'bw' || colorMode === 'grayscale') {
+            this._suggestedTray.style.display = 'none';
+        } else {
+            this._renderSuggestedColors();
+        }
     }
 
     // ─── Click ───────────────────────────────────────────────
@@ -457,6 +460,18 @@ class PaletteSurgeon {
         this._headerText.textContent = 'Click a color to isolate';
         this._updateSelectionCSS();
 
+        // Smart removal for user-added colors
+        if (this._session.addedColors.has(i)) {
+            logger.log(`[Surgeon] REMOVE added color ${i} (alt+click)`);
+            this._session.removeAddedColor(i).catch(err => {
+                logger.log(`[PaletteSurgeon] Remove failed: ${err.message}`);
+                this._state = prevState;
+                this._selectedIndex = prevIndex;
+                this._updateSelectionCSS();
+            });
+            return;
+        }
+
         logger.log(`[Surgeon] DELETE swatch ${i} (alt+click)`);
         this._session.deletePaletteColor(i).catch(err => {
             logger.log(`[PaletteSurgeon] Delete failed: ${err.message}`);
@@ -480,6 +495,9 @@ class PaletteSurgeon {
     // ─── Color Picker ────────────────────────────────────────
 
     async _openColorPicker(i) {
+        const colorMode = this._session.state.colorMode;
+        if (colorMode === 'bw') return; // Strictly disabled for B/W
+
         const sep = this._session.getSeparationState();
         if (!sep) return;
 
@@ -512,20 +530,13 @@ class PaletteSurgeon {
                 const newG = Math.round(c.rgb.green);
                 const newB = Math.round(c.rgb.blue);
 
-                // Only treat as confirmed if the color actually changed from the swatch.
-                // Photoshop reverts foreground color on cancel, so this catches all
-                // cancel scenarios regardless of the batchPlay response format.
                 if (newR !== rgb.r || newG !== rgb.g || newB !== rgb.b) {
                     result = { r: newR, g: newG, b: newB };
                 }
             }, { commandName: "Pick Swatch Color" });
 
-            // Modal is done — release the picker lock immediately so the
-            // dialog close handler stops re-showing.  The async processing
-            // below (overridePaletteColor) must not hold this lock.
             this._setPickerOpen(false);
 
-            // Reset to IDLE before applying so the rebuild sees clean state
             this._state = 'IDLE';
             this._selectedIndex = -1;
             this._session.clearHighlight();
@@ -534,6 +545,9 @@ class PaletteSurgeon {
 
             if (result) {
                 const lab = Reveal.rgbToLab(result.r, result.g, result.b);
+                if (colorMode === 'grayscale') {
+                    lab.a = 0; lab.b = 0; // Force grayscale
+                }
                 await this._session.overridePaletteColor(i, lab);
                 logger.log(`[PaletteSurgeon] Color ${i} overridden: rgb(${result.r},${result.g},${result.b})`);
             }
@@ -543,13 +557,15 @@ class PaletteSurgeon {
             this._selectedIndex = -1;
             this._headerText.textContent = 'Click a color to isolate';
         } finally {
-            this._setPickerOpen(false);  // belt-and-suspenders for error paths
+            this._setPickerOpen(false);
         }
     }
 
     // ─── Add Color Picker ──────────────────────────────────────
 
     async _openAddColorPicker() {
+        const colorMode = this._session.state.colorMode;
+        if (colorMode === 'bw') return; // Strictly disabled for B/W
         if (this._pickerOpen) return;
 
         this._setPickerOpen(true);
@@ -559,7 +575,6 @@ class PaletteSurgeon {
             const { core, action, app } = require("photoshop");
             let result = null;
 
-            // Seed with mid-gray so any change counts as "confirmed"
             const seedR = 128, seedG = 128, seedB = 128;
 
             await core.executeAsModal(async () => {
@@ -581,19 +596,18 @@ class PaletteSurgeon {
                 const newG = Math.round(c.rgb.green);
                 const newB = Math.round(c.rgb.blue);
 
-                // Treat as confirmed if color changed from seed
                 if (newR !== seedR || newG !== seedG || newB !== seedB) {
                     result = { r: newR, g: newG, b: newB };
                 }
             }, { commandName: "Pick New Color" });
 
-            // Modal is done — release the picker lock immediately so the
-            // dialog close handler stops re-showing.  The async processing
-            // below (addPaletteColor) must not hold this lock.
             this._setPickerOpen(false);
 
             if (result) {
                 const lab = Reveal.rgbToLab(result.r, result.g, result.b);
+                if (colorMode === 'grayscale') {
+                    lab.a = 0; lab.b = 0; // Force grayscale
+                }
                 logger.log(`[PaletteSurgeon] Adding color: rgb(${result.r},${result.g},${result.b}) → Lab(${lab.L.toFixed(1)},${lab.a.toFixed(1)},${lab.b.toFixed(1)})`);
                 await this._session.addPaletteColor(lab);
             }
@@ -603,7 +617,7 @@ class PaletteSurgeon {
             logger.log(`[PaletteSurgeon] Add color picker error: ${err.message}`);
             this._headerText.textContent = 'Click a color to isolate';
         } finally {
-            this._setPickerOpen(false);  // belt-and-suspenders for error paths
+            this._setPickerOpen(false);
         }
     }
 
@@ -612,7 +626,6 @@ class PaletteSurgeon {
     _onRevert(i) {
         if (this._pickerOpen) return;
 
-        // Added colors get fully removed (palette shrinks) instead of reverted
         if (this._session.addedColors.has(i)) {
             this._state = 'IDLE';
             this._selectedIndex = -1;
@@ -631,26 +644,21 @@ class PaletteSurgeon {
 
     // ─── Suggested Colors ─────────────────────────────────────
 
-    /** Check if a suggestion was already checked (delegates to SessionState) */
     _isSuggestionAdded(suggestion) {
         return this._session.isSuggestionChecked(suggestion);
     }
 
-    /** Remove a checked suggestion (delegates to SessionState) */
     _removeSuggestion(suggestion) {
         this._session.removeCheckedSuggestion(suggestion);
     }
 
-    /** ΔE between two Lab colors */
     _deltaE(c1, c2) {
         return Reveal.LabDistance.cie76(c1, c2);
     }
 
-    /** Check if a suggestion is too close to any current palette entry (linear ΔE < 15) */
     _isTooCloseToCurrentPalette(suggestion) {
         const sep = this._session.getSeparationState();
         if (!sep || !sep.palette) return false;
-        // Linear ΔE threshold for "too similar to existing palette color" exclusion
         const PALETTE_EXCLUSION_DE = 15;
         for (const pal of sep.palette) {
             if (this._deltaE(suggestion, pal) < PALETTE_EXCLUSION_DE) return true;
@@ -660,8 +668,6 @@ class PaletteSurgeon {
 
     _renderSuggestedColors() {
         const cachedSuggestions = this._session.getSuggestedColors();
-
-        // Filter against CURRENT palette — but never filter out checked (added) suggestions
         const suggestions = (cachedSuggestions || []).filter(s =>
             this._isSuggestionAdded(s) || !this._isTooCloseToCurrentPalette(s)
         );
@@ -695,7 +701,6 @@ class PaletteSurgeon {
             swatch.className = 'surgeon-suggested-swatch';
             swatch.style.background = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
 
-            // Extract percentage from reason string (e.g. "3.2% of image")
             const pctMatch = suggestion.reason && suggestion.reason.match(/([\d.]+)%/);
             const pctStr = pctMatch ? pctMatch[1] + '%' : '';
 
@@ -707,64 +712,41 @@ class PaletteSurgeon {
 
             const idx = si;
 
-            // Ctrl+click: toggle "must be in final palette" checkmark
             swatch.addEventListener('pointerdown', (e) => {
                 if (!e.ctrlKey || this._pickerOpen) return;
-                e.preventDefault();
-                e.stopPropagation();
+                e.preventDefault(); e.stopPropagation();
                 swatch._ctrlHandled = true;
-
                 if (isAdded) {
-                    logger.log(`[Surgeon] Unmarked suggested color: L=${suggestion.L.toFixed(0)} a=${suggestion.a.toFixed(0)} b=${suggestion.b.toFixed(0)}`);
                     this._removeSuggestion(suggestion);
                 } else {
-                    logger.log(`[Surgeon] Marked suggested color: ${suggestion.reason}`);
                     this._session.addCheckedSuggestion(suggestion);
                 }
                 this._renderSuggestedColors();
             });
 
-            // Plain click: select/deselect (solo view in preview)
             swatch.onclick = (e) => {
                 if (swatch._ctrlHandled) { swatch._ctrlHandled = false; return; }
                 if (this._pickerOpen) return;
-
-                // Deselect any palette swatch
                 if (this._state === 'SELECTED') {
-                    this._state = 'IDLE';
-                    this._selectedIndex = -1;
+                    this._state = 'IDLE'; this._selectedIndex = -1;
                     this._updateSelectionCSS();
                 }
-
                 if (this._selectedSuggestionIdx === idx) {
                     if (this._suggestionViewMode === 'solo') {
-                        // Solo → show integrated "what if" preview
                         this._suggestionViewMode = 'integrated';
-                        this._session.setSuggestionGhost(
-                            { L: suggestion.L, a: suggestion.a, b: suggestion.b },
-                            'integrated'
-                        );
+                        this._session.setSuggestionGhost({ L: suggestion.L, a: suggestion.a, b: suggestion.b }, 'integrated');
                         this._headerText.textContent = 'Showing "what if" \u2014 click to deselect';
                     } else {
-                        // Integrated → deselect
-                        this._selectedSuggestionIdx = -1;
-                        this._suggestionViewMode = null;
-                        this._session.clearHighlight();
-                        this._headerText.textContent = 'Click a color to isolate';
+                        this._selectedSuggestionIdx = -1; this._suggestionViewMode = null;
+                        this._session.clearHighlight(); this._headerText.textContent = 'Click a color to isolate';
                     }
                 } else {
-                    // Select this suggestion → show solo isolation
-                    this._selectedSuggestionIdx = idx;
-                    this._suggestionViewMode = 'solo';
-                    this._session.setSuggestionGhost(
-                        { L: suggestion.L, a: suggestion.a, b: suggestion.b },
-                        'solo'
-                    );
+                    this._selectedSuggestionIdx = idx; this._suggestionViewMode = 'solo';
+                    this._session.setSuggestionGhost({ L: suggestion.L, a: suggestion.a, b: suggestion.b }, 'solo');
                     this._headerText.textContent = 'Ctrl+click to mark "must have"';
                 }
                 this._renderSuggestedColors();
             };
-
 
             const wrapper = document.createElement('div');
             wrapper.className = 'surgeon-suggested-item';
@@ -795,7 +777,6 @@ class PaletteSurgeon {
             } else {
                 swatch.classList.remove('surgeon-selected');
             }
-            // Show revert button when selected AND (overridden OR deleted OR added)
             const revertBtn = swatch.querySelector('.surgeon-revert');
             if (revertBtn) {
                 const addedColors = this._session.addedColors;
@@ -807,7 +788,7 @@ class PaletteSurgeon {
             }
         }
     }
-    /** True if swatch is deleted or a merge source (not editable). */
+
     _isDeadSwatch(i) {
         if (this._session.deletedColors.has(i)) return true;
         for (const sources of this._session.mergeHistory.values()) {
@@ -816,14 +797,6 @@ class PaletteSurgeon {
         return false;
     }
 
-    // ─── Drag Helpers ──────────────────────────────────────
-
-    /**
-     * Hit-test swatches by bounding rect (UXP lacks elementFromPoint).
-     * @param {number} clientX
-     * @param {number} clientY
-     * @returns {number} palette index under pointer, or -1
-     */
     _hitTestSwatch(clientX, clientY) {
         for (const [idx, el] of this._swatchElements) {
             const r = el.getBoundingClientRect();
@@ -835,25 +808,17 @@ class PaletteSurgeon {
         return -1;
     }
 
-    /**
-     * Create a ? help button + collapsible help text block.
-     * @param {string} helpText
-     * @returns {{ btn: HTMLElement, text: HTMLElement }}
-     */
     _createHelpBlock(helpText) {
         const btn = document.createElement('button');
         btn.className = 'knob-help-btn';
         btn.title = 'Help';
         btn.textContent = '?';
-
         const text = document.createElement('span');
         text.className = 'knob-help';
         text.textContent = helpText;
-
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const isVisible = text.classList.contains('visible');
-            // Close any other open help
             document.querySelectorAll('.knob-help.visible').forEach(el => el.classList.remove('visible'));
             document.querySelectorAll('.knob-help-btn.active').forEach(el => el.classList.remove('active'));
             if (!isVisible) {
@@ -861,7 +826,6 @@ class PaletteSurgeon {
                 btn.classList.add('active');
             }
         });
-
         return { btn, text };
     }
 }
