@@ -30,6 +30,7 @@ const HueGapRecovery = require('./HueGapRecovery');
 const RgbMedianCut = require('./RgbMedianCut');
 const PixelAssignment = require('./PixelAssignment');
 const RevealMk15Engine = require('./RevealMk15Engine');
+const StencilEngine = require('./StencilEngine');
 
 /**
  * @typedef {Object} PosterizeOptions
@@ -255,6 +256,13 @@ class PosterizationEngine {
         const bitDepthSource = options.tuning ? 'tuning.centroid.bitDepth' : '_normalizeBitDepth(options.bitDepth)';
 
         // Dispatch to appropriate engine with strategy injection
+        if (options.colorMode === 'bw' || options.colorMode === 'grayscale') {
+            return this._posterizeStencil(pixels, width, height, targetColors, {
+                ...options,
+                enableGridOptimization
+            });
+        }
+
         switch (engineType) {
             case 'reveal':
                 return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
@@ -1153,11 +1161,7 @@ class PosterizationEngine {
      * @private
      */
     static _posterizeStencil(pixels, width, height, targetColors, options = {}) {
-        return this._posterizeRevealMk1_0(pixels, width, height, targetColors, {
-            ...options,
-            grayscaleOnly: true,
-            enableHueGapAnalysis: false
-        });
+        return StencilEngine.posterize(pixels, width, height, targetColors, options);
     }
 
     // ========================================================================

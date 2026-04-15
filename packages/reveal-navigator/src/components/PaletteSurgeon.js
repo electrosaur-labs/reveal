@@ -143,6 +143,7 @@ class PaletteSurgeon {
 
         // Lab palette for D50 swatch rendering and gamut badges
         const labPalette = sep.palette;
+        const colorMode = this._session.state.colorMode;
 
         for (let i = 0; i < rgbPalette.length; i++) {
             const isDeleted = this._session.deletedColors.has(i);
@@ -273,7 +274,8 @@ class PaletteSurgeon {
                 e.stopPropagation();
 
                 // Deleted swatches: allow click (select → revert) but no drag
-                if (!isDeleted) {
+                // B/W mode: No merging allowed (strict 2-color)
+                if (!isDeleted && colorMode !== 'bw') {
                     swatch.setPointerCapture(e.pointerId);
                     this._dragSourceIndex = idx;
                     this._dragStartX = e.clientX;
@@ -359,7 +361,6 @@ class PaletteSurgeon {
         }
 
         // "+" add button — hide in B/W mode
-        const colorMode = this._session.state.colorMode;
         if (rgbPalette.length < 20 && colorMode !== 'bw') {
             const addBtn = document.createElement('div');
             addBtn.className = 'surgeon-swatch surgeon-add';
@@ -394,10 +395,15 @@ class PaletteSurgeon {
         }
 
         const isDeleted = this._session.deletedColors.has(i);
+        const colorMode = this._session.state.colorMode;
 
         // Alt+click → delete swatch (merge into nearest neighbor)
-        // On already-deleted swatch, Alt+click reverts instead
+        // B/W Mode: Blocking deletion entirely to preserve 2-color environment
         if (altKey) {
+            if (colorMode === 'bw') {
+                this._headerText.textContent = 'Deletion disabled in B/W mode';
+                return;
+            }
             if (isDeleted) {
                 this._onRevert(i);
             } else {
@@ -442,7 +448,12 @@ class PaletteSurgeon {
             this._selectedIndex = i;
             this._state = 'SELECTED';
             this._session.setHighlight(i);
-            this._headerText.textContent = 'Shift+click merge \u2022 Alt+click delete \u2022 Ctrl+click edit';
+            
+            if (colorMode === 'bw') {
+                this._headerText.textContent = 'B/W mode: Edits and merges disabled';
+            } else {
+                this._headerText.textContent = 'Shift+click merge \u2022 Alt+click delete \u2022 Ctrl+click edit';
+            }
         }
 
         this._updateSelectionCSS();
@@ -451,6 +462,9 @@ class PaletteSurgeon {
     // ─── Delete Swatch ─────────────────────────────────────────
 
     _onDeleteSwatch(i) {
+        const colorMode = this._session.state.colorMode;
+        if (colorMode === 'bw') return; // Blocking deletion in B/W
+
         // Reset selection state
         const prevState = this._state;
         const prevIndex = this._selectedIndex;
@@ -512,6 +526,7 @@ class PaletteSurgeon {
             let result = null;
 
             await core.executeAsModal(async () => {
+                // Set the foreground color first
                 await action.batchPlay([{
                     _obj: "set",
                     _target: [{ _ref: "color", _property: "foregroundColor" }],
@@ -521,6 +536,7 @@ class PaletteSurgeon {
                     }
                 }], {});
 
+                // Show the picker
                 await action.batchPlay([{
                     _obj: "showColorPicker"
                 }], {});
@@ -546,7 +562,8 @@ class PaletteSurgeon {
             if (result) {
                 const lab = Reveal.rgbToLab(result.r, result.g, result.b);
                 if (colorMode === 'grayscale') {
-                    lab.a = 0; lab.b = 0; // Force grayscale
+                    // Fallback for Grayscale: Discard chroma, keep only L
+                    lab.a = 0; lab.b = 0; 
                 }
                 await this._session.overridePaletteColor(i, lab);
                 logger.log(`[PaletteSurgeon] Color ${i} overridden: rgb(${result.r},${result.g},${result.b})`);
@@ -606,7 +623,8 @@ class PaletteSurgeon {
             if (result) {
                 const lab = Reveal.rgbToLab(result.r, result.g, result.b);
                 if (colorMode === 'grayscale') {
-                    lab.a = 0; lab.b = 0; // Force grayscale
+                    // Fallback for Grayscale: Discard chroma, keep only L
+                    lab.a = 0; lab.b = 0;
                 }
                 logger.log(`[PaletteSurgeon] Adding color: rgb(${result.r},${result.g},${result.b}) → Lab(${lab.L.toFixed(1)},${lab.a.toFixed(1)},${lab.b.toFixed(1)})`);
                 await this._session.addPaletteColor(lab);
