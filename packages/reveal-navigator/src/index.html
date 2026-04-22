@@ -909,18 +909,15 @@
             border: 1px solid #3a3a3a;
             border-radius: 3px;
             background: #2a2a2a;
-            height: 90px;
+            min-height: 90px;
+            height: auto;
             overflow-y: auto;
             position: relative;
         }
 
         #palette-surgeon .knob-help.visible {
-            position: fixed;
-            left: 12px;
-            right: 12px;
-            bottom: 12px;
-            z-index: 100;
             display: block;
+            margin: 4px 0 6px 0;
         }
 
         #structural-confirm {
@@ -950,7 +947,19 @@
         }
 
         .surgeon-header {
-            display: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            padding: 0 2px;
+        }
+
+        .surgeon-header span {
+            color: #aaa;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: bold;
         }
 
         .surgeon-palette-row {
@@ -1542,15 +1551,13 @@
                         <select id="picker-substrateMode">
                             <option value="auto">Auto</option>
                             <option value="white">White</option>
-                            <option value="dark">Dark</option>
                             <option value="black">Black</option>
                             <option value="none">None</option>
-                            <option value="transparent">Transparent</option>
                         </select>
                         <button class="knob-revert" id="revert-substrateMode" style="margin-left: auto;">&#x21BA;</button>
                         <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
                     </div>
-                    <span class="knob-help">What you're printing on. Auto detects from the image. White/Dark/Black set the substrate color explicitly. Transparent treats the substrate as see-through. Affects how background pixels are handled in the separation.</span>
+                    <span class="knob-help">What you're printing on. Auto detects background from corners. White/Black set color explicitly. None treats background as a printable color. Background pixels are culled from quantization to save palette slots.</span>
 
                     <!-- Group: Optimization (moved from Advanced) -->
                     <div class="knob-group-label" style="border-top: 3px solid #666;">Optimization</div>
