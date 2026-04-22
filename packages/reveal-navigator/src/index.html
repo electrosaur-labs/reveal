@@ -261,6 +261,11 @@
             white-space: nowrap;
         }
 
+        .stat-sort-arrow {
+            font-size: 8px;
+            margin-left: 2px;
+        }
+
         .stat-sep {
             color: #555;
             margin: 0 3px;
@@ -269,14 +274,15 @@
 
         /* ─── Mechanical Knobs Panel ─── */
         #knobs-panel {
-            flex: 1 1 0;
+            flex: 1 1 auto;
             min-height: 0;
             display: flex;
             flex-direction: column;
-            padding: 5px 4px;
+            padding: 0 4px 5px 4px;
             border: 1px solid #3a3a3a;
             border-radius: 3px;
             background: #2a2a2a;
+            overflow: hidden;
         }
 
         .knob-row {
@@ -337,7 +343,6 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin: 14px 0 8px 0;
-            border-top: 1px solid #444;
             padding-top: 8px;
         }
 
@@ -406,13 +411,13 @@
         #screen-printing-panel-trigger::before {
             content: '▶';
             display: inline-block;
-            margin-right: 6px;
-            font-size: 8px;
-            transition: transform 0.1s;
+            margin-right: 8px;
+            font-size: 11px;
+            transition: color 0.2s ease;
         }
 
         #screen-printing-panel.is-open #screen-printing-panel-trigger::before {
-            transform: rotate(90deg);
+            content: '▼';
         }
 
         #screen-printing-panel-content {
@@ -438,13 +443,13 @@
         #advanced-panel-trigger::before {
             content: '▶';
             display: inline-block;
-            margin-right: 6px;
-            font-size: 8px;
-            transition: transform 0.1s;
+            margin-right: 8px;
+            font-size: 11px;
+            transition: color 0.2s ease;
         }
 
         #advanced-panel.is-open #advanced-panel-trigger::before {
-            transform: rotate(90deg);
+            content: '▼';
         }
 
         #advanced-panel-content {
@@ -475,48 +480,55 @@
             accent-color: #4da6ff;
         }
 
-        #btn-reread {
+        /* Unified Top Action Buttons */
+        .top-action-btn {
             width: 100%;
-            margin-top: 12px;
-            margin-bottom: 4px;
+            height: 38px;
+            margin: 0 0 6px 0;
             padding: 6px 8px;
-            background: #1a2a3a;
-            border: 1px solid #3070a0;
-            color: #60b0ff;
             border-radius: 3px;
-            font-size: 11px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 700;
             cursor: pointer;
+            border: 1px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        #btn-reread {
+            background: #1a2a3a;
+            border-color: #3070a0;
+            color: #60b0ff;
         }
         #btn-reread:hover:not(:disabled) {
             background: #203848;
             border-color: #4090c0;
         }
-        #btn-reread:disabled {
-            opacity: 0.3;
-            cursor: default;
-        }
 
         #btn-reset-top {
-            width: 100%;
-            margin-top: 4px;
-            margin-bottom: 4px;
-            padding: 6px 8px;
             background: #3a3020;
-            border: 1px solid #7a6530;
+            border-color: #7a6530;
             color: #e0a030;
-            border-radius: 3px;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
         }
-
         #btn-reset-top:hover:not(:disabled) {
             background: #4a3a28;
             border-color: #a08040;
         }
 
-        #btn-reset-top:disabled {
+        #btn-finalize {
+            background: #1a3a2a;
+            border-color: #307050;
+            color: #60c090;
+        }
+        #btn-finalize:hover:not(:disabled) {
+            background: #204838;
+            border-color: #409060;
+            color: #fff;
+        }
+
+        .top-action-btn:disabled {
             opacity: 0.3;
             cursor: default;
         }
@@ -1176,24 +1188,9 @@
         /* ─── Finalize Row ─── */
         #finalize-row {
             flex-shrink: 0;
-            padding: 0 0 8px 0;
+            padding: 0;
+            margin: 0 0 8px 0;
             text-align: center;
-        }
-
-        #finalize-row sp-action-button {
-            width: 100%;
-            background: #1a3a2a;
-            border: 1px solid #307050;
-            color: #60c090;
-            border-radius: 3px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-
-        #finalize-row sp-action-button:hover {
-            background: #204838;
-            border-color: #409060;
-            color: #fff;
         }
 
         #finalize-summary {
@@ -1226,7 +1223,7 @@
             flex: 0 0 320px;
             display: flex;
             flex-direction: column;
-            padding: 8px;
+            padding: 0 8px 8px 8px;
             border-left: 1px solid #444;
             background: #2a2a2a;
             min-height: 0;
@@ -1234,6 +1231,7 @@
         }
         #knobs-header {
             flex: 0 0 auto;
+            padding-top: 8px;
         }
         #knobs-scroll {
             flex: 1 1 0;
@@ -1243,9 +1241,7 @@
 
         #hud-info {
             display: flex;
-            flex-direction: column;
-            gap: 4px;
-            width: 100%;
+            flex-direction: column; gap: 4px; width: 100%;
         }
 
         #status-bar {
@@ -1494,24 +1490,24 @@
             <!-- Mechanical Knobs -->
             <div id="knobs-panel" style="display:none;">
                 <div id="knobs-header">
-                    <button id="btn-reread" title="Reread the document from Photoshop">Reread Document</button>
-                    <button id="btn-reset-top" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
+                    <button id="btn-reread" class="top-action-btn" title="Reread the document from Photoshop">Reread Document</button>
+                    <button id="btn-reset-top" class="top-action-btn" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
 
                     <!-- Finalize Flight Plan -->
                     <div id="finalize-row" style="display:none;">
-                        <sp-action-button id="btn-finalize" variant="accent">Separate</sp-action-button>
+                        <button id="btn-finalize" class="top-action-btn" title="Finalize separation">Separate</button>
                         <div id="finalize-progress"></div>
                         <div id="finalize-summary"></div>
                     </div>
+                </div>
 
-                    <div class="knob-row" style="margin-bottom:4px;">
+                <div id="knobs-scroll">
+                    <div class="knob-row" style="margin-bottom:4px; margin-top: 4px;">
                         <span style="color:#e0e0e0; font-size:14px; font-weight:600; letter-spacing:0.5px;">Basic</span>
                         <button id="btn-help-toggle" title="Toggle help descriptions">?</button>
                     </div>
 
-                </div>
-
-                <div id="knobs-scroll">
+                    <div class="knob-group-label" style="border-top: none; padding-top: 0; margin-top: 4px;">Colors</div>
                 <div class="knob-row">
                     <span class="knob-label">Target Colors</span>
                     <button class="knob-revert" id="revert-targetColors" title="Revert to archetype default">&#x21BA;</button>
@@ -1539,7 +1535,7 @@
                     <span class="knob-help">Guarantee a pure black in the palette. Keeps crisp outlines and text sharp instead of mixing from other dark colors.</span>
 
                     <!-- Group: Substrate (moved from Advanced) -->
-                    <div class="knob-group-label">Substrate</div>
+                    <div class="knob-group-label" style="border-top: 3px solid #666;">Substrate</div>
 
                     <div class="knob-row" style="justify-content: flex-start !important;">
                         <span class="knob-label">Substrate</span>
@@ -1557,7 +1553,7 @@
                     <span class="knob-help">What you're printing on. Auto detects from the image. White/Dark/Black set the substrate color explicitly. Transparent treats the substrate as see-through. Affects how background pixels are handled in the separation.</span>
 
                     <!-- Group: Optimization (moved from Advanced) -->
-                    <div class="knob-group-label">Optimization</div>
+                    <div class="knob-group-label" style="border-top: 3px solid #666;">Optimization</div>
 
                     <div class="knob-row" style="justify-content: flex-start !important;">
                         <span class="knob-label">Auto Merge</span>
@@ -1568,7 +1564,9 @@
                     <span class="knob-help">Master switch for the palette reduction pass. When off, no colors are merged regardless of Merge Distance. When on, the engine applies the ΔE merge threshold.</span>
                 </div>
 
-                <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
+                <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
+
+                <div class="knob-group-label" style="border-top: 3px solid #666;">Refinement</div>
 
                 <div class="knob-row">
                     <span class="knob-label">Minimum Coverage</span>
@@ -1597,7 +1595,9 @@
                 <sp-slider id="knob-shadowClamp" min="0" max="40" step="0.5" value="8" variant="filled"></sp-slider>
                 <span class="knob-help">Minimum mask density for each color. Faint areas below this threshold get boosted so they remain visible in the output. 0% = no clamping.</span>
 
-                <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
+                <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
+
+                <div class="knob-group-label" style="border-top: 3px solid #666;">Post-processing</div>
 
                 <div class="knob-row" style="justify-content: flex-start !important;">
                     <span class="knob-label">Dither</span>
@@ -1613,7 +1613,7 @@
                 </div>
                 <span class="knob-help">Dithering pattern to simulate smooth gradients with a limited palette. None = hard edges between colors. Floyd-Steinberg = classic error diffusion. Atkinson = sharp, clean transitions. Bayer = ordered grid pattern. Stucki = wide-kernel diffusion.</span>
 
-                <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
+                <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
 
                 <!-- ─── Screen Printing (Foldable) ─── -->
                 <div id="screen-printing-panel" style="margin-bottom: 8px;">
@@ -1649,7 +1649,7 @@
                     </div><!-- /screen-printing-panel-content -->
                 </div><!-- /screen-printing-panel -->
 
-                <hr style="border: none; border-top: 1px solid #444; margin: 6px 0;" />
+                <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
 
                 <!-- ─── Advanced (Engine Room) ─── -->
                 <div id="advanced-panel" style="margin-bottom: 8px;">
