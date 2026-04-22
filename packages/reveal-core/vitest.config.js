@@ -16,7 +16,7 @@ export default defineConfig({
     testTimeout: 120_000,
     hookTimeout: 60_000,
     teardownTimeout: 120_000,
-    rpcTimeout: 120_000,
+    rpcTimeout: 300_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
