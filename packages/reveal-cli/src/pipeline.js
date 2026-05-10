@@ -141,7 +141,13 @@ async function processSingle(lab16bit, width, height, options = {}) {
     dna.archetype = config.meta?.archetypeId;
 
     // Apply CLI overrides
-    if (options.colors !== undefined) config.targetColors = options.colors;
+    if (options.colors !== undefined) {
+        config.targetColors = options.colors;
+        config.targetColorsSlider = options.colors;
+        // Strictly honor explicit color counts by disabling rescues
+        config.enableHueGapAnalysis = false;
+        config.forcePeaks = false;
+    }
     if (options.minVolume !== undefined) config.minVolume = options.minVolume;
     if (options.speckleRescue !== undefined) config.speckleRescue = options.speckleRescue;
     if (options.shadowClamp !== undefined) config.shadowClamp = options.shadowClamp;

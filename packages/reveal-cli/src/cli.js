@@ -31,7 +31,8 @@ program
     .option('--min-volume <percent>', 'Minimum coverage threshold (0-5%)', parseFloat)
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
     .option('--shadow-clamp <percent>', 'Ink body clamp (0-20%)', parseFloat)
-    .option('--single', 'Single archetype mode (default: compare 3 adaptive + top-scoring)')
+    .option('--single', 'Single archetype mode (default if --archetype provided)')
+    .option('--compare', 'Compare mode: Chameleon, Distilled, Salamander + top DNA match (default)')
     .option('--recipe <path>', 'Load settings from recipe JSON')
     .option('--save-recipe <path>', 'Save effective settings to recipe JSON')
     .option('--list-archetypes', 'Print available archetypes and exit')
@@ -82,6 +83,9 @@ async function run(inputFile, options) {
 
     try {
         // Validation
+        if (options.compare && (options.single || options.archetype)) {
+            throw new Error('--compare and --single/--archetype are mutually exclusive');
+        }
         if (options.single && !options.archetype) {
             throw new Error('--single requires --archetype (which archetype to use?)');
         }
@@ -107,7 +111,8 @@ async function run(inputFile, options) {
             // Merge recipe outputs with CLI formats
             const recipeFormats = recipe.outputs || [];
             mergedOptions.formats = new Set([...formats, ...recipeFormats]);
-            mergedOptions.single = options.single;
+            mergedOptions.single = options.single || !!mergedOptions.archetype;
+            mergedOptions.compare = options.compare;
             mergedOptions.output = options.output || recipe.outputDir;
             mergedOptions.quiet = options.quiet;
             mergedOptions.verbose = options.verbose;
@@ -116,6 +121,7 @@ async function run(inputFile, options) {
             log(`Loaded recipe: ${options.recipe}`);
         } else {
             mergedOptions.formats = formats;
+            mergedOptions.single = options.single || !!options.archetype;
         }
 
         // Ingest
@@ -127,10 +133,10 @@ async function run(inputFile, options) {
         const basename = path.basename(inputFile, path.extname(inputFile));
         const inputDir = path.dirname(path.resolve(inputFile));
 
-        if (mergedOptions.single || mergedOptions.archetype) {
+        if (mergedOptions.single) {
             await runSingle(lab16bit, width, height, basename, inputDir, inputFormat, mergedOptions, log, verbose, inputFile);
         } else {
-            await runCompare(lab16bit, width, height, basename, inputDir, inputFormat, mergedOptions, log, verbose);
+            await runCompare(lab16bit, width, height, basename, inputDir, inputFormat, mergedOptions, log, verbose, inputFile);
         }
 
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -222,7 +228,7 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
     }
 }
 
-async function runCompare(lab16bit, width, height, basename, inputDir, inputFormat, options, log, verbose) {
+async function runCompare(lab16bit, width, height, basename, inputDir, inputFormat, options, log, verbose, inputFile) {
     // Shared DNA computation
     log('Computing DNA...');
     const dna = computeDna(lab16bit, width, height);
@@ -234,7 +240,8 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
     // Deduplicate if top match is one of the pseudos
     const uniqueArchetypes = [...new Set(archetypes)];
 
-    const parentDir = path.join(options.output ? path.resolve(options.output) : inputDir, `${basename}_reveal`);
+    const rootOutputDir = options.output ? path.resolve(options.output) : inputDir;
+    const parentDir = path.join(rootOutputDir, `${basename}_reveal`);
     if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
 
     const summaryRows = [];
@@ -258,8 +265,57 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
 
         // Write outputs in subdirectory — preserve 16-bit depth for PSD/TIFF input
         const sixteenBit = inputFormat === 'psd' || inputFormat === 'tiff';
-        await writeFlat(result.colorIndices, result.paletteLab, width, height,
-            path.join(subDir, `${basename}.png`), { sixteenBit });
+        const subFlatPath = path.join(subDir, `${basename}.png`);
+        await writeFlat(result.colorIndices, result.paletteLab, width, height, subFlatPath, { sixteenBit });
+
+        // If this is the top DNA match, ALSO write to the root output directory
+        // to satisfy integration tests and provide a convenient "best" result.
+        if (archId === topMatch) {
+            const rootFlatPath = path.join(rootOutputDir, `${basename}_reveal.png`);
+            await writeFlat(result.colorIndices, result.paletteLab, width, height, rootFlatPath, { sixteenBit });
+            log(`Wrote top match to root: ${rootFlatPath}`);
+
+            const rootOutputFiles = [path.basename(rootFlatPath)];
+
+            // Write requested formats to root too
+            if (options.formats.has('psd')) {
+                const rootPsdPath = path.join(rootOutputDir, `${basename}_reveal.psd`);
+                await writePsd(result.paletteLab, result.paletteRgb, result.masks, result.colorIndices, width, height, rootPsdPath);
+                rootOutputFiles.push(path.basename(rootPsdPath));
+            }
+
+            if (options.formats.has('ora')) {
+                const rootOraPath = path.join(rootOutputDir, `${basename}_reveal.ora`);
+                await writeOra(result.paletteLab, result.paletteRgb, result.masks, result.colorIndices, width, height, rootOraPath, result.hexColors);
+                rootOutputFiles.push(path.basename(rootOraPath));
+            }
+
+            if (options.formats.has('plates')) {
+                const rootPlatePaths = await writePlates(result.masks, result.hexColors, width, height, rootOutputDir, basename);
+                rootOutputFiles.push(...rootPlatePaths.map(p => path.basename(p)));
+            }
+
+            if (options.json !== false) {
+                const rootJsonPath = path.join(rootOutputDir, `${basename}_reveal.json`);
+                writeSidecar(rootJsonPath, result, {
+                    inputFile: path.basename(inputFile),
+                    outputFiles: rootOutputFiles,
+                    trap: options.trap || 0,
+                });
+            }
+
+            // Save recipe if requested
+            if (options.saveRecipe) {
+                saveRecipe(options.saveRecipe, {
+                    archetype: result.config.meta?.archetypeId,
+                    colors: result.paletteLab.length,
+                    trap: options.trap,
+                    minVolume: result.config.minVolume,
+                    speckleRescue: result.config.speckleRescue,
+                    shadowClamp: result.config.shadowClamp,
+                });
+            }
+        }
 
         if (options.formats.has('psd')) {
             await writePsd(result.paletteLab, result.paletteRgb, result.masks, result.colorIndices, width, height,

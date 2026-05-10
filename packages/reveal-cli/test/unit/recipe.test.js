@@ -53,10 +53,10 @@ describe('recipe', () => {
         it('validates colors range', () => {
             const filePath = path.join(tmpDir, 'recipe.json');
             fs.writeFileSync(filePath, JSON.stringify({ colors: 1 }));
-            expect(() => loadRecipe(filePath)).toThrow('colors" must be 2-10');
+            expect(() => loadRecipe(filePath)).toThrow('colors" must be 2-12');
 
-            fs.writeFileSync(filePath, JSON.stringify({ colors: 11 }));
-            expect(() => loadRecipe(filePath)).toThrow('colors" must be 2-10');
+            fs.writeFileSync(filePath, JSON.stringify({ colors: 13 }));
+            expect(() => loadRecipe(filePath)).toThrow('colors" must be 2-12');
         });
 
         it('validates minVolume range', () => {
