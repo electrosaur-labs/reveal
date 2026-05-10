@@ -1,5 +1,5 @@
 # reveal-navigator TODOs
 
-## UI Labels
+## General
 
-- [ ] Rename "Halftone" label (Output group, `picker-ditherType`) to **"Dither"** — matches Krita plugin convention and is more technically accurate for the screen printing workflow.
+- [ ] Add more comprehensive integration tests for ProductionWorker.

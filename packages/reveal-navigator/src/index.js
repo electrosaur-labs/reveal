@@ -803,6 +803,12 @@ function _showProgress(label, percent) {
         const shortLabel = label.replace(/[\u2026.]+$/, '').trim();
         const pct = percent != null ? percent : 0;
 
+        // If this is a new phase, move the previous one to [OK]
+        const currentActive = progressEl.querySelector('.splash-active-text');
+        if (currentActive && currentActive.textContent !== shortLabel.toUpperCase()) {
+             _completedPhases.push(currentActive.textContent.toLowerCase());
+        }
+
         let html = '<div class="splash-header">REVEAL CORE PROCESS LOG [v1.0.1]</div>';
 
         // Completed phases with [OK]
@@ -813,7 +819,8 @@ function _showProgress(label, percent) {
 
         // Current phase with [IN PROGRESS...]
         html += '<div class="splash-line">' +
-            shortLabel.toUpperCase() + ': <span class="splash-active">[IN PROGRESS...]</span></div>';
+            shortLabel.toUpperCase() + ': <span class="splash-active">[IN PROGRESS...]</span>' +
+            '<span class="splash-active-text" style="display:none">' + shortLabel.toUpperCase() + '</span></div>';
 
         // Progress bar
         html += '<div class="splash-bar"><div class="splash-bar-fill" style="width:' + pct + '%"></div></div>';
@@ -825,7 +832,6 @@ function _showProgress(label, percent) {
         html += '<div class="splash-date">' + dateStr + '</div>';
 
         progressEl.innerHTML = html;
-        _completedPhases.push(shortLabel);
     }
     setStatus(label);
 }
@@ -833,6 +839,13 @@ function _showProgress(label, percent) {
 function _updateScoringProgress(computed, total) {
     const progressEl = document.getElementById('splash-progress');
     if (!progressEl) return;
+    
+    // Ensure "SCORING ARCHETYPES" is the active line if not already
+    const activeText = progressEl.querySelector('.splash-active-text');
+    if (!activeText || activeText.textContent !== 'SCORING ARCHETYPES') {
+        _showProgress('Scoring archetypes\u2026', 85);
+    }
+
     const pct = total > 0 ? Math.round(85 + (computed / total) * 15) : 90;
     const fill = document.getElementById('ingest-progress-fill');
     if (fill) fill.style.width = pct + '%';
@@ -840,7 +853,7 @@ function _updateScoringProgress(computed, total) {
     const barFill = progressEl.querySelector('.splash-bar-fill');
     if (barFill) barFill.style.width = pct + '%';
     const activeLine = progressEl.querySelector('.splash-active');
-    if (activeLine) activeLine.textContent = `[${computed}/${total}]`;
+    if (activeLine) activeLine.textContent = `[${computed}/${total}] IN PROGRESS...`;
 }
 
 function _hideProgress() {
@@ -869,37 +882,18 @@ async function handleFinalize() {
 
     isProductionRunning = true;
 
-
     // Disable UI immediately
     const btn = document.getElementById('btn-finalize');
     const carouselEl = document.getElementById('carousel');
-    const progressEl = document.getElementById('finalize-progress');
     if (btn) btn.disabled = true;
     if (carouselEl) carouselEl.style.pointerEvents = 'none';
-    if (progressEl) {
-        progressEl.style.display = 'block';
-        progressEl.textContent = 'Reading full-res pixels...';
-    }
 
     // Yield to repaint before heavy I/O
     await new Promise(r => setTimeout(r, 50));
 
     try {
-        const worker = new ProductionWorker(sessionState, (step, total, msg) => {
-            if (progressEl) progressEl.textContent = msg;
-        });
-
+        const worker = new ProductionWorker(sessionState);
         const result = await worker.execute();
-
-        const state = sessionState.getState();
-        const lines = [
-            `Created ${result.layerCount} layers in ${(result.elapsedMs / 1000).toFixed(1)}s`,
-            `Archetype: ${state.activeArchetypeId || 'unknown'}`,
-            `Knobs: Vol ${state.minVolume}% | Spkl ${state.speckleRescue}px | Shd ${state.shadowClamp}%` +
-                (state.trapSize > 0 ? ` | Trap ${state.trapSize}pt` : '')
-        ];
-        const overrideCount = sessionState.paletteOverrides.size;
-        if (overrideCount > 0) lines.push(`Palette overrides: ${overrideCount}`);
 
         logger.log(`[Navigator] Production render complete: ${result.layerCount} layers, ${result.elapsedMs}ms`);
 
@@ -912,10 +906,8 @@ async function handleFinalize() {
         // Restore UI on failure
         if (btn) btn.disabled = false;
         if (carouselEl) carouselEl.style.pointerEvents = '';
-        if (progressEl) progressEl.style.display = 'none';
     } finally {
         isProductionRunning = false;
-
     }
 }
 
@@ -950,13 +942,8 @@ function _closeDialog() {
 function _resetFinalizeUI() {
     const btn = document.getElementById('btn-finalize');
     const carouselEl = document.getElementById('carousel');
-    const progressEl = document.getElementById('finalize-progress');
     if (btn) btn.disabled = false;
     if (carouselEl) carouselEl.style.pointerEvents = '';
-    if (progressEl) {
-        progressEl.style.display = 'none';
-        progressEl.textContent = '';
-    }
 }
 
 // ─── UI Reset ────────────────────────────────────────────

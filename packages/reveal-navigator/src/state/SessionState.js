@@ -183,6 +183,10 @@ class SessionState extends EventEmitter {
         this.state.initialArchetypeId = topMatch.id;
 
         this.proxyEngine = new Reveal.ProxyEngine();
+        
+        this.emit('progress', { label: 'Initializing proxy\u2026', percent: 65 });
+        await new Promise(r => setTimeout(r, 20)); // yield before expensive posterize
+        
         const proxyResult = await this.proxyEngine.initializeProxy(labPixels, width, height, this.currentConfig);
         this.baselineColorCount = proxyResult.palette.length;
         
@@ -190,7 +194,7 @@ class SessionState extends EventEmitter {
 
         this.emit('proxyReady', proxyResult);
         this.emit('progress', { label: 'Applying knobs\u2026', percent: 85 });
-        await new Promise(r => setTimeout(r, 20)); // yield
+        await new Promise(r => setTimeout(r, 20)); // yield before updateProxy
 
         const knobResult = await this.proxyEngine.updateProxy(this.getMechanicalKnobs());
         this.previewBuffer = knobResult.previewBuffer;

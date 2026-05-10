@@ -89,8 +89,17 @@ class ProductionWorker {
         // Cursor goes busy immediately on "Separate" click.
         // Pixel read + separation + mask gen + layer creation all run inside.
         const result = await core.executeAsModal(async (executionContext) => {
+            const updateProgress = (step, msg) => {
+                if (executionContext.reportProgress) {
+                    executionContext.reportProgress({
+                        value: step / 4,
+                        message: msg
+                    });
+                }
+            };
+
             // ── Step 1: Read full-res pixels ──
-            self._onProgress(1, 4, 'Reading full-res pixels...');
+            updateProgress(1, 'Reading full-res pixels...');
             logger.log('[ProductionWorker] Reading full-res document...');
 
             const doc = app.activeDocument;

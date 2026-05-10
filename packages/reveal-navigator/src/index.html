@@ -219,6 +219,14 @@
             transition: width 0.3s ease;
         }
 
+        #splash-progress .splash-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #888, #ccc);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
         #splash-progress .splash-date {
             font-family: monospace;
             font-size: 10px;
@@ -1004,7 +1012,7 @@
             position: relative;
             touch-action: none;
             flex-shrink: 0;
-            min-width: 54px;
+            min-width: 68px; /* Increased to fit label + revert button */
         }
         .surgeon-swatch:active:not(.surgeon-deleted) {
             opacity: 0.5;
@@ -1075,18 +1083,14 @@
             background: #2a2a2a;
             border: none;
             color: #f0a030;
-            font-size: 13px;
+            font-size: 12px;
             cursor: pointer;
             padding: 2px;
             line-height: 1;
             flex-shrink: 0;
-            position: absolute;
-            right: 2px;
-            top: 50%;
-            transform: translateY(-50%);
             border-radius: 50%;
             box-shadow: 0 0 4px rgba(0,0,0,0.5);
-            z-index: 10;
+            margin-left: 2px;
         }
 
         .surgeon-revert:hover {
@@ -1095,7 +1099,7 @@
         }
 
         .surgeon-revert.visible {
-            display: block;
+            display: inline-block;
         }
 
         .surgeon-clip-badge {
@@ -1130,13 +1134,15 @@
 
         .surgeon-delete-badge {
             position: absolute;
-            top: 4px;
-            left: 7px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             color: #ff4444;
-            font-size: 14px;
+            font-size: 16px;
             font-weight: bold;
             pointer-events: none;
             text-shadow: 0 0 2px #000;
+            line-height: 1;
         }
 
         .surgeon-pct {
@@ -1253,31 +1259,6 @@
             flex-shrink: 0;
             padding: 0;
             margin: 0 0 8px 0;
-            text-align: center;
-        }
-
-        #finalize-summary {
-            display: none;
-            margin-top: 4px;
-            padding: 6px 8px;
-            background: #1e3a1e;
-            border: 1px solid #3a6a3a;
-            border-radius: 3px;
-            font-size: 10px;
-            color: #a0d8a0;
-            white-space: pre-line;
-            text-align: left;
-        }
-
-        #finalize-progress {
-            display: none;
-            margin-top: 4px;
-            padding: 4px 8px;
-            background: #2d3545;
-            border: 1px solid #4da6ff;
-            border-radius: 3px;
-            font-size: 10px;
-            color: #8bb8e8;
             text-align: center;
         }
 
@@ -1559,8 +1540,6 @@
                     <!-- Finalize Flight Plan -->
                     <div id="finalize-row" style="display:none;">
                         <button id="btn-finalize" class="top-action-btn" title="Finalize separation">Separate</button>
-                        <div id="finalize-progress"></div>
-                        <div id="finalize-summary"></div>
                     </div>
                 </div>
 
@@ -1759,7 +1738,7 @@
                     <div class="knob-check-group">
                         <div class="knob-row" style="justify-content: flex-start !important;">
                             <span class="knob-label">Skip Transparent</span>
-                            <input type="checkbox" id="chk-ignoreTransparent" class="adv-checkbox" checked style="margin-left: 4px;">
+                            <input type="checkbox" id="chk-ignoreTransparent" class="adv-checkbox" style="margin-left: 4px;">
                             <button class="knob-revert" id="revert-ignoreTransparent" style="margin-left: auto;">&#x21BA;</button>
                             <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
                         </div>

@@ -458,7 +458,7 @@ class ArchetypeCarousel {
             `<div class="card-name">${archetype.name}</div>` +
             `<div class="card-score-row">` +
                 `<div class="card-score-bar"><div class="card-score-fill" style="width:${scorePercent}%"></div></div>` +
-                `<span class="card-sort-label">${sortStr}</span>` +
+                `<span class="card-sort-label" title="Overall Match Score (0-100)">${sortStr}</span>` +
             `</div>` +
             `<div class="card-hue">${hueIndicator}</div>`;
 
