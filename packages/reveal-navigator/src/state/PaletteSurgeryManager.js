@@ -57,21 +57,31 @@ class PaletteSurgeryManager {
      * @returns {Array<{L,a,b}>|null} Overridden palette
      */
     buildOverriddenPalette() {
-        if (!this._proxyEngine || !this._proxyEngine._baselineState) return null;
+        if (!this._palette) return null;
         
-        // Use the baseline from the engine as the definitive source
-        const basePalette = this._proxyEngine._baselineState.palette;
-        const result = basePalette.map(c => ({ ...c }));
+        const graph = this._palette.graph;
+        const baseOrder = graph.getDisplayOrder();
         
-        // Apply overrides from the graph
-        const overrides = this.paletteOverrides;
-        for (const [idx, color] of overrides) {
-            if (idx < result.length) {
-                result[idx] = { ...color };
-            }
-        }
+        // Map baseline IDs to their current effective Lab color
+        const result = baseOrder.map(id => graph.getEffectiveLab(id));
         
         return result;
+    }
+
+    /**
+     * Build a palette representing the "identity" of each slot.
+     * Preserves the node's own color (override or base) even if it is merged.
+     * Used by the UI to show what each swatch represents.
+     * @returns {Array<{L,a,b}>|null}
+     */
+    getIdentityPalette() {
+        if (!this._palette) return null;
+        const graph = this._palette.graph;
+        const baseOrder = graph.getDisplayOrder();
+        return baseOrder.map(id => {
+            const node = graph.getNodeById(id);
+            return node ? node.effectiveLab : { L: 50, a: 0, b: 0 };
+        });
     }
 
     // ─── Mutations ───────────────────────────────────────────
@@ -113,11 +123,11 @@ class PaletteSurgeryManager {
      * @returns {{targetIndex: number, isSuggestion: boolean}} Nearest live color
      */
     findMergeTarget(displayIndex, distanceMetric, extraColors) {
-        const effectivePalette = this.buildOverriddenPalette();
-        if (!effectivePalette) throw new Error('Proxy not initialized');
+        const basePalette = this.buildOverriddenPalette();
+        if (!basePalette) throw new Error('Proxy not initialized');
 
         const suggestions = extraColors || [];
-        const fullPalette = [...effectivePalette, ...suggestions];
+        const fullPalette = [...basePalette, ...suggestions];
         
         const src = fullPalette[displayIndex];
         let bestDist = Infinity;
@@ -148,7 +158,7 @@ class PaletteSurgeryManager {
 
         return {
             targetIndex: bestIdx,
-            isSuggestion: bestIdx >= effectivePalette.length
+            isSuggestion: bestIdx >= basePalette.length
         };
     }
 

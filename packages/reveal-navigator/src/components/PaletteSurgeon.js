@@ -151,7 +151,7 @@ class PaletteSurgeon {
         this._swatchElements.clear();
 
         // Lab palette for D50 swatch rendering and gamut badges
-        const labPalette = sep.palette;
+        const identityPalette = this._session._paletteSurgery.getIdentityPalette();
         const colorMode = this._session.state.colorMode;
 
         const baselineCount = this._session.baselineColorCount || 0;
@@ -168,13 +168,14 @@ class PaletteSurgeon {
             // Only skip slots that are NOT baseline AND have 0 pixels (shouldn't happen with current logic).
             if (counts[i] === 0 && !isDeleted && !isAdded && !isMergeSource && !isBaseline) continue;
 
-            const pct = (isDeleted || isMergeSource) ? '—' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
+            const pct = (isDeleted || isMergeSource) ? '\u2014' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
             const isOverridden = this._session.paletteOverrides.has(i);
 
             // ── Compute swatch color using D50 (matches Photoshop rendering) ──
-            const c = (labPalette && labPalette[i])
-                ? Reveal.labToRgbD50(labPalette[i])
-                : rgbPalette[i];
+            // Use Identity Palette so deleted/merged swatches keep their own color
+            const c = (identityPalette && identityPalette[i])
+                ? Reveal.labToRgbD50(identityPalette[i])
+                : (rgbPalette[i] || { r: 128, g: 128, b: 128 });
 
             // ── Swatch container with HARD-BOUND index ──
             const swatch = document.createElement('div');
@@ -192,18 +193,19 @@ class PaletteSurgeon {
             colorBlock.className = 'surgeon-color';
             if (isOverridden) colorBlock.classList.add('surgeon-overridden');
             colorBlock.style.background = `rgb(${c.r},${c.g},${c.b})`;
+            colorBlock.style.display = 'inline-block'; // force visibility
 
             // ── Override dot ──
             const dot = document.createElement('span');
             dot.className = 'surgeon-override-dot';
-            if (isOverridden) dot.classList.add('visible');
+            if (isOverridden && !isDeleted && !isMergeSource) dot.classList.add('visible');
 
-            // ── Deleted swatch styling (Alt+click delete) ──
-            if (isDeleted) {
+            // ── Deleted / Merged swatch styling (Alt+click delete or drag-merge) ──
+            if (isDeleted || isMergeSource) {
                 swatch.classList.add('surgeon-deleted');
                 const xBadge = document.createElement('span');
                 xBadge.className = 'surgeon-delete-badge';
-                xBadge.textContent = '\u2715';
+                xBadge.textContent = '\u2715'; // X
                 colorBlock.appendChild(xBadge);
             }
 
@@ -216,22 +218,22 @@ class PaletteSurgeon {
             }
 
             // ── Gamut clip badge — flags swatches where D50 rendering still lost chroma ──
-            if (labPalette && labPalette[i]) {
-                const gamut = Reveal.labGamutInfo(labPalette[i]);
+            if (identityPalette && identityPalette[i]) {
+                const gamut = Reveal.labGamutInfo(identityPalette[i]);
                 if (!gamut.inGamut) {
                     const clipBadge = document.createElement('span');
                     clipBadge.className = 'surgeon-clip-badge';
-                    clipBadge.textContent = '\u26A0';  // ⚠
-                    const lab = labPalette[i];
+                    clipBadge.textContent = '\u26A0';  // \u26A0
+                    const lab = identityPalette[i];
                     clipBadge.title = `Print-only color: exceeds monitor gamut\n${gamut.chromaLoss.toFixed(0)}% chroma lost (${gamut.iterations} iterations)\nTrue Lab: L=${lab.L.toFixed(1)} a=${lab.a.toFixed(1)} b=${lab.b.toFixed(1)}\nThe printed separation will be more vibrant than this swatch.`;
                     colorBlock.appendChild(clipBadge);
                 }
             }
 
-            // ── Merge badge ("+N" on target, "−" on source) ──
+            // ── Merge badge ("+N" on target) ──
             const mergedSources = this._session.mergeHistory.get(i);
             const mergeCount = mergedSources ? mergedSources.size : 0;
-            if (mergeCount > 0) {
+            if (mergeCount > 0 && !isDeleted && !isMergeSource) {
                 const badge = document.createElement('span');
                 badge.className = 'surgeon-merge-badge';
                 badge.textContent = `+${mergeCount}`;
@@ -239,26 +241,18 @@ class PaletteSurgeon {
                 colorBlock.appendChild(badge);
             }
 
-            // "−" on merge sources (this swatch was merged into another)
-            if (isMergeSource) {
-                swatch.classList.add('surgeon-merged');
-                const mBadge = document.createElement('span');
-                mBadge.className = 'surgeon-merge-badge surgeon-merge-source';
-                mBadge.textContent = '\u2212';  // −
-                mBadge.title = 'Merged into another color — click \u21BA to revert';
-                colorBlock.appendChild(mBadge);
-            }
-
             // ── Percentage label ──
             const label = document.createElement('span');
             label.className = 'surgeon-pct';
             label.textContent = pct;
 
-            // ── Revert button (visible when selected + overridden/deleted/added/merged) ──
+            // ── Revert button (visible when selected AND has surgery) ──
             const revertBtn = document.createElement('button');
             revertBtn.className = 'surgeon-revert';
             const isSelected = (this._state === 'SELECTED' && i === this._selectedIndex);
-            if ((isOverridden || isDeleted || isAdded || isMergeSource) && isSelected) revertBtn.classList.add('visible');
+            if ((isOverridden || isDeleted || isAdded || isMergeSource) && isSelected) {
+                revertBtn.classList.add('visible');
+            }
             revertBtn.textContent = '\u21BA';
             revertBtn.title = 'Revert to original color';
             revertBtn.onclick = (e) => {
@@ -418,7 +412,6 @@ class PaletteSurgeon {
         const colorMode = this._session.state.colorMode;
 
         // Alt+click → delete swatch (merge into nearest neighbor)
-        // B/W Mode: Blocking deletion entirely to preserve 2-color environment
         if (altKey) {
             if (colorMode === 'bw') {
                 this._headerText.textContent = 'Deletion disabled in B/W mode';
@@ -429,16 +422,6 @@ class PaletteSurgeon {
             } else {
                 this._onDeleteSwatch(i);
             }
-            return;
-        }
-
-        // Dead swatches: single-click selects (to show revert), no double-click picker
-        if (isDeleted || isMergeSource) {
-            this._state = 'SELECTED';
-            this._selectedIndex = i;
-            this._headerText.textContent = isDeleted ? `Deleted — click \u21BA or Alt+click to restore` : `Merged — click \u21BA or Alt+click to restore`;
-            this._session.setHighlight(i);
-            this._rebuild();  // rebuild reads _state/_selectedIndex to set selection + revert button
             return;
         }
 
@@ -464,16 +447,18 @@ class PaletteSurgeon {
             this._session.clearHighlight();
             this._headerText.textContent = 'Click a color to isolate';
         } else {
-            // Different swatch or IDLE → select this one
-            this._selectedIndex = i;
-            this._state = 'SELECTED';
-            this._session.setHighlight(i);
-            
-            if (colorMode === 'bw') {
-                this._headerText.textContent = 'B/W mode: Edits and merges disabled';
-            } else {
-                this._headerText.textContent = 'Shift+click merge \u2022 Alt+click delete \u2022 Ctrl+click edit';
-            }
+        // Different swatch or IDLE → select this one
+        this._selectedIndex = i;
+        this._state = 'SELECTED';
+        this._session.setHighlight(i);
+        
+        if (colorMode === 'bw') {
+            this._headerText.textContent = 'B/W mode: Edits and merges disabled';
+        } else if (isDeleted || isMergeSource) {
+            this._headerText.textContent = 'Deleted \u2014 click \u21BA or Alt+click to restore';
+        } else {
+            this._headerText.textContent = 'Drag merge \u2022 Alt+click delete \u2022 Dbl-click edit';
+        }
         }
 
         this._updateSelectionCSS();
@@ -825,7 +810,10 @@ class PaletteSurgeon {
             if (revertBtn) {
                 const addedColors = this._session.addedColors;
                 const isMergeSource = this._isMergeSource(idx);
-                if (selected && (isOverriddenMap.has(idx) || deletedColors.has(idx) || addedColors.has(idx) || isMergeSource)) {
+                const isDeleted = deletedColors.has(idx);
+                // Persistent visibility for dead swatches (deleted or merged source)
+                // Otherwise only visible when selected and has some other edit
+                if (isDeleted || isMergeSource || (selected && (isOverriddenMap.has(idx) || addedColors.has(idx)))) {
                     revertBtn.classList.add('visible');
                 } else {
                     revertBtn.classList.remove('visible');

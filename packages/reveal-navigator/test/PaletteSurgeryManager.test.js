@@ -44,9 +44,9 @@ describe('setOverride / buildOverriddenPalette', () => {
         expect(result[1]).toEqual(MOCK_PALETTE[1]); // unchanged
     });
 
-    it('returns null when proxyEngine is not initialized', () => {
+    it('returns empty array when no baseline', () => {
         const pm = new PaletteSurgeryManager();
-        expect(pm.buildOverriddenPalette()).toBeNull();
+        expect(pm.buildOverriddenPalette()).toEqual([]);
     });
 
     it('deep-copies override values', () => {
@@ -244,6 +244,33 @@ describe('snapshot / restore', () => {
         expect(pm.mergeHistory.size).toBe(0);
         expect(pm.deletedColors.size).toBe(0);
         expect(pm.addedColors.size).toBe(0);
+    });
+});
+
+// ─── integration: Suggestion Targets ─────────────────────
+
+describe('Suggestion Targets', () => {
+    it('handles merging into a suggestion by converting to an override', () => {
+        const pm = createManager();
+        
+        // Use a suggestion that is GUARANTEED to be the nearest neighbor.
+        // MOCK_PALETTE[0] is {50,0,0}.
+        // Nearest in MOCK is {30,-15,25} (idx 2) or {80,10,-20} (idx 1).
+        // Let's use a suggestion very close to {50,0,0}.
+        const suggestion = { L: 51, a: 0, b: 0 };
+        
+        // Find merge target including a suggestion (passed as extraColors)
+        const { targetIndex, isSuggestion } = pm.findMergeTarget(0, 'cie76', [suggestion]);
+        
+        expect(isSuggestion).toBe(true);
+        expect(targetIndex).toBe(4); // MOCK_PALETTE.length
+        
+        // deletePaletteColor logic in SessionState:
+        pm.markDeleted(0);
+        pm.setOverride(0, suggestion);
+        
+        expect(pm.deletedColors.has(0)).toBe(true);
+        expect(pm.paletteOverrides.get(0).L).toBe(51);
     });
 });
 

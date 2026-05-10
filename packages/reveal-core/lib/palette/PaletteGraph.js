@@ -160,14 +160,14 @@ class PaletteGraph {
     /** Returns a Map of targetDisplayIndex -> Set of sourceDisplayIndices. */
     get mergeHistory() {
         const history = new Map();
-        this._displayOrder.forEach((id, idx) => {
-            const node = this._nodes.get(id);
-            if (node && node.mergeTargetId) {
-                const finalTargetId = this.resolveMergeTarget(id);
+        this._nodes.forEach(node => {
+            if (node.mergeTargetId) {
+                const finalTargetId = this.resolveMergeTarget(node.id);
                 const targetIdx = this._displayOrder.indexOf(finalTargetId);
-                if (targetIdx !== -1) {
+                const sourceIdx = this._displayOrder.indexOf(node.id);
+                if (targetIdx !== -1 && sourceIdx !== -1) {
                     if (!history.has(targetIdx)) history.set(targetIdx, new Set());
-                    history.get(targetIdx).add(idx);
+                    history.get(targetIdx).add(sourceIdx);
                 }
             }
         });

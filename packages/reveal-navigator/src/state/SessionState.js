@@ -161,11 +161,15 @@ class SessionState extends EventEmitter {
         this._archetypeStateCache.clear();
 
         this.emit('progress', { label: 'Analyzing image DNA\u2026', percent: 35 });
+        await new Promise(r => setTimeout(r, 20)); // yield
+        
         const dnaGen = new Reveal.DNAGenerator();
         this.imageDNA = dnaGen.generate(labPixels, width, height, { bitDepth: 16 });
         this.emit('dnaReady', this.imageDNA);
 
         this.emit('progress', { label: 'Initializing navigator\u2026', percent: 55 });
+        await new Promise(r => setTimeout(r, 20)); // yield
+        
         this._chameleonConfig = Reveal.generateConfigurationMk2(this.imageDNA);
         this._salamanderConfig = Reveal.generateConfigurationSalamander(this.imageDNA);
 
@@ -186,6 +190,7 @@ class SessionState extends EventEmitter {
 
         this.emit('proxyReady', proxyResult);
         this.emit('progress', { label: 'Applying knobs\u2026', percent: 85 });
+        await new Promise(r => setTimeout(r, 20)); // yield
 
         const knobResult = await this.proxyEngine.updateProxy(this.getMechanicalKnobs());
         this.previewBuffer = knobResult.previewBuffer;
@@ -441,6 +446,8 @@ class SessionState extends EventEmitter {
 
         this.emit('proxyReady', { previewBuffer: knobResult.previewBuffer, palette: knobResult.palette, dimensions: proxyResult.dimensions, elapsedMs: proxyResult.elapsedMs + knobResult.elapsedMs });
     }
+
+    getAllArchetypeScores() { return this._scoring.getAllArchetypeScores(); }
 
     // ─── Highlight / Isolation ─────────────────────────────────
 
