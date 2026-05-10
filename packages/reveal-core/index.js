@@ -31,6 +31,8 @@ const RevelationError = require('./lib/metrics/RevelationError');
 const DNAFidelity = require('./lib/metrics/DNAFidelity');
 const SuggestedColorAnalyzer = require('./lib/analysis/SuggestedColorAnalyzer');
 const InterpolatorEngine = require('./lib/analysis/InterpolatorEngine').InterpolatorEngine;
+const Palette = require('./lib/palette/Palette');
+const PaletteGraph = require('./lib/palette/PaletteGraph');
 const logger = require('./lib/utils/logger');
 
 // Lazy-loaded interpolator engine singleton
@@ -625,6 +627,8 @@ module.exports.engines = {
 
     // Utilities
     LabConverter,
+    Palette,
+    PaletteGraph,
 };
 
 // ============================================================================
@@ -650,4 +654,6 @@ Object.assign(module.exports, {
     DNAFidelity,
     SuggestedColorAnalyzer,
     PaletteOps,
+    Palette,
+    PaletteGraph,
 });

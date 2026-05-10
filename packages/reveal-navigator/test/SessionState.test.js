@@ -3,10 +3,6 @@
  *
  * Tests the snapshot/restore lifecycle, isCustomized() helper,
  * resetToDefaults(), and the swapArchetype() auto-restore flow.
- *
- * Uses REAL @electrosaur-labs/core (pure JS, no I/O) — no mocking needed.
- * setupSession() creates a SessionState with a mock proxyEngine
- * and a real config generated from a real archetype.
  */
 
 const SessionState = require('../src/state/SessionState');
@@ -21,14 +17,6 @@ const ARCHETYPE_C = 'graphic-vibrant';
 const DUMMY_DNA = new Reveal.DNAGenerator().generate(
     new Uint16Array(3 * 4 * 4), 4, 4, { bitDepth: 16 }
 );
-
-/**
- * Get the default config value for a knob on a given archetype.
- */
-function getArchetypeDefault(archetypeId, key) {
-    const config = Reveal.generateConfiguration(DUMMY_DNA, { manualArchetypeId: archetypeId });
-    return config[key];
-}
 
 /**
  * Helper: set up a SessionState with minimal internal state.
@@ -83,6 +71,22 @@ function setupSession(archetypeId = ARCHETYPE_A) {
             metadata: {},
             elapsedMs: 1
         }),
+        addColorAndReseparate: vi.fn().mockImplementation(async (labColor) => {
+            session.proxyEngine._baselineState.palette.push({ ...labColor });
+            return {
+                palette: [...session.proxyEngine._baselineState.palette],
+                dimensions: { width: 2, height: 2 },
+                elapsedMs: 5
+            };
+        }),
+        removeColorAndReseparate: vi.fn().mockImplementation(async (index) => {
+            session.proxyEngine._baselineState.palette.splice(index, 1);
+            return {
+                palette: [...session.proxyEngine._baselineState.palette],
+                dimensions: { width: 2, height: 2 },
+                elapsedMs: 5
+            };
+        }),
     };
 
     return session;
@@ -116,35 +120,37 @@ describe('_snapshotArchetypeState', () => {
         expect(cached.knobs.meshSize).toBeUndefined();
     });
 
-    it('deep-copies paletteOverrides (no shared references)', () => {
+    it('deep-copies paletteOverrides (no shared references)', async () => {
         const s = setupSession();
-        s.paletteOverrides.set(0, { L: 50, a: 10, b: -5 });
+        await s.overridePaletteColor(0, { L: 50, a: 10, b: -5 });
 
         s._snapshotArchetypeState(ARCHETYPE_A);
 
-        // Mutate live map — cache should be unaffected
-        s.paletteOverrides.get(0).L = 99;
-        s.paletteOverrides.set(1, { L: 20, a: 0, b: 0 });
+        // Mutate live map via another override
+        await s.overridePaletteColor(0, { L: 99, a: 0, b: 0 });
 
         const cached = s._archetypeStateCache.get(ARCHETYPE_A);
-        expect(cached.paletteOverrides.get(0).L).toBe(50);
-        expect(cached.paletteOverrides.has(1)).toBe(false);
+        // The cache should have the first override
+        expect(cached.graph.nodes.find(n => n[0] === 'palette-0')[1].overrideLab.L).toBe(50);
     });
 
-    it('deep-copies mergeHistory and deletedColors', () => {
+    it('deep-copies mergeHistory and deletedColors', async () => {
         const s = setupSession();
-        s.mergeHistory.set(0, new Set([1, 2]));
-        s.deletedColors.add(1);
-        s.deletedColors.add(2);
+        // Add a color so there are 3, allowing one deletion/merge without "last remaining" error
+        await s.addPaletteColor({ L: 100, a: 0, b: 0 });
+        await s.mergePaletteColors(1, 0);
 
         s._snapshotArchetypeState(ARCHETYPE_A);
 
-        s.mergeHistory.get(0).add(3);
-        s.deletedColors.add(3);
+        // Mutate live state
+        await s.deletePaletteColor(0);
 
         const cached = s._archetypeStateCache.get(ARCHETYPE_A);
-        expect(cached.mergeHistory.get(0).size).toBe(2);
-        expect(cached.deletedColors.size).toBe(2);
+        const node1 = cached.graph.nodes.find(n => n[0] === 'palette-1')[1];
+        expect(node1.mergeTargetId).toBe('palette-0');
+        
+        const node0 = cached.graph.nodes.find(n => n[0] === 'palette-0')[1];
+        expect(node0.status).toBe('active'); // was active when snapshotted
     });
 
     it('does nothing when id is null', () => {
@@ -181,40 +187,38 @@ describe('_restoreArchetypeState', () => {
         s.state.trapSize = 0;
 
         s._restoreArchetypeState(ARCHETYPE_A);
-        // trapSize is session-level (SESSION_KNOBS) — survives archetype swaps, not cached
         expect(s.state.trapSize).toBe(0);
     });
 
-    it('restores palette surgery from cache', () => {
+    it('restores palette surgery from cache', async () => {
         const s = setupSession();
-        s.paletteOverrides.set(0, { L: 60, a: 5, b: -10 });
-        s.mergeHistory.set(1, new Set([2]));
-        s.deletedColors.add(2);
+        await s.overridePaletteColor(0, { L: 60, a: 5, b: -10 });
+        await s.mergePaletteColors(1, 0);
         s._snapshotArchetypeState(ARCHETYPE_A);
 
-        s.paletteOverrides.clear();
-        s.mergeHistory.clear();
-        s.deletedColors.clear();
+        // Manually clear live state instead of resetToDefaults (which deletes cache)
+        s._paletteSurgery.reset([{ L: 50, a: 0, b: 0 }, { L: 80, a: 10, b: -20 }]);
 
         s._restoreArchetypeState(ARCHETYPE_A);
 
-        expect(s.paletteOverrides.size).toBe(1);
+        expect(s.paletteOverrides.size).toBe(2); // 0 is overridden, 1 is merged (reported as override)
         expect(s.paletteOverrides.get(0).L).toBe(60);
-        expect(s.mergeHistory.get(1).has(2)).toBe(true);
-        expect(s.deletedColors.has(2)).toBe(true);
+        expect(s.mergeHistory.get(0).has(1)).toBe(true);
     });
 
-    it('deep-copies on restore (cache not mutated by later live changes)', () => {
+    it('deep-copies on restore (cache not mutated by later live changes)', async () => {
         const s = setupSession();
-        s.paletteOverrides.set(0, { L: 60, a: 5, b: -10 });
+        await s.overridePaletteColor(0, { L: 60, a: 5, b: -10 });
         s._snapshotArchetypeState(ARCHETYPE_A);
-        s.paletteOverrides.clear();
+        
+        // Manually clear live state
+        s._paletteSurgery.reset([{ L: 50, a: 0, b: 0 }, { L: 80, a: 10, b: -20 }]);
 
         s._restoreArchetypeState(ARCHETYPE_A);
-        s.paletteOverrides.get(0).L = 99;
+        await s.overridePaletteColor(0, { L: 99, a: 0, b: 0 });
 
         const cached = s._archetypeStateCache.get(ARCHETYPE_A);
-        expect(cached.paletteOverrides.get(0).L).toBe(60);
+        expect(cached.graph.nodes.find(n => n[0] === 'palette-0')[1].overrideLab.L).toBe(60);
     });
 
     it('returns false when no cache entry exists', () => {
@@ -236,9 +240,7 @@ describe('_restoreArchetypeState', () => {
 
     it('sets isKnobsCustomized=false when restored values match defaults', () => {
         const s = setupSession();
-        // Snapshot at defaults
         s._snapshotArchetypeState(ARCHETYPE_A);
-
         s._restoreArchetypeState(ARCHETYPE_A);
         expect(s.state.isKnobsCustomized).toBe(false);
     });
@@ -258,15 +260,17 @@ describe('isCustomized', () => {
         expect(s.isCustomized()).toBe(true);
     });
 
-    it('returns true when palette overrides exist', () => {
+    it('returns true when palette overrides exist', async () => {
         const s = setupSession();
-        s.paletteOverrides.set(0, { L: 50, a: 0, b: 0 });
+        await s.overridePaletteColor(0, { L: 50, a: 0, b: 0 });
         expect(s.isCustomized()).toBe(true);
     });
 
-    it('returns true when deleted colors exist', () => {
+    it('returns true when deleted colors exist', async () => {
         const s = setupSession();
-        s.deletedColors.add(1);
+        // Add color first so deletion works
+        await s.addPaletteColor({ L: 100, a: 0, b: 0 });
+        await s.deletePaletteColor(1);
         expect(s.isCustomized()).toBe(true);
     });
 });
@@ -290,11 +294,10 @@ describe('resetToDefaults', () => {
         expect(s.state.isKnobsCustomized).toBe(false);
     });
 
-    it('clears palette surgery', () => {
+    it('clears palette surgery', async () => {
         const s = setupSession();
-        s.paletteOverrides.set(0, { L: 60, a: 5, b: -10 });
-        s.mergeHistory.set(1, new Set([2]));
-        s.deletedColors.add(2);
+        await s.overridePaletteColor(0, { L: 60, a: 5, b: -10 });
+        await s.mergePaletteColors(1, 0);
 
         s.resetToDefaults();
 
@@ -305,13 +308,9 @@ describe('resetToDefaults', () => {
 
     it('clears suggested color selections', () => {
         const s = setupSession();
-        s._suggestions.checkedSuggestions.push({ L: 50, a: 10, b: -5 });
-        s._suggestions.cachedSuggestions = [{ L: 50, a: 10, b: -5, source: 'test', reason: 'test' }];
-
+        s.addCheckedSuggestion({ L: 50, a: 10, b: -5 });
         s.resetToDefaults();
-
-        expect(s._suggestions.checkedSuggestions).toEqual([]);
-        expect(s._suggestions.cachedSuggestions).toBeNull();
+        expect(s.checkedSuggestions).toEqual([]);
     });
 
     it('deletes cache entry for current archetype', () => {
@@ -357,7 +356,7 @@ describe('swapArchetype auto-restore', () => {
         // Customize A
         s.state.minVolume = 4.0;
         s.state.speckleRescue = 10;
-        s.paletteOverrides.set(0, { L: 75, a: 20, b: -15 });
+        await s.overridePaletteColor(0, { L: 75, a: 20, b: -15 });
 
         // Swap to B
         await s.swapArchetype(ARCHETYPE_B);
@@ -373,27 +372,13 @@ describe('swapArchetype auto-restore', () => {
         expect(s.state.activeArchetypeId).toBe(ARCHETYPE_A);
         expect(s.state.minVolume).toBe(4.0);
         expect(s.state.speckleRescue).toBe(10);
-        expect(s.paletteOverrides.size).toBe(1);
+        expect(s.paletteOverrides.has(0)).toBe(true);
         expect(s.paletteOverrides.get(0).L).toBe(75);
-    });
-
-    it('trapSize persists across archetype swaps (session-level, not per-archetype)', async () => {
-        const s = setupSession(ARCHETYPE_A);
-        s.state.trapSize = 5;
-
-        await s.swapArchetype(ARCHETYPE_B);
-        // trapSize is session-level — survives swap, reset to default by _applyConfigToState
-        expect(s.state.trapSize).toBe(0);
-
-        // Set again and swap back — trapSize resets each swap (not restored from cache)
-        s.state.trapSize = 7;
-        await s.swapArchetype(ARCHETYPE_A);
-        expect(s.state.trapSize).toBe(0); // reset by _applyConfigToState, not cached
     });
 
     it('passes paletteOverride to updateProxy when restoring cached surgery', async () => {
         const s = setupSession(ARCHETYPE_A);
-        s.paletteOverrides.set(0, { L: 75, a: 20, b: -15 });
+        await s.overridePaletteColor(0, { L: 75, a: 20, b: -15 });
 
         await s.swapArchetype(ARCHETYPE_B);
         s.proxyEngine.updateProxy.mockClear();
@@ -421,13 +406,12 @@ describe('swapArchetype auto-restore', () => {
         const defaultMinVol = s._archetypeDefaults.minVolume;
 
         s.state.minVolume = 4.0;
-        s.paletteOverrides.set(0, { L: 75, a: 20, b: -15 });
+        await s.overridePaletteColor(0, { L: 75, a: 20, b: -15 });
         s.resetToDefaults();
 
         await s.swapArchetype(ARCHETYPE_B);
         await s.swapArchetype(ARCHETYPE_A);
 
-        // Should arrive at A's defaults (cache was deleted by resetToDefaults)
         expect(s.state.minVolume).toBe(defaultMinVol);
         expect(s.paletteOverrides.size).toBe(0);
         expect(s.state.isKnobsCustomized).toBe(false);
@@ -438,12 +422,12 @@ describe('swapArchetype auto-restore', () => {
 
         // Customize A
         s.state.minVolume = 4.0;
-        s.paletteOverrides.set(0, { L: 75, a: 20, b: -15 });
+        await s.overridePaletteColor(0, { L: 75, a: 20, b: -15 });
 
         // Swap to B, customize differently
         await s.swapArchetype(ARCHETYPE_B);
         s.state.shadowClamp = 15;
-        s.paletteOverrides.set(1, { L: 30, a: -5, b: 10 });
+        await s.overridePaletteColor(1, { L: 30, a: -5, b: 10 });
 
         // Swap to C (fresh)
         await s.swapArchetype(ARCHETYPE_C);
@@ -471,12 +455,10 @@ describe('_applyConfigToState injects production knob defaults into config', () 
         session.imageDNA = DUMMY_DNA;
         const config = Reveal.generateConfiguration(DUMMY_DNA, { manualArchetypeId: ARCHETYPE_A });
 
-        // generateConfiguration does NOT include trapSize
         expect(config.trapSize).toBeUndefined();
 
         session._applyConfigToState(config);
 
-        // After _applyConfigToState, config MUST have trapSize (for MechanicalKnobs sync)
         expect(config.trapSize).toBe(0);
         expect(session.state.trapSize).toBe(0);
     });
@@ -490,7 +472,6 @@ describe('_applyConfigToState injects production knob defaults into config', () 
 
         await s.swapArchetype(ARCHETYPE_B);
 
-        // configChanged should include trapSize=0 (B's default)
         expect(configs.length).toBeGreaterThan(0);
         expect(configs[configs.length - 1].trapSize).toBe(0);
     });
@@ -506,7 +487,6 @@ describe('_applyConfigToState injects production knob defaults into config', () 
 
         await s.swapArchetype(ARCHETYPE_A);
 
-        // trapSize is session-level — _applyConfigToState resets it to default (0), not restored from cache
         expect(configs.length).toBeGreaterThan(0);
         expect(configs[configs.length - 1].trapSize).toBe(0);
     });

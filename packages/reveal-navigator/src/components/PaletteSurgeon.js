@@ -27,6 +27,7 @@ class PaletteSurgeon {
 
         this._state = 'IDLE';
         this._selectedIndex = -1;
+        this._editingIndex = -1; // Index currently being edited via color picker
 
         // Manual double-click detection (UXP dblclick is unreliable)
         this._lastClickTime = 0;
@@ -92,6 +93,7 @@ class PaletteSurgeon {
         this._session.on('archetypeChanged', () => {
             this._state = 'IDLE';
             this._selectedIndex = -1;
+            this._editingIndex = -1;
             this._selectedSuggestionIdx = -1;
             this._suggestionViewMode = null;
             this._session.clearHighlight();
@@ -128,9 +130,16 @@ class PaletteSurgeon {
         // If selected swatch was pruned away, deselect (but keep deleted swatches selected —
         // they always have zero counts because their pixels were merged into neighbors)
         if (this._state === 'SELECTED') {
-            const selectedIsDeleted = this._session.deletedColors.has(this._selectedIndex);
+            const isDeleted = this._session.deletedColors.has(this._selectedIndex);
+            const isAdded = this._session.addedColors.has(this._selectedIndex);
+            const isMergeSource = this._isMergeSource(this._selectedIndex);
+            
+            // Baseline slots (0 to baselineColorCount-1) always exist, 
+            // but added slots can be removed.
+            const isBaseline = this._selectedIndex < (this._session.baselineColorCount || 0);
+
             if (this._selectedIndex >= rgbPalette.length ||
-                (counts[this._selectedIndex] === 0 && !selectedIsDeleted)) {
+                (counts[this._selectedIndex] === 0 && !isDeleted && !isAdded && !isMergeSource && !isBaseline)) {
                 this._state = 'IDLE';
                 this._selectedIndex = -1;
                 this._session.clearHighlight();
@@ -145,12 +154,21 @@ class PaletteSurgeon {
         const labPalette = sep.palette;
         const colorMode = this._session.state.colorMode;
 
+        const baselineCount = this._session.baselineColorCount || 0;
+
         for (let i = 0; i < rgbPalette.length; i++) {
             const isDeleted = this._session.deletedColors.has(i);
             const isAdded = this._session.addedColors.has(i);
-            if (counts[i] === 0 && !isDeleted && !isAdded) continue;   // skip truly empty, keep deleted + added
+            const isMergeSource = this._isMergeSource(i);
+            const isBaseline = i < baselineCount;
 
-            const pct = isDeleted ? '—' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
+            // Spatial Consistency: 
+            // - Always keep baseline slots in place, even if they have 0 pixels (merged/deleted).
+            // - Keep user-added slots as long as they exist in the palette array.
+            // Only skip slots that are NOT baseline AND have 0 pixels (shouldn't happen with current logic).
+            if (counts[i] === 0 && !isDeleted && !isAdded && !isMergeSource && !isBaseline) continue;
+
+            const pct = (isDeleted || isMergeSource) ? '—' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
             const isOverridden = this._session.paletteOverrides.has(i);
 
             // ── Compute swatch color using D50 (matches Photoshop rendering) ──
@@ -164,6 +182,9 @@ class PaletteSurgeon {
             swatch.dataset.index = i;
             if (this._state === 'SELECTED' && i === this._selectedIndex) {
                 swatch.classList.add('surgeon-selected');
+            }
+            if (i === this._editingIndex) {
+                swatch.classList.add('surgeon-editing');
             }
 
             // ── Color block ──
@@ -219,11 +240,8 @@ class PaletteSurgeon {
             }
 
             // "−" on merge sources (this swatch was merged into another)
-            let isMergeSource = false;
-            for (const [, sources] of this._session.mergeHistory) {
-                if (sources.has(i)) { isMergeSource = true; break; }
-            }
             if (isMergeSource) {
+                swatch.classList.add('surgeon-merged');
                 const mBadge = document.createElement('span');
                 mBadge.className = 'surgeon-merge-badge surgeon-merge-source';
                 mBadge.textContent = '\u2212';  // −
@@ -236,11 +254,11 @@ class PaletteSurgeon {
             label.className = 'surgeon-pct';
             label.textContent = pct;
 
-            // ── Revert button (visible when selected + overridden/deleted/added) ──
+            // ── Revert button (visible when selected + overridden/deleted/added/merged) ──
             const revertBtn = document.createElement('button');
             revertBtn.className = 'surgeon-revert';
             const isSelected = (this._state === 'SELECTED' && i === this._selectedIndex);
-            if ((isOverridden || isDeleted || isAdded) && isSelected) revertBtn.classList.add('visible');
+            if ((isOverridden || isDeleted || isAdded || isMergeSource) && isSelected) revertBtn.classList.add('visible');
             revertBtn.textContent = '\u21BA';
             revertBtn.title = 'Revert to original color';
             revertBtn.onclick = (e) => {
@@ -273,9 +291,10 @@ class PaletteSurgeon {
                 e.preventDefault();
                 e.stopPropagation();
 
-                // Deleted swatches: allow click (select → revert) but no drag
+                // Dead swatches: allow click (select → revert) but no drag
                 // B/W mode: No merging allowed (strict 2-color)
-                if (!isDeleted && colorMode !== 'bw') {
+                const isDead = this._isDeadSwatch(idx);
+                if (!isDead && colorMode !== 'bw') {
                     swatch.setPointerCapture(e.pointerId);
                     this._dragSourceIndex = idx;
                     this._dragStartX = e.clientX;
@@ -395,6 +414,7 @@ class PaletteSurgeon {
         }
 
         const isDeleted = this._session.deletedColors.has(i);
+        const isMergeSource = this._isMergeSource(i);
         const colorMode = this._session.state.colorMode;
 
         // Alt+click → delete swatch (merge into nearest neighbor)
@@ -404,7 +424,7 @@ class PaletteSurgeon {
                 this._headerText.textContent = 'Deletion disabled in B/W mode';
                 return;
             }
-            if (isDeleted) {
+            if (isDeleted || isMergeSource) {
                 this._onRevert(i);
             } else {
                 this._onDeleteSwatch(i);
@@ -412,11 +432,11 @@ class PaletteSurgeon {
             return;
         }
 
-        // Deleted swatches: single-click selects (to show revert), no double-click picker
-        if (isDeleted) {
+        // Dead swatches: single-click selects (to show revert), no double-click picker
+        if (isDeleted || isMergeSource) {
             this._state = 'SELECTED';
             this._selectedIndex = i;
-            this._headerText.textContent = `Deleted — click \u21BA or Alt+click to restore`;
+            this._headerText.textContent = isDeleted ? `Deleted — click \u21BA or Alt+click to restore` : `Merged — click \u21BA or Alt+click to restore`;
             this._session.setHighlight(i);
             this._rebuild();  // rebuild reads _state/_selectedIndex to set selection + revert button
             return;
@@ -519,7 +539,9 @@ class PaletteSurgeon {
         if (!rgb) return;
 
         this._setPickerOpen(true);
+        this._editingIndex = i;
         this._headerText.textContent = 'Opening color picker...';
+        this._rebuild(); // Show "depressed" state
 
         try {
             const { core, action, app } = require("photoshop");
@@ -552,6 +574,7 @@ class PaletteSurgeon {
             }, { commandName: "Pick Swatch Color" });
 
             this._setPickerOpen(false);
+            this._editingIndex = -1;
 
             this._state = 'IDLE';
             this._selectedIndex = -1;
@@ -572,9 +595,12 @@ class PaletteSurgeon {
             logger.log(`[PaletteSurgeon] Color picker error: ${err.message}`);
             this._state = 'IDLE';
             this._selectedIndex = -1;
+            this._editingIndex = -1;
             this._headerText.textContent = 'Click a color to isolate';
+            this._rebuild();
         } finally {
             this._setPickerOpen(false);
+            this._editingIndex = -1;
         }
     }
 
@@ -798,7 +824,8 @@ class PaletteSurgeon {
             const revertBtn = swatch.querySelector('.surgeon-revert');
             if (revertBtn) {
                 const addedColors = this._session.addedColors;
-                if (selected && (isOverriddenMap.has(idx) || deletedColors.has(idx) || addedColors.has(idx))) {
+                const isMergeSource = this._isMergeSource(idx);
+                if (selected && (isOverriddenMap.has(idx) || deletedColors.has(idx) || addedColors.has(idx) || isMergeSource)) {
                     revertBtn.classList.add('visible');
                 } else {
                     revertBtn.classList.remove('visible');
@@ -809,6 +836,10 @@ class PaletteSurgeon {
 
     _isDeadSwatch(i) {
         if (this._session.deletedColors.has(i)) return true;
+        return this._isMergeSource(i);
+    }
+
+    _isMergeSource(i) {
         for (const sources of this._session.mergeHistory.values()) {
             if (sources.has(i)) return true;
         }

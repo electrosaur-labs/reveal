@@ -94,6 +94,7 @@ describe('recordMerge', () => {
         const pm = createManager();
         pm.recordMerge(1, 0);
 
+        // In new architecture, merged nodes report the target color as an override for compatibility
         const override = pm.paletteOverrides.get(1);
         expect(override.L).toBe(MOCK_PALETTE[0].L);
     });
@@ -110,7 +111,9 @@ describe('recordMerge', () => {
 
     it('throws for invalid indices', () => {
         const pm = createManager();
-        expect(() => pm.recordMerge(99, 0)).toThrow();
+        // The manager now checks if node exists for index
+        pm.recordMerge(99, 0); 
+        expect(pm.paletteOverrides.has(99)).toBe(false);
     });
 });
 
@@ -159,8 +162,8 @@ describe('findMergeTarget', () => {
 describe('trackAddedColor / removeTrackedColor', () => {
     it('tracks added color indices', () => {
         const pm = createManager();
-        pm.trackAddedColor(4);
-        pm.trackAddedColor(5);
+        pm.trackAddedColor(4, { L: 100, a: 0, b: 0 });
+        pm.trackAddedColor(5, { L: 50, a: 10, b: 10 });
 
         expect(pm.addedColors.has(4)).toBe(true);
         expect(pm.addedColors.has(5)).toBe(true);
@@ -168,16 +171,15 @@ describe('trackAddedColor / removeTrackedColor', () => {
 
     it('removeTrackedColor shifts indices above removed', () => {
         const pm = createManager();
-        pm.trackAddedColor(4);
-        pm.trackAddedColor(5);
-        pm.trackAddedColor(6);
+        pm.trackAddedColor(4, { L: 100, a: 0, b: 0 });
+        pm.trackAddedColor(5, { L: 50, a: 10, b: 10 });
+        pm.trackAddedColor(6, { L: 20, a: 0, b: 0 });
 
         pm.removeTrackedColor(5);
 
         // 4 stays, 5 removed, 6 shifts down to 5
         expect(pm.addedColors.has(4)).toBe(true);
         expect(pm.addedColors.size).toBe(2);
-        // The set now contains {4, 5} (where 5 was originally 6)
         const indices = [...pm.addedColors].sort();
         expect(indices).toEqual([4, 5]);
     });
@@ -189,10 +191,10 @@ describe('trackAddedColor / removeTrackedColor', () => {
 
     it('shifts palette overrides above removed index', () => {
         const pm = createManager();
-        pm.trackAddedColor(4);
+        pm.trackAddedColor(4, { L: 100, a: 0, b: 0 });
         pm.setOverride(4, { L: 70, a: 0, b: 0 });
         pm.setOverride(1, { L: 60, a: 0, b: 0 });
-        pm.trackAddedColor(5);
+        pm.trackAddedColor(5, { L: 50, a: 10, b: 10 });
         pm.setOverride(5, { L: 80, a: 0, b: 0 });
 
         pm.removeTrackedColor(4);
@@ -210,12 +212,14 @@ describe('snapshot / restore', () => {
         const pm = createManager();
         pm.setOverride(0, { L: 99, a: 1, b: 2 });
         pm.markDeleted(1);
-        pm.trackAddedColor(4);
+        pm.trackAddedColor(4, { L: 100, a: 0, b: 0 });
 
         const snap = pm.snapshot();
-        expect(snap.paletteOverrides.get(0).L).toBe(99);
-        expect(snap.deletedColors.has(1)).toBe(true);
-        expect(snap.addedColors.has(4)).toBe(true);
+        pm.restore(snap);
+        
+        expect(pm.paletteOverrides.get(0).L).toBe(99);
+        expect(pm.deletedColors.has(1)).toBe(true);
+        expect(pm.addedColors.has(4)).toBe(true);
     });
 
     it('restore deep-copies (no shared references)', () => {
@@ -226,7 +230,9 @@ describe('snapshot / restore', () => {
         pm.restore(snap);
         pm.setOverride(0, { L: 60, a: 0, b: 0 }); // mutate live state
 
-        expect(snap.paletteOverrides.get(0).L).toBe(99); // snapshot unchanged
+        // Re-restore and check
+        pm.restore(snap);
+        expect(pm.paletteOverrides.get(0).L).toBe(99); 
     });
 
     it('restore(null) resets to clean state', () => {
@@ -263,7 +269,7 @@ describe('hasEdits', () => {
 
     it('returns true with added colors', () => {
         const pm = createManager();
-        pm.trackAddedColor(4);
+        pm.trackAddedColor(4, { L: 100, a: 0, b: 0 });
         expect(pm.hasEdits()).toBe(true);
     });
 });
@@ -275,7 +281,7 @@ describe('reset / clearEdits', () => {
         const pm = createManager();
         pm.setOverride(0, { L: 60, a: 0, b: 0 });
         pm.markDeleted(1);
-        pm.trackAddedColor(4);
+        pm.trackAddedColor(4, { L: 100, a: 0, b: 0 });
 
         pm.reset();
 
@@ -289,7 +295,7 @@ describe('reset / clearEdits', () => {
         const pm = createManager();
         pm.setOverride(0, { L: 60, a: 0, b: 0 });
         pm.markDeleted(1);
-        pm.trackAddedColor(4);
+        pm.trackAddedColor(4, { L: 100, a: 0, b: 0 });
 
         pm.clearEdits();
 

@@ -1,9 +1,9 @@
 /**
  * PaletteSurgeryManager — Palette edit state for Navigator
  *
- * Owns the 4 mutable palette data structures (overrides, merges,
- * deletions, additions) and the palette-building logic. SessionState
- * delegates palette mutations here and handles proxy updates itself.
+ * Wraps the @electrosaur-labs/core Palette object.
+ * Delegates all surgery (merges, deletes, overrides) to the core graph.
+ * Provides index-based getters for backward compatibility with SessionState.
  */
 
 const Reveal = require('@electrosaur-labs/core');
@@ -13,64 +13,64 @@ class PaletteSurgeryManager {
 
     constructor() {
         this._proxyEngine = null;
-        this.reset();
+        this._palette = new Reveal.Palette();
     }
 
-    /** Bind to a ProxyEngine instance (called once per image load). */
+    /** Bind to a ProxyEngine instance. */
     initialize(proxyEngine) {
         this._proxyEngine = proxyEngine;
+        
+        // Initialize core Palette with the current baseline from the engine
+        if (proxyEngine && proxyEngine._baselineState) {
+            this.reset(proxyEngine._baselineState.palette);
+        }
     }
 
     // ─── State Access ────────────────────────────────────────
 
-    get paletteOverrides() { return this._paletteOverrides; }
-    get mergeHistory() { return this._mergeHistory; }
-    get deletedColors() { return this._deletedColors; }
-    get addedColors() { return this._addedColors; }
-
-    set addedColors(v) { this._addedColors = v; }
-    set paletteOverrides(v) { this._paletteOverrides = v; }
-    set mergeHistory(v) { this._mergeHistory = v; }
-    set deletedColors(v) { this._deletedColors = v; }
+    /** Compatibility getters: return index-based structures for SessionState/UI. */
+    get paletteOverrides() { return this._palette.graph.paletteOverrides; }
+    get mergeHistory() { return this._palette.graph.mergeHistory; }
+    get deletedColors() { return this._palette.graph.deletedColors; }
+    get addedColors() { return this._palette.graph.addedColors; }
 
     // ─── Lifecycle ───────────────────────────────────────────
 
-    reset() {
-        this._paletteOverrides = new Map();  // colorIndex → {L, a, b}
-        this._mergeHistory = new Map();      // targetIndex → Set<sourceIndex>
-        this._deletedColors = new Set();     // deleted colorIndex values
-        this._addedColors = new Set();       // user-added palette indices
+    /**
+     * Reset to clean state with new baseline palette.
+     * @param {Array<{L,a,b}>} [baselinePalette] - New baseline colors
+     */
+    reset(baselinePalette = []) {
+        this._palette = new Reveal.Palette(baselinePalette);
+        logger.log(`[PaletteSurgeryManager] Reset with ${baselinePalette.length} colors`);
     }
 
     /** Clear overrides/merges/deletions but preserve addedColors. */
     clearEdits() {
-        this._paletteOverrides.clear();
-        this._mergeHistory.clear();
-        this._deletedColors.clear();
+        this._palette.clearEdits();
     }
 
     // ─── Palette Building ────────────────────────────────────
 
     /**
      * Build an overridden palette from baseline + edits.
-     * ALWAYS uses the clean, un-mutated baseline palette as the source.
-     * Never falls back to separationState.palette — it's a mutable
-     * result of knob application and creates index drift when minVolume remaps.
-     *
-     * @returns {Array<{L,a,b}>|null} Overridden palette, or null if proxy not ready
+     * @returns {Array<{L,a,b}>|null} Overridden palette
      */
     buildOverriddenPalette() {
         if (!this._proxyEngine || !this._proxyEngine._baselineState) return null;
-
+        
+        // Use the baseline from the engine as the definitive source
         const basePalette = this._proxyEngine._baselineState.palette;
         const result = basePalette.map(c => ({ ...c }));
-
-        for (const [idx, color] of this._paletteOverrides) {
+        
+        // Apply overrides from the graph
+        const overrides = this.paletteOverrides;
+        for (const [idx, color] of overrides) {
             if (idx < result.length) {
                 result[idx] = { ...color };
             }
         }
-
+        
         return result;
     }
 
@@ -78,107 +78,90 @@ class PaletteSurgeryManager {
 
     /**
      * Record a color override.
-     * @param {number} colorIndex
+     * @param {number} displayIndex
      * @param {{L,a,b}} newLabColor
      */
-    setOverride(colorIndex, newLabColor) {
-        logger.log(`[PaletteSurgery.override] idx=${colorIndex} Lab=(${newLabColor.L.toFixed(1)},${newLabColor.a.toFixed(1)},${newLabColor.b.toFixed(1)}) overrides=${this._paletteOverrides.size}`);
-        this._paletteOverrides.set(colorIndex, { ...newLabColor });
+    setOverride(displayIndex, newLabColor) {
+        const nodeId = this._nodeIdFromIndex(displayIndex);
+        if (nodeId) {
+            this._palette.override(nodeId, newLabColor);
+            logger.log(`[PaletteSurgeryManager] Overrode ${nodeId} at index ${displayIndex}`);
+        } else {
+            logger.log(`[PaletteSurgeryManager] FAILED override: no node at index ${displayIndex}`);
+        }
     }
 
     /**
      * Revert a single override + deletion.
-     * @param {number} colorIndex
+     * @param {number} displayIndex
      * @returns {boolean} true if something was reverted
      */
-    revertOverride(colorIndex) {
-        if (!this._paletteOverrides.has(colorIndex) && !this._deletedColors.has(colorIndex)) return false;
-
-        this._paletteOverrides.delete(colorIndex);
-        this._deletedColors.delete(colorIndex);
-
-        // Clean up merge history: remove this source from whichever target absorbed it
-        for (const [target, sources] of this._mergeHistory) {
-            sources.delete(colorIndex);
-            if (sources.size === 0) this._mergeHistory.delete(target);
+    revertOverride(displayIndex) {
+        const nodeId = this._nodeIdFromIndex(displayIndex);
+        if (nodeId) {
+            this._palette.revert(nodeId);
+            return true;
         }
-
-        // If this index was itself a merge target (had sources merged into it),
-        // cascade-revert those sources too — they were pointing at this color
-        // which is now restored to its original, so the chain is broken.
-        const dependents = this._mergeHistory.get(colorIndex);
-        if (dependents) {
-            for (const dep of dependents) {
-                this._paletteOverrides.delete(dep);
-            }
-            this._mergeHistory.delete(colorIndex);
-        }
-
-        return true;
+        return false;
     }
 
     /**
      * Find the nearest live palette color to merge a deleted color into.
-     * @param {number} colorIndex - Color to delete
+     * @param {number} displayIndex - Color to delete
      * @param {string} distanceMetric - 'cie76', 'cie94', or 'cie2000'
-     * @param {Array<{L,a,b}>} [extraColors] - Additional colors (e.g. checked suggestions)
+     * @param {Array<{L,a,b}>} [extraColors] - Additional colors (checked suggestions)
      * @returns {{targetIndex: number, isSuggestion: boolean}} Nearest live color
      */
-    findMergeTarget(colorIndex, distanceMetric, extraColors) {
-        const basePalette = this.buildOverriddenPalette();
-        if (!basePalette || colorIndex >= basePalette.length) {
-            throw new Error(`Invalid palette index: ${colorIndex}`);
-        }
+    findMergeTarget(displayIndex, distanceMetric, extraColors) {
+        const effectivePalette = this.buildOverriddenPalette();
+        if (!effectivePalette) throw new Error('Proxy not initialized');
 
-        const palette = extraColors && extraColors.length > 0
-            ? [...basePalette, ...extraColors]
-            : basePalette;
+        const suggestions = extraColors || [];
+        const fullPalette = [...effectivePalette, ...suggestions];
+        
+        const src = fullPalette[displayIndex];
+        let bestDist = Infinity;
+        let bestIdx = -1;
 
-        // Collect dead indices (merge sources + already deleted) to skip
-        const dead = new Set(this._deletedColors);
-        for (const sources of this._mergeHistory.values()) {
-            for (const s of sources) dead.add(s);
+        // Skip sources that are already merged or deleted
+        const deadIndices = new Set(this.deletedColors);
+        for (const sources of this.mergeHistory.values()) {
+            for (const s of sources) deadIndices.add(s);
         }
-        dead.add(colorIndex);
+        deadIndices.add(displayIndex);
 
         const metric = distanceMetric || 'cie76';
         const distFn = metric === 'cie2000' ? Reveal.LabDistance.cie2000SquaredInline
                      : metric === 'cie94'   ? Reveal.LabDistance.cie94SquaredInline
                      :                        Reveal.LabDistance.cie76SquaredInline;
 
-        const src = palette[colorIndex];
-        let bestDist = Infinity;
-        let bestIdx = -1;
-        for (let i = 0; i < palette.length; i++) {
-            if (dead.has(i)) continue;
-            const d = distFn(
-                src.L, src.a, src.b,
-                palette[i].L, palette[i].a, palette[i].b
-            );
+        for (let i = 0; i < fullPalette.length; i++) {
+            if (deadIndices.has(i)) continue;
+            const d = distFn(src.L, src.a, src.b, fullPalette[i].L, fullPalette[i].a, fullPalette[i].b);
             if (d < bestDist) {
                 bestDist = d;
                 bestIdx = i;
             }
         }
 
-        if (bestIdx === -1) {
-            throw new Error('Cannot delete the last remaining color');
-        }
-
-        logger.log(`[PaletteSurgery.delete] idx=${colorIndex} → nearest=${bestIdx} (dE²=${bestDist.toFixed(1)})`);
+        if (bestIdx === -1) throw new Error('Cannot delete the last remaining color');
 
         return {
             targetIndex: bestIdx,
-            isSuggestion: bestIdx >= basePalette.length
+            isSuggestion: bestIdx >= effectivePalette.length
         };
     }
 
     /**
      * Mark a color as deleted.
-     * @param {number} colorIndex
+     * @param {number} displayIndex
      */
-    markDeleted(colorIndex) {
-        this._deletedColors.add(colorIndex);
+    markDeleted(displayIndex) {
+        const nodeId = this._nodeIdFromIndex(displayIndex);
+        if (nodeId) {
+            const node = this._palette.graph.getNodeById(nodeId);
+            if (node) node.status = 'deleted';
+        }
     }
 
     /**
@@ -187,135 +170,73 @@ class PaletteSurgeryManager {
      * @param {number} targetIndex
      */
     recordMerge(sourceIndex, targetIndex) {
-        const palette = this.buildOverriddenPalette();
-        if (!palette || sourceIndex >= palette.length || targetIndex >= palette.length) {
-            throw new Error(`Invalid palette index: source=${sourceIndex}, target=${targetIndex}, size=${palette ? palette.length : 0}`);
+        const sId = this._nodeIdFromIndex(sourceIndex);
+        const tId = this._nodeIdFromIndex(targetIndex);
+        if (sId && tId) {
+            this._palette.merge(sId, tId);
         }
-
-        logger.log(`[PaletteSurgery.merge] source=${sourceIndex} target=${targetIndex} mapSize_before=${this._paletteOverrides.size} keys=[${[...this._paletteOverrides.keys()]}]`);
-
-        this._paletteOverrides.set(sourceIndex, { ...palette[targetIndex] });
-
-        if (!this._mergeHistory.has(targetIndex)) {
-            this._mergeHistory.set(targetIndex, new Set());
-        }
-        this._mergeHistory.get(targetIndex).add(sourceIndex);
     }
 
     /**
-     * Track a newly added color index.
-     * @param {number} newIndex
+     * Track a newly added color.
+     * @param {number} newIndex (ignored, uses lab color)
+     * @param {{L,a,b}} labColor
      */
-    trackAddedColor(newIndex) {
-        this._addedColors.add(newIndex);
+    trackAddedColor(newIndex, labColor) {
+        if (labColor) {
+            this._palette.graph.addNode(labColor);
+        }
     }
 
     /**
-     * Remove a user-added color and shift all tracked indices.
-     * @param {number} colorIndex
-     * @returns {boolean} true if removed, false if not an added color
+     * Remove a user-added color.
+     * @param {number} displayIndex
+     * @returns {boolean} true if removed
      */
-    removeTrackedColor(colorIndex) {
-        if (!this._addedColors.has(colorIndex)) return false;
-
-        logger.log(`[PaletteSurgery.removeAdded] Removing added color at index ${colorIndex}`);
-
-        // Remove from addedColors; shift tracked indices above the removed one
-        this._addedColors.delete(colorIndex);
-        const shifted = new Set();
-        for (const idx of this._addedColors) {
-            shifted.add(idx > colorIndex ? idx - 1 : idx);
+    removeTrackedColor(displayIndex) {
+        const nodeId = this._nodeIdFromIndex(displayIndex);
+        if (nodeId && nodeId.startsWith('added-')) {
+            return this._palette.graph.removeAddedNode(nodeId);
         }
-        this._addedColors = shifted;
-
-        // Shift paletteOverrides for indices above removed
-        const newOverrides = new Map();
-        for (const [idx, color] of this._paletteOverrides) {
-            if (idx === colorIndex) continue;
-            const newIdx = idx > colorIndex ? idx - 1 : idx;
-            newOverrides.set(newIdx, color);
-        }
-        this._paletteOverrides = newOverrides;
-
-        // Shift mergeHistory
-        const newMergeHistory = new Map();
-        for (const [target, sources] of this._mergeHistory) {
-            if (target === colorIndex) continue;
-            const newTarget = target > colorIndex ? target - 1 : target;
-            const newSources = new Set();
-            for (const s of sources) {
-                if (s === colorIndex) continue;
-                newSources.add(s > colorIndex ? s - 1 : s);
-            }
-            if (newSources.size > 0) newMergeHistory.set(newTarget, newSources);
-        }
-        this._mergeHistory = newMergeHistory;
-
-        // Shift deletedColors
-        const newDeleted = new Set();
-        for (const idx of this._deletedColors) {
-            if (idx === colorIndex) continue;
-            newDeleted.add(idx > colorIndex ? idx - 1 : idx);
-        }
-        this._deletedColors = newDeleted;
-
-        return true;
+        return false;
     }
 
-    // ─── Serialization (for archetype state cache) ───────────
+    // ─── Private Helpers ─────────────────────────────────────
 
-    /**
-     * Snapshot current palette surgery state for later restore.
-     * @returns {Object} Deep-copied state
-     */
+    _nodeIdFromIndex(index) {
+        const order = this._palette.graph.getDisplayOrder();
+        return order[index] || null;
+    }
+
+    // ─── Serialization ───────────────────────────────────────
+
+    /** Snapshot for archetype cache. */
     snapshot() {
-        return {
-            paletteOverrides: new Map(
-                [...this._paletteOverrides].map(([k, v]) => [k, { ...v }])
-            ),
-            mergeHistory: new Map(
-                [...this._mergeHistory].map(([k, v]) => [k, new Set(v)])
-            ),
-            deletedColors: new Set(this._deletedColors),
-            addedColors: new Set(this._addedColors)
-        };
+        return this._palette.snapshot();
     }
 
-    /**
-     * Restore palette surgery state from a snapshot.
-     * Deep-copies to prevent cache mutation from live edits.
-     * @param {Object} data - From snapshot()
-     */
+    /** Restore from archetype cache. */
     restore(data) {
-        if (!data) {
-            this.reset();
+        // If data contains Maps/Sets (old format), we need to handle it or reset
+        if (data && (data.paletteOverrides instanceof Map)) {
+            logger.log('[PaletteSurgeryManager] Migrating old snapshot format');
+            this.reset(); // Fallback for old cache
             return;
         }
-        // Deep-copy Maps and Sets to prevent cross-archetype mutation
-        this._paletteOverrides = new Map();
-        if (data.paletteOverrides) {
-            for (const [idx, color] of data.paletteOverrides) {
-                this._paletteOverrides.set(idx, { ...color });
-            }
-        }
-        this._mergeHistory = new Map();
-        if (data.mergeHistory) {
-            for (const [target, sources] of data.mergeHistory) {
-                this._mergeHistory.set(target, new Set(sources));
-            }
-        }
-        this._deletedColors = new Set(data.deletedColors || []);
-        this._addedColors = new Set(data.addedColors || []);
+        this._palette.restore(data);
     }
 
-    /**
-     * Check if any palette edits exist.
-     * @returns {boolean}
-     */
+    /** Returns true if any palette surgery edits exist. */
     hasEdits() {
-        return this._paletteOverrides.size > 0 ||
-            this._deletedColors.size > 0 ||
-            this._addedColors.size > 0;
+        return this._palette.hasEdits();
+    }
+
+    /** Check if a color index is a merge source. */
+    isMergeSource(displayIndex) {
+        const nodeId = this._nodeIdFromIndex(displayIndex);
+        if (!nodeId) return false;
+        const node = this._palette.graph.getNodeById(nodeId);
+        return node ? node.isMerged : false;
     }
 }
 
