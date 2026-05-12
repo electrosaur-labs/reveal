@@ -1,0 +1,22 @@
+{
+    "id": "distilled-saliency",
+    "name": "Distilled Saliency",
+    "description": "Over-quantize + Saliency centroids + FPS reduction.",
+    "steps": [
+        { 
+            "op": "quantize", 
+            "algorithm": "median-cut", 
+            "kScale": 3.0, 
+            "params": { "centroidStrategy": "SALIENCY",
+                        "warmABoost": {
+                            "default": 3.0,
+                            "min": 1.0,
+                            "max": 5.0
+                        }
+                    } 
+        },
+        { "op": "map", "dither": "none" },
+        { "op": "distill", "algorithm": "fps" },
+        { "op": "map", "dither": "auto" }
+    ]
+}

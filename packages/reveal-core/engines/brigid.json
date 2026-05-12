@@ -1,0 +1,11 @@
+{
+  "id": "brigid",
+  "name": "Brigid",
+  "description": "The Healer. Structural resilience focusing on shadow protection and contrast.",
+  "centroidStrategy": "SALIENCY",
+  "blackBias": { "value": 18.0, "default": 18.0, "min": 15.0, "max": 25.0 },
+  "cWeight": { "value": 1.2, "default": 1.2, "min": 1.0, "max": 1.5 },
+  "lWeight": { "value": 2.5, "default": 2.5, "min": 2.0, "max": 4.0 },
+  "shadowThreshold": { "value": 10.0, "default": 10.0, "min": 5.0, "max": 15.0 },
+  "vibrancyBoost": { "value": 2.2, "default": 2.2, "min": 1.8, "max": 2.5 }
+}

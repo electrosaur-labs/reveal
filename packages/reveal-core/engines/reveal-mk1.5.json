@@ -1,0 +1,19 @@
+{
+    "id": "reveal-mk1.5",
+    "name": "Reveal Mk 1.5",
+    "description": "Legacy reference implementation parity pipeline.",
+    "steps": [
+        { "op": "cull", "color": { "L": {"value": 100, "default": 100}, "a": {"value": 0, "default": 0}, "b": {"value": 0, "default": 0} }, "tolerance": {"value": 1.0, "default": 1.0}, "preserve": true },
+        { "op": "cull", "color": { "L": {"value": 0, "default": 0}, "a": {"value": 0, "default": 0}, "b": {"value": 0, "default": 0} }, "tolerance": {"value": 1.0, "default": 1.0}, "preserve": true },
+        { "op": "cull", "color": { "L": {"value": 100, "default": 100}, "a": {"value": 0, "default": 0}, "b": {"value": 0, "default": 0} }, "tolerance": {"value": 3.5, "default": 3.5} },
+        { 
+            "op": "quantize", 
+            "algorithm": "median-cut", 
+            "params": { "centroidStrategy": "SALIENCY", "vibrancyBoost": {"value": 1.6, "default": 1.6}, "highlightBoost": {"value": 2.2, "default": 2.2} } 
+        },
+        { "op": "refine", "algorithm": "k-means", "iterations": {"value": 1, "default": 1} },
+        { "op": "snap", "threshold": {"value": 8.0, "default": 8.0} },
+        { "op": "inject", "color": "preserved" },
+        { "op": "map", "dither": "auto" }
+    ]
+}

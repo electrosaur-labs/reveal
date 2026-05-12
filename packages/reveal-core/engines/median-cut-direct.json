@@ -1,0 +1,9 @@
+{
+    "id": "median-cut-direct",
+    "name": "Median Cut Direct",
+    "description": "Standard Lab-space partitioning.",
+    "steps": [
+        { "op": "quantize", "algorithm": "median-cut" },
+        { "op": "map", "dither": "auto" }
+    ]
+}

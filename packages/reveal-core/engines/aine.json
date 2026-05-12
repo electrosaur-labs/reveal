@@ -1,0 +1,10 @@
+{
+  "id": "aine",
+  "name": "Aine",
+  "description": "The Sun Goddess. High-chroma, vibrant separation prioritizing color purity.",
+  "centroidStrategy": "SALIENCY",
+  "cWeight": { "value": 5.0, "default": 5.0, "min": 3.5, "max": 8.0 },
+  "lWeight": { "value": 0.2, "default": 0.2, "min": 0.1, "max": 0.5 },
+  "vibrancyBoost": { "value": 2.5, "default": 2.5, "min": 2.0, "max": 4.0 },
+  "targetColors": { "value": 12, "default": 12, "min": 10, "max": 16 }
+}

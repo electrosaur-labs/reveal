@@ -1,0 +1,32 @@
+{
+    "id": "jethro-print",
+    "name": "Jethro Print (7-Color)",
+    "description": "Production Reveal + Surgical merge of gray into black.",
+    "steps": [
+        { "op": "cull", "color": { "L": {"value": 100, "default": 100}, "a": {"value": 0, "default": 0}, "b": {"value": 0, "default": 0} }, "tolerance": {"value": 1.0, "default": 1.0}, "preserve": true },
+        { "op": "cull", "color": { "L": {"value": 0, "default": 0}, "a": {"value": 0, "default": 0}, "b": {"value": 0, "default": 0} }, "tolerance": {"value": 1.0, "default": 1.0}, "preserve": true },
+        { "op": "cull", "color": { "L": {"value": 100, "default": 100}, "a": {"value": 0, "default": 0}, "b": {"value": 0, "default": 0} }, "tolerance": {"value": 3.5, "default": 3.5} },
+        { 
+            "op": "quantize", 
+            "algorithm": "median-cut", 
+            "kScale": {"value": 3.0, "default": 3.0}, 
+            "params": { "centroidStrategy": "SALIENCY", "warmABoost": {"value": 3.0, "default": 3.0}, "highlightBoost": {"value": 2.0, "default": 2.0} } 
+        },
+        { "op": "map", "dither": "none" },
+        { "op": "distill", "algorithm": "fps" },
+        { "op": "snap", "threshold": {"value": 6.0, "default": 6.0} },
+        { "op": "refine", "algorithm": "k-means", "iterations": {"value": 2, "default": 2} },
+        { "op": "rescue", "params": { "chromaThreshold": {"value": 12, "default": 12}, "distinctnessThreshold": {"value": 15, "default": 15} } },
+        { "op": "refine", "params": { "paletteReduction": {"value": 2.0, "default": 2.0} } },
+        { "op": "inject", "color": "preserved" },
+        { "op": "inject", "color": "substrate" },
+        { "op": "map", "dither": "auto" },
+        { 
+            "op": "surgery", 
+            "actions": [
+                { "type": "merge", "from": 6, "to": 8 }
+            ]
+        },
+        { "op": "refine", "params": { "speckleRescue": {"value": 5, "default": 5}, "minVolume": {"value": 0.005, "default": 0.005} } }
+    ]
+}

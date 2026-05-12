@@ -1,0 +1,33 @@
+{
+  "id": "production-reveal",
+  "name": "Production Reveal",
+  "description": "MK 1.5 style with substrate culling and feature rescue.",
+  "steps": [
+    { "op": "cull", "color": { "L": 100, "a": 0, "b": 0 }, "tolerance": 1.0, "preserve": true },
+    { "op": "cull", "color": { "L": 0, "a": 0, "b": 0 }, "tolerance": 1.0, "preserve": true },
+    { "op": "cull", "color": { "L": 100, "a": 0, "b": 0 }, "tolerance": 3.5 },
+    { 
+      "op": "quantize", 
+      "algorithm": "median-cut", 
+      "kScale": 3.0, 
+      "params": {
+        "targetColors": {
+          "default": 10,
+          "bounds": [5, 15]
+        },
+        "centroidStrategy": "VOLUMETRIC",
+        "warmABoost": 3.0,
+        "highlightBoost": 2.0
+      } 
+    },
+    { "op": "map", "dither": "none" },
+    { "op": "distill", "algorithm": "fps" },
+    { "op": "snap", "threshold": 6.0 },
+    { "op": "refine", "algorithm": "k-means", "iterations": 2 },
+    { "op": "rescue", "params": { "chromaThreshold": 10, "distinctnessThreshold": 12 } },
+    { "op": "inject", "color": "preserved" },
+    { "op": "inject", "color": "substrate" },
+    { "op": "map", "dither": "auto" },
+    { "op": "refine", "params": { "speckleRescue": 4, "minVolume": 0.001 } }
+  ]
+}

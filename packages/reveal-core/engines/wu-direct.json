@@ -1,0 +1,9 @@
+{
+    "id": "wu-direct",
+    "name": "Wu Direct",
+    "description": "High-fidelity SSE-minimizing quantization.",
+    "steps": [
+        { "op": "quantize", "algorithm": "wu" },
+        { "op": "map", "dither": "auto" }
+    ]
+}
