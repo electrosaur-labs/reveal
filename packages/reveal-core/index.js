@@ -629,6 +629,12 @@ module.exports.engines = {
     LabConverter,
     Palette,
     PaletteGraph,
+
+    // Modular Framework
+    PipelineEngine: require('./lib/framework/engine/PipelineEngine'),
+    EngineRegistry: require('./lib/framework/engine/EngineRegistry'),
+    EngineBuilder: require('./lib/framework/engine/EngineBuilder'),
+    Quantizer: require('./lib/framework/engine/Quantizer'),
 };
 
 // ============================================================================
@@ -656,4 +662,8 @@ Object.assign(module.exports, {
     PaletteOps,
     Palette,
     PaletteGraph,
+    PipelineEngine: require('./lib/framework/engine/PipelineEngine'),
+    EngineRegistry: require('./lib/framework/engine/EngineRegistry'),
+    EngineBuilder: require('./lib/framework/engine/EngineBuilder'),
+    Quantizer: require('./lib/framework/engine/Quantizer'),
 });

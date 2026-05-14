@@ -241,9 +241,29 @@ class ProxyEngine {
 
         const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
 
-        const posterizeResult = PosterizationEngine.posterize(
-            this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
-        );
+        let posterizeResult;
+
+        // If config includes a modular engine recipe (with steps), use PipelineEngine.
+        // Otherwise, fall back to the standard PosterizationEngine.
+        if (proxyConfig.engineOverride && Array.isArray(proxyConfig.engineOverride.steps)) {
+            const PipelineEngine = require('../framework/engine/PipelineEngine');
+            const pipelineRes = PipelineEngine.execute(
+                this.proxyBuffer, 
+                proxyConfig.engineOverride, 
+                proxyConfig
+            );
+            
+            posterizeResult = {
+                paletteLab: pipelineRes.palette,
+                assignments: pipelineRes.assignments,
+                metadata: pipelineRes.metadata || {}
+            };
+        } else {
+            posterizeResult = PosterizationEngine.posterize(
+                this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
+            );
+        }
+
         const colorIndices = posterizeResult.assignments;
 
         // 3. Masks
@@ -278,7 +298,7 @@ class ProxyEngine {
         // Caller (SessionState) follows up with updateProxy() to apply knobs.
         const previewBuffer = this._generatePreviewFromIndices(
             colorIndices,
-            posterizeResult.palette,
+            this.separationState.rgbPalette,
             proxyW,
             proxyH
         );

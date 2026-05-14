@@ -342,7 +342,13 @@ class ParameterGenerator {
             },
 
             // Preprocessing
-            preprocessing
+            preprocessing,
+
+            // Call-site overrides (new in v4.1)
+            // Preserve these so ProxyEngine and production render know which
+            // modular engine or manual archetype was requested.
+            engineOverride: options.engineOverride || null,
+            manualArchetypeId: options.manualArchetypeId || null
         };
 
         // Log configuration selection

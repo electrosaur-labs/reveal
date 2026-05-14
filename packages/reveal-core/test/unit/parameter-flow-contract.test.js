@@ -122,6 +122,8 @@ const METADATA_KEYS = new Set([
     'rangeClamp',
     'preprocessing',        // Preprocessing intensity descriptor (separate from engine option)
     'neutralCentroidClampThreshold', // Fixed safety floor (0.5), not user-tunable
+    'engineOverride',
+    'manualArchetypeId',
 ]);
 
 // ─── Derived / Multiplier Keys ───────────────────────────────────────

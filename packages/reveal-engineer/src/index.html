@@ -1,0 +1,1912 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Electrosaur: Engineer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Adobe Clean', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #323232;
+            color: #e0e0e0;
+            font-size: 12px;
+            overflow: hidden;
+        }
+
+        /* ─── Ingest Progress Bar ─── */
+        #ingest-progress {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: #444;
+            z-index: 50;
+        }
+        #ingest-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #4a9eff;
+            transition: width 0.3s ease;
+        }
+
+/* ─── Dialog fills its allocation ─── */
+        #navigatorDialog {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: #323232;
+            overflow: hidden;
+        }
+
+        /* ─── Two-Column Root: Main (left) | Knobs (right) ─── */
+        #root {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: row;
+            min-height: 0;
+        }
+
+        /* ─── Left Panel: Full workflow column ─── */
+        #main-panel {
+            position: relative;
+            flex: 1 1 0;
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            gap: 6px;
+            min-height: 0;
+            min-width: 0;
+        }
+
+        /* ─── Document Header ─── */
+        #doc-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 0;
+            border-bottom: 1px solid #444;
+            flex-shrink: 0;
+        }
+
+        #doc-name {
+            font-size: 12px;
+            font-weight: 500;
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 1;
+            min-width: 0;
+        }
+
+        /* ─── Preview (maximized) ─── */
+        #preview-container {
+            flex: 1 1 0;
+            min-height: 0;
+            background: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 3px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            touch-action: none;
+        }
+
+        #preview-img {
+            image-rendering: pixelated;
+            display: block;
+        }
+
+        #preview-img:active {
+            cursor: grabbing;
+        }
+
+        @font-face {
+            font-family: 'Anton';
+            src: url('Anton-Regular.ttf') format('truetype');
+            font-weight: 400;
+            font-style: normal;
+        }
+
+        #preview-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            background: radial-gradient(ellipse at 40% 40%, #d0d0d0 0%, #a8a8a8 30%, #787878 70%, #505050 100%);
+            padding-top: 0;
+        }
+
+        #splash-brand {
+            text-align: center;
+            margin-bottom: 24px;
+            width: 100%;
+        }
+
+        #preview-placeholder .brand-logo {
+            width: 100%;
+            display: block;
+            border-radius: 0;
+        }
+
+        #splash-brand .brand-reveal {
+            font-family: 'Anton', sans-serif;
+            font-size: 28px;
+            font-weight: 400;
+            color: #444;
+            letter-spacing: 10px;
+            text-transform: uppercase;
+            text-shadow: 0 1px 1px rgba(255,255,255,0.3);
+        }
+
+        #splash-brand .brand-separator {
+            width: 60px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #666, transparent);
+            margin: 8px auto;
+        }
+
+        #splash-brand .brand-tagline {
+            font-family: 'Adobe Clean', sans-serif;
+            font-size: 11px;
+            color: #555;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-top: 6px;
+        }
+
+        #splash-progress {
+            text-align: left;
+            min-width: 320px;
+            max-width: 420px;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(80, 80, 80, 0.5);
+            border-radius: 6px;
+        }
+
+        #splash-progress .splash-header {
+            font-family: monospace;
+            font-size: 12px;
+            font-weight: 700;
+            color: #aaa;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        #splash-progress .splash-line {
+            font-family: monospace;
+            font-size: 12px;
+            color: #ccc;
+            margin: 3px 0;
+        }
+
+        #splash-progress .splash-line .splash-ok {
+            color: #50b070;
+            font-weight: 700;
+        }
+
+        #splash-progress .splash-line .splash-active {
+            color: #e0c040;
+            font-weight: 700;
+        }
+
+        #splash-progress .splash-bar {
+            margin-top: 10px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        #splash-progress .splash-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #888, #ccc);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        #splash-progress .splash-date {
+            font-family: monospace;
+            font-size: 10px;
+            color: #999;
+            margin-top: 8px;
+        }
+
+/* ─── Stats (inline in doc-header) ─── */
+        .stat-archetype-label {
+            color: #e0e0e0;
+            font-weight: 700;
+            font-size: 16px;
+            white-space: nowrap;
+        }
+
+        .stat-val {
+            color: #ccc;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .stat-highlight {
+            color: #8bb8e8;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .stat-score {
+            color: #e0c97f;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .stat-sort-score {
+            color: #7be07b;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .stat-sort-arrow {
+            font-size: 8px;
+            margin-left: 2px;
+        }
+
+        .stat-sep {
+            color: #555;
+            margin: 0 3px;
+            font-size: 14px;
+        }
+
+        /* ─── Mechanical Knobs Panel ─── */
+        #knobs-panel {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 0 4px 5px 4px;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            background: #2a2a2a;
+            overflow: hidden;
+        }
+
+        .knob-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 1px;
+        }
+
+        .knob-label {
+            color: #e0e0e0;
+            font-size: 10px;
+        }
+        .knob-check-group .knob-label {
+            min-width: 100px;
+        }
+
+        .knob-val {
+            color: #ccc;
+            font-size: 10px;
+            min-width: 32px;
+            text-align: right;
+        }
+
+        .knob-revert {
+            display: none;
+            background: none;
+            border: none;
+            color: #f0a030;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 0 2px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .knob-revert:hover {
+            color: #ffc060;
+        }
+
+        #knobs-panel sp-slider {
+            width: 100%;
+            margin-bottom: 4px;
+            --spectrum-slider-track-color: #555;
+            --spectrum-slider-fill-track-color: #4da6ff;
+        }
+
+        #knobs-panel sp-slider:last-child {
+            margin-bottom: 0;
+        }
+
+        .knob-group-label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 14px 0 8px 0;
+            padding-top: 8px;
+        }
+
+        /* ─── Help Toggle System ─── */
+        .knob-help {
+            display: none;
+            font-size: 12px;
+            color: #1a1a1a;
+            background: #fff3b0;
+            border: 1px solid #e0c860;
+            border-radius: 4px;
+            padding: 6px 8px;
+            margin: 4px 0 6px 0;
+            line-height: 1.5;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        #knobs-panel.show-help .knob-help {
+            display: block;
+        }
+        #btn-help-toggle {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0;
+            width: 16px;
+            text-align: right;
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+        #btn-help-toggle:hover, #btn-help-toggle.active {
+            color: #4da6ff;
+        }
+
+        /* ─── Per-Control Help Button ─── */
+        .knob-help-btn {
+            display: inline-block;
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0;
+            width: 16px;
+            text-align: right;
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+        .knob-help-btn:hover {
+            color: #4da6ff;
+        }
+        .knob-help-btn.active {
+            color: #4da6ff;
+        }
+        .knob-help.visible {
+            display: block;
+        }
+
+        #screen-printing-panel-trigger:hover {
+            color: #bbb;
+        }
+
+        #screen-printing-panel-trigger::before {
+            content: '▶';
+            display: inline-block;
+            margin-right: 8px;
+            font-size: 11px;
+            transition: color 0.2s ease;
+        }
+
+        #screen-printing-panel.is-open #screen-printing-panel-trigger::before {
+            content: '▼';
+        }
+
+        #screen-printing-panel-content {
+            display: none;
+        }
+
+        #screen-printing-panel.is-open #screen-printing-panel-content {
+            display: block;
+        }
+
+        #advanced-panel summary {
+            font-size: 10px;
+            color: #888;
+            cursor: pointer;
+            padding: 4px 0;
+            user-select: none;
+        }
+
+        #advanced-panel-trigger:hover {
+            color: #bbb;
+        }
+
+        #advanced-panel-trigger::before {
+            content: '▶';
+            display: inline-block;
+            margin-right: 8px;
+            font-size: 11px;
+            transition: color 0.2s ease;
+        }
+
+        #advanced-panel.is-open #advanced-panel-trigger::before {
+            content: '▼';
+        }
+
+        #advanced-panel-content {
+            display: none;
+        }
+
+        #advanced-panel.is-open #advanced-panel-content {
+            display: block;
+        }
+
+        #knobs-panel select {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 3px 4px;
+            background: #383838;
+            color: #ccc;
+            border: 1px solid #555;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+
+        #knobs-panel select:focus {
+            border-color: #4da6ff;
+            outline: none;
+        }
+
+        #advanced-panel .adv-checkbox {
+            accent-color: #4da6ff;
+        }
+
+        /* Unified Top Action Buttons */
+        .top-action-btn {
+            width: 100%;
+            height: 38px;
+            margin: 0 0 6px 0;
+            padding: 6px 8px;
+            border-radius: 3px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        #btn-reread {
+            background: #1a2a3a;
+            border-color: #3070a0;
+            color: #60b0ff;
+        }
+        #btn-reread:hover:not(:disabled) {
+            background: #203848;
+            border-color: #4090c0;
+        }
+
+        #btn-reset-top {
+            background: #3a3020;
+            border-color: #7a6530;
+            color: #e0a030;
+        }
+        #btn-reset-top:hover:not(:disabled) {
+            background: #4a3a28;
+            border-color: #a08040;
+        }
+
+        #btn-finalize {
+            background: #1a3a2a;
+            border-color: #307050;
+            color: #60c090;
+        }
+        #btn-finalize:hover:not(:disabled) {
+            background: #204838;
+            border-color: #409060;
+            color: #fff;
+        }
+
+        .top-action-btn:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+
+/* ─── Carousel Filter + Sort Row ─── */
+        #carousel-filter-row {
+            display: none;
+            flex-shrink: 0;
+            align-items: center;
+            justify-content: space-between;
+            padding: 2px 0;
+            gap: 4px;
+        }
+
+        #carousel-filters {
+            display: flex;
+            gap: 4px;
+            flex-wrap: nowrap;
+            overflow: hidden;
+            align-items: center;
+        }
+
+        .filter-label {
+            font-size: 9px;
+            color: #e0e0e0;
+            flex-shrink: 0;
+            margin-right: 4px;
+        }
+
+        .filter-chip {
+            display: inline-block;
+            padding: 2px 10px;
+            font-size: 10px;
+            color: #999;
+            background: #383838;
+            border: 1px solid #555;
+            border-radius: 10px;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .filter-chip:hover {
+            color: #ccc;
+            border-color: #777;
+            background: #444;
+        }
+
+        .filter-chip.active {
+            color: #fff;
+            background: #3a5a8a;
+            border-color: #4da6ff;
+        }
+
+        #carousel-sort {
+            display: none;
+            gap: 4px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .sort-label {
+            font-size: 9px;
+            color: #e0e0e0;
+            margin-right: 2px;
+        }
+
+        .sort-chip {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 10px;
+            color: #999;
+            background: #383838;
+            border: 1px solid #555;
+            border-radius: 10px;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .sort-chip:hover {
+            color: #ccc;
+            border-color: #777;
+            background: #444;
+        }
+
+        .sort-chip.active {
+            color: #fff;
+            background: #4a3a2a;
+            border-color: #d4a017;
+        }
+
+        .sort-arrow {
+            font-size: 8px;
+        }
+
+        /* ─── Trait Badges ─── */
+        .card-traits {
+            display: flex;
+            gap: 3px;
+            flex-wrap: wrap;
+            margin-bottom: 2px;
+        }
+
+        .trait-badge {
+            display: inline-block;
+            padding: 0 4px;
+            font-size: 8px;
+            color: #bbb;
+            background: #3a3a3a;
+            border-radius: 6px;
+            white-space: nowrap;
+            line-height: 14px;
+        }
+
+        /* ─── Description Tooltip ─── */
+        .archetype-tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            margin-bottom: 4px;
+            padding: 6px 10px;
+            background: #1a1a1a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #ccc;
+            font-size: 10px;
+            line-height: 1.4;
+            max-width: 220px;
+            white-space: normal;
+            pointer-events: none;
+            z-index: 60;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+
+/* ─── Archetype Carousel (horizontal scroll) ─── */
+        .carousel-card.synthetic {
+            background: #606060;
+            border-color: #777;
+            width: auto;
+            min-width: 110px;
+        }
+
+        .carousel-card.synthetic .card-name,
+        .carousel-card.synthetic .card-sort-label {
+            color: #ddd;
+            white-space: nowrap;
+            overflow: visible;
+        }
+
+        .carousel-card.synthetic:hover {
+            background: #666;
+            border-color: #999;
+        }
+
+        .carousel-card.synthetic.active {
+            background: #fff;
+            border-color: #4da6ff;
+            border-width: 2px;
+        }
+
+        .carousel-card.synthetic.active .card-name,
+        .carousel-card.synthetic.active .card-sort-label {
+            color: #111;
+        }
+
+        .carousel-more {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 60px;
+            width: 60px;
+            background: #333;
+            border-style: dashed;
+        }
+
+        .carousel-more:hover {
+            background: #444;
+            border-color: #888;
+        }
+
+        .carousel-more .card-name {
+            color: #aaa;
+            text-align: center;
+        }
+
+        #carousel {
+            display: flex;
+            gap: 4px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 4px 0;
+            scrollbar-width: thin;
+            scrollbar-color: #555 transparent;
+            flex-shrink: 0;
+            max-height: 70px;
+        }
+
+        .carousel-card {
+            width: 110px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 4px 6px;
+            cursor: pointer;
+            transition: border-color 0.15s;
+        }
+
+        .carousel-card:hover {
+            border-color: #777;
+            background: #333;
+        }
+
+        .carousel-card.active {
+            border-color: #4da6ff;
+            background: #2d3545;
+        }
+
+        .carousel-card.scoring {
+            border-color: #ff0;
+            box-shadow: 0 0 6px rgba(255, 255, 0, 0.5);
+        }
+
+        /* ─── Processing Overlay ─── */
+        #processing-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.55);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            cursor: wait;
+        }
+        #processing-overlay.visible {
+            display: flex !important;
+        }
+        #processing-overlay span {
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .carousel-card.recommended {
+            border-left: 3px solid #d4a017;
+        }
+
+        .recommended-badge {
+            background: #d4a017;
+            color: #000;
+            font-size: 9px;
+            font-weight: bold;
+            text-align: center;
+            padding: 1px 0;
+            margin: -4px -5px 3px -5px;
+            border-radius: 2px 2px 0 0;
+            letter-spacing: 0.5px;
+        }
+
+        #carousel-progress {
+            display: none;
+            padding: 4px 8px;
+            background: #1e1e1e;
+            border-radius: 4px;
+            margin-bottom: 4px;
+        }
+        #carousel-progress-bar {
+            height: 12px;
+            background: #333;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        #carousel-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #4da6ff;
+            border-radius: 6px;
+            transition: width 0.15s;
+        }
+        #carousel-progress-text {
+            font-size: 10px;
+            color: #aaa;
+            margin-top: 2px;
+            text-align: center;
+        }
+
+        .carousel-card.unscored {
+            opacity: 0.45;
+        }
+        .carousel-card.unscored:hover {
+            opacity: 0.75;
+        }
+
+        .card-name {
+            font-size: 10px;
+            font-weight: 500;
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 2px;
+        }
+        .card-sort-label {
+            color: #ccc;
+            font-weight: 600;
+            font-size: 10px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            min-width: 16px;
+            text-align: right;
+        }
+
+        .card-score-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 2px;
+        }
+
+        .card-score-bar {
+            flex: 1;
+            height: 3px;
+            background: #444;
+            border-radius: 1px;
+            overflow: hidden;
+        }
+
+        .card-score-fill {
+            height: 100%;
+            background: #4da6ff;
+            border-radius: 1px;
+        }
+
+        .card-score-val {
+            font-size: 9px;
+            color: #888;
+            min-width: 18px;
+            text-align: right;
+        }
+
+        .card-swatches, .card-hue {
+            display: flex;
+            gap: 2px;
+        }
+
+        .card-swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 1px;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: inline-block;
+        }
+
+        .card-explore-hint {
+            font-size: 9px;
+            color: #888;
+            font-style: italic;
+            margin-top: 2px;
+        }
+
+        .card-customized {
+            color: #f0a030;
+            margin-left: 4px;
+            font-weight: bold;
+        }
+
+        /* ─── Palette Surgeon ─── */
+        /* Fixed height prevents layout reflow when color count or
+           suggested tray changes (e.g. switching split modes). */
+        /* Block all panel input while Photoshop color picker modal is open */
+        #main-panel.picker-modal-active { pointer-events: none; }
+
+        #palette-surgeon {
+            flex-shrink: 0;
+            display: none;
+            padding: 5px 4px;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            background: #2a2a2a;
+            min-height: 90px;
+            height: auto;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        #palette-surgeon .knob-help.visible {
+            display: block;
+            margin: 4px 0 6px 0;
+        }
+
+        #structural-confirm {
+            padding: 6px 8px;
+            background: #3a2a1a;
+            border: 1px solid #f0a030;
+            border-radius: 3px;
+            margin-top: 4px;
+            font-size: 11px;
+            color: #f0d080;
+        }
+        #structural-confirm button {
+            margin-left: 8px;
+            padding: 2px 10px;
+            border: 1px solid #888;
+            border-radius: 3px;
+            background: #444;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        #structural-confirm button:hover {
+            background: #555;
+        }
+        #structural-confirm-ok {
+            border-color: #f0a030;
+        }
+
+        .surgeon-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            padding: 0 2px;
+        }
+
+        .surgeon-header span {
+            color: #aaa;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: bold;
+        }
+
+        .surgeon-palette-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .surgeon-row-label {
+            font-size: 9px;
+            color: #e0e0e0;
+            flex-shrink: 0;
+            margin-right: 4px;
+        }
+
+        .surgeon-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .surgeon-swatch {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            padding: 0px 4px;
+            border: 1px solid transparent;
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+            touch-action: none;
+        }
+        .surgeon-swatch:active:not(.surgeon-deleted) {
+            opacity: 0.5;
+            border-color: #f0a030;
+            cursor: grabbing;
+        }
+
+        .surgeon-swatch.surgeon-hover {
+            border-color: #888;
+            background: #383838;
+        }
+
+        .surgeon-swatch.surgeon-selected {
+            border-color: #4da6ff;
+            background: #2d3545;
+        }
+
+        .surgeon-swatch.surgeon-merge-target {
+            border-color: #f0a030;
+            background: #3a3520;
+        }
+
+        .surgeon-color {
+            display: inline-block;
+            width: 19px;
+            height: 19px;
+            border-radius: 2px;
+            border: 1px solid rgba(255,255,255,0.15);
+            position: relative;
+        }
+
+        .surgeon-color.surgeon-overridden {
+            border-color: #f0a030;
+            box-shadow: 0 0 3px rgba(240, 160, 48, 0.4);
+        }
+
+        .surgeon-override-dot {
+            display: none;
+            position: absolute;
+            top: 1px;
+            right: 1px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #f0a030;
+        }
+
+        .surgeon-override-dot.visible {
+            display: block;
+        }
+
+        .surgeon-revert {
+            display: none;
+            background: none;
+            border: none;
+            color: #f0a030;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 0 2px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .surgeon-revert:hover {
+            color: #ffc060;
+        }
+
+        .surgeon-revert.visible {
+            display: inline;
+        }
+
+        .surgeon-clip-badge {
+            position: absolute;
+            top: 0px;
+            right: 0px;
+            font-size: 10px;
+            color: #ff8800;
+            pointer-events: none;
+            text-shadow: 0 0 2px #000;
+        }
+
+        .surgeon-merge-badge {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            font-size: 8px;
+            font-weight: bold;
+            color: #fff;
+            background: #4da6ff;
+            border-radius: 6px;
+            padding: 0 3px;
+            line-height: 13px;
+        }
+        .surgeon-merge-source {
+            background: #e6923a;
+        }
+
+        .surgeon-swatch.surgeon-deleted {
+            opacity: 0.4;
+        }
+
+        .surgeon-delete-badge {
+            position: absolute;
+            top: 4px;
+            left: 7px;
+            color: #ff4444;
+            font-size: 14px;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        .surgeon-pct {
+            font-size: 10px;
+            color: #999;
+        }
+
+        .surgeon-add { cursor: pointer; opacity: 0.6; }
+        .surgeon-add:hover { opacity: 1.0; }
+        .surgeon-add-color {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 2px;
+            border: 1px dashed rgba(255,255,255,0.3);
+            color: #888;
+            font-size: 16px;
+            background: transparent;
+        }
+        .surgeon-add-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            font-size: 8px;
+            font-weight: bold;
+            color: #fff;
+            background: #50c878;
+            border-radius: 6px;
+            padding: 0 3px;
+            line-height: 13px;
+        }
+
+        /* ─── Suggested Colors Tray ─── */
+        .surgeon-suggested-tray {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            flex-wrap: wrap;
+        }
+        .surgeon-suggested-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .surgeon-suggested-item {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .surgeon-suggested-pct {
+            font-size: 10px;
+            color: #999;
+        }
+        .surgeon-suggested-swatch {
+            width: 24px;
+            height: 24px;
+            border-radius: 3px;
+            border: 1px solid rgba(255,255,255,0.2);
+            cursor: pointer;
+        }
+        .surgeon-suggested-swatch:hover {
+            border-color: rgba(255,255,255,0.6);
+            transform: scale(1.15);
+        }
+        .surgeon-suggested-swatch.surgeon-selected {
+            border-color: #4da6ff;
+            transform: scale(1.15);
+            box-shadow: 0 0 6px rgba(77, 166, 255, 0.6);
+        }
+        .surgeon-suggested-swatch.added {
+            border-color: #50c878;
+            position: relative;
+            cursor: pointer;
+        }
+        .surgeon-suggested-swatch.added.surgeon-selected {
+            border-color: #4da6ff;
+            box-shadow: 0 0 6px rgba(77, 166, 255, 0.6);
+        }
+        .surgeon-suggested-swatch.added::after {
+            content: '\2713';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 0 0 3px rgba(0,0,0,0.8);
+        }
+
+        /* ─── Finalize Row ─── */
+        #finalize-row {
+            flex-shrink: 0;
+            padding: 0;
+            margin: 0 0 8px 0;
+            text-align: center;
+        }
+
+        #finalize-summary {
+            display: none;
+            margin-top: 4px;
+            padding: 6px 8px;
+            background: #1e3a1e;
+            border: 1px solid #3a6a3a;
+            border-radius: 3px;
+            font-size: 10px;
+            color: #a0d8a0;
+            white-space: pre-line;
+            text-align: left;
+        }
+
+        #finalize-progress {
+            display: none;
+            margin-top: 4px;
+            padding: 4px 8px;
+            background: #2d3545;
+            border: 1px solid #4da6ff;
+            border-radius: 3px;
+            font-size: 10px;
+            color: #8bb8e8;
+            text-align: center;
+        }
+
+        /* ─── Right Panel: Knobs ─── */
+        #hud-panel {
+            flex: 0 0 320px;
+            display: flex;
+            flex-direction: column;
+            padding: 0 8px 8px 8px;
+            border-left: 1px solid #444;
+            background: #2a2a2a;
+            min-height: 0;
+            overflow: hidden;
+        }
+        #knobs-header {
+            flex: 0 0 auto;
+            padding-top: 8px;
+        }
+        #knobs-scroll {
+            flex: 1 1 0;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        #hud-info {
+            display: flex;
+            flex-direction: column; gap: 4px; width: 100%;
+        }
+
+        #status-bar {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 10px;
+            color: #777;
+        }
+
+        #status-text { }
+        #accuracy-text { color: #999; }
+        #dna-fidelity-text { font-weight: 600; font-size: 14px; }
+
+        #dominant-sector {
+            font-size: 10px;
+            color: #888;
+        }
+
+        #proxy-resolution, #preview-zoom-stepped {
+            background: #383838;
+            border: 1px solid #555;
+            color: #aaa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-left: 4px;
+            cursor: pointer;
+        }
+        #proxy-resolution:focus, #preview-zoom-stepped:focus { border-color: #4da6ff; outline: none; }
+
+        /* ─── Error Overlay ─── */
+        #error-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #1e1e1e;
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #error-box {
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #e0e0e0;
+            padding: 24px;
+            max-width: 340px;
+            width: 90%;
+        }
+
+        #error-box h3 {
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #ff6b6b;
+        }
+
+        #error-box p {
+            font-size: 12px;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            color: #ccc;
+        }
+
+        #error-box button {
+            background: #505050;
+            border: 1px solid #666;
+            color: #e0e0e0;
+            padding: 5px 16px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            float: right;
+        }
+
+        #error-box button:hover { background: #606060; }
+
+    </style>
+</head>
+<body>
+    <dialog id="navigatorDialog">
+    <div id="processing-overlay">
+        <sp-progress-circle size="large" indeterminate></sp-progress-circle>
+        <span style="margin-top: 12px;">Processing…</span>
+    </div>
+    <div id="ingest-progress"><div id="ingest-progress-fill"></div></div>
+    <div id="root">
+        <!-- Left Panel: Full workflow -->
+        <div id="main-panel">
+            <!-- Document Header + Stats -->
+            <div id="doc-header">
+                <span id="stat-archetype-name" class="stat-archetype-label" style="display:none;"></span>
+                <span class="stat-sep" id="stat-sep-colors" style="display:none;">&middot;</span>
+                <span class="stat-val" id="stat-colors" style="display:none;"></span>
+                <span class="stat-sep" id="stat-sep-delta" style="display:none;">&middot;</span>
+                <span class="stat-highlight" id="stat-delta" style="display:none;"></span>
+                <span class="stat-sep" id="stat-sep-fidelity" style="display:none;">&middot;</span>
+                <span id="dna-fidelity-text" style="display:none;"></span>
+                <span class="stat-sep" id="stat-sep-score" style="display:none;">&middot;</span>
+                <span class="stat-score" id="stat-score" style="display:none;"></span>
+                <span style="flex:1;"></span>
+                <span id="proxy-resolution-label" style="display:none; color:#888; font-size:10px; margin-left:4px;">Resolution</span>
+                <select id="proxy-resolution" title="Preview resolution (long edge)" style="display:none;">
+                    <option value="1000" selected>1000px</option>
+                    <option value="1500">1500px</option>
+                    <option value="2000">2000px</option>
+                </select>
+
+                <!-- Larger visual gap/separator -->
+                <span style="display:inline-block; width:32px; border-right: 1px solid #444; margin-right: 12px; height: 16px;"></span>
+
+                <span id="preview-zoom-label" style="color:#888; font-size:10px; margin-left:4px;">Zoom</span>
+                <select id="preview-zoom-stepped" title="Quantized Zoom">
+                    <option value="fit" selected>Fit to View</option>
+                    <option value="0.25">25%</option>
+                    <option value="0.5">50%</option>
+                    <option value="1.0">100% (1:1)</option>
+                    <option value="2.0">200% (2:1)</option>
+                </select>
+
+                </div>
+
+                <!-- Preview (maximized) -->
+                <div id="preview-container" tabindex="0">
+                    <img id="preview-img" draggable="false" style="display:none;" />
+                    <div id="preview-placeholder">
+                    <img class="brand-logo" src="electrosaur.png" alt="Electrosaur" />
+                    <div id="splash-brand">
+                        <div class="brand-separator"></div>
+                        <div class="brand-reveal">REVEAL</div>
+                        <div class="brand-tagline">Color Separation Engine</div>
+                    </div>
+                    <div id="splash-progress">
+                        <div class="splash-header">PROCESS LOG</div>
+                        <div class="splash-line">AWAITING DOCUMENT...</div>
+                        <div class="splash-bar"><div class="splash-bar-fill" style="width: 0%; height: 100%; background: #4a9eff; transition: width 0.3s ease;"></div></div>
+                    </div>
+                </div>
+                </div>
+
+
+
+            <!-- Palette Surgeon (color isolation + merge) -->
+            <div id="palette-surgeon"></div>
+
+            <!-- Confirmation banner for structural changes that destroy palette edits -->
+            <div id="structural-confirm" style="display: none;">
+                <span id="structural-confirm-msg">Palette edits will be lost. Continue?</span>
+                <button id="structural-confirm-ok">OK</button>
+                <button id="structural-confirm-cancel">Cancel</button>
+            </div>
+
+            <!-- Scoring progress bar (visible during background archetype scoring) -->
+            <div id="carousel-progress">
+                <div id="carousel-progress-bar"><div id="carousel-progress-fill"></div></div>
+                <div id="carousel-progress-text"></div>
+            </div>
+
+            <!-- Carousel Group Filters + Sort (single row) -->
+            <div id="carousel-filter-row">
+                <div id="carousel-filters">
+                    <span class="filter-label">Show</span>
+                    <span class="filter-chip active" data-group="all">All</span>
+                    <span class="filter-chip" data-group="natural">Natural</span>
+                    <span class="filter-chip" data-group="soft">Soft</span>
+                    <span class="filter-chip" data-group="graphic">Graphic</span>
+                    <span class="filter-chip" data-group="dramatic">Dramatic</span>
+                    <span class="filter-chip" data-group="vibrant">Vibrant</span>
+                    <span class="filter-chip" data-group="specialist">Specialist</span>
+                    <button class="knob-help-btn" id="filter-help-btn" title="Help">?</button>
+                </div>
+                <span class="knob-help" id="filter-help-text">Reveal analyzes your image's DNA — luminance, chroma, contrast, entropy — and matches it against 26 built-in archetypes. Each archetype is a separation strategy tuned for a different image character. Groups filter by style: Natural (faithful reproduction), Soft (muted tones), Graphic (bold contrast), Dramatic (deep shadows), Vibrant (saturated color), Specialist (algorithmic variants).</span>
+                <div id="carousel-sort" style="display:none;">
+                    <span class="sort-label">Sort</span>
+                    <span class="sort-chip active" data-sort="score">Score <span class="sort-arrow">&#x25B2;</span></span>
+                    <span class="sort-chip" data-sort="de">&#x0394;E <span class="sort-arrow"></span></span>
+                    <span class="sort-chip" data-sort="dna">DNA <span class="sort-arrow"></span></span>
+                    <span class="sort-chip" data-sort="screens">#Colors <span class="sort-arrow"></span></span>
+                    <button class="knob-help-btn" id="sort-help-btn" title="Help">?</button>
+                </div>
+                <span class="knob-help" id="sort-help-text">Score: composite quality ranking (lower = better match for your image). ΔE: average perceptual color error — how far each pixel drifts from the original. DNA: how well the archetype's parameters match your image's structural fingerprint. #Colors: number of colors the archetype produces.</span>
+            </div>
+
+            <!-- Archetype Carousel (horizontal scroll) -->
+            <div id="carousel"></div>
+        </div>
+
+        <!-- Right Panel: Knobs -->
+        <div id="hud-panel" style="display:none;">
+            <!-- Mechanical Knobs -->
+            <div id="knobs-panel" style="display:none;">
+                <div id="knobs-header">
+                    <button id="btn-reread" class="top-action-btn" title="Reread the document from Photoshop">Reread Document</button>
+                    <button id="btn-reset-top" class="top-action-btn" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
+
+                    <!-- Finalize Flight Plan -->
+                    <div id="finalize-row" style="display:none;">
+                        <button id="btn-finalize" class="top-action-btn" title="Finalize separation">Separate</button>
+                        <div id="finalize-progress"></div>
+                        <div id="finalize-summary"></div>
+                    </div>
+                </div>
+
+                <div id="knobs-scroll">
+                    <div class="knob-row" style="margin-bottom:4px; margin-top: 4px;">
+                        <span style="color:#e0e0e0; font-size:14px; font-weight:600; letter-spacing:0.5px;">Basic</span>
+                        <button id="btn-help-toggle" title="Toggle help descriptions">?</button>
+                    </div>
+
+                    <div class="knob-group-label" style="border-top: none; padding-top: 0; margin-top: 4px;">Colors</div>
+                <div class="knob-row">
+                    <span class="knob-label">Target Colors</span>
+                    <button class="knob-revert" id="revert-targetColors" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="targetColors-val">8</span>
+                    <button class="knob-help-btn" title="Help">?</button>
+                </div>
+                <sp-slider id="knob-targetColors" min="3" max="12" step="1" value="8" variant="filled"></sp-slider>
+                <span class="knob-help">Target number of colors in the palette — treated as a hint, not an exact count. The engine may produce slightly more or fewer depending on image content, palette pruning, and minimum coverage removal. More colors = more fidelity. Typical range: 4–8 for most images, 8–12 for complex scenes.</span>
+
+                <div class="knob-check-group">
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Preserve White</span>
+                        <input type="checkbox" id="chk-preserveWhite" class="adv-checkbox" checked style="margin-left: 4px;">
+                        <button class="knob-revert" id="revert-preserveWhite" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Guarantee a pure white in the palette. Essential when the output needs a clean white base layer.</span>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Preserve Black</span>
+                        <input type="checkbox" id="chk-preserveBlack" class="adv-checkbox" checked style="margin-left: 4px;">
+                        <button class="knob-revert" id="revert-preserveBlack" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Guarantee a pure black in the palette. Keeps crisp outlines and text sharp instead of mixing from other dark colors.</span>
+
+                    <!-- Group: Substrate (moved from Advanced) -->
+                    <div class="knob-group-label" style="border-top: 3px solid #666;">Substrate</div>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Substrate</span>
+                        <select id="picker-substrateMode">
+                            <option value="auto">Auto</option>
+                            <option value="white">White</option>
+                            <option value="black">Black</option>
+                            <option value="none">None</option>
+                        </select>
+                        <button class="knob-revert" id="revert-substrateMode" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">What you're printing on. Auto detects background from corners. White/Black set color explicitly. None treats background as a printable color. Background pixels are culled from quantization to save palette slots.</span>
+
+                    <!-- Group: Optimization (moved from Advanced) -->
+                    <div class="knob-group-label" style="border-top: 3px solid #666;">Optimization</div>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Auto Merge</span>
+                        <input type="checkbox" id="chk-enablePaletteReduction" class="adv-checkbox" checked style="margin-left: 4px;">
+                        <button class="knob-revert" id="revert-enablePaletteReduction" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Master switch for the palette reduction pass. When off, no colors are merged regardless of Merge Distance. When on, the engine applies the ΔE merge threshold.</span>
+                </div>
+
+                <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
+
+                <div class="knob-group-label" style="border-top: 3px solid #666;">Refinement</div>
+
+                <div class="knob-row">
+                    <span class="knob-label">Minimum Coverage</span>
+                    <button class="knob-revert" id="revert-minVolume" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="minVolume-val">1.5%</span>
+                    <button class="knob-help-btn" title="Help">?</button>
+                </div>
+                <sp-slider id="knob-minVolume" min="0" max="5" step="0.1" value="1.5" variant="filled"></sp-slider>
+                <span class="knob-help">Colors that cover less than this percentage of the image get merged into their nearest neighbor. Eliminates weak colors without visible quality loss.</span>
+
+                <div class="knob-row">
+                    <span class="knob-label">Despeckle</span>
+                    <button class="knob-revert" id="revert-speckleRescue" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="speckleRescue-val">4px</span>
+                    <button class="knob-help-btn" title="Help">?</button>
+                </div>
+                <sp-slider id="knob-speckleRescue" min="0" max="30" step="1" value="4" variant="filled"></sp-slider>
+                <span class="knob-help">Remove isolated pixel clusters smaller than this radius. Cleans up stray dots that appear as noise. Higher values = cleaner output but may lose fine detail.</span>
+
+                <div class="knob-row">
+                    <span class="knob-label">Minimum Opacity</span>
+                    <button class="knob-revert" id="revert-shadowClamp" title="Revert to archetype default">&#x21BA;</button>
+                    <span class="knob-val" id="shadowClamp-val">8.0%</span>
+                    <button class="knob-help-btn" title="Help">?</button>
+                </div>
+                <sp-slider id="knob-shadowClamp" min="0" max="40" step="0.5" value="8" variant="filled"></sp-slider>
+                <span class="knob-help">Minimum mask density for each color. Faint areas below this threshold get boosted so they remain visible in the output. 0% = no clamping.</span>
+
+                <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
+
+                <div class="knob-group-label" style="border-top: 3px solid #666;">Post-processing</div>
+
+                <div class="knob-row" style="justify-content: flex-start !important;">
+                    <span class="knob-label">Dither</span>
+                    <select id="picker-ditherType">
+                        <option value="none">None</option>
+                        <option value="floyd-steinberg">Floyd-Steinberg</option>
+                        <option value="bayer">Bayer</option>
+                        <option value="atkinson">Atkinson</option>
+                        <option value="stucki">Stucki</option>
+                    </select>
+                    <button class="knob-revert" id="revert-ditherType" style="margin-left: auto;">&#x21BA;</button>
+                    <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                </div>
+                <span class="knob-help">Dithering pattern to simulate smooth gradients with a limited palette. None = hard edges between colors. Floyd-Steinberg = classic error diffusion. Atkinson = sharp, clean transitions. Bayer = ordered grid pattern. Stucki = wide-kernel diffusion.</span>
+
+                <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
+
+                <!-- ─── Screen Printing (Foldable) ─── -->
+                <div id="screen-printing-panel" style="margin-bottom: 8px;">
+                    <div id="screen-printing-panel-trigger" style="font-size: 14px; font-weight: 600; color: #e0e0e0; cursor: pointer; padding: 8px 0 12px 0; user-select: none; display: flex; align-items: center; letter-spacing: 0.5px;">Screen Printing</div>
+                    <div id="screen-printing-panel-content">
+
+                        <div class="knob-row" style="justify-content: flex-start !important;">
+                            <span class="knob-label">Mesh</span>
+                            <select id="picker-meshSize" style="margin-left: 4px;">
+                                <option value="0">No Mesh (0)</option>
+                                <option value="110">110 TPI</option>
+                                <option value="156">156 TPI</option>
+                                <option value="200">200 TPI</option>
+                                <option value="230" selected>230 TPI</option>
+                                <option value="280">280 TPI</option>
+                                <option value="305">305 TPI</option>
+                                <option value="355">355 TPI</option>
+                            </select>
+                            <button class="knob-revert" id="revert-meshSize" title="Revert to default" style="margin-left: auto;">&#x21BA;</button>
+                            <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                        </div>
+                        <span class="knob-help">Minimum reproducible detail size, set by mesh density (threads per inch). Higher TPI = finer detail preserved. Affects dithering scale so the pattern matches the output resolution. Set to 0 to disable.</span>
+
+                        <div class="knob-row" style="justify-content: flex-start !important;">
+                            <span class="knob-label">Trap Width</span>
+                            <span class="knob-val" id="trapSize-val" style="margin-left: 4px;">0pt</span>
+                            <button class="knob-revert" id="revert-trapSize" title="Revert to default" style="margin-left: auto;">&#x21BA;</button>
+                            <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                        </div>
+                        <sp-slider id="knob-trapSize" min="0" max="10" step="1" value="0" variant="filled"></sp-slider>
+                        <span class="knob-help">Expand lighter colors under darker neighbors to prevent gaps from misregistration. Measured in points. 0 = no trapping.</span>
+
+                    </div><!-- /screen-printing-panel-content -->
+                </div><!-- /screen-printing-panel -->
+
+                <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
+
+                <!-- ─── Advanced (Engine Room) ─── -->
+                <div id="advanced-panel" style="margin-bottom: 8px;">
+                    <div id="advanced-panel-trigger" style="font-size: 14px; font-weight: 600; color: #e0e0e0; cursor: pointer; padding: 8px 0 12px 0; user-select: none; display: flex; align-items: center; letter-spacing: 0.5px;">Advanced</div>
+                    <div id="advanced-panel-content">
+
+                    <!-- Group: Method -->
+                    <div class="knob-group-label">Method</div>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Separation Method</span>
+                        <select id="picker-engineType">
+                            <option value="reveal-mk1.5">Standard</option>
+                            <option value="distilled">Adaptive</option>
+                            <option value="reveal">Hue-Aware</option>
+                            <option value="balanced">Fast</option>
+                            <option value="classic">Classic</option>
+                            <option value="stencil">Stencil</option>
+                        </select>
+                        <button class="knob-revert" id="revert-engineType" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Standard: full Mk 1.5 engine with neutral sovereignty and highlight rescue. Adaptive: over-quantize then distil to target count. Hue-Aware: Mk 1.0 with hue gap recovery. Fast: Mk 1.0 without hue analysis. Classic: simple RGB median cut. Stencil: luminance-only for single-color work.</span>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Color Mode</span>
+                        <select id="picker-colorMode">
+                            <option value="color">Color</option>
+                            <option value="bw">B/W</option>
+                            <option value="grayscale">Grayscale</option>
+                        </select>
+                        <button class="knob-revert" id="revert-colorMode" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Color: full chromatic separation. B/W: two-tone black and white only. Grayscale: luminance-only separation across multiple gray levels.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Substrate Tolerance</span>
+                        <button class="knob-revert" id="revert-substrateTolerance">&#x21BA;</button>
+                        <span class="knob-val" id="substrateTolerance-val">2.0</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-substrateTolerance" min="0" max="5" step="0.5" value="2" variant="filled"></sp-slider>
+                    <span class="knob-help">How close a pixel's color must be to the substrate before it's treated as background and skipped. Higher = more aggressive background removal. Lower = only exact matches are skipped.</span>
+
+                    <div class="knob-check-group">
+                        <div class="knob-row" style="justify-content: flex-start !important;">
+                            <span class="knob-label">Skip Transparent</span>
+                            <input type="checkbox" id="chk-ignoreTransparent" class="adv-checkbox" checked style="margin-left: 4px;">
+                            <button class="knob-revert" id="revert-ignoreTransparent" style="margin-left: auto;">&#x21BA;</button>
+                            <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                        </div>
+                        <span class="knob-help">Skip fully transparent pixels so they don't influence color selection. Turn off if your image uses transparency as a design element.</span>
+                    </div>
+                    <!-- Group: Algorithm -->
+                    <div class="knob-group-label">Algorithm</div>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Starting Palette</span>
+                        <select id="picker-splitMode">
+                            <option value="variance">Detail Priority</option>
+                            <option value="median">Color Priority</option>
+                        </select>
+                        <button class="knob-revert" id="revert-splitMode" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">How median cut partitions color space. Detail Priority (variance) splits where error is highest — best for photographic work. Color Priority (median) splits where color count is highest — preserves more distinct hues in graphic art.</span>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Quantizer</span>
+                        <select id="picker-quantizer">
+                            <option value="wu">Wu (Vibrance)</option>
+                            <option value="median-cut">Median Cut</option>
+                        </select>
+                        <button class="knob-revert" id="revert-quantizer" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Color quantization algorithm. Wu (Vibrance) minimizes total color error via variance-optimal splitting. Median Cut splits by equal population — legacy option.</span>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Color Matching</span>
+                        <select id="picker-distanceMetric">
+                            <option value="cie76">Standard (CIE76)</option>
+                            <option value="cie94">Perceptual (CIE94)</option>
+                            <option value="cie2000">Museum Grade (CIE2000)</option>
+                        </select>
+                        <button class="knob-revert" id="revert-distanceMetric" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Distance formula for matching pixels to palette colors. CIE76: fast Euclidean — good for graphics. CIE94: chroma-weighted — better for photos with saturated colors. CIE2000: museum-grade perceptual accuracy — slow but best for fine art.</span>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Color Selection</span>
+                        <select id="picker-centroidStrategy">
+                            <option value="SALIENCY">Eye-Catching (Saliency)</option>
+                            <option value="ROBUST_SALIENCY">Balanced (Robust Saliency)</option>
+                            <option value="VOLUMETRIC">Even Fill (Volumetric)</option>
+                            <option value="AVERAGE">Simple Average (Average)</option>
+                        </select>
+                        <button class="knob-revert" id="revert-centroidStrategy" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">How the representative color is picked from each median cut bucket. Saliency: top 5% most vivid pixels — punchy results. Robust Saliency: same but clamps outliers — stable for warm-dominant images. Volumetric: weighted by pixel count — even coverage. Average: simple mean — flat but predictable.</span>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Pre-Smoothing</span>
+                        <select id="picker-preprocessingIntensity">
+                            <option value="off">Off</option>
+                            <option value="auto">Auto</option>
+                            <option value="light">Light</option>
+                            <option value="medium">Medium</option>
+                            <option value="heavy">Heavy</option>
+                        </select>
+                        <button class="knob-revert" id="revert-preprocessingIntensity" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Edge-preserving bilateral filter applied before separation. Smooths noise and compression artifacts while keeping hard edges sharp. Off for clean graphics, Light–Heavy for photos. Auto enables only when image entropy is high.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Gray Protection</span>
+                        <button class="knob-revert" id="revert-neutralSovereigntyThreshold">&#x21BA;</button>
+                        <span class="knob-val" id="neutralSovereigntyThreshold-val">0</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-neutralSovereigntyThreshold" min="0" max="100" step="1" value="0" variant="filled"></sp-slider>
+                    <span class="knob-help">When neutral (low-chroma) pixels exceed this % of the image, one palette slot is reserved for a dedicated neutral. Prevents white/gray backgrounds from consuming the chromatic color budget.</span>
+
+                    <!-- Group: Saturation -->
+                    <div class="knob-group-label">Saturation</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Boost</span>
+                        <button class="knob-revert" id="revert-vibrancyBoost">&#x21BA;</button>
+                        <span class="knob-val" id="vibrancyBoost-val">1.4×</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-vibrancyBoost" min="0.5" max="3" step="0.05" value="1.4" variant="filled"></sp-slider>
+                    <span class="knob-help">Multiplier that pushes centroid colors toward full saturation. Higher values rescue muted colors that median cut tends to average out. 1.0× = no boost.</span>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Curve</span>
+                        <select id="picker-vibrancyMode">
+                            <option value="linear">Linear</option>
+                            <option value="subtle">Subtle</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="aggressive">Aggressive</option>
+                            <option value="exponential">Exponential</option>
+                        </select>
+                        <button class="knob-revert" id="revert-vibrancyMode" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Shape of the saturation boost curve. Linear: uniform boost across all chroma levels. Subtle–Aggressive: progressively stronger push on muted colors. Exponential: maximum rescue for the most desaturated pixels.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Gate</span>
+                        <button class="knob-revert" id="revert-chromaGate">&#x21BA;</button>
+                        <span class="knob-val" id="chromaGate-val">—</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-chromaGate" min="1" max="3" step="0.1" value="1" variant="filled"></sp-slider>
+                    <span class="knob-help">Chroma threshold gate — pixels below this chroma level don't receive the saturation boost. Prevents noise in near-neutral areas from getting amplified. Higher = more selective boosting.</span>
+
+                    <!-- Group: Color Merging -->
+                    <div class="knob-group-label">Color Merging</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Merge Distance</span>
+                        <button class="knob-revert" id="revert-paletteReduction">&#x21BA;</button>
+                        <span class="knob-val" id="paletteReduction-val">6.0</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-paletteReduction" min="0" max="20" step="0.5" value="6" variant="filled"></sp-slider>
+                    <span class="knob-help">Palette colors closer than this ΔE distance get merged into one. Higher values = fewer, more distinct colors. Useful for reducing color count when similar colors would be hard to distinguish.</span>
+
+                    <div class="knob-check-group">
+                        <div class="knob-row" style="justify-content: flex-start !important;">
+                            <span class="knob-label">Hue Recovery</span>
+                            <input type="checkbox" id="chk-enableHueGapAnalysis" class="adv-checkbox" checked style="margin-left: 4px;">
+                            <button class="knob-revert" id="revert-enableHueGapAnalysis" style="margin-left: auto;">&#x21BA;</button>
+                            <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                        </div>
+                        <span class="knob-help">Master switch for hue gap analysis. When on, the engine scans for hue sectors missing from the palette and injects rescue colors. Prevents median cut from dropping minority hues like green foliage in warm images.</span>
+                    </div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Hue Lock</span>
+                        <button class="knob-revert" id="revert-hueLockAngle">&#x21BA;</button>
+                        <span class="knob-val" id="hueLockAngle-val">20°</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-hueLockAngle" min="0" max="90" step="1" value="20" variant="filled"></sp-slider>
+                    <span class="knob-help">Hue angle tolerance (in degrees) for locking recovered colors into their target sector. Wider angle = more forgiving hue matches. 0° = exact hue match required.</span>
+
+                    <!-- Group: Color Priority -->
+                    <div class="knob-group-label">Color Priority</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Lightness</span>
+                        <button class="knob-revert" id="revert-lWeight">&#x21BA;</button>
+                        <span class="knob-val" id="lWeight-val">1.2×</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-lWeight" min="0.5" max="3" step="0.1" value="1.2" variant="filled"></sp-slider>
+                    <span class="knob-help">Weight for lightness (L*) axis in median cut splitting. Higher = more colors dedicated to tonal range. Lower = engine favors chromatic variety over tonal steps.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Color Intensity</span>
+                        <button class="knob-revert" id="revert-cWeight">&#x21BA;</button>
+                        <span class="knob-val" id="cWeight-val">2.0×</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-cWeight" min="0.5" max="6" step="0.1" value="2" variant="filled"></sp-slider>
+                    <span class="knob-help">Weight for chroma (saturation) axis in median cut splitting. Higher = more colors dedicated to color intensity differences. Lower = engine favors tonal or hue variety.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Black Pull</span>
+                        <button class="knob-revert" id="revert-blackBias">&#x21BA;</button>
+                        <span class="knob-val" id="blackBias-val">3.0</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-blackBias" min="0" max="10" step="0.5" value="3" variant="filled"></sp-slider>
+                    <span class="knob-help">Bias that pulls very dark pixels toward a dedicated black color. Higher values = stronger black snap, giving crisper shadows and outlines. 0 = no black preference.</span>
+
+                    <!-- Group: Tone -->
+                    <div class="knob-group-label">Tone</div>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Highlight</span>
+                        <button class="knob-revert" id="revert-highlightThreshold">&#x21BA;</button>
+                        <span class="knob-val" id="highlightThreshold-val">90 L</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-highlightThreshold" min="80" max="100" step="1" value="90" variant="filled"></sp-slider>
+                    <span class="knob-help">L* value above which pixels are treated as highlights. Highlighted pixels can receive an extra saturation boost to prevent pastel wash-out in bright areas.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Highlight Boost</span>
+                        <button class="knob-revert" id="revert-highlightBoost">&#x21BA;</button>
+                        <span class="knob-val" id="highlightBoost-val">1.5×</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-highlightBoost" min="0" max="3" step="0.1" value="1.5" variant="filled"></sp-slider>
+                    <span class="knob-help">Extra saturation multiplier applied to pixels above the Highlight Threshold. Rescues washed-out pastels in bright areas. 1.0× = no extra boost.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Shadow Point</span>
+                        <button class="knob-revert" id="revert-shadowPoint">&#x21BA;</button>
+                        <span class="knob-val" id="shadowPoint-val">15 L</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-shadowPoint" min="5" max="25" step="1" value="15" variant="filled"></sp-slider>
+                    <span class="knob-help">L* value below which pixels are treated as deep shadows. Shadow pixels get special handling to preserve dark detail instead of collapsing to pure black.</span>
+
+                    <!-- Group: Detail -->
+                    <div class="knob-group-label">Detail</div>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Smoothing</span>
+                        <input type="checkbox" id="chk-medianPass" class="adv-checkbox" style="margin-left: 4px;">
+                        <button class="knob-revert" id="revert-medianPass" style="margin-left: auto;">&#x21BA;</button>
+                        <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                    </div>
+                    <span class="knob-help">Apply a median filter pass after separation to reduce color noise at boundaries. Smooths jagged edges between adjacent color regions.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Fine Detail</span>
+                        <button class="knob-revert" id="revert-detailRescue">&#x21BA;</button>
+                        <span class="knob-val" id="detailRescue-val">—</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-detailRescue" min="0" max="20" step="1" value="0" variant="filled"></sp-slider>
+                    <span class="knob-help">Counterbalances smoothing by restoring fine detail that the median filter might erase. Higher values = more detail preserved at the cost of noisier boundaries.</span>
+
+                    </div><!-- /advanced-panel-content -->
+                </div><!-- /advanced-panel -->
+                </div><!-- /knobs-scroll -->
+            </div>
+
+            <div id="hud-info">
+                <div id="status-bar">
+                    <span id="status-text">Waiting for document...</span>
+                </div>
+                <div id="dominant-sector" style="display:none"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Overlay (hidden by default) -->
+    <div id="error-overlay">
+        <div id="error-box">
+            <h3 id="error-title">Error</h3>
+            <p id="error-message"></p>
+            <button id="btn-error-ok">OK</button>
+        </div>
+    </div>
+    </dialog>
+
+    <script src="index.js"></script>
+</body>
+</html>

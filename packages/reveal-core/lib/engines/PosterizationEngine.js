@@ -280,7 +280,10 @@ class PosterizationEngine {
                     ...options,
                     enableGridOptimization,
                     enableHueGapAnalysis: false, // Always OFF for balanced
-                    snapThreshold
+                    snapThreshold,
+                    strategy,
+                    strategyName,
+                    tuning
                 });
 
             case 'classic':
@@ -290,7 +293,10 @@ class PosterizationEngine {
                 return this._posterizeStencil(pixels, width, height, targetColors, {
                     ...options,
                     enableGridOptimization,
-                    grayscaleOnly: true // Force L-only
+                    grayscaleOnly: true, // Force L-only
+                    strategy,
+                    strategyName,
+                    tuning
                 });
 
             case 'reveal-mk1.5':

@@ -4,14 +4,13 @@
     "type": "classical",
     "description": "Exact reproduction of the legacy Reveal Mk 1.5 pipeline.",
     "steps": [
-        { "op": "substrate_detection" },
         { "op": "snap_lab", "shadowThreshold": {"value": 6.0, "default": 6.0}, "highlightThreshold": {"value": 98.0, "default": 98.0} },
-        { "op": "quantize", "color": { "L": {"value": 100, "default": 100}, "a": {"value": 0, "default": 0}, "b": {"value": 0, "default": 0} }, "tolerance": {"value": 3.5, "default": 3.5} },
-        { "op": "hijack_substrate" },
+        { "op": "quantize", "tolerance": {"value": 3.5, "default": 3.5} },
         { "op": "refine", "algorithm": "k-means", "iterations": {"value": 1, "default": 1} },
         { "op": "snap", "threshold": {"value": 8.0, "default": 8.0} },
         { "op": "prune", "threshold": {"value": 8.0, "default": 8.0} },
-        { "op": "density_floor", "floor": {"value": 0.005, "default": 0.005} },
-        { "op": "map", "dither": "none" }
+        { "op": "peak_finder", "maxPeaks": 1 },
+        { "op": "map", "dither": "none" },
+        { "op": "density_floor", "floor": {"value": 0.005, "default": 0.005} }
     ]
 }

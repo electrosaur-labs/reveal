@@ -12,6 +12,8 @@
       "kScale": 3.0, 
       "params": {
         "targetColors": {
+          "modulateBy": "targetColors",
+          "sensitivity": 1.0,
           "default": 10,
           "bounds": [5, 15]
         },
