@@ -148,19 +148,13 @@ class ProxyEngine {
         // Skips the expensive mapPixelsToPaletteAsync nearest-neighbor pass.
         const colorIndices = posterizeResult.assignments;
 
-        // 4. Generate masks from color indices
-        const masks = [];
-        for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
-            const mask = SeparationEngine.generateLayerMask(colorIndices, i, proxyW, proxyH);
-            masks.push(mask);
-        }
-
-        // 5. Cache separation state
+        // 4. Cache separation state
+        // OPTIMIZATION: Skip mask generation. updateProxy will lazily compute them if needed.
         this.separationState = {
             palette: posterizeResult.paletteLab,
             rgbPalette: posterizeResult.paletteLab.map(c => LabEncoding.labToRgbD50(c)),
             colorIndices: colorIndices,
-            masks: masks,
+            masks: null,
             width: proxyW,
             height: proxyH,
             distanceMetric: initialConfig.distanceMetric || 'cie76',
@@ -665,7 +659,7 @@ class ProxyEngine {
                 typeof c === 'string' ? c : { ...c }
             ) : null,
             colorIndices: new Uint8Array(s.colorIndices),
-            masks: s.masks.map(m => new Uint8Array(m)),
+            masks: s.masks ? s.masks.map(m => new Uint8Array(m)) : null,
             width: s.width,
             height: s.height,
             distanceMetric: s.distanceMetric || 'cie76',
@@ -685,7 +679,7 @@ class ProxyEngine {
                 typeof c === 'string' ? c : { ...c }
             ) : null,
             colorIndices: new Uint8Array(b.colorIndices),
-            masks: b.masks.map(m => new Uint8Array(m)),
+            masks: b.masks ? b.masks.map(m => new Uint8Array(m)) : null,
             width: b.width,
             height: b.height,
             distanceMetric: b.distanceMetric || 'cie76',
@@ -709,7 +703,7 @@ class ProxyEngine {
                 typeof c === 'string' ? c : { ...c }
             ) : null,
             colorIndices: new Uint8Array(b.colorIndices),
-            masks: b.masks.map(m => new Uint8Array(m)),
+            masks: b.masks ? b.masks.map(m => new Uint8Array(m)) : null,
             width: b.width,
             height: b.height,
             distanceMetric: b.distanceMetric || 'cie76',
@@ -753,7 +747,7 @@ class ProxyEngine {
                 typeof c === 'string' ? c : { ...c }
             ) : null,
             colorIndices: new Uint8Array(snapshot.colorIndices),
-            masks: snapshot.masks.map(m => new Uint8Array(m)),
+            masks: snapshot.masks ? snapshot.masks.map(m => new Uint8Array(m)) : null,
             width: snapshot.width,
             height: snapshot.height,
             distanceMetric: snapshot.distanceMetric || 'cie76',
@@ -831,6 +825,12 @@ class ProxyEngine {
         if (params.minVolume !== undefined) {
             await this._applyMinVolume(params.minVolume);
         }
+
+        // ALWAYS rebuild masks before applying Speckle Rescue or Shadow Clamp.
+        // We defer mask generation until now to avoid double-allocating arrays 
+        // during initialization or archetype swaps.
+        await this._rebuildMasks();
+
         if (params.speckleRescue !== undefined) {
             await this._applySpeckleRescue(params.speckleRescue);
         }
@@ -850,9 +850,6 @@ class ProxyEngine {
         const maxColors = target > 0 ? target + 2 : 0;
 
         MechanicalKnobs.applyMinVolume(colorIndices, palette, pixelCount, minVolumePercent, { maxColors });
-
-        // Rebuild masks (pruned colors get all-zero masks)
-        await this._rebuildMasks();
     }
 
     /**
