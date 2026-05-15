@@ -329,16 +329,18 @@ class LabMedianCut {
 
         if (grayscaleOnly) {
             // Grayscale mode: Deduplicate by L value only
-            // Many pixels share the same L value (e.g., 200k white pixels all L=100)
+            // Using a packed integer hash instead of string concatenation.
             const lMap = new Map();
 
             // Grid sampling: Only process every GRID_STRIDE-th pixel
             for (let i = 0; i < labPixels.length; i += 3 * GRID_STRIDE) {
                 const L = labPixels[i];
-                const key = L.toFixed(2); // Round to 2 decimals to handle float precision
+                // Hash: L[0-100] with 0.01 precision -> 0-10000
+                const key = Math.round(L * 100);
 
-                if (lMap.has(key)) {
-                    lMap.get(key).count++;
+                const existing = lMap.get(key);
+                if (existing) {
+                    existing.count++;
                 } else {
                     lMap.set(key, { L, a: 0, b: 0, count: 1 });
                 }

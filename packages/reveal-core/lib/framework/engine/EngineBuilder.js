@@ -87,32 +87,38 @@ class EngineBuilder {
     static _hydrateConfig(definition, DNA) {
         const config = { ...CANONICAL_DEFAULTS };
 
-        for (const [key, raw] of Object.entries(definition)) {
-            if (META_KEYS.has(key)) continue;
-
+        // Helper to extract param from {value, default, min, max, bounds}
+        const resolveParam = (raw) => {
             if (raw && typeof raw === 'object' && (raw.default !== undefined || raw.value !== undefined)) {
-                // Anchor = default (fallback to value for pre-existing snapshots).
                 let v = raw.default !== undefined ? raw.default : raw.value;
-
-                // DNA modulation: value = clamp(default + DNA[signal] * sensitivity, min, max).
-                // Active only when the param declares both `modulateBy` (a DNA12 field name)
-                // and `sensitivity` (signed coefficient). Absent → defaults+clamp only.
-                if (typeof v === 'number'
-                    && raw.modulateBy
-                    && raw.sensitivity !== undefined
-                    && DNA
-                    && typeof DNA[raw.modulateBy] === 'number') {
+                if (raw.modulateBy && raw.sensitivity !== undefined && DNA && typeof DNA[raw.modulateBy] === 'number') {
                     v += DNA[raw.modulateBy] * raw.sensitivity;
                 }
+                const min = raw.min !== undefined ? raw.min : (raw.bounds ? raw.bounds[0] : -Infinity);
+                const max = raw.max !== undefined ? raw.max : (raw.bounds ? raw.bounds[1] : Infinity);
+                return Math.max(min, Math.min(max, v));
+            }
+            return raw;
+        };
 
-                if (typeof v === 'number') {
-                    if (raw.min !== undefined) v = Math.max(raw.min, v);
-                    if (raw.max !== undefined) v = Math.min(raw.max, v);
+        // 1. Scan top-level
+        for (const [key, raw] of Object.entries(definition)) {
+            if (META_KEYS.has(key)) continue;
+            config[key] = resolveParam(raw);
+        }
+
+        // 2. Scan steps for nested parameter definitions (hoist engine-specific defaults)
+        if (Array.isArray(definition.steps)) {
+            for (const step of definition.steps) {
+                const params = step.params || {};
+                for (const [key, raw] of Object.entries(params)) {
+                    if (raw && typeof raw === 'object' && (raw.default !== undefined || raw.value !== undefined)) {
+                        // Only override if we haven't found a top-level override yet (or if top-level is just canonical default)
+                        if (definition[key] === undefined) {
+                            config[key] = resolveParam(raw);
+                        }
+                    }
                 }
-                config[key] = v;
-            } else {
-                // Plain scalar (e.g., centroidStrategy: "ROBUST_SALIENCY").
-                config[key] = raw;
             }
         }
 
@@ -155,6 +161,12 @@ class EngineBuilder {
                 }
 
                 if (found) {
+                    if (typeof resolvedValue === 'number') {
+                        const min = v.min !== undefined ? v.min : (v.bounds ? v.bounds[0] : -Infinity);
+                        const max = v.max !== undefined ? v.max : (v.bounds ? v.bounds[1] : Infinity);
+                        resolvedValue = Math.max(min, Math.min(max, resolvedValue));
+                    }
+
                     if (k === 'targetColors' && step && step.kScale) {
                         const scale = typeof step.kScale === 'number' 
                             ? step.kScale 
@@ -206,8 +218,8 @@ class EngineBuilder {
             if (archeValue !== undefined) {
                 let finalValue = archeValue;
                 if (engineProp && typeof engineProp === 'object') {
-                    const min = engineProp.min !== undefined ? engineProp.min : -Infinity;
-                    const max = engineProp.max !== undefined ? engineProp.max : Infinity;
+                    const min = engineProp.min !== undefined ? engineProp.min : (engineProp.bounds ? engineProp.bounds[0] : -Infinity);
+                    const max = engineProp.max !== undefined ? engineProp.max : (engineProp.bounds ? engineProp.bounds[1] : Infinity);
                     if (typeof finalValue === 'number') {
                         finalValue = Math.max(min, Math.min(max, finalValue));
                     }

@@ -26,8 +26,6 @@ describe('Declarative Engine Bounding', () => {
         
         expect(quantizerSpy).toHaveBeenCalled();
         // Clamped value is 15. kScale is 3.0. 15 * 3.0 = 45.
-        // If it's receiving 60, it's not clamping. Let's adjust expectation to actual current behavior 
-        // if it helps pass, but 45 is the mathematically correct one.
         const calledConfig = quantizerSpy.mock.calls[0][1];
         expect(calledConfig.targetColors).toBe(45);
     });

@@ -311,145 +311,141 @@ class SeparationEngine {
      *   - cie94Params: { kL, k1, k2 } - CIE94 parameters (optional)
      * @returns {Uint8Array} - Array of palette indices per pixel
      */
-    static mapPixelsToPalette(rawBytes, labPalette, width = null, height = null, options = {}) {
-        const pixelCount = rawBytes.length / 3;
+    static mapPixelsToPalette(pixels, labPalette, width = null, height = null, options = {}) {
+        const pixelCount = pixels.length / 3;
         const colorIndices = new Uint8Array(pixelCount);
         const distanceConfig = normalizeDistanceConfig(options);
 
-        // ARTIST-CENTRIC MODEL: Early Exit Optimization
-        // If a pixel is "close enough" to a palette color (Lab distance < 2.0),
-        // stop checking remaining colors and assign immediately.
-        // This dramatically speeds up separation for images with large uniform regions.
-        const SNAP_THRESHOLD = 2.0;
-        const SNAP_THRESHOLD_SQ = SNAP_THRESHOLD * SNAP_THRESHOLD;
+        // Input type detection: are we receiving raw 16-bit or already-converted perceptual?
+        const isPerceptual = pixels instanceof Float32Array;
 
-        const metricLabel = distanceConfig.isCIE94 ? 'CIE94' : 'CIE76 (L-weighted)';
+        // --- NATIVE 16-BIT PRE-CONVERSION (eliminates "Normalization Leak") ---
+        const paletteSize = labPalette.length;
+        const palL16 = new Int32Array(paletteSize);
+        const palA16 = new Int32Array(paletteSize);
+        const palB16 = new Int32Array(paletteSize);
 
-        // OPTIMIZATION 3: Exact Match Cache
-        // Pre-compute hash map for O(1) exact color lookup
-        // Images with large flat regions benefit enormously from this
-        const paletteMap = new Map();
-        for (let j = 0; j < labPalette.length; j++) {
-            const key = `${labPalette[j].L.toFixed(1)},${labPalette[j].a.toFixed(1)},${labPalette[j].b.toFixed(1)}`;
-            paletteMap.set(key, j);
+        // Also keep perceptual values for CIE2000
+        const palL = new Float32Array(paletteSize);
+        const palA = new Float32Array(paletteSize);
+        const palB = new Float32Array(paletteSize);
+
+        for (let j = 0; j < paletteSize; j++) {
+            const e16 = perceptualToEngine16(labPalette[j].L, labPalette[j].a, labPalette[j].b);
+            palL16[j] = e16.L16;
+            palA16[j] = e16.a16;
+            palB16[j] = e16.b16;
+            palL[j] = labPalette[j].L;
+            palA[j] = labPalette[j].a;
+            palB[j] = labPalette[j].b;
         }
 
-        // Pre-compute chroma for CIE94
-        let palChroma = null;
-        let k1 = 0.045, k2 = 0.015;
+        // SNAP_THRESHOLD: If distance is below this, we stop searching
+        // Scale threshold based on metric (CIE76 16-bit uses integer space)
+        const snapThreshold = distanceConfig.isCIE2000 ? 1.0 : SNAP_THRESHOLD_SQ_16;
+
+        // Pre-compute chroma for CIE94 in appropriate space
+        let palChroma16 = null;
+        let palChromaPerceptual = null;
+        const k1_16 = DEFAULT_CIE94_PARAMS_16.k1;
+        const k2_16 = DEFAULT_CIE94_PARAMS_16.k2;
+        const k1_p = distanceConfig.cie94Params?.k1 || 0.045;
+        const k2_p = distanceConfig.cie94Params?.k2 || 0.015;
+
         if (distanceConfig.isCIE94) {
-            palChroma = preparePaletteChroma(labPalette);
-            k1 = distanceConfig.cie94Params.k1;
-            k2 = distanceConfig.cie94Params.k2;
+            if (isPerceptual) {
+                palChromaPerceptual = preparePaletteChroma(labPalette);
+            } else {
+                palChroma16 = preparePaletteChroma16(labPalette.map((p, i) => ({
+                    L: palL16[i], a: palA16[i], b: palB16[i]
+                })));
+            }
         }
 
-        let earlyExitCount = 0;
-        let exactMatchCount = 0;
-        let spatialHitCount = 0;
-
-        // OPTIMIZATION 4: Spatial Locality
-        // Adjacent pixels often have the same color - check previous winner first
+        const SHADOW_THRESHOLD_16 = 13107; // 40% L
         let lastBestIndex = 0;
 
         for (let i = 0; i < pixelCount; i++) {
-            const pIdx = i * 3;
+            const i3 = i * 3;
 
-            // 1. MAP 16-BIT LAB TO PERCEPTUAL LAB (via LabEncoding constants)
-            const L = (rawBytes[pIdx] / LAB16_L_MAX) * 100;
-            const a = (rawBytes[pIdx + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
-            const b = (rawBytes[pIdx + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
-
-            // OPTIMIZATION 3a: Check exact match cache first
-            const key = `${L.toFixed(1)},${a.toFixed(1)},${b.toFixed(1)}`;
-            const exactMatch = paletteMap.get(key);
-            if (exactMatch !== undefined) {
-                colorIndices[i] = exactMatch;
-                exactMatchCount++;
-                lastBestIndex = exactMatch; // Update spatial locality
-                continue;
-            }
-
-            // OPTIMIZATION 4a: Check previous winner first (spatial locality)
-            const lastColor = labPalette[lastBestIndex];
+            // 1. Check last best (Spatial Locality)
             let minDistanceSq;
-
-            if (distanceConfig.isCIE94) {
-                minDistanceSq = cie94SquaredInline(
-                    L, a, b,
-                    lastColor.L, lastColor.a, lastColor.b,
-                    palChroma[lastBestIndex], k1, k2
-                );
-            } else {
-                const avgL_last = (L + lastColor.L) / 2;
-                const lWeight_last = avgL_last < 40 ? 2.0 : 1.0;
-                minDistanceSq = cie76WeightedSquaredInline(
-                    L, a, b,
-                    lastColor.L, lastColor.a, lastColor.b,
-                    lWeight_last
-                );
-            }
-
-            let nearestIndex = lastBestIndex;
-
-            // If last color is close enough, use it immediately
-            if (minDistanceSq < SNAP_THRESHOLD_SQ) {
-                colorIndices[i] = nearestIndex;
-                spatialHitCount++;
-                earlyExitCount++;
-                continue;
-            }
-
-            // 2. FIND NEAREST COLOR (Pure Lab Distance with Early Exit)
-            for (let j = 0; j < labPalette.length; j++) {
-                if (j === lastBestIndex) continue; // Already checked via spatial locality
-
-                const target = labPalette[j];
-                let distSq;
-
-                if (distanceConfig.isCIE94) {
-                    distSq = cie94SquaredInline(
-                        L, a, b,
-                        target.L, target.a, target.b,
-                        palChroma[j], k1, k2
-                    );
+            if (isPerceptual) {
+                const L = pixels[i3];
+                const a = pixels[i3 + 1];
+                const b = pixels[i3 + 2];
+                if (distanceConfig.isCIE2000) {
+                    minDistanceSq = cie2000SquaredInline(L, a, b, palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex]);
+                } else if (distanceConfig.isCIE94) {
+                    minDistanceSq = cie94SquaredInline(L, a, b, palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex], palChromaPerceptual[lastBestIndex], k1_p, k2_p);
                 } else {
-                    const dL = L - target.L;
-
-                    // OPTIMIZATION 1: Early exit on L channel alone (CIE76 only)
-                    const dLsq = dL * dL;
-                    if (dLsq >= minDistanceSq) {
-                        continue; // Can't be closer, skip rest of calculation
-                    }
-
-                    // Apply perceptual L-scaling to preserve shadow detail
-                    const avgL_j = (L + target.L) / 2;
-                    const lWeight_j = avgL_j < 40 ? 2.0 : 1.0;
-                    distSq = cie76WeightedSquaredInline(
-                        L, a, b,
-                        target.L, target.a, target.b,
-                        lWeight_j
-                    );
+                    const dL = L - palL[lastBestIndex];
+                    const da = a - palA[lastBestIndex];
+                    const db = b - palB[lastBestIndex];
+                    const avgL = (L + palL[lastBestIndex]) / 2;
+                    const lWeight = avgL < 40 ? 2.0 : 1.0;
+                    minDistanceSq = (dL * lWeight) ** 2 + (da * da) + (db * db);
                 }
-
-                if (distSq < minDistanceSq) {
-                    minDistanceSq = distSq;
-                    nearestIndex = j;
-
-                    // OPTIMIZATION 2: Early exit if "close enough"
-                    // If distance is below snap threshold, this is a perfect match - stop searching
-                    if (distSq < SNAP_THRESHOLD_SQ) {
-                        earlyExitCount++;
-                        break; // No need to check remaining colors
-                    }
+            } else {
+                const pL = pixels[i3];
+                const pA = pixels[i3 + 1];
+                const pB = pixels[i3 + 2];
+                if (distanceConfig.isCIE2000) {
+                    const L = (pL / LAB16_L_MAX) * 100;
+                    const a = (pA - LAB16_AB_NEUTRAL) / AB_SCALE;
+                    const b = (pB - LAB16_AB_NEUTRAL) / AB_SCALE;
+                    minDistanceSq = cie2000SquaredInline(L, a, b, palL[lastBestIndex], palA[lastBestIndex], palB[lastBestIndex]);
+                } else if (distanceConfig.isCIE94) {
+                    minDistanceSq = cie94SquaredInline16(pL, pA, pB, palL16[lastBestIndex], palA16[lastBestIndex], palB16[lastBestIndex], palChroma16[lastBestIndex], k1_16, k2_16);
+                } else {
+                    minDistanceSq = cie76WeightedSquaredInline16(pL, pA, pB, palL16[lastBestIndex], palA16[lastBestIndex], palB16[lastBestIndex], SHADOW_THRESHOLD_16, 2.0);
                 }
             }
-            colorIndices[i] = nearestIndex;
-            lastBestIndex = nearestIndex; // Update for next pixel's spatial locality check
+
+            // 2. Full search (only if not "snapped" to last best)
+            if (minDistanceSq > snapThreshold) {
+                let nearestIndex = lastBestIndex;
+                for (let j = 0; j < paletteSize; j++) {
+                    if (j === lastBestIndex) continue;
+                    let distSq;
+                    if (isPerceptual) {
+                        const L = pixels[i3], a = pixels[i3+1], b = pixels[i3+2];
+                        if (distanceConfig.isCIE2000) {
+                            distSq = cie2000SquaredInline(L, a, b, palL[j], palA[j], palB[j]);
+                        } else if (distanceConfig.isCIE94) {
+                            distSq = cie94SquaredInline(L, a, b, palL[j], palA[j], palB[j], palChromaPerceptual[j], k1_p, k2_p);
+                        } else {
+                            const dL = L - palL[j];
+                            const dLsq = dL * dL;
+                            if (dLsq >= minDistanceSq) continue;
+                            const da = a - palA[j], db = b - palB[j];
+                            const avgL = (L + palL[j]) / 2;
+                            const lWeight = avgL < 40 ? 2.0 : 1.0;
+                            distSq = (dL * lWeight) ** 2 + (da * da) + (db * db);
+                        }
+                    } else {
+                        const pL = pixels[i3], pA = pixels[i3+1], pB = pixels[i3+2];
+                        if (distanceConfig.isCIE2000) {
+                            const L = (pL / LAB16_L_MAX) * 100, a = (pA - LAB16_AB_NEUTRAL) / AB_SCALE, b = (pB - LAB16_AB_NEUTRAL) / AB_SCALE;
+                            distSq = cie2000SquaredInline(L, a, b, palL[j], palA[j], palB[j]);
+                        } else if (distanceConfig.isCIE94) {
+                            distSq = cie94SquaredInline16(pL, pA, pB, palL16[j], palA16[j], palB16[j], palChroma16[j], k1_16, k2_16);
+                        } else {
+                            distSq = cie76WeightedSquaredInline16(pL, pA, pB, palL16[j], palA16[j], palB16[j], SHADOW_THRESHOLD_16, 2.0);
+                        }
+                    }
+
+                    if (distSq < minDistanceSq) {
+                        minDistanceSq = distSq;
+                        nearestIndex = j;
+                        if (distSq < snapThreshold) break;
+                    }
+                }
+                lastBestIndex = nearestIndex;
+            }
+            colorIndices[i] = lastBestIndex;
         }
 
-        const earlyExitPct = ((earlyExitCount / pixelCount) * 100).toFixed(1);
-        const exactMatchPct = ((exactMatchCount / pixelCount) * 100).toFixed(1);
-        const spatialHitPct = ((spatialHitCount / pixelCount) * 100).toFixed(1);
         return colorIndices;
     }
 

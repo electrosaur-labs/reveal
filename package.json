@@ -35,6 +35,8 @@
     "url": "https://github.com/electrosaur-labs/reveal.git"
   },
   "devDependencies": {
+    "eslint": "^10.3.0",
+    "eslint-plugin-import": "^2.32.0",
     "omggif": "^1.0.10",
     "opentype.js": "^1.3.4",
     "utif2": "^4.1.0"

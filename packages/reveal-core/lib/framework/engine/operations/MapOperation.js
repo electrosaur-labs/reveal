@@ -7,9 +7,10 @@ class MapOperation extends PipelineOperation {
         const h = state.metadata.height;
         
         // Wraps the core pixel-to-palette mapping
-        // Signature: mapPixelsToPalette(rawBytes, labPalette, width = null, height = null, options = {})
+        // Signature: mapPixelsToPalette(pixels, labPalette, width = null, height = null, options = {})
+        // Using state.pixels (perceptual Float32Array) avoids per-pixel conversion costs.
         const colorIndices = require('../../../engines/SeparationEngine').mapPixelsToPalette(
-            state.originalPixels,
+            state.pixels,
             state.palette,
             w, h,
             { ...config, ...this.params }
