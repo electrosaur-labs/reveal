@@ -18,9 +18,9 @@ const ScoringManager = require('./ScoringManager');
 const SuggestionManager = require('./SuggestionManager');
 const DNA12 = require('./DNA12');
 const { DIM_COLOR } = require('../utils/pixelProcessing');
-const PipelineEngine = require('../machine/pipeline/PipelineEngine');
-const EngineBuilder = require('../machine/engine/EngineBuilder');
-const EngineRegistry = require('../machine/engine/EngineRegistry');
+const PipelineEngine = Reveal.engines.PipelineEngine;
+const EngineBuilder = Reveal.engines.EngineBuilder;
+const EngineRegistry = Reveal.engines.EngineRegistry;
 
 const logger = Reveal.logger;
 

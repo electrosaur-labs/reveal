@@ -10,7 +10,7 @@
  */
 
 const Reveal = require("@electrosaur-labs/core");
-const EngineRegistry = require('../machine/engine/EngineRegistry');
+const EngineRegistry = Reveal.engines.EngineRegistry;
 const logger = Reveal.logger;
 
 class ArchetypeCarousel {

@@ -7,9 +7,10 @@
 
 const EventEmitter = require('./EventEmitter');
 const Reveal = require('@electrosaur-labs/core');
-const PipelineEngine = require('../machine/pipeline/PipelineEngine');
-const EngineBuilder = require('../machine/engine/EngineBuilder');
-const EngineRegistry = require('../machine/engine/EngineRegistry');
+
+const PipelineEngine = Reveal.engines.PipelineEngine;
+const EngineBuilder = Reveal.engines.EngineBuilder;
+const EngineRegistry = Reveal.engines.EngineRegistry;
 
 const logger = Reveal.logger;
 
