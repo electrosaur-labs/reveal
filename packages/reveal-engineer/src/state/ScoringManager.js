@@ -100,8 +100,13 @@ class ScoringManager extends EventEmitter {
 
     /**
      * Background ΔE scoring loop for engines.
+     * @param {Array} allScores - List of engine match objects to score
+     * @param {string} topId - Top match ID
+     * @param {number} generation - Current scoring generation (for cancellation)
+     * @param {Map<string, Object>} eagerResults - Optional pre-computed results: engineId -> {palette, assignments, meanDeltaE, rgbPalette}
+     * @param {Object} knobs - Current mechanical knobs to apply before scoring
      */
-    async scoreArchetypes(allScores, topId, generation, eagerSet, knobs) {
+    async scoreArchetypes(allScores, topId, generation, eagerResults = new Map(), knobs) {
         this._allScores = allScores;
         const total = allScores.length;
         let computed = 0;
@@ -110,6 +115,29 @@ class ScoringManager extends EventEmitter {
             if (this._scoringGeneration !== generation) break;
 
             try {
+                // EAGER PATH: Use pre-computed results if available (e.g. for the active engine)
+                if (eagerResults && eagerResults.has(match.id)) {
+                    const eager = eagerResults.get(match.id);
+                    match.meanDeltaE = eager.meanDeltaE;
+                    match.edgeSurvival = eager.edgeSurvival || 0;
+                    match.targetColors = eager.palette.length;
+                    match.sortScore = this.computeSortScore(match.meanDeltaE, match.targetColors, match.edgeSurvival);
+                    this._engineDeltaE.set(match.id, match.meanDeltaE);
+                    
+                    computed++;
+                    this.emit('archetypeScored', {
+                        id: match.id,
+                        meanDeltaE: match.meanDeltaE,
+                        edgeSurvival: match.edgeSurvival,
+                        targetColors: match.targetColors,
+                        sortScore: match.sortScore,
+                        rgbPalette: eager.rgbPalette,
+                        computed,
+                        total
+                    });
+                    continue;
+                }
+
                 const engineDef = EngineRegistry.get(match.id);
 
                 // Build engine instance from def + image DNA (no archetype merge).

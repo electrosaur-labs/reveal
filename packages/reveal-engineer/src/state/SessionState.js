@@ -314,39 +314,23 @@ class SessionState extends EventEmitter {
         this.emit('progress', { phase: 'visual', label: 'Downsampling proxy\u2026', percent: 55 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        // Ingest using core ProxyEngine to get downsampled 16-bit Engine Lab buffer
+        // OPTIMIZATION: Skip legacy posterization pass inside initializeProxy.
+        // We will run the authoritative PipelineEngine next.
         const proxyInit = await this.proxyEngine.initializeProxy(
-            labPixels, width, height, this.currentConfig
+            labPixels, width, height, { ...this.currentConfig, skipPosterize: true }
         );
         const proxyBuffer = this.proxyEngine.proxyBuffer; // Raw 16-bit Engine Lab
         const proxyW = proxyInit.dimensions.width;
         const proxyH = proxyInit.dimensions.height;
 
-        this.emit('progress', { phase: 'visual', label: 'Extracting features\u2026', percent: 65 });
-        await new Promise(r => setTimeout(r, 20)); // yield for repaint
-
-        // Snapshot the Mk1.5 result that initializeProxy just produced.
-        // initializeProxy always runs PosterizationEngine.posterize (the authoritative
-        // core Mk1.5 path). We capture it here before _installPosterizationResult
-        // overwrites separationState with the active goddess engine result.
-        const sep = this.proxyEngine.separationState;
-        this._mk15ProxyState = {
-            palette: sep.palette.map(c => ({ ...c })),
-            colorIndices: new Uint8Array(sep.colorIndices),
-            metadata: { ...sep.metadata },
-            width: proxyW,
-            height: proxyH
-        };
-
         // Cache resolution-local DNA12 (computed from proxy pixels, not full-res).
-        // Card swaps at this resolution reuse this without recomputing.
         this._currentResolutionDNA = { ...this.imageDNA };
         DNA12.augment(this._currentResolutionDNA, proxyBuffer, proxyW, proxyH);
 
         this.emit('progress', { phase: 'visual', label: 'Executing pipeline\u2026', percent: 75 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        // Perform separation using the isolated PipelineEngine
+        // AUTHORITATIVE POSTERIZATION: Use the isolated PipelineEngine
         const result = PipelineEngine.execute(proxyBuffer, hydratedEngine, {
             ...this.currentConfig,
             width: proxyW,
@@ -356,9 +340,7 @@ class SessionState extends EventEmitter {
         this.emit('progress', { phase: 'visual', label: 'Rendering preview\u2026', percent: 85 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        // Install into BOTH separationState and _baselineState so the subsequent
-        // updateProxy(knobs) call restores from THIS engine's posterization, not
-        // from the initializeProxy()-time Mk1.5 baseline.
+        // Install into BOTH separationState and _baselineState
         const { rgbPalette } = this._installPosterizationResult(result, proxyW, proxyH);
 
         // Convert 16-bit proxy buffer to 8-bit Lab ONLY for the UI preview generator facade
@@ -371,7 +353,15 @@ class SessionState extends EventEmitter {
         this.state.proxyBufferReady = true;
         this.state.isProcessing = false;
 
-        const initialAccuracy = this.calculateCurrentAccuracy();
+        // --- Quality Metrics (EAGER COMPUTATION) ---
+        const meanDeltaE = Reveal.RevelationError.meanDeltaE16(
+            proxyBuffer, result.assignments, result.palette, proxyW * proxyH
+        );
+        const edgeResult = Reveal.RevelationError.edgeSurvival16(
+            proxyBuffer, result.assignments, proxyW, proxyH
+        );
+        
+        this._scoring.setArchetypeDeltaE(initialEngineId, meanDeltaE);
         const initialFidelity = this.calculateDNAFidelity();
 
         // Initialize ScoringManager with the 5 goddess engines
@@ -390,20 +380,30 @@ class SessionState extends EventEmitter {
             activeColorCount: result.palette.length,
             elapsedMs: result.metadata.elapsedMs,
             dimensions: { width: proxyW, height: proxyH },
-            accuracyDeltaE: initialAccuracy,
+            accuracyDeltaE: meanDeltaE,
             dnaFidelity: initialFidelity
         });
 
         // ── Phase 4: Carousel ready with the 5 goddess engines ──
         const goddessEngines = ['aine', 'anu', 'brigid', 'cailleach', 'rhiannon'];
-        const allScores = goddessEngines.map(id => ({ id, score: 0 })); // Simplified scoring for engines initially
+        const allScores = goddessEngines.map(id => ({ id, score: 0 }));
+
+        // EAGER RESULTS: Feed the initial engine's stats to ScoringManager so it 
+        // doesn't re-calculate the active card in the background loop.
+        const eagerResults = new Map();
+        eagerResults.set(initialEngineId, {
+            palette: result.palette,
+            rgbPalette: rgbPalette,
+            meanDeltaE: meanDeltaE,
+            edgeSurvival: edgeResult.edgeSurvival
+        });
 
         this.emit('carouselReady', { scores: allScores, topMatchId: initialEngineId });
         
-        // Launch background ΔE scoring for the 5 goddess engines
+        // Launch background ΔE scoring
         const generation = this._scoring.scoringGeneration;
         const knobs = this.getMechanicalKnobs();
-        this._scoring.scoreArchetypes(allScores, initialEngineId, generation, new Set(), knobs);
+        this._scoring.scoreArchetypes(allScores, initialEngineId, generation, eagerResults, knobs);
 
         return proxyInit;
         }

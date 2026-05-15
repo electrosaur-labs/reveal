@@ -341,8 +341,15 @@ class SeparationEngine {
         }
 
         // SNAP_THRESHOLD: If distance is below this, we stop searching
-        // Scale threshold based on metric (CIE76 16-bit uses integer space)
-        const snapThreshold = distanceConfig.isCIE2000 ? 1.0 : SNAP_THRESHOLD_SQ_16;
+        // Scale threshold based on metric and coordinate space
+        let snapThreshold;
+        if (distanceConfig.isCIE2000) {
+            snapThreshold = 1.0;
+        } else if (isPerceptual) {
+            snapThreshold = 4.0; // ΔE = 2.0
+        } else {
+            snapThreshold = SNAP_THRESHOLD_SQ_16;
+        }
 
         // Pre-compute chroma for CIE94 in appropriate space
         let palChroma16 = null;

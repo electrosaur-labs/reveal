@@ -141,6 +141,26 @@ class ProxyEngine {
 
         const proxyConfig = { ...initialConfig, ...PROXY_SAFE_OVERRIDES };
 
+        // OPTIMIZATION: Skip legacy posterization if the caller intends to overwrite
+        // it immediately (common in Engineer initialization flow).
+        if (proxyConfig.skipPosterize) {
+            // Still need to store source metadata for Production configurations
+            this.sourceMetadata = {
+                originalWidth: width,
+                originalHeight: height,
+                dna: null, // DNA should be set by authoritative caller later
+                bitDepth: initialConfig.bitDepth || 16,
+                targetColors: initialConfig.targetColors || initialConfig.targetColorsSlider || 0
+            };
+            this._substrateMode = initialConfig.substrateMode || 'auto';
+
+            const elapsed = performance.now() - startTime;
+            return {
+                dimensions: { width: proxyW, height: proxyH },
+                elapsedMs: elapsed
+            };
+        }
+
         const posterizeResult = PosterizationEngine.posterize(
             proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
         );
