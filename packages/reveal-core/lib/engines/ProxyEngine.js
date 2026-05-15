@@ -77,11 +77,41 @@ class ProxyEngine {
 
     constructor() {
         this.proxyBuffer = null;        // 512px 16-bit LAB buffer (may be bilaterally filtered)
+        this._proxyBufferPerceptual = null; // Cached Float32 perceptual representation
         this._rawProxyBuffer = null;    // 512px unfiltered stride-3 buffer — canonical source for re-filtering
         this._proxyPreprocessingIntensity = null; // intensity applied to current proxyBuffer
         this.separationState = null;    // Cached palette + indices + masks (may be mutated by knobs)
         this._baselineState = null;     // Clean snapshot from last posterize (never mutated by knobs)
         this.sourceMetadata = null;     // Original dimensions, DNA
+    }
+
+    /**
+     * Lazily initialize and return the Float32 Perceptual buffer.
+     * Prevents redundant 7.6MB allocations during PipelineEngine.executeAsync.
+     */
+    get proxyBufferPerceptual() {
+        if (this._proxyBufferPerceptual) {
+            return this._proxyBufferPerceptual;
+        }
+
+        if (!this.proxyBuffer) {
+            return null;
+        }
+
+        const pixels16 = this.proxyBuffer;
+        const L_SCALE = LabEncoding.L_SCALE;
+        const AB_SCALE = LabEncoding.AB_SCALE;
+        const LAB16_AB_NEUTRAL = LabEncoding.LAB16_AB_NEUTRAL;
+
+        const pixelsPerceptual = new Float32Array(pixels16.length);
+        for (let i = 0; i < pixels16.length; i += 3) {
+            pixelsPerceptual[i]     = pixels16[i] / L_SCALE;
+            pixelsPerceptual[i + 1] = (pixels16[i + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
+            pixelsPerceptual[i + 2] = (pixels16[i + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
+        }
+
+        this._proxyBufferPerceptual = pixelsPerceptual;
+        return this._proxyBufferPerceptual;
     }
 
     /**
@@ -137,6 +167,7 @@ class ProxyEngine {
         this._proxyPreprocessingIntensity = preprocessingIntensity;
 
         this.proxyBuffer = proxyBuffer;
+        this._proxyBufferPerceptual = null; // Invalidate cached perceptual buffer
         this._originalRGBA = null;  // Invalidate cached original preview
 
         const proxyConfig = { ...initialConfig, ...PROXY_SAFE_OVERRIDES };

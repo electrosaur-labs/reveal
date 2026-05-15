@@ -3,16 +3,14 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const { PosterizationEngine } = require('../../index').engines;
-const PipelineEngine = require('../../../reveal-engineer/src/machine/pipeline/PipelineEngine');
-const EngineBuilder = require('../../../reveal-engineer/src/machine/engine/EngineBuilder');
-const EngineRegistry = require('../../../reveal-engineer/src/machine/engine/EngineRegistry');
+const { PosterizationEngine, PipelineEngine, EngineBuilder, EngineRegistry } = require('../../index').engines;
 
 /**
  * MVP parity bar: the declaratively-defined Mk1.5 engine
  * (engines/reveal-mk1.5-reference.json executed by the Engineer's PipelineEngine)
  * should produce a palette within ΔE76 < 3.0 of the in-code Mk1.5 engine
  * (PosterizationEngine.posterize with engineType:'reveal-mk1.5').
+
  *
  * Project parity criterion per dev/MATHEMATICAL_PARITY.md: ΔE76 < 3.0.
  * Bit-identical is not the target — reveal-core has internal optimizations
@@ -69,10 +67,10 @@ describe('Mk1.5 declarative vs in-code parity', () => {
         expect(result.paletteLab.length).toBeLessThanOrEqual(targetColors + 2);
     });
 
-    test('declarative Mk1.5 produces a non-trivial palette', () => {
+    test('declarative Mk1.5 produces a non-trivial palette', async () => {
         const def = EngineRegistry.get('reveal-mk1.5-reference');
         const hydrated = EngineBuilder.build(def, null);
-        const result = PipelineEngine.execute(pixels, hydrated, {
+        const result = await PipelineEngine.executeAsync(pixels, hydrated, {
             width,
             height,
             targetColors
@@ -81,7 +79,7 @@ describe('Mk1.5 declarative vs in-code parity', () => {
         expect(result.palette.length).toBeGreaterThan(0);
     });
 
-    test('palettes match within ΔE76 < 3.0 (mean) — MVP parity bar', () => {
+    test('palettes match within ΔE76 < 3.0 (mean) — MVP parity bar', async () => {
         // In-code
         const incode = PosterizationEngine.posterize(pixels, width, height, targetColors, {
             engineType: 'reveal-mk1.5',
@@ -93,7 +91,7 @@ describe('Mk1.5 declarative vs in-code parity', () => {
         // Declarative
         const def = EngineRegistry.get('reveal-mk1.5-reference');
         const hydrated = EngineBuilder.build(def, null);
-        const declRes = PipelineEngine.execute(pixels, hydrated, {
+        const declRes = await PipelineEngine.executeAsync(pixels, hydrated, {
             width,
             height,
             targetColors

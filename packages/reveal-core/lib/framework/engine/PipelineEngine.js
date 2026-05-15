@@ -15,7 +15,7 @@ class PipelineEngine {
      * 
      * @param {Uint16Array} pixels16 - Raw Engine 16-bit Lab pixels (0-32768)
      * @param {Object} recipe - Compiled steps from EngineBuilder
-     * @param {Object} config - Global configuration (can contain onProgress callback)
+     * @param {Object} config - Global configuration (can contain onProgress callback and precomputedPerceptual buffer)
      * @returns {Promise<Object>} Final separation result
      */
     static async executeAsync(pixels16, recipe, config) {
@@ -27,13 +27,17 @@ class PipelineEngine {
         // as the raw 16-bit source so MapOperation's mapPixelsToPalette — which
         // does its own internal 16-bit → perceptual conversion — receives what
         // it expects.
-        const pixelsPerceptual = new Float32Array(pixels16.length);
-        for (let i = 0; i < pixels16.length; i += 3) {
-            pixelsPerceptual[i]     = pixels16[i] / L_SCALE;
-            pixelsPerceptual[i + 1] = (pixels16[i + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
-            pixelsPerceptual[i + 2] = (pixels16[i + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
+        if (config.precomputedPerceptual) {
+            state.pixels = config.precomputedPerceptual;
+        } else {
+            const pixelsPerceptual = new Float32Array(pixels16.length);
+            for (let i = 0; i < pixels16.length; i += 3) {
+                pixelsPerceptual[i]     = pixels16[i] / L_SCALE;
+                pixelsPerceptual[i + 1] = (pixels16[i + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
+                pixelsPerceptual[i + 2] = (pixels16[i + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
+            }
+            state.pixels = pixelsPerceptual;
         }
-        state.pixels = pixelsPerceptual;
 
         const logger = config.logger || console;
 
@@ -84,13 +88,17 @@ class PipelineEngine {
     static execute(pixels16, recipe, config) {
         const state = new PipelineState(pixels16, config);
 
-        const pixelsPerceptual = new Float32Array(pixels16.length);
-        for (let i = 0; i < pixels16.length; i += 3) {
-            pixelsPerceptual[i]     = pixels16[i] / L_SCALE;
-            pixelsPerceptual[i + 1] = (pixels16[i + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
-            pixelsPerceptual[i + 2] = (pixels16[i + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
+        if (config.precomputedPerceptual) {
+            state.pixels = config.precomputedPerceptual;
+        } else {
+            const pixelsPerceptual = new Float32Array(pixels16.length);
+            for (let i = 0; i < pixels16.length; i += 3) {
+                pixelsPerceptual[i]     = pixels16[i] / L_SCALE;
+                pixelsPerceptual[i + 1] = (pixels16[i + 1] - LAB16_AB_NEUTRAL) / AB_SCALE;
+                pixelsPerceptual[i + 2] = (pixels16[i + 2] - LAB16_AB_NEUTRAL) / AB_SCALE;
+            }
+            state.pixels = pixelsPerceptual;
         }
-        state.pixels = pixelsPerceptual;
 
         const logger = config.logger || console;
         logger.log(`[PipelineEngine] Starting Sync: ${recipe.name || 'Unnamed'}`);
