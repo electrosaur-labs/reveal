@@ -2,16 +2,19 @@ const PipelineOperation = require('../PipelineOperation');
 const PaletteOps = require('../../../engines/PaletteOps');
 
 class MapOperation extends PipelineOperation {
-    execute(state, config) {
+    async execute(state, config) {
         const w = state.metadata.width;
         const h = state.metadata.height;
         
-        // Wraps the core pixel-to-palette mapping
-        // Signature: mapPixelsToPalette(pixels, labPalette, width = null, height = null, options = {})
-        // Using state.pixels (perceptual Float32Array) avoids per-pixel conversion costs.
-        const colorIndices = require('../../../engines/SeparationEngine').mapPixelsToPalette(
-            state.pixels,
+        // Pass the scaled progress callback to mapPixelsToPaletteAsync
+        const onProgress = config._stepProgress || null;
+        
+        // Wraps the core pixel-to-palette mapping asynchronously
+        // Signature: mapPixelsToPaletteAsync(rawBytes, labPalette, onProgress, width, height, options)
+        const colorIndices = await require('../../../engines/SeparationEngine').mapPixelsToPaletteAsync(
+            state.originalPixels,
             state.palette,
+            onProgress,
             w, h,
             { ...config, ...this.params }
         );

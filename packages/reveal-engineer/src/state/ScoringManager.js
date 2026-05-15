@@ -153,7 +153,7 @@ class ScoringManager extends EventEmitter {
                     ...knobs
                 };
 
-                const result = PipelineEngine.execute(proxyBuffer, hydratedEngine, config);
+                const result = await PipelineEngine.executeAsync(proxyBuffer, hydratedEngine, config);
                 
                 if (this._scoringGeneration !== generation) break;
 

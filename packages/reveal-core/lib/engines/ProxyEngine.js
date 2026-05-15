@@ -267,7 +267,7 @@ class ProxyEngine {
         // Otherwise, fall back to the standard PosterizationEngine.
         if (proxyConfig.engineOverride && Array.isArray(proxyConfig.engineOverride.steps)) {
             const PipelineEngine = require('../framework/engine/PipelineEngine');
-            const pipelineRes = PipelineEngine.execute(
+            const pipelineRes = await PipelineEngine.executeAsync(
                 this.proxyBuffer, 
                 proxyConfig.engineOverride, 
                 proxyConfig

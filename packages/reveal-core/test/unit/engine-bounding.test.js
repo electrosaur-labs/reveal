@@ -5,7 +5,7 @@ import Quantizer from '../../lib/framework/engine/Quantizer';
 import EngineBuilder from '../../lib/framework/engine/EngineBuilder';
 
 describe('Declarative Engine Bounding', () => {
-    const pixels = new Float32Array([0, 0, 0, 100, 100, 100]);
+    const pixels = new Uint16Array([0, 0, 0, 32768, 32768, 32768]);
     const quantizerSpy = vi.fn(() => [{ L: 0, a: 0, b: 0 }]);
 
     beforeEach(() => {
@@ -16,13 +16,13 @@ describe('Declarative Engine Bounding', () => {
         vi.clearAllMocks();
     });
 
-    test('clamps an out-of-bounds parameter (upper)', () => {
+    test('clamps an out-of-bounds parameter (upper)', async () => {
         const engineDef = EngineRegistry.get('production-reveal');
         // Target colors has bounds [5, 15] in production-reveal.json
         const archetype = { parameters: { targetColors: { value: 20 } } }; 
         
         const recipe = EngineBuilder.synthesize(engineDef, archetype);
-        PipelineEngine.execute(pixels, recipe, {});
+        await PipelineEngine.executeAsync(pixels, recipe, {});
         
         expect(quantizerSpy).toHaveBeenCalled();
         // Clamped value is 15. kScale is 3.0. 15 * 3.0 = 45.
@@ -30,12 +30,12 @@ describe('Declarative Engine Bounding', () => {
         expect(calledConfig.targetColors).toBe(45);
     });
     
-    test('clamps an out-of-bounds parameter (lower)', () => {
+    test('clamps an out-of-bounds parameter (lower)', async () => {
         const engineDef = EngineRegistry.get('production-reveal');
         const archetype = { parameters: { targetColors: { value: 2 } } }; 
         
         const recipe = EngineBuilder.synthesize(engineDef, archetype);
-        PipelineEngine.execute(pixels, recipe, {});
+        await PipelineEngine.executeAsync(pixels, recipe, {});
 
         expect(quantizerSpy).toHaveBeenCalled();
         const calledConfig = quantizerSpy.mock.calls[0][1];
@@ -43,12 +43,12 @@ describe('Declarative Engine Bounding', () => {
         expect(calledConfig.targetColors).toBe(15);
     });
 
-    test('uses the incoming value when it is within bounds', () => {
+    test('uses the incoming value when it is within bounds', async () => {
         const engineDef = EngineRegistry.get('production-reveal');
         const archetype = { parameters: { targetColors: { value: 12 } } }; 
         
         const recipe = EngineBuilder.synthesize(engineDef, archetype);
-        PipelineEngine.execute(pixels, recipe, {});
+        await PipelineEngine.executeAsync(pixels, recipe, {});
 
         expect(quantizerSpy).toHaveBeenCalled();
         const calledConfig = quantizerSpy.mock.calls[0][1];
@@ -56,10 +56,10 @@ describe('Declarative Engine Bounding', () => {
         expect(calledConfig.targetColors).toBe(36);
     });
 
-    test('uses default when parameter is missing from dynamic config', () => {
+    test('uses default when parameter is missing from dynamic config', async () => {
         const engineDef = EngineRegistry.get('production-reveal');
         const recipe = EngineBuilder.synthesize(engineDef, null);
-        PipelineEngine.execute(pixels, recipe, {});
+        await PipelineEngine.executeAsync(pixels, recipe, {});
 
         expect(quantizerSpy).toHaveBeenCalled();
         const calledConfig = quantizerSpy.mock.calls[0][1];

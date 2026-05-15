@@ -330,11 +330,14 @@ class SessionState extends EventEmitter {
         this.emit('progress', { phase: 'visual', label: 'Executing pipeline\u2026', percent: 75 });
         await new Promise(r => setTimeout(r, 20)); // yield for repaint
 
-        // AUTHORITATIVE POSTERIZATION: Use the isolated PipelineEngine
-        const result = PipelineEngine.execute(proxyBuffer, hydratedEngine, {
+        // AUTHORITATIVE POSTERIZATION: Use the isolated PipelineEngine asynchronously
+        const result = await PipelineEngine.executeAsync(proxyBuffer, hydratedEngine, {
             ...this.currentConfig,
             width: proxyW,
-            height: proxyH
+            height: proxyH,
+            onProgress: (pct) => {
+                this.emit('progress', { phase: 'visual', label: 'Executing pipeline\u2026', percent: 65 + (pct * 0.2) });
+            }
         });
 
         this.emit('progress', { phase: 'visual', label: 'Rendering preview\u2026', percent: 85 });
@@ -647,7 +650,7 @@ class SessionState extends EventEmitter {
                     metadata: this._mk15ProxyState.metadata
                 };
             } else {
-                pipelineRes = PipelineEngine.execute(proxyBuffer, hydratedEngine, {
+                pipelineRes = await PipelineEngine.executeAsync(proxyBuffer, hydratedEngine, {
                     ...this.currentConfig,
                     width: proxyW,
                     height: proxyH
