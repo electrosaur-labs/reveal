@@ -794,6 +794,7 @@ function setStatus(text) {
 // Phase swatch colors — one per progress step
 const PHASE_COLORS = ['#e06060', '#e09040', '#d0c040', '#50b070', '#4090d0', '#8060c0'];
 let _completedPhases = [];
+let _currentPhase = null;
 
 function _showProgress(label, percent) {
     const bar = document.getElementById('ingest-progress');
@@ -806,6 +807,13 @@ function _showProgress(label, percent) {
         const shortLabel = label.replace(/[\u2026.]+$/, '').trim();
         const pct = percent != null ? percent : 0;
 
+        if (_currentPhase !== shortLabel) {
+            if (_currentPhase) {
+                _completedPhases.push(_currentPhase);
+            }
+            _currentPhase = shortLabel;
+        }
+
         let html = '<div class="splash-header">REVEAL CORE PROCESS LOG [v1.0.1]</div>';
 
         // Completed phases with [OK]
@@ -816,7 +824,7 @@ function _showProgress(label, percent) {
 
         // Current phase with [IN PROGRESS...]
         html += '<div class="splash-line">' +
-            shortLabel.toUpperCase() + ': <span class="splash-active">[IN PROGRESS...]</span></div>';
+            shortLabel.toUpperCase() + ': <span class="splash-active">[IN PROGRESS... ' + Math.round(pct) + '%]</span></div>';
 
         // Progress bar
         html += '<div class="splash-bar"><div class="splash-bar-fill" style="width:' + pct + '%"></div></div>';
@@ -828,7 +836,6 @@ function _showProgress(label, percent) {
         html += '<div class="splash-date">' + dateStr + '</div>';
 
         progressEl.innerHTML = html;
-        _completedPhases.push(shortLabel);
     }
     setStatus(label);
 }
@@ -855,6 +862,7 @@ function _hideProgress() {
         if (fill) fill.style.width = '0%';
     }, 300);
     _completedPhases = [];
+    _currentPhase = null;
     setStatus('');
 }
 
