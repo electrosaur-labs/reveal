@@ -221,18 +221,22 @@ describe('ProxyEngine lifecycle — jethro 800×547', () => {
         // Save baseline snapshot
         const snapshot = engine.getBaselineSnapshot();
 
+        // Verify masks are initially null
+        expect(snapshot.masks).toBeNull();
+
         // Apply aggressive knobs
         await engine.updateProxy({ minVolume: 5, speckleRescue: 10, shadowClamp: 20 });
 
-        // Verify knobs changed state
+        // Verify knobs changed state (minVolume alters colorIndices)
         const knobbed = engine.separationState;
-        let masksDiff = 0;
-        for (let c = 0; c < snapshot.masks.length; c++) {
-            for (let i = 0; i < snapshot.colorIndices.length; i++) {
-                if (snapshot.masks[c][i] !== knobbed.masks[c][i]) masksDiff++;
-            }
+        let indexDiff = 0;
+        for (let i = 0; i < snapshot.colorIndices.length; i++) {
+            if (snapshot.colorIndices[i] !== knobbed.colorIndices[i]) indexDiff++;
         }
-        expect(masksDiff).toBeGreaterThan(0);
+        expect(indexDiff).toBeGreaterThan(0);
+
+        // Verify updateProxy actually generated masks
+        expect(knobbed.masks).not.toBeNull();
 
         // Restore from snapshot
         engine.restoreBaselineSnapshot(snapshot, config);
@@ -241,11 +245,9 @@ describe('ProxyEngine lifecycle — jethro 800×547', () => {
         for (let i = 0; i < snapshot.colorIndices.length; i++) {
             expect(engine.separationState.colorIndices[i]).toBe(snapshot.colorIndices[i]);
         }
-        for (let c = 0; c < snapshot.masks.length; c++) {
-            for (let i = 0; i < snapshot.colorIndices.length; i++) {
-                expect(engine.separationState.masks[c][i]).toBe(snapshot.masks[c][i]);
-            }
-        }
+        
+        // After restore, masks should be null again
+        expect(engine.separationState.masks).toBeNull();
     }, 30000);
 
     test('updateProxy with zero knobs: equivalent to clean baseline', async () => {
