@@ -189,6 +189,8 @@ describe('every ParameterGenerator production field is categorized', () => {
         'preprocessing',               // preprocessing config object (not a scalar)
         'rangeClamp',                  // derived from DNA, not a knob
         'targetColorsSlider',          // alias for targetColors
+        'engineOverride',              // optional engine override passed through from options
+        'manualArchetypeId',           // archetype bypass input echoed into config
     ]);
 
     // Internal engine fields set by archetypes but not exposed as user-facing
