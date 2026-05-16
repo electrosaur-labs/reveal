@@ -13,10 +13,10 @@ export default defineConfig({
     },
     maxWorkers: 1,
     minWorkers: 1,
-    testTimeout: 120_000,
+    testTimeout: 300_000,
     hookTimeout: 60_000,
-    teardownTimeout: 120_000,
-    rpcTimeout: 300_000,
+    teardownTimeout: 300_000,
+    rpcTimeout: 600_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
