@@ -884,21 +884,14 @@ async function handleFinalize() {
     // Disable UI immediately
     const btn = document.getElementById('btn-finalize');
     const carouselEl = document.getElementById('carousel');
-    const progressEl = document.getElementById('finalize-progress');
     if (btn) btn.disabled = true;
     if (carouselEl) carouselEl.style.pointerEvents = 'none';
-    if (progressEl) {
-        progressEl.style.display = 'block';
-        progressEl.textContent = 'Reading full-res pixels...';
-    }
 
     // Yield to repaint before heavy I/O
     await new Promise(r => setTimeout(r, 50));
 
     try {
-        const worker = new ProductionWorker(sessionState, (step, total, msg) => {
-            if (progressEl) progressEl.textContent = msg;
-        });
+        const worker = new ProductionWorker(sessionState);
 
         const result = await worker.execute();
 
@@ -923,7 +916,6 @@ async function handleFinalize() {
         // Restore UI on failure
         if (btn) btn.disabled = false;
         if (carouselEl) carouselEl.style.pointerEvents = '';
-        if (progressEl) progressEl.style.display = 'none';
     } finally {
         isProductionRunning = false;
 
@@ -960,13 +952,8 @@ function _closeDialog() {
 function _resetFinalizeUI() {
     const btn = document.getElementById('btn-finalize');
     const carouselEl = document.getElementById('carousel');
-    const progressEl = document.getElementById('finalize-progress');
     if (btn) btn.disabled = false;
     if (carouselEl) carouselEl.style.pointerEvents = '';
-    if (progressEl) {
-        progressEl.style.display = 'none';
-        progressEl.textContent = '';
-    }
 }
 
 // ─── UI Reset ────────────────────────────────────────────

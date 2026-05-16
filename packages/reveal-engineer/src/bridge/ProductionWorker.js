@@ -89,8 +89,13 @@ class ProductionWorker {
         // Cursor goes busy immediately on "Separate" click.
         // Pixel read + separation + mask gen + layer creation all run inside.
         const result = await core.executeAsModal(async (executionContext) => {
+            const setProgress = async (value) => {
+                try { await executionContext.hostControl.setProgressBar({ value }); } catch (_) {}
+            };
+
             // ── Step 1: Read full-res pixels ──
             self._onProgress(1, 4, 'Reading full-res pixels...');
+            await setProgress(0);
             logger.log('[ProductionWorker] Reading full-res document...');
 
             const doc = app.activeDocument;
@@ -142,6 +147,7 @@ class ProductionWorker {
 
             // ── Step 2: Separate image ──
             self._onProgress(2, 4, 'Separating image...');
+            await setProgress(0.25);
             const tSep = Date.now();
             const ditherType = prodConfig.ditherType || 'none';
 
@@ -186,6 +192,7 @@ class ProductionWorker {
 
             // ── Step 3: Build masks ──
             self._onProgress(3, 4, 'Building masks...');
+            await setProgress(0.5);
 
             // Convert trap size from points (UI) to pixels using document DPI
             const dpi = prodConfig.resolution || 72;
@@ -224,6 +231,7 @@ class ProductionWorker {
             try {
                 for (let i = 0; i < layers.length; i++) {
                     self._onProgress(4, 4, `Creating layer ${i + 1}/${layers.length}...`);
+                    await setProgress(0.75 + (i / layers.length) * 0.25);
                     logger.log(`[ProductionWorker] Creating layer ${i + 1}/${layers.length}: ${layers[i].name}`);
 
                     if (is16bit) {
@@ -272,7 +280,7 @@ class ProductionWorker {
 
             return { layerCount: layers.length, xmpError };
         }, {
-            commandName: "Reveal"
+            commandName: 'Reveal Separation'
         });
 
         const elapsedMs = Date.now() - t0;
