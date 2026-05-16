@@ -902,9 +902,9 @@ class ProxyEngine {
         // during initialization or archetype swaps.
         await this._rebuildMasks();
 
-        if (params.speckleRescue !== undefined) {
-            await this._applySpeckleRescue(params.speckleRescue);
-        }
+        // Always run speckle rescue — when sliderPx=0 and meshSize is known,
+        // MechanicalKnobs auto-computes the minimum printable dot from press physics.
+        await this._applySpeckleRescue(params.speckleRescue || 0, params.meshSize || 0, params.imageDpi || 0);
         if (params.shadowClamp !== undefined) {
             await this._applyShadowClamp(params.shadowClamp);
         }
@@ -925,15 +925,15 @@ class ProxyEngine {
 
     /**
      * Apply speckle rescue — delegates to MechanicalKnobs.
-     * Passes originalWidth for proxy-aware threshold scaling.
+     * Passes originalWidth for proxy-scale correction and mesh params for auto-compute.
      * @private
      */
-    async _applySpeckleRescue(thresholdPixels) {
+    async _applySpeckleRescue(sliderPx, meshTPI, imageDpi) {
         const { masks, colorIndices, width, height } = this.separationState;
         const originalWidth = this.sourceMetadata && this.sourceMetadata.originalWidth;
 
         MechanicalKnobs.applySpeckleRescue(
-            masks, colorIndices, width, height, thresholdPixels, originalWidth
+            masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI, imageDpi
         );
     }
 

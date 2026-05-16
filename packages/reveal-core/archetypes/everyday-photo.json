@@ -45,7 +45,7 @@
     "ignoreTransparent": true,
     "neutralSovereigntyThreshold": 10,
     "preprocessingIntensity": "auto",
-    "speckleRescue": 4,
+    "speckleRescue": 0,
     "refinementPasses": 1
   }
 }

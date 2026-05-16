@@ -120,8 +120,8 @@
         "speckleRescue": {
           "type": "number",
           "minimum": 0,
-          "maximum": 8,
-          "description": "Morphological despeckle: removes isolated clusters below N pixels. Eliminates unprintable digital lint. Standard: 4 pixels for 230-mesh screens."
+          "maximum": 30,
+          "description": "Morphological despeckle: linear px threshold — removes clusters smaller than N×N px². 0 = auto-compute from mesh physics (PRINT_FACTOR × dpi / meshTPI). At 300 DPI / 230 TPI this floors at 10px linear (100px² area)."
         },
         "medianPass": {
           "type": "boolean",

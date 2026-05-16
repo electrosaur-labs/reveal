@@ -360,10 +360,10 @@ class ProductionWorker {
         // Build masks from (possibly remapped) color indices
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, labPalette.length, pixelCount);
 
-        // Loupe tiles are native resolution — no originalWidth scaling needed
-        if (knobs.speckleRescue > 0) {
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, knobs.speckleRescue);
-        }
+        // Loupe tiles are native resolution — no originalWidth scaling needed.
+        // Always run: when sliderPx=0, auto-computes minimum printable dot from mesh physics.
+        MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height,
+            knobs.speckleRescue, null, knobs.meshSize, knobs.imageDpi);
 
         if (knobs.shadowClamp > 0) {
             MechanicalKnobs.applyShadowClamp(masks, colorIndices, labPalette, width, height, knobs.shadowClamp);
@@ -433,10 +433,12 @@ class ProductionWorker {
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, labPalette.length, pixelCount);
 
         // ── Apply speckleRescue (shared with ProxyEngine) ──
-        // No originalWidth scaling — production runs at full document resolution
-        if (speckleRescue > 0) {
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, speckleRescue);
-        }
+        // No originalWidth scaling — production runs at full document resolution.
+        // Always run: when sliderPx=0, auto-computes minimum printable dot from mesh physics.
+        const meshTPI = this._sessionState.state.meshSize || 230;
+        const imageDpi = this._sessionState.imageResolution || 300;
+        MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height,
+            speckleRescue, null, meshTPI, imageDpi);
 
         // ── Apply shadowClamp (shared with ProxyEngine) ──
         // Uses tonal-aware edge erosion (same algorithm as proxy preview)

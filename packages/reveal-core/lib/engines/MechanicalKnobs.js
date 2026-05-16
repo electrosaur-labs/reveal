@@ -163,35 +163,63 @@ class MechanicalKnobs {
     /**
      * Apply speckleRescue: morphological despeckle + BFS healing.
      *
-     * Removes isolated pixel clusters smaller than threshold, then heals
-     * the orphaned pixels by flooding them with neighboring colors.
+     * Removes isolated pixel clusters whose area falls below a threshold derived
+     * from the slider value, then BFS-heals orphaned pixels into surrounding colors.
      *
-     * @param {Array<Uint8Array>} masks - Per-color binary masks (mutated in place)
-     * @param {Uint8Array} colorIndices - Per-pixel palette index (mutated by healing)
-     * @param {number} width - Image width
-     * @param {number} height - Image height
-     * @param {number} thresholdPixels - User-facing speckle size (0-10px)
-     * @param {number} [originalWidth] - Full document width (for proxy scaling)
+     * UNITS: the slider and `meshTPI`-derived value are LINEAR pixel dimensions.
+     * They are squared internally before being compared to `clusterPixels.length`
+     * (which is a pixel count / area). A slider value of 7 means "remove blobs
+     * smaller than 7×7 = 49 pixels", not "smaller than 7 pixels".
+     *
+     * AUTO-COMPUTE (sliderPx = 0): derives the minimum printable dot size from
+     * press physics — PRINT_FACTOR × (imageDpi / meshTPI). At 300 DPI / 230 TPI
+     * with PRINT_FACTOR=7 this yields 10 px linear → 100 px area. Dots smaller
+     * than this fall through the mesh opening and either wash out or clog the screen.
+     *
+     * PROXY SCALING: the linear dimension is divided by linearScale (not sqrt)
+     * so the proxy area threshold correctly mirrors the production threshold.
+     *
+     * @param {Array<Uint8Array>} masks        Per-color binary masks (mutated)
+     * @param {Uint8Array}        colorIndices Per-pixel palette index (mutated by healing)
+     * @param {number}            width        Image width in pixels
+     * @param {number}            height       Image height in pixels
+     * @param {number}            sliderPx     Linear slider value (0 = auto from mesh physics)
+     * @param {number}            [originalWidth] Full document width (for proxy scaling)
+     * @param {number}            [meshTPI=0]  Screen mesh threads-per-inch (e.g. 230)
+     * @param {number}            [imageDpi=0] Document DPI; 0 → assume 300
      */
-    static applySpeckleRescue(masks, colorIndices, width, height, thresholdPixels, originalWidth) {
-        if (thresholdPixels <= 0) return;
+    static applySpeckleRescue(masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI = 0, imageDpi = 0) {
+        const PRINT_FACTOR = 7;
 
-        let threshold = Math.round(thresholdPixels);
+        // Resolve linear threshold (px):
+        //   sliderPx > 0 → user-specified linear dimension
+        //   sliderPx = 0 → auto-compute from press physics: PRINT_FACTOR × (dpi / meshTPI)
+        //                   At 300 DPI / 230 TPI: ceil(7 × 300 / 230) = 10 px → 100 px² area
+        let linearPx;
+        if (sliderPx > 0) {
+            linearPx = sliderPx;
+        } else if (meshTPI > 0) {
+            const dpi = imageDpi > 0 ? imageDpi : 300;
+            linearPx = Math.max(1, Math.ceil(PRINT_FACTOR * dpi / meshTPI));
+        } else {
+            return;
+        }
 
-        // Scale threshold for proxy resolution.
-        // Despeckle removes connected components below a pixel-area threshold.
-        // Area scales as linearScale², so linear scaling overshoots badly.
-        // Use sqrt(linearScale) — scales by perimeter dimension.
+        // Scale down for proxy: a blob N px wide at full-res is N/linearScale px
+        // wide at proxy, so divide the linear dimension (area scales as 1/scale²).
+        let effectiveLinearPx = linearPx;
         if (originalWidth && originalWidth > width) {
             const linearScale = originalWidth / width;
-            threshold = Math.round(threshold * Math.sqrt(linearScale));
+            effectiveLinearPx = Math.max(1, Math.round(linearPx / linearScale));
         }
+
+        // _despeckleMask compares clusterPixels.length (area) to this threshold.
+        const areaThreshold = effectiveLinearPx * effectiveLinearPx;
 
         for (let colorIdx = 0; colorIdx < masks.length; colorIdx++) {
-            SeparationEngine._despeckleMask(masks[colorIdx], width, height, threshold);
+            SeparationEngine._despeckleMask(masks[colorIdx], width, height, areaThreshold);
         }
 
-        // Heal orphaned pixels so despeckled areas absorb into surrounding color
         MechanicalKnobs.healOrphanedPixels(masks, colorIndices, width, height);
     }
 

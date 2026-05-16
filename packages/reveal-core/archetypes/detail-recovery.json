@@ -47,7 +47,7 @@
     "neutralSovereigntyThreshold": 0,
     "preprocessingIntensity": "light",
     "shadowClamp": 6,
-    "speckleRescue": 4,
+    "speckleRescue": 0,
     "minVolume": 1,
     "refinementPasses": 1
   },

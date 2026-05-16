@@ -56,7 +56,7 @@
     "preprocessingIntensity": "light",
     "shadowClamp": 6,
     "detailRescue": 5,
-    "speckleRescue": 4,
+    "speckleRescue": 0,
     "medianPass": false,
     "minVolume": 1.5,
     "refinementPasses": 2

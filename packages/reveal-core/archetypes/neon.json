@@ -54,7 +54,7 @@
     "preprocessingIntensity": "none",
     "chromaGate": 1.8,
     "detailRescue": 8,
-    "speckleRescue": 4,
+    "speckleRescue": 0,
     "shadowClamp": 6,
     "minVolume": 0.5,
     "refinementPasses": 0
