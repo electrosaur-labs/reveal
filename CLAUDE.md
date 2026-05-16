@@ -15,7 +15,6 @@ npm run test:core                # Core engine tests (900+ tests, 57 files)
 npm run test:cli                 # CLI tests (36 tests)
 npm run test:navigator           # Navigator plugin tests
 npm run build:navigator          # Build Photoshop Navigator panel
-npm run build:adobe              # Build legacy Photoshop dialog
 npm run package:navigator        # Create .ccx installer
 
 # Watch modes:
@@ -58,7 +57,6 @@ No linters, formatters, or CI/CD. Code style: 4-space indent, single quotes, `co
 reveal-core (ZERO deps, pure JS)
      │
      ├── reveal-navigator   (Photoshop UXP panel — webpack, jpeg-js, buffer)
-     ├── reveal-adobe        (Legacy UXP dialog — superseded by navigator)
      ├── reveal-cli          (CLI tool — sharp, commander, utif2)
      ├── reveal-batch        (Benchmarking CLI — sharp, commander, chalk)
      └── reveal-app          (Standalone web UI — express, ws, sharp) [in progress]
