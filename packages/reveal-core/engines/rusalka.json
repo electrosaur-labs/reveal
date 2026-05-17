@@ -1,8 +1,7 @@
 {
-    "id": "reveal-mk1.5-reference",
-    "name": "Reveal Mk 1.5 (Reference)",
-    "type": "classical",
-    "description": "Exact reproduction of the legacy Reveal Mk 1.5 pipeline.",
+    "id": "rusalka",
+    "name": "Rusalka",
+    "description": "Definition-based Mk 1.5 pipeline — PeakFinder hue injection, snap/prune, density floor.",
     "steps": [
         { "op": "snap_lab", "shadowThreshold": {"value": 6.0, "default": 6.0}, "highlightThreshold": {"value": 98.0, "default": 98.0} },
         { "op": "quantize", "tolerance": {"value": 3.5, "default": 3.5} },

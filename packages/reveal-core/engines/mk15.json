@@ -1,8 +1,0 @@
-{
-  "id": "mk15",
-  "name": "Mk 1.5",
-  "group": "reference",
-  "type": "classical",
-  "description": "Legacy Reveal Mk 1.5 — PeakFinder hue injection, Wu quantizer, ROBUST_SALIENCY centroids.",
-  "targetColors": 12
-}

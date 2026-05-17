@@ -48,9 +48,9 @@ describe('Mk1.5 declarative vs in-code parity', () => {
     const targetColors = 8;
 
     test('declarative engine def loads and hydrates', () => {
-        const def = EngineRegistry.get('reveal-mk1.5-reference');
+        const def = EngineRegistry.get('rusalka');
         expect(def).toBeTruthy();
-        expect(def.id).toBe('reveal-mk1.5-reference');
+        expect(def.id).toBe('rusalka');
         expect(Array.isArray(def.steps)).toBe(true);
 
         const hydrated = EngineBuilder.build(def, null);
@@ -68,7 +68,7 @@ describe('Mk1.5 declarative vs in-code parity', () => {
     });
 
     test('declarative Mk1.5 produces a non-trivial palette', async () => {
-        const def = EngineRegistry.get('reveal-mk1.5-reference');
+        const def = EngineRegistry.get('rusalka');
         const hydrated = EngineBuilder.build(def, null);
         const result = await PipelineEngine.executeAsync(pixels, hydrated, {
             width,
@@ -89,7 +89,7 @@ describe('Mk1.5 declarative vs in-code parity', () => {
         const incodePalette = incode.paletteLab;
 
         // Declarative
-        const def = EngineRegistry.get('reveal-mk1.5-reference');
+        const def = EngineRegistry.get('rusalka');
         const hydrated = EngineBuilder.build(def, null);
         const declRes = await PipelineEngine.executeAsync(pixels, hydrated, {
             width,
