@@ -873,7 +873,7 @@ class ProxyEngine {
     async _applyShadowClamp(clampPercent) {
         const { masks, colorIndices, palette, width, height } = this.separationState;
 
-        MechanicalKnobs.applyShadowClamp(
+        await MechanicalKnobs.applyShadowClampAsync(
             masks, colorIndices, palette, width, height, clampPercent
         );
     }

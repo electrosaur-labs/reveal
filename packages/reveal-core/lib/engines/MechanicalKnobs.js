@@ -293,6 +293,56 @@ class MechanicalKnobs {
     }
 
     /**
+     * Async variant of applyShadowClamp for ProxyEngine (real-time preview).
+     * Yields to the UI thread between per-color passes so archetype swaps stay responsive.
+     * ProductionWorker and batch callers use the synchronous applyShadowClamp.
+     */
+    static async applyShadowClampAsync(masks, colorIndices, palette, width, height, clampPercent) {
+        if (clampPercent <= 0) return;
+
+        const baseThreshold = (clampPercent / 100) * 3;
+
+        for (let c = 0; c < masks.length; c++) {
+            const mask = masks[c];
+            const inkL = (palette[c] && palette[c].L !== undefined) ? palette[c].L : 50;
+            const lightnessBoost = inkL / 100;
+            const threshold = baseThreshold * (0.5 + lightnessBoost);
+
+            const toRemove = [];
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = y * width + x;
+                    if (mask[i] === 0) continue;
+
+                    let same = 0, total = 0;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            if (dx === 0 && dy === 0) continue;
+                            const nx = x + dx, ny = y + dy;
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                total++;
+                                if (mask[ny * width + nx] > 0) same++;
+                            }
+                        }
+                    }
+
+                    if (same / total < threshold) {
+                        toRemove.push(i);
+                    }
+                }
+            }
+
+            for (const idx of toRemove) mask[idx] = 0;
+
+            // Yield to UXP UI thread between colors so archetype swaps don't freeze
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        MechanicalKnobs.healOrphanedPixels(masks, colorIndices, width, height);
+    }
+
+    /**
      * BFS-fill orphaned pixels from surrounding non-orphan neighbors.
      *
      * An orphaned pixel is one where its assigned color's mask was zeroed

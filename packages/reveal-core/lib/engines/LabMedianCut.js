@@ -381,8 +381,9 @@ class LabMedianCut {
                     }
                 }
 
-                // Create unique key from Lab values (rounded to 2 decimals for float precision)
-                const key = `${L.toFixed(2)},${a.toFixed(2)},${b.toFixed(2)}`;
+                // Integer composite key: values are 16-bit integers (0–32768), no string alloc needed.
+                // L * 32769² + a * 32769 + b is collision-free and within JS safe-integer range.
+                const key = L * 1073807361 + a * 32769 + b;
 
                 if (labMap.has(key)) {
                     labMap.get(key).count++;
