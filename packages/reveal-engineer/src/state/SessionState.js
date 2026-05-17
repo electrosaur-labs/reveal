@@ -234,20 +234,6 @@ class SessionState extends EventEmitter {
         }
     }
 
-    /**
-     * Synthesize final parameters by merging an engine definition with an archetype's parameters.
-     * Archetype values take precedence but are clamped by engine-defined bounds.
-     * Formula: Value_final = max(min, min(max, archetype.prop.value))
-     *
-     * @param {Object} engineSource - Declarative engine spec OR built recipe
-     * @param {Object} archetype - Archetype parameters object
-     * @returns {Object} Hydrated engine recipe with flat numeric parameters
-     * @private
-     */
-    _synthesizeEngine(engineSource, archetype) {
-        return Reveal.engines.EngineBuilder.synthesize(engineSource, archetype);
-    }
-
     /** @private */
     async _loadImageImpl(labPixels, width, height, originalWidth, originalHeight) {
         this._sourceLabPixels = labPixels; // Retained for proxy re-initialization at different resolutions

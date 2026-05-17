@@ -195,8 +195,9 @@ class EngineBuilder {
      * Synthesize an engine with archetype parameters.
      * Fuses base engine specs with image-matched archetype personality.
      * Archetype values take precedence but are clamped by engine-defined bounds.
+     * @param {Object} DNA - Optional DNA12-augmented DNA; passed to build() for modulateBy hydration.
      */
-    static synthesize(engineSource, archetype) {
+    static synthesize(engineSource, archetype, DNA = null) {
         if (!engineSource) return null;
 
         const sourceClone = JSON.parse(JSON.stringify(engineSource));
@@ -230,7 +231,7 @@ class EngineBuilder {
             }
         }
 
-        return this.build(sourceClone);
+        return this.build(sourceClone, DNA);
     }
 
     /**
