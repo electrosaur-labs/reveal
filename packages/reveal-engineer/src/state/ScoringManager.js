@@ -77,10 +77,10 @@ class ScoringManager extends EventEmitter {
     }
 
     /**
-     * Get the 5 goddess engines for the carousel.
+     * Get the 7 goddess engines for the carousel.
      */
     getAllArchetypeScores() {
-        const goddessIds = ['aine', 'anu', 'brigid', 'cailleach', 'rhiannon', 'mk15'];
+        const goddessIds = ['aine', 'anu', 'brigid', 'cailleach', 'morrigan', 'rhiannon', 'rusalka'];
         return goddessIds.map(id => ({ id, score: 0 }));
     }
 

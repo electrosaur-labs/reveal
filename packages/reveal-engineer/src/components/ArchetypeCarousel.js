@@ -118,13 +118,13 @@ class ArchetypeCarousel {
     }
 
     /**
-     * Rebuild the card strip with the 5 goddess engines.
+     * Rebuild the card strip with the 7 goddess engines.
      */
     _rebuild(scores) {
         const state = this._session.getState();
         this._activeId = state.activeArchetypeId;
 
-        const goddessIds = ['aine', 'anu', 'brigid', 'cailleach', 'morrigan', 'rhiannon', 'mk15'];
+        const goddessIds = ['aine', 'anu', 'brigid', 'cailleach', 'morrigan', 'rhiannon', 'rusalka'];
 
         this._container.innerHTML = '';
 

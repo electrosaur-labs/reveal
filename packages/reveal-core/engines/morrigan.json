@@ -1,36 +1,12 @@
 {
   "id": "morrigan",
   "name": "Morrigan",
-  "description": "The Phantom Queen. Aggressive contrast and heavy ink density for a gritty, high-drama aesthetic.",
+  "intent": "reductive",
+  "description": "The Reaper. High-contrast, shadow-heavy separation for drama and edge clarity.",
   "centroidStrategy": "VOLUMETRIC",
-  "blackBias": { 
-    "value": 25.0, 
-    "default": 25.0, 
-    "min": 20.0, 
-    "max": 35.0 
-  },
-  "lWeight": { 
-    "value": 4.0, 
-    "default": 4.0, 
-    "min": 3.0, 
-    "max": 6.0 
-  },
-  "cWeight": { 
-    "value": 0.6, 
-    "default": 0.6, 
-    "min": 0.3, 
-    "max": 1.0 
-  },
-  "shadowThreshold": { 
-    "value": 15.0, 
-    "default": 15.0, 
-    "min": 10.0, 
-    "max": 25.0 
-  },
-  "targetColors": { 
-    "value": 10, 
-    "default": 10, 
-    "min": 8, 
-    "max": 14 
-  }
+  "blackBias": { "value": 25.0, "default": 25.0, "min": 20.0, "max": 35.0, "modulateBy": "lStdDev", "sensitivity": 10.0 },
+  "lWeight": { "value": 4.0, "default": 4.0, "min": 3.0, "max": 6.0, "modulateBy": "lStdDev", "sensitivity": 2.0 },
+  "cWeight": { "value": 0.6, "default": 0.6, "min": 0.3, "max": 1.0 },
+  "shadowThreshold": { "value": 15.0, "default": 15.0, "min": 10.0, "max": 25.0, "modulateBy": "edgeDensity", "sensitivity": 8.0 },
+  "targetColors": { "value": 10, "default": 10, "min": 8, "max": 14 }
 }

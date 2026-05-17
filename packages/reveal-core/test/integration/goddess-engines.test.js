@@ -1,7 +1,7 @@
 /**
  * Goddess Engines Integration Test
- * 
- * Verifies that the 5 Celtic goddess engines (Synthesis Layer)
+ *
+ * Verifies that the 7 goddess engines (Synthesis Layer)
  * produce UNIQUE palettes when fused with the same archetype.
  */
 
@@ -46,8 +46,8 @@ describe('Synthesis Layer: Goddess Engines', () => {
         bestArchetype = mapper.getBestMatch(imageDNA);
     });
 
-    it('should generate unique palettes for all 5 goddess engines', async () => {
-        const goddessIds = ['aine', 'anu', 'brigid', 'cailleach', 'rhiannon'];
+    it('should generate unique palettes for all 7 goddess engines', async () => {
+        const goddessIds = ['aine', 'anu', 'brigid', 'cailleach', 'morrigan', 'rhiannon', 'rusalka'];
         const results = {};
 
         const proxyEngine = new Reveal.ProxyEngine();
@@ -84,7 +84,7 @@ describe('Synthesis Layer: Goddess Engines', () => {
         const uniquePalettes = new Set(Object.values(results));
         
         // Final assertion
-        expect(uniquePalettes.size, `Expected 5 unique palettes, but got ${uniquePalettes.size}.\nPalettes: ${JSON.stringify(results, null, 2)}`)
-            .toBe(5);
+        expect(uniquePalettes.size, `Expected 7 unique palettes, but got ${uniquePalettes.size}.\nPalettes: ${JSON.stringify(results, null, 2)}`)
+            .toBe(7);
     });
 });

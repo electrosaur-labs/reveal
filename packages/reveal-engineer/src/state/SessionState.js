@@ -100,7 +100,7 @@ class SessionState extends EventEmitter {
         this.previewBuffer = null;          // Current RGBA preview
         this.imageDNA = null;               // DNA v2.0 snapshot (from full-res pixels at load)
         this._currentResolutionDNA = null;  // DNA12 recomputed from current proxy buffer (per-resolution)
-        this._mk15ProxyState = null;        // Snapshot of initializeProxy Mk1.5 result (authoritative core path)
+        this._rusalkaProxyState = null;      // Snapshot of initializeProxy Rusalka result (authoritative core path)
         this.imageWidth = 0;                // Proxy dimensions
         this.imageHeight = 0;
         this.imageResolution = 72;          // Document PPI (pixels per inch)
@@ -167,7 +167,7 @@ class SessionState extends EventEmitter {
         this.previewBuffer = null;
         this.imageDNA = null;
         this._currentResolutionDNA = null;
-        this._mk15ProxyState = null;
+        this._rusalkaProxyState = null;
         this._sourceLabPixels = null;
         this._proxyTargetSize = 1000;
         this.imageWidth = 0;
@@ -388,7 +388,7 @@ class SessionState extends EventEmitter {
         });
 
         // ── Phase 4: Carousel ready with the 5 goddess engines ──
-        const goddessEngines = ['aine', 'anu', 'brigid', 'cailleach', 'rhiannon'];
+        const goddessEngines = ['aine', 'anu', 'brigid', 'cailleach', 'morrigan', 'rhiannon', 'rusalka'];
         const allScores = goddessEngines.map(id => ({ id, score: 0 }));
 
         // EAGER RESULTS: Feed the initial engine's stats to ScoringManager so it 
@@ -643,11 +643,11 @@ class SessionState extends EventEmitter {
             // Mk1.5: use the snapshot from initializeProxy (authoritative core path)
             // rather than re-running via PipelineEngine's reimplementation.
             let pipelineRes;
-            if (engineId === 'mk15' && this._mk15ProxyState) {
+            if (engineId === 'rusalka' && this._rusalkaProxyState) {
                 pipelineRes = {
-                    palette: this._mk15ProxyState.palette,
-                    assignments: this._mk15ProxyState.colorIndices,
-                    metadata: this._mk15ProxyState.metadata
+                    palette: this._rusalkaProxyState.palette,
+                    assignments: this._rusalkaProxyState.colorIndices,
+                    metadata: this._rusalkaProxyState.metadata
                 };
             } else {
                 pipelineRes = await PipelineEngine.executeAsync(proxyBuffer, hydratedEngine, {
@@ -727,7 +727,7 @@ class SessionState extends EventEmitter {
         const proxyW = proxyResult.dimensions.width;
         const proxyH = proxyResult.dimensions.height;
         const sep = this.proxyEngine.separationState;
-        this._mk15ProxyState = {
+        this._rusalkaProxyState = {
             palette: sep.palette.map(c => ({ ...c })),
             colorIndices: new Uint8Array(sep.colorIndices),
             metadata: { ...sep.metadata },
@@ -751,12 +751,12 @@ class SessionState extends EventEmitter {
 
         if (engineId) {
             let pipelineRes;
-            if (engineId === 'mk15') {
+            if (engineId === 'rusalka') {
                 // Mk1.5 snapshot was already captured above — use it directly.
                 pipelineRes = {
-                    palette: this._mk15ProxyState.palette,
-                    assignments: this._mk15ProxyState.colorIndices,
-                    metadata: this._mk15ProxyState.metadata
+                    palette: this._rusalkaProxyState.palette,
+                    assignments: this._rusalkaProxyState.colorIndices,
+                    metadata: this._rusalkaProxyState.metadata
                 };
             } else {
             const engineDef = EngineRegistry.get(engineId);

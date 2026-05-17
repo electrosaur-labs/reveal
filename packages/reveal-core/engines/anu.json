@@ -1,10 +1,11 @@
 {
   "id": "anu",
   "name": "Anu",
+  "intent": "faithful",
   "description": "The Mother. Balanced volumetric separation with natural tonal preservation.",
   "centroidStrategy": "VOLUMETRIC",
-  "lWeight": { "value": 1.5, "default": 1.5, "min": 1.0, "max": 2.0 },
+  "lWeight": { "value": 1.5, "default": 1.5, "min": 1.0, "max": 2.0, "modulateBy": "lMean", "sensitivity": 0.5 },
   "cWeight": { "value": 1.5, "default": 1.5, "min": 1.0, "max": 2.0 },
-  "vibrancyBoost": { "value": 1.5, "default": 1.5, "min": 1.0, "max": 2.0 },
+  "vibrancyBoost": { "value": 1.5, "default": 1.5, "min": 1.0, "max": 2.0, "modulateBy": "neutralAnchor", "sensitivity": 0.5 },
   "targetColors": { "value": 8, "default": 8, "min": 6, "max": 12 }
 }

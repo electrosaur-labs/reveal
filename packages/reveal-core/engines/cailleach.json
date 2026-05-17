@@ -1,7 +1,8 @@
 {
   "id": "cailleach",
   "name": "Cailleach",
-  "description": "The Winter Queen. Spatial-aware separation preserving edge detail.",
+  "intent": "reductive",
+  "description": "The Bone. Structure-first separation prioritising spatial entropy and boundary noise.",
   "centroidStrategy": "ROBUST_SALIENCY",
   "spatialWeight": { "value": 1.5, "default": 1.5, "min": 1.0, "max": 3.0, "modulateBy": "spatialEntropy", "sensitivity": 1.5 },
   "edgePreservation": { "value": 0.8, "default": 0.8, "min": 0.0, "max": 1.0 },
