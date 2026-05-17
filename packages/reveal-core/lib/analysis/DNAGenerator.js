@@ -35,238 +35,144 @@ class DNAGenerator {
         const bitDepth = options.bitDepth || 8;
         const totalPixels = width * height;
 
-        // Initialize sector data
-        const sectorData = {};
-        this.SECTORS.forEach(s => {
-            sectorData[s.name] = {
-                pixels: [],
-                weight: 0,
-                lMean: 0,
-                cMean: 0,
-                cMax: 0
-            };
-        });
+        // HIGH-PERFORMANCE BUFFERS: Eliminate million-object allocation
+        const sectorCount = new Uint32Array(12);
+        const sectorLSum = new Float64Array(12);
+        const sectorCSum = new Float64Array(12);
+        const sectorCMax = new Float64Array(12);
 
-        // Track global statistics
-        let lSum = 0, lSqSum = 0;
-        let cSum = 0, cMax = 0;
+        // Pre-compute normalization factors to avoid branching in loop
+        let lNorm, abNorm, abNeutral;
+        if (bitDepth === 'perceptual') {
+            lNorm = 1; abNorm = 1; abNeutral = 0;
+        } else if (bitDepth === 16) {
+            lNorm = 100 / 32768; abNorm = 1/128; abNeutral = 16384;
+        } else {
+            lNorm = 100 / 255; abNorm = 1; abNeutral = 128;
+        }
+
+        const RAD_TO_DEG = 180 / Math.PI;
+        let lSum = 0, lSqSum = 0, cSum = 0, cMaxGlobal = 0;
         let kMax = 0, kMin = 100;
         let warmPixels = 0, coolPixels = 0;
 
-        // Process each pixel
+        // CORE LOOP: Minimal overhead
         for (let i = 0; i < labPixels.length; i += 3) {
-            const L = this._normalizeLab(labPixels[i], 'L', bitDepth);
-            const a = this._normalizeLab(labPixels[i + 1], 'a', bitDepth);
-            const b = this._normalizeLab(labPixels[i + 2], 'b', bitDepth);
+            // 1. Normalize
+            let L, a, b;
+            if (bitDepth === 'perceptual') {
+                L = labPixels[i]; a = labPixels[i+1]; b = labPixels[i+2];
+            } else if (bitDepth === 16) {
+                L = labPixels[i] * lNorm;
+                a = (labPixels[i+1] - abNeutral) * abNorm;
+                b = (labPixels[i+2] - abNeutral) * abNorm;
+            } else {
+                L = labPixels[i] * lNorm;
+                a = labPixels[i+1] - abNeutral;
+                b = labPixels[i+2] - abNeutral;
+            }
 
+            // 2. Global stats
             const C = Math.sqrt(a * a + b * b);
-            const h = this._labToHue(a, b);
-
-            // Global statistics
             lSum += L;
             lSqSum += L * L;
             cSum += C;
-            cMax = Math.max(cMax, C);
-            kMax = Math.max(kMax, L);
-            kMin = Math.min(kMin, L);
+            if (C > cMaxGlobal) cMaxGlobal = C;
+            if (L > kMax) kMax = L;
+            if (L < kMin) kMin = L;
 
-            // Temperature bias (warm = +b, cool = -b)
-            if (Math.abs(b) > 5) {
-                if (b > 0) warmPixels++;
-                else coolPixels++;
-            }
+            // 3. Temperature bias (warm = +b, cool = -b)
+            if (b > 5) warmPixels++;
+            else if (b < -5) coolPixels++;
 
-            // Assign to sector (only if chromatic)
+            // 4. Sector Analysis (only if chromatic)
             if (C > 5) {
-                const sector = this._getSectorForHue(h);
-                if (sector) {
-                    sectorData[sector.name].pixels.push({ L, C, h });
-                    sectorData[sector.name].cMax = Math.max(sectorData[sector.name].cMax, C);
-                }
+                let h = Math.atan2(b, a) * RAD_TO_DEG;
+                if (h < 0) h += 360;
+
+                // Fast sector lookup: 360° / 12 = 30° sectors
+                // Offset by 15° because Red starts at 345° (-15°)
+                let sIdx = Math.floor(((h + 15) % 360) / 30);
+                
+                sectorCount[sIdx]++;
+                sectorLSum[sIdx] += L;
+                sectorCSum[sIdx] += C;
+                if (C > sectorCMax[sIdx]) sectorCMax[sIdx] = C;
             }
         }
 
-        // Calculate global metrics
+        // --- Post-Processing ---
         const lMean = lSum / totalPixels;
-        const lVariance = (lSqSum / totalPixels) - (lMean * lMean);
-        const lStdDev = Math.sqrt(Math.max(0, lVariance));
+        const lStdDev = Math.sqrt(Math.max(0, (lSqSum / totalPixels) - (lMean * lMean)));
         const cMean = cSum / totalPixels;
-        const k = kMax - kMin; // Contrast
-
-        // Process sector statistics
+        
+        const sectorData = {};
         let dominantSector = null;
-        let maxWeight = 0;
+        let maxSectorWeight = 0;
+        const weights = new Float64Array(12);
 
-        this.SECTORS.forEach(s => {
-            const sector = sectorData[s.name];
-            const pixelCount = sector.pixels.length;
-            sector.weight = pixelCount / totalPixels;
+        for (let j = 0; j < 12; j++) {
+            const name = this.SECTORS[j].name;
+            const count = sectorCount[j];
+            const weight = count / totalPixels;
+            weights[j] = weight;
 
-            if (pixelCount > 0) {
-                sector.lMean = sector.pixels.reduce((sum, p) => sum + p.L, 0) / pixelCount;
-                sector.cMean = sector.pixels.reduce((sum, p) => sum + p.C, 0) / pixelCount;
+            sectorData[name] = {
+                weight: parseFloat(weight.toFixed(4)),
+                lMean: count > 0 ? parseFloat((sectorLSum[j] / count).toFixed(1)) : 0,
+                cMean: count > 0 ? parseFloat((sectorCSum[j] / count).toFixed(1)) : 0,
+                cMax: parseFloat(sectorCMax[j].toFixed(1))
+            };
+
+            if (weight > maxSectorWeight) {
+                maxSectorWeight = weight;
+                dominantSector = name;
             }
+        }
 
-            // Track dominant sector
-            if (sector.weight > maxWeight) {
-                maxWeight = sector.weight;
-                dominantSector = s.name;
-            }
-
-            // Clean up pixel array (not needed in final output)
-            delete sector.pixels;
-        });
-
-        // Calculate hue entropy (Shannon entropy of sector weights)
-        const hueEntropy = this._calculateEntropy(
-            this.SECTORS.map(s => sectorData[s.name].weight)
-        );
-
-        // Calculate temperature bias (-1 = cool, +1 = warm)
+        const hueEntropy = this._calculateEntropy(weights);
         const totalTempPixels = warmPixels + coolPixels;
-        const temperatureBias = totalTempPixels > 0
-            ? (warmPixels - coolPixels) / totalTempPixels
-            : 0;
 
         return {
             version: '2.0',
             global: {
                 l: parseFloat(lMean.toFixed(1)),
                 c: parseFloat(cMean.toFixed(1)),
-                k: parseFloat(k.toFixed(1)),
+                k: parseFloat((kMax - kMin).toFixed(1)),
                 l_std_dev: parseFloat(lStdDev.toFixed(1)),
                 hue_entropy: parseFloat(hueEntropy.toFixed(3)),
-                temperature_bias: parseFloat(temperatureBias.toFixed(2)),
-                primary_sector_weight: parseFloat(maxWeight.toFixed(3))
+                temperature_bias: parseFloat((totalTempPixels > 0 ? (warmPixels - coolPixels) / totalTempPixels : 0).toFixed(2)),
+                primary_sector_weight: parseFloat(maxSectorWeight.toFixed(3))
             },
-            dominant_sector: dominantSector,
+            dominant_sector: dominantSector || 'gray',
             sectors: sectorData,
-            metadata: {
-                width,
-                height,
-                totalPixels,
-                bitDepth
-            }
+            metadata: { width, height, totalPixels, bitDepth }
         };
     }
 
-    /**
-     * Generate DNA v2.0 directly from a raw Lab pixel buffer.
-     * Mirrors fromIndices() but skips the palette-reconstruction step.
-     *
-     * Bit depth is auto-detected from the array type:
-     *   Uint16Array → engine 16-bit (L: 0-32768, a/b: 0-32768, 16384=neutral)
-     *   Uint8Array / Uint8ClampedArray → 8-bit (L: 0-255, a/b: 0-255, 128=neutral)
-     * Override with options.bitDepth if needed.
-     *
-     * @param {Uint8Array|Uint8ClampedArray|Uint16Array} labPixels - Raw Lab pixel buffer
-     * @param {number} width
-     * @param {number} height
-     * @param {Object} [options]
-     * @param {number} [options.bitDepth] - Force bit depth (8 or 16)
-     * @returns {Object} DNA v2.0 structure
-     */
     static fromPixels(labPixels, width, height, options = {}) {
-        const bitDepth = options.bitDepth ||
-            (labPixels instanceof Uint16Array ? 16 : 8);
-        const gen = new DNAGenerator();
-        return gen.generate(labPixels, width, height, { bitDepth });
+        const bitDepth = options.bitDepth || (labPixels instanceof Uint16Array ? 16 : 8);
+        return (new DNAGenerator()).generate(labPixels, width, height, { bitDepth });
     }
 
-    /**
-     * Generate DNA from posterization output (palette + color indices).
-     * Reconstructs perceptual Lab from palette entries and runs generate().
-     *
-     * @param {Uint8Array} colorIndices - Per-pixel palette index
-     * @param {Array<{L,a,b}>} labPalette - Palette in perceptual Lab (L: 0-100, a/b: -128..+127)
-     * @param {number} width
-     * @param {number} height
-     * @returns {Object} DNA v2.0 structure
-     */
     static fromIndices(colorIndices, labPalette, width, height) {
         const pixelCount = width * height;
         const labPixels = new Float32Array(pixelCount * 3);
-
         for (let i = 0; i < pixelCount; i++) {
-            const ci = colorIndices[i];
-            const pal = labPalette[ci];
+            const pal = labPalette[colorIndices[i]];
             const off = i * 3;
-            labPixels[off]     = pal.L;
-            labPixels[off + 1] = pal.a;
-            labPixels[off + 2] = pal.b;
+            labPixels[off] = pal.L; labPixels[off + 1] = pal.a; labPixels[off + 2] = pal.b;
         }
-
-        const gen = new DNAGenerator();
-        return gen.generate(labPixels, width, height, { bitDepth: 'perceptual' });
+        return (new DNAGenerator()).generate(labPixels, width, height, { bitDepth: 'perceptual' });
     }
 
-    /**
-     * Normalize Lab values from encoded format to standard range
-     */
-    _normalizeLab(value, component, bitDepth) {
-        if (bitDepth === 'perceptual') {
-            // Already in standard Lab range (L: 0-100, a/b: -128..+127)
-            return value;
-        } else if (bitDepth === 16) {
-            // 16-bit: L: 0-32768 → 0-100, a/b: 0-32768 (16384=neutral) → -128 to +127
-            if (component === 'L') {
-                return (value / 32768) * 100;
-            } else {
-                return ((value - 16384) / 128);
-            }
-        } else {
-            // 8-bit: L: 0-255 → 0-100, a/b: 0-255 (128=neutral) → -128 to +127
-            if (component === 'L') {
-                return (value / 255) * 100;
-            } else {
-                return value - 128;
-            }
-        }
-    }
-
-    /**
-     * Convert Lab a,b to hue angle (0-360°)
-     */
-    _labToHue(a, b) {
-        let h = Math.atan2(b, a) * (180 / Math.PI);
-        if (h < 0) h += 360;
-        return h;
-    }
-
-    /**
-     * Get sector for a given hue angle
-     */
-    _getSectorForHue(hue) {
-        for (const sector of this.SECTORS) {
-            if (sector.start > sector.end) {
-                // Wraps around 0° (e.g., red: 345-15)
-                if (hue >= sector.start || hue < sector.end) {
-                    return sector;
-                }
-            } else {
-                if (hue >= sector.start && hue < sector.end) {
-                    return sector;
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Calculate Shannon entropy of a probability distribution
-     * Returns 0 (monochrome) to 1 (uniform rainbow)
-     */
     _calculateEntropy(weights) {
-        const maxEntropy = Math.log2(this.SECTORS.length);
+        const maxEntropy = Math.log2(12);
         let entropy = 0;
-
         for (const w of weights) {
-            if (w > 0) {
-                entropy -= w * Math.log2(w);
-            }
+            if (w > 0) entropy -= w * Math.log2(w);
         }
-
-        return entropy / maxEntropy; // Normalize to 0-1
+        return entropy / maxEntropy;
     }
 }
 
