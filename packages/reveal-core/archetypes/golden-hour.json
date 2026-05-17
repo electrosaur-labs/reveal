@@ -59,7 +59,7 @@
     "neutralIsolationThreshold": 0,
     "preprocessingIntensity": "off",
     "shadowClamp": 4,
-    "speckleRescue": 4,
+    "speckleRescue": 0,
     "minVolume": 0,
     "ghostFloor": 0.01,
     "refinementPasses": 1,

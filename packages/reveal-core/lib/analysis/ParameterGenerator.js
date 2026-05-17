@@ -132,7 +132,7 @@ class ParameterGenerator {
      * Canonical helper — use instead of cherry-picking individual fields.
      *
      * @param {Object} source - Config object or reactive state
-     * @returns {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number}}
+     * @returns {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number, meshSize: number, imageDpi: number}}
      */
     static extractMechanicalKnobs(source) {
         return {
@@ -140,6 +140,8 @@ class ParameterGenerator {
             speckleRescue: source.speckleRescue || 0,
             shadowClamp: source.shadowClamp || 0,
             trapSize: source.trapSize || 0,
+            meshSize: source.meshSize || source.meshCount || 230,
+            imageDpi: source.imageDpi || source.resolution || 300,
         };
     }
 

@@ -49,7 +49,7 @@
     "ignoreTransparent": true,
     "neutralSovereigntyThreshold": 25,
     "preprocessingIntensity": "medium",
-    "speckleRescue": 4,
+    "speckleRescue": 0,
     "refinementPasses": 1
   },
   "scoring": {

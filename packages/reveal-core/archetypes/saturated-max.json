@@ -56,7 +56,7 @@
     "densityFloor": 0,
     "preprocessingIntensity": "off",
     "shadowClamp": 6,
-    "speckleRescue": 4,
+    "speckleRescue": 0,
     "chromaGate": 1.5,
     "minVolume": 0.8,
     "refinementPasses": 2
