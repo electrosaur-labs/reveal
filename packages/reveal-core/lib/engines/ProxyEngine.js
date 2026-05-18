@@ -45,7 +45,6 @@ const PROXY_SAFE_OVERRIDES = Object.freeze({
     densityFloor: 0,
     enablePaletteReduction: false,
     preservedUnifyThreshold: 0.5,
-    isPreview: true,
     refinementPasses: 1,
 });
 
@@ -436,9 +435,7 @@ class ProxyEngine {
         const proxyH = this.separationState.height;
         const pixelCount = proxyW * proxyH;
 
-        // Quality metrics need full-precision pixel assignment (stride-1), not the
-        // stride-4 approximation used for live preview rendering.
-        const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES, isPreview: false };
+        const proxyConfig = { ...config, ...PROXY_SAFE_OVERRIDES };
         const buf = this._bufferForConfig(proxyConfig);
 
         const result = PosterizationEngine.posterize(
