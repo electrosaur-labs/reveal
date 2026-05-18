@@ -92,7 +92,7 @@ class ProxyEngine {
      * @param {Object} initialConfig - Posterization config
      * @returns {Promise<Object>} Proxy state
      */
-    async initializeProxy(labPixels, width, height, initialConfig) {
+    async initializeProxy(labPixels, width, height, initialConfig, onProgress = null) {
         // --- Input validation ---
         if (!labPixels || !(labPixels instanceof Uint16Array)) {
             throw new Error('initializeProxy: labPixels must be a Uint16Array');
@@ -108,6 +108,9 @@ class ProxyEngine {
         }
 
         const startTime = performance.now();
+        const _progress = async (label, percent) => {
+            if (onProgress) { onProgress(label, percent); await new Promise(r => setTimeout(r, 0)); }
+        };
 
         // 1. Stride-3 subsample — picks every 3rd pixel, no blending.
         //    Matches the batch pipeline exactly, preserving rare color clusters
@@ -124,6 +127,7 @@ class ProxyEngine {
         this._rawProxyBuffer = rawBuffer;
 
         // 2. Bilateral filter preprocessing — applied to a COPY so _rawProxyBuffer stays clean.
+        await _progress('Filtering image…', 67);
         const preprocessingIntensity = initialConfig.preprocessingIntensity || 'auto';
         let proxyBuffer;
         if (preprocessingIntensity !== 'off') {
@@ -139,6 +143,7 @@ class ProxyEngine {
         this.proxyBuffer = proxyBuffer;
         this._originalRGBA = null;  // Invalidate cached original preview
 
+        await _progress('Quantizing colors…', 70);
         const proxyConfig = { ...initialConfig, ...PROXY_SAFE_OVERRIDES };
 
         const posterizeResult = PosterizationEngine.posterize(
@@ -178,6 +183,7 @@ class ProxyEngine {
 
         // 6. Generate clean preview (no knobs yet).
         // Caller (SessionState) follows up with updateProxy() to apply knobs.
+        await _progress('Building preview…', 80);
         const previewBuffer = this._generatePreviewFromIndices(
             this.separationState.colorIndices,
             this.separationState.rgbPalette,
@@ -299,7 +305,7 @@ class ProxyEngine {
      * @param {Object} paramChanges - Only changed parameters
      * @returns {Promise<Object>} Updated preview data
      */
-    async updateProxy(paramChanges) {
+    async updateProxy(paramChanges, onProgress = null) {
         if (!this.separationState) {
             throw new Error('Proxy not initialized');
         }
@@ -319,7 +325,7 @@ class ProxyEngine {
         // hue sector could lose its sector rescue, causing the swatch to be
         // pruned and disappear. Running knobs on the baseline preserves the
         // same weak/strong/rescue classification the user saw before editing.
-        await this._applyKnobs(paramChanges);
+        await this._applyKnobs(paramChanges, onProgress);
 
         // Apply palette override AFTER knobs — swap ink colors without
         // re-separating. In screen printing, "override" means "same plate,
@@ -821,20 +827,27 @@ class ProxyEngine {
      * Apply all mechanical knobs from a config/paramChanges object.
      * @private
      */
-    async _applyKnobs(params) {
+    async _applyKnobs(params, onProgress = null) {
+        const _progress = async (label, percent) => {
+            if (onProgress) { onProgress(label, percent); await new Promise(r => setTimeout(r, 0)); }
+        };
+
         if (params.minVolume !== undefined) {
             await this._applyMinVolume(params.minVolume);
         }
 
         // ALWAYS rebuild masks before applying Speckle Rescue or Shadow Clamp.
-        // We defer mask generation until now to avoid double-allocating arrays 
+        // We defer mask generation until now to avoid double-allocating arrays
         // during initialization or archetype swaps.
+        await _progress('Building masks…', 87);
         await this._rebuildMasks();
 
         // Always run speckle rescue — when sliderPx=0 and meshSize is known,
         // MechanicalKnobs auto-computes the minimum printable dot from press physics.
+        await _progress('Despeckling…', 91);
         await this._applySpeckleRescue(params.speckleRescue || 0, params.meshSize || 0, params.imageDpi || 0);
         if (params.shadowClamp !== undefined) {
+            await _progress('Clamping shadows…', 95);
             await this._applyShadowClamp(params.shadowClamp);
         }
     }
