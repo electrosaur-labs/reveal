@@ -45,7 +45,6 @@ const PROXY_SAFE_OVERRIDES = Object.freeze({
     densityFloor: 0,
     enablePaletteReduction: false,
     preservedUnifyThreshold: 0.5,
-    refinementPasses: 1,
 });
 
 /**
