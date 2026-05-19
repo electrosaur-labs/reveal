@@ -30,6 +30,7 @@ const HueGapRecovery = require('./HueGapRecovery');
 const RgbMedianCut = require('./RgbMedianCut');
 const PixelAssignment = require('./PixelAssignment');
 const RevealMk15Engine = require('./RevealMk15Engine');
+const RevealMk20Engine = require('./RevealMk20Engine');
 const StencilEngine = require('./StencilEngine');
 
 /**
@@ -238,7 +239,7 @@ class PosterizationEngine {
             : false;
 
         // STRATEGY SELECTION: Use user-provided strategy or default to SALIENCY for reveal, VOLUMETRIC for others
-        const strategyName = options.centroidStrategy || ((engineType === 'reveal' || engineType === 'reveal-mk1.5') ? 'SALIENCY' : 'VOLUMETRIC');
+        const strategyName = options.centroidStrategy || ((engineType === 'reveal' || engineType === 'reveal-mk1.5' || engineType === 'reveal-mk2') ? 'SALIENCY' : 'VOLUMETRIC');
         const strategy = CentroidStrategies[strategyName] || CentroidStrategies.SALIENCY;
 
         // Validate strategy is a function
@@ -294,11 +295,21 @@ class PosterizationEngine {
                 });
 
             case 'reveal-mk1.5':
-            case 'reveal-mk2':   // Same posterization as Mk 1.5, different param generation
                 return RevealMk15Engine.posterize(pixels, width, height, targetColors, {
                     ...options,
                     enableGridOptimization,
-                    enableHueGapAnalysis,  // Respect user setting (same as Mk 1.0)
+                    enableHueGapAnalysis,
+                    snapThreshold,
+                    strategy,
+                    strategyName,
+                    tuning
+                });
+
+            case 'reveal-mk2':
+                return RevealMk20Engine.posterize(pixels, width, height, targetColors, {
+                    ...options,
+                    enableGridOptimization,
+                    enableHueGapAnalysis,
                     snapThreshold,
                     strategy,
                     strategyName,
@@ -1195,7 +1206,7 @@ class PosterizationEngine {
         // engineType (e.g. 'reveal-mk2') may default to VOLUMETRIC. Without this
         // the strategy override causes a massive redward centroid shift.
         const originalEngineType = options.engineType || 'reveal';
-        const impliedStrategy = (originalEngineType === 'reveal' || originalEngineType === 'reveal-mk1.5')
+        const impliedStrategy = (originalEngineType === 'reveal' || originalEngineType === 'reveal-mk1.5' || originalEngineType === 'reveal-mk2')
             ? 'SALIENCY' : 'VOLUMETRIC';
         const overResult = PosterizationEngine.posterize(labPixels, width, height, overCount, {
             ...options,

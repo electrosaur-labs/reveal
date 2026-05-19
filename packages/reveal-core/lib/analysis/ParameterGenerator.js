@@ -222,7 +222,7 @@ class ParameterGenerator {
             // Identity
             id: archetype.id,
             name: archetype.name,
-            engineType: archetype.engine === 'distilled' ? 'distilled' : 'reveal-mk1.5',
+            engineType: archetype.engine === 'distilled' ? 'distilled' : 'reveal-mk2',
 
             // NOTE: bitDepth is intentionally NOT included here.
             // ParameterGenerator has no opinion on bit depth — the caller knows their data.
@@ -321,6 +321,12 @@ class ParameterGenerator {
             // Screen mesh — NOT set here; meshSize is a session-level equipment
             // setting (physical screen), not an archetype/image property.
             // Default 230 TPI is applied in SessionState.
+
+            // DNA-derived inputs for RevealMk20Engine.
+            // dnaCentroid: dominant sector centroid — replaces PeakFinder rescan.
+            // dnaSectors:  full sector map — drives generalised highlight rescue.
+            dnaCentroid: this._computeDNACentroid(dna),
+            dnaSectors: dna.sectors || null,
 
             // Legacy fields
             rangeClamp: [dna.minL || 0, dna.maxL || 100],
@@ -427,6 +433,33 @@ class ParameterGenerator {
         const minColors = archetype.parameters?.minColors || 4;
         const maxColors = archetype.parameters?.maxColors || 12;
         return Math.max(minColors, Math.min(maxColors, Math.round(count)));
+    }
+
+    /**
+     * Compute a DNA-derived chromatic anchor from the dominant hue sector.
+     * Used by RevealMk20Engine as a principled replacement for PeakFinder.
+     *
+     * Returns null when the dominant sector is too neutral or too sparse
+     * to be a useful quantization anchor.
+     *
+     * @param {Object} dna - DNA v2.0 analysis
+     * @returns {{L: number, a: number, b: number}|null}
+     */
+    static _computeDNACentroid(dna) {
+        if (!dna.sectors || !dna.dominant_sector || dna.dominant_sector === 'gray') return null;
+
+        const sector = dna.sectors[dna.dominant_sector];
+        if (!sector) return null;
+
+        // Require meaningful pixel presence and chromatic content
+        if (sector.weight < 0.10) return null;
+        if (sector.cMean < 20) return null;
+
+        return {
+            L: sector.lMean,
+            a: sector.aMean,
+            b: sector.bMean
+        };
     }
 
     /**
@@ -701,9 +734,11 @@ class ParameterGenerator {
             neutralIsolationThreshold: config.neutralIsolationThreshold,
             warmABoost: config.warmABoost,
 
-            // PeakFinder tuning
+            // PeakFinder tuning (Mk1.5) / DNA inputs (Mk2.0)
             peakFinderMaxPeaks: config.peakFinderMaxPeaks,
             peakFinderBlacklistedSectors: config.peakFinderBlacklistedSectors,
+            dnaCentroid: config.dnaCentroid,
+            dnaSectors: config.dnaSectors,
 
             // K-means refinement
             refinementPasses: config.refinementPasses,

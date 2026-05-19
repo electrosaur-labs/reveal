@@ -32,6 +32,8 @@ Per sector:
 |---|---|
 | `weight` | Fraction of **total** pixels in this sector — this is the manifold coordinate |
 | `lMean` | Mean L* of pixels in this sector |
+| `aMean` | Mean a* of pixels in this sector |
+| `bMean` | Mean b* of pixels in this sector |
 | `cMean` | Mean chroma of pixels in this sector |
 | `cMax` | Peak chroma observed in this sector |
 
@@ -69,18 +71,18 @@ The per-sector `lMean`, `cMean`, `cMax` are available for the Highlight Rescue s
   },
   dominant_sector: 'orange',  // name of highest-weight sector
   sectors: {
-    red:        { weight, lMean, cMean, cMax },
-    orange:     { weight, lMean, cMean, cMax },
-    yellow:     { weight, lMean, cMean, cMax },
-    chartreuse: { weight, lMean, cMean, cMax },
-    green:      { weight, lMean, cMean, cMax },
-    cyan:       { weight, lMean, cMean, cMax },
-    azure:      { weight, lMean, cMean, cMax },
-    blue:       { weight, lMean, cMean, cMax },
-    purple:     { weight, lMean, cMean, cMax },
-    magenta:    { weight, lMean, cMean, cMax },
-    pink:       { weight, lMean, cMean, cMax },
-    rose:       { weight, lMean, cMean, cMax }
+    red:        { weight, lMean, aMean, bMean, cMean, cMax },
+    orange:     { weight, lMean, aMean, bMean, cMean, cMax },
+    yellow:     { weight, lMean, aMean, bMean, cMean, cMax },
+    chartreuse: { weight, lMean, aMean, bMean, cMean, cMax },
+    green:      { weight, lMean, aMean, bMean, cMean, cMax },
+    cyan:       { weight, lMean, aMean, bMean, cMean, cMax },
+    azure:      { weight, lMean, aMean, bMean, cMean, cMax },
+    blue:       { weight, lMean, aMean, bMean, cMean, cMax },
+    purple:     { weight, lMean, aMean, bMean, cMean, cMax },
+    magenta:    { weight, lMean, aMean, bMean, cMean, cMax },
+    pink:       { weight, lMean, aMean, bMean, cMean, cMax },
+    rose:       { weight, lMean, aMean, bMean, cMean, cMax }
   },
   metadata: { width, height, totalPixels, bitDepth }
 }

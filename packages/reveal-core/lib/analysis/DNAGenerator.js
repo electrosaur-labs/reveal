@@ -38,6 +38,8 @@ class DNAGenerator {
         // HIGH-PERFORMANCE BUFFERS: Eliminate million-object allocation
         const sectorCount = new Uint32Array(12);
         const sectorLSum = new Float64Array(12);
+        const sectorASum = new Float64Array(12);
+        const sectorBSum = new Float64Array(12);
         const sectorCSum = new Float64Array(12);
         const sectorCMax = new Float64Array(12);
 
@@ -96,6 +98,8 @@ class DNAGenerator {
                 
                 sectorCount[sIdx]++;
                 sectorLSum[sIdx] += L;
+                sectorASum[sIdx] += a;
+                sectorBSum[sIdx] += b;
                 sectorCSum[sIdx] += C;
                 if (C > sectorCMax[sIdx]) sectorCMax[sIdx] = C;
             }
@@ -120,6 +124,8 @@ class DNAGenerator {
             sectorData[name] = {
                 weight: parseFloat(weight.toFixed(4)),
                 lMean: count > 0 ? parseFloat((sectorLSum[j] / count).toFixed(1)) : 0,
+                aMean: count > 0 ? parseFloat((sectorASum[j] / count).toFixed(1)) : 0,
+                bMean: count > 0 ? parseFloat((sectorBSum[j] / count).toFixed(1)) : 0,
                 cMean: count > 0 ? parseFloat((sectorCSum[j] / count).toFixed(1)) : 0,
                 cMax: parseFloat(sectorCMax[j].toFixed(1))
             };

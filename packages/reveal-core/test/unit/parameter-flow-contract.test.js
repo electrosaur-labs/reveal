@@ -57,7 +57,9 @@ const POSTERIZATION_ENGINE_READS = new Set([
     'vibrancyMode',
     // vibrancyBoost also used in centroid (duplicate, already listed)
 
-    // Sub-engine specific (Mk1.0 / Mk1.5)
+    // Sub-engine specific (Mk1.0 / Mk1.5 / Mk2.0)
+    'dnaCentroid',           // RevealMk20Engine: DNA-derived chromatic anchor (replaces PeakFinder)
+    'dnaSectors',            // RevealMk20Engine: full sector map for generalised highlight rescue
     'preserveWhite',
     'preserveBlack',
     'substrateMode',
