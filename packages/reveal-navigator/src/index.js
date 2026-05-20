@@ -516,11 +516,17 @@ function initPlugin() {
                 }
             });
 
-            // Deactivate when a palette swatch is highlighted
+            // Disable while a palette swatch is highlighted; re-enable when cleared
             sessionState.on('highlightChanged', (data) => {
-                if ((data.colorIndex >= 0 || data.ghostBuffer) && btnTrapInspect.classList.contains('active')) {
-                    btnTrapInspect.textContent = 'Show Traps';
-                    btnTrapInspect.classList.remove('active');
+                const highlightActive = data.colorIndex >= 0 || !!data.ghostBuffer;
+                if (highlightActive) {
+                    if (btnTrapInspect.classList.contains('active')) {
+                        btnTrapInspect.textContent = 'Show Traps';
+                        btnTrapInspect.classList.remove('active');
+                    }
+                    btnTrapInspect.disabled = true;
+                } else {
+                    btnTrapInspect.disabled = !(sessionState.state.trapSize > 0);
                 }
             });
 
