@@ -226,6 +226,12 @@ class Preview {
         try {
             if (!this._dimensions) return;
 
+            // Any highlight (swatch click or ghost) dismisses the trap overlay
+            if (this._trapOverlayActive && (data.colorIndex >= 0 || data.ghostBuffer)) {
+                this._trapOverlayActive = false;
+                if (this._trapsLabel) this._trapsLabel.style.display = 'none';
+            }
+
             if (data.ghostBuffer) {
                 // Ghost preview for suggested color hover
                 this._renderBuffer(data.ghostBuffer, this._dimensions.width, this._dimensions.height);

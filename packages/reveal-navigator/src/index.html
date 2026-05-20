@@ -333,6 +333,15 @@
             color: #ffc060;
         }
 
+        #btn-trap-inspect:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        #btn-trap-inspect.active {
+            color: #ffc060;
+        }
+
         #knobs-panel sp-slider {
             width: 100%;
             margin-bottom: 4px;
@@ -1441,6 +1450,8 @@
                 <span class="stat-sep" id="stat-sep-score" style="display:none;">&middot;</span>
                 <span class="stat-score" id="stat-score" style="display:none;"></span>
                 <span style="flex:1;"></span>
+                <button id="btn-trap-inspect" class="knob-revert" style="display:none; width:auto; padding:2px 8px; font-size:10px;" title="Overlay trap zones on the preview">Show Traps</button>
+                <span style="display:inline-block; width:12px;"></span>
                 <span id="proxy-resolution-label" style="display:none; color:#888; font-size:10px; margin-left:4px;">Resolution</span>
                 <select id="proxy-resolution" title="Preview resolution (long edge)" style="display:none;">
                     <option value="1000">1000px</option>
@@ -1457,8 +1468,6 @@
                     <option value="8">1:8</option>
                 </select>
                 <button class="knob-help-btn" id="loupe-help-btn" title="Help" style="display:none;">?</button>
-                <span style="display:inline-block; width:8px;"></span>
-                <button id="btn-trap-inspect" class="knob-revert" style="display:none; width:auto; padding:2px 8px; font-size:10px;" title="Overlay trap zones on the preview">Show Traps</button>
                 <span class="knob-help" id="loupe-help-text">Pixel-level magnifier. Hover over the preview to see a 1:1 crop of the posterized output. Shows the exact Lab coordinates and per-pixel ΔE so you can verify separation accuracy at print resolution. Change zoom level to see wider context.</span>
             </div>
 
