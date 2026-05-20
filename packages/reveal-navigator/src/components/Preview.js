@@ -319,18 +319,16 @@ class Preview {
             'background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 3px; ' +
             'pointer-events: none; z-index: 10; display: block;'
         );
+        // Hide TRAPS label while showing original (overlay not applicable)
+        if (this._trapsLabel) this._trapsLabel.style.display = 'none';
     }
 
     /**
-     * Show the posterized preview (normal view).
+     * Show the posterized preview (normal view), restoring trap overlay if active.
      */
     showPosterized() {
         if (!this._dimensions) return;
 
-        const buf = this._session.getPreview();
-        if (!buf) return;
-
-        this._renderBuffer(buf, this._dimensions.width, this._dimensions.height);
         this._showingOriginal = false;
         if (this._originalLabel) this._originalLabel.setAttribute('style',
             'position: absolute; top: 8px; left: 8px; ' +
@@ -338,6 +336,15 @@ class Preview {
             'background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 3px; ' +
             'pointer-events: none; z-index: 10; display: none;'
         );
+
+        if (this._trapOverlayActive) {
+            this.showTrapOverlay();
+            return;
+        }
+
+        const buf = this._session.getPreview();
+        if (!buf) return;
+        this._renderBuffer(buf, this._dimensions.width, this._dimensions.height);
     }
 
     /** @returns {boolean} Whether the original image is currently displayed */
