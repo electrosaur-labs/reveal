@@ -674,6 +674,50 @@ class SessionState extends EventEmitter {
     getPreview() { return this.previewBuffer; }
     getPalette() { return this._paletteSurgery.buildOverriddenPalette(); }
     getDNA() { return this.imageDNA; }
+
+    /**
+     * Composite trap expansion zones onto the current preview buffer.
+     * Zones are rendered in each ink's RGB color at 70% opacity.
+     * Trap size is scaled from full-res points to proxy pixels.
+     * Returns null if trap is off, no zones computed, or proxy not ready.
+     *
+     * @returns {Uint8ClampedArray|null} RGBA buffer with overlay, or null
+     */
+    generateTrapOverlayBuffer() {
+        const sep = this.proxyEngine?.separationState;
+        if (!sep?.masks || !sep.palette || !this.previewBuffer) return null;
+
+        const trapSizePts = this.state.trapSize;
+        if (!(trapSizePts > 0)) return null;
+
+        const dpi = this.imageResolution || 72;
+        const fullTrapPx = trapSizePts * dpi / 72;
+        const proxyTrapPx = Math.max(1, Math.round(fullTrapPx * sep.width / this.imageWidth));
+
+        const zoneResult = Reveal.TrapEngine.computeTrapZones(
+            sep.masks, sep.palette, sep.width, sep.height, proxyTrapPx
+        );
+        if (!zoneResult) return null;
+
+        const buf = this.previewBuffer;
+        const rgba = new Uint8ClampedArray(buf.length);
+        rgba.set(buf);
+
+        for (let ci = 0; ci < sep.palette.length; ci++) {
+            const zone = zoneResult.zones[ci];
+            const rgb = sep.rgbPalette?.[ci];
+            if (!zone || !rgb) continue;
+            for (let p = 0; p < zone.length; p++) {
+                if (zone[p] !== 255) continue;
+                const off = p * 4;
+                rgba[off]     = Math.round(rgb.r * 0.7 + rgba[off]     * 0.3);
+                rgba[off + 1] = Math.round(rgb.g * 0.7 + rgba[off + 1] * 0.3);
+                rgba[off + 2] = Math.round(rgb.b * 0.7 + rgba[off + 2] * 0.3);
+            }
+        }
+
+        return rgba;
+    }
     getSeparationState() { return this.proxyEngine?.separationState; }
     getOriginalPreviewBuffer() { return this.proxyEngine?.getOriginalPreviewRGBA(); }
     getSuggestedColors() { return this._suggestions.getSuggestedColors(); }

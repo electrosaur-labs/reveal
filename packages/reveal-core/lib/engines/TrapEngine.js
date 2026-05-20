@@ -186,6 +186,37 @@ class TrapEngine {
 
         return totalAdded;
     }
+
+    /**
+     * Compute trap expansion zones without mutating the source masks.
+     * Returns the pixels added by trapping for each color (XOR of original vs trapped).
+     *
+     * @param {Array<Uint8Array>} masks - Per-color binary masks (not mutated)
+     * @param {Array<{L, a, b}>} labPalette
+     * @param {number} width
+     * @param {number} height
+     * @param {number} maxTrapPixels
+     * @returns {{zones: Array<Uint8Array>, trapSizes: Array} | null} null if no trapping occurs
+     */
+    static computeTrapZones(masks, labPalette, width, height, maxTrapPixels) {
+        if (maxTrapPixels <= 0 || !masks || masks.length === 0) return null;
+
+        const cloned = masks.map(m => new Uint8Array(m));
+        const result = TrapEngine.applyTrapping(cloned, labPalette, width, height, maxTrapPixels);
+
+        if (result.trappedCount === 0) return null;
+
+        const zones = masks.map((original, i) => {
+            const zone = new Uint8Array(original.length);
+            const trapped = cloned[i];
+            for (let p = 0; p < zone.length; p++) {
+                if (original[p] === 0 && trapped[p] === 255) zone[p] = 255;
+            }
+            return zone;
+        });
+
+        return { zones, trapSizes: result.trapSizes };
+    }
 }
 
 module.exports = TrapEngine;

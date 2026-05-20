@@ -37,6 +37,10 @@ class Preview {
         // Corner label for "ORIGINAL" indicator
         this._originalLabel = this._createOriginalLabel();
 
+        // Trap overlay state
+        this._trapOverlayActive = false;
+        this._trapsLabel = this._createTrapsLabel();
+
         this._bindEvents();
         this._bindBlinkComparator();
     }
@@ -112,6 +116,40 @@ class Preview {
         if (this._blinkInterval) { clearInterval(this._blinkInterval); this._blinkInterval = null; }
     }
 
+    // ─── Trap Overlay ─────────────────────────────────────────
+
+    _createTrapsLabel() {
+        const label = document.createElement('span');
+        label.textContent = 'TRAPS';
+        label.setAttribute('style',
+            'position: absolute; top: 8px; right: 8px; ' +
+            'font-size: 11px; font-weight: bold; color: #ffffff; ' +
+            'background: rgba(180,60,60,0.85); padding: 2px 6px; border-radius: 3px; ' +
+            'pointer-events: none; z-index: 10; display: none;'
+        );
+        if (this._img && this._img.parentElement) {
+            this._img.parentElement.appendChild(label);
+        }
+        return label;
+    }
+
+    showTrapOverlay() {
+        if (!this._dimensions) return;
+        const buf = this._session.generateTrapOverlayBuffer();
+        if (!buf) return;
+        this._trapOverlayActive = true;
+        this._renderBuffer(buf, this._dimensions.width, this._dimensions.height);
+        if (this._trapsLabel) this._trapsLabel.style.display = 'block';
+    }
+
+    hideTrapOverlay() {
+        this._trapOverlayActive = false;
+        if (this._trapsLabel) this._trapsLabel.style.display = 'none';
+        this.showPosterized();
+    }
+
+    isTrapOverlayActive() { return this._trapOverlayActive; }
+
     _onScoringPreview(data) {
         try {
             if (!this._dimensions || !data.previewBuffer) return;
@@ -137,6 +175,19 @@ class Preview {
 
             // Snap back from original view — the posterized data just changed
             this._showingOriginal = false;
+
+            // If trap overlay is active, recompute and show it instead of normal preview
+            if (this._trapOverlayActive) {
+                const overlayBuf = this._session.generateTrapOverlayBuffer();
+                if (overlayBuf) {
+                    this._renderBuffer(overlayBuf, this._dimensions.width, this._dimensions.height);
+                    this._setStatus(`${data.elapsedMs.toFixed(0)}ms`);
+                    return;
+                }
+                // Trap became invalid (e.g. trapSize set to 0) — fall through to normal render
+                this._trapOverlayActive = false;
+                if (this._trapsLabel) this._trapsLabel.style.display = 'none';
+            }
             if (this._originalLabel) this._originalLabel.setAttribute('style',
                 'position: absolute; top: 8px; left: 8px; ' +
                 'font-size: 11px; font-weight: bold; color: #e0a030; ' +

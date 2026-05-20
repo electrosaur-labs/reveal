@@ -493,6 +493,38 @@ function initPlugin() {
             }
         });
 
+        // Inspect Traps toggle
+        const btnTrapInspect = document.getElementById('btn-trap-inspect');
+        const trapSlider = document.getElementById('knob-trapSize');
+        if (btnTrapInspect && preview) {
+            btnTrapInspect.addEventListener('click', () => {
+                if (preview.isTrapOverlayActive()) {
+                    preview.hideTrapOverlay();
+                    btnTrapInspect.textContent = 'Inspect Traps';
+                    btnTrapInspect.classList.remove('active');
+                } else {
+                    preview.showTrapOverlay();
+                    if (preview.isTrapOverlayActive()) {
+                        btnTrapInspect.textContent = 'Hide Traps';
+                        btnTrapInspect.classList.add('active');
+                    }
+                }
+            });
+
+            // Live overlay update when trap slider changes while overlay is active
+            if (trapSlider) {
+                trapSlider.addEventListener('change', () => {
+                    if (!preview.isTrapOverlayActive()) return;
+                    preview.showTrapOverlay();
+                    if (!preview.isTrapOverlayActive()) {
+                        // trapSize became 0 — overlay deactivated itself
+                        btnTrapInspect.textContent = 'Inspect Traps';
+                        btnTrapInspect.classList.remove('active');
+                    }
+                });
+            }
+        }
+
         // Wire Finalize button
         const btnFinalize = document.getElementById('btn-finalize');
         if (btnFinalize) {
