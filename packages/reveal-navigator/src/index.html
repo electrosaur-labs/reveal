@@ -1457,6 +1457,8 @@
                     <option value="8">1:8</option>
                 </select>
                 <button class="knob-help-btn" id="loupe-help-btn" title="Help" style="display:none;">?</button>
+                <span style="display:inline-block; width:8px;"></span>
+                <button id="btn-trap-inspect" class="knob-revert" style="display:none; width:auto; padding:2px 8px; font-size:10px;" title="Overlay trap zones on the preview">Show Traps</button>
                 <span class="knob-help" id="loupe-help-text">Pixel-level magnifier. Hover over the preview to see a 1:1 crop of the posterized output. Shows the exact Lab coordinates and per-pixel ΔE so you can verify separation accuracy at print resolution. Change zoom level to see wider context.</span>
             </div>
 
@@ -1684,9 +1686,6 @@
                             <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
                         </div>
                         <sp-slider id="knob-trapSize" min="0" max="10" step="1" value="0" variant="filled"></sp-slider>
-                        <div style="display:flex; align-items:center; gap:6px; margin-top:4px;">
-                            <button id="btn-trap-inspect" class="knob-revert" style="width:auto; padding:2px 10px; font-size:11px;" title="Overlay trap zones on the preview">Inspect Traps</button>
-                        </div>
                         <span class="knob-help">Expand lighter colors under darker neighbors to prevent gaps from misregistration. Measured in points. 0 = no trapping.</span>
 
                     </div><!-- /screen-printing-panel-content -->

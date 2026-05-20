@@ -358,6 +358,11 @@ function initPlugin() {
                 if (loupeZoom) loupeZoom.setAttribute('style', 'display: inline-block;');
                 const loupeHelpBtn = document.getElementById('loupe-help-btn');
                 if (loupeHelpBtn) loupeHelpBtn.setAttribute('style', 'display: inline-block;');
+                const btnTrapInspectEl = document.getElementById('btn-trap-inspect');
+                if (btnTrapInspectEl) {
+                    btnTrapInspectEl.style.display = 'inline-block';
+                    btnTrapInspectEl.disabled = !(sessionState.state.trapSize > 0);
+                }
                 _hideProgress();
             }, 250);
         });
@@ -493,14 +498,14 @@ function initPlugin() {
             }
         });
 
-        // Inspect Traps toggle
+        // Show Traps toggle
         const btnTrapInspect = document.getElementById('btn-trap-inspect');
         const trapSlider = document.getElementById('knob-trapSize');
         if (btnTrapInspect && preview) {
             btnTrapInspect.addEventListener('click', () => {
                 if (preview.isTrapOverlayActive()) {
                     preview.hideTrapOverlay();
-                    btnTrapInspect.textContent = 'Inspect Traps';
+                    btnTrapInspect.textContent = 'Show Traps';
                     btnTrapInspect.classList.remove('active');
                 } else {
                     preview.showTrapOverlay();
@@ -511,15 +516,19 @@ function initPlugin() {
                 }
             });
 
-            // Live overlay update when trap slider changes while overlay is active
+            // Live overlay update + disabled state when trap slider changes
             if (trapSlider) {
                 trapSlider.addEventListener('change', () => {
-                    if (!preview.isTrapOverlayActive()) return;
-                    preview.showTrapOverlay();
-                    if (!preview.isTrapOverlayActive()) {
-                        // trapSize became 0 — overlay deactivated itself
-                        btnTrapInspect.textContent = 'Inspect Traps';
+                    const hasTrap = sessionState.state.trapSize > 0;
+                    btnTrapInspect.disabled = !hasTrap;
+                    if (!hasTrap && preview.isTrapOverlayActive()) {
+                        preview.hideTrapOverlay();
+                        btnTrapInspect.textContent = 'Show Traps';
                         btnTrapInspect.classList.remove('active');
+                        return;
+                    }
+                    if (preview.isTrapOverlayActive()) {
+                        preview.showTrapOverlay();
                     }
                 });
             }
@@ -1026,6 +1035,8 @@ function _clearUI() {
     if (loupeZoom) { loupeZoom.style.display = 'none'; loupeZoom.selectedIndex = 0; }
     const loupeHelpBtn = document.getElementById('loupe-help-btn');
     if (loupeHelpBtn) loupeHelpBtn.style.display = 'none';
+    const btnTrapInspectReset = document.getElementById('btn-trap-inspect');
+    if (btnTrapInspectReset) { btnTrapInspectReset.style.display = 'none'; btnTrapInspectReset.textContent = 'Show Traps'; btnTrapInspectReset.classList.remove('active'); }
 
     // Reset all pickers to first option (prevents stale browser/UXP cache)
     document.querySelectorAll('#knobs-panel select, #advanced-panel select').forEach(sel => { sel.selectedIndex = 0; });
