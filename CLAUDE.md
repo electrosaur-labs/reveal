@@ -11,7 +11,7 @@ Pure JavaScript color separation engine for screen printing. Reduces full-color 
 ```bash
 # From reveal/ root:
 npm run build                    # Build all packages
-npm run test:core                # Core engine tests (900+ tests, 57 files)
+npm run test:core                # Core engine tests (1085+ tests, 59 files)
 npm run test:cli                 # CLI tests (36 tests)
 npm run test:navigator           # Navigator plugin tests
 npm run build:navigator          # Build Photoshop Navigator panel
@@ -88,8 +88,9 @@ ONE field flows through the entire system: archetype `engine` → ParameterGener
 
 | engineType | Algorithm |
 |-----------|-----------|
-| `reveal` | LabMedianCut + HueGapRecovery (default) |
-| `reveal-mk1.5` | RevealMk15Engine (legacy) |
+| `reveal-mk2` | LabMedianCut + HueGapRecovery + Mk2.0 seeding (default for all non-distilled archetypes) |
+| `reveal` | LabMedianCut + HueGapRecovery (legacy fallback) |
+| `reveal-mk1.5` | RevealMk15Engine (legacy — used internally by `distilled` inner call only) |
 | `balanced` | LabMedianCut only |
 | `distilled` | Over-quantize 3× + Furthest-Point Sampling |
 | `stencil` | Luminance-only quantization |
@@ -97,11 +98,13 @@ ONE field flows through the entire system: archetype `engine` → ParameterGener
 
 There is no `engineMode` — eliminated in engine unification.
 
+**Active dispatch:** `ParameterGenerator` sets `engineType: archetype.engine === 'distilled' ? 'distilled' : 'reveal-mk2'`. All other cases (`reveal`, `classic`, `stencil`) remain in the switch but are not dispatched by normal archetype paths.
+
 ### DNA v2.0 & Archetypes
 
 **DNA:** 7D global vector (L, C, K, σL, entropy, temperature, sector_weight) + 12-sector hue breakdown.
 
-**Archetypes:** 25 JSON files auto-discovered from `packages/reveal-core/archetypes/*.json`. Add/remove by adding/removing files. Grouped by `"group"` field (graphic, faithful, dramatic) for carousel filter chips.
+**Archetypes:** 26 JSON files auto-discovered from `packages/reveal-core/archetypes/*.json`. Add/remove by adding/removing files. Grouped by `"group"` field (graphic, faithful, dramatic) for carousel filter chips.
 
 **Three pseudo-archetypes** (code-only, no JSON): Chameleon (Mk2 interpolator), Distilled (furthest-point sampling), Salamander (DNA-driven color count).
 
@@ -135,6 +138,7 @@ Three knobs shared between ProxyEngine (preview) and ProductionWorker (commit):
 | `lib/engines/PaletteOps.js` | 30K | Snap/prune/merge palette operations |
 | `lib/engines/HueGapRecovery.js` | 18K | Missing hue sector injection |
 | `lib/engines/MechanicalKnobs.js` | 15K | Post-separation mask adjustments |
+| `lib/engines/TrapEngine.js` | — | Color trapping — dilates lighter colors under darker; `computeTrapZones()` for non-mutating visualization |
 | `lib/engines/DitheringStrategies.js` | 18K | Floyd-Steinberg, Bayer, Atkinson, Stucki |
 | `lib/engines/CentroidStrategies.js` | 16K | SALIENCY, ROBUST_SALIENCY, VOLUMETRIC |
 | `lib/color/LabEncoding.js` | 20K | 8-bit ↔ 16-bit ↔ perceptual Lab conversions |
@@ -161,7 +165,7 @@ generatePreview(labPixels, labPalette, rgbPalette) → RGBA buffer
 
 Active Photoshop plugin. Built with Webpack 5 (externals: `photoshop`, `uxp`).
 
-**Design principle — Preview = Production:** The 800px proxy preview MUST produce visually identical results to the full-res Commit output. ProxyEngine and ProductionWorker share identical MechanicalKnobs logic.
+**Design principle — Preview = Production:** The 1000px proxy preview MUST produce visually identical results to the full-res Commit output. ProxyEngine and ProductionWorker share identical MechanicalKnobs logic.
 
 **Key files:**
 - `src/index.js` — Plugin entry, UI wiring

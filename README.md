@@ -35,13 +35,13 @@ The Photoshop plugin gives you real-time preview, palette editing, and one-click
 ## Key Features
 
 - **Lab median cut quantization** — Recursive partitioning in perceptual color space, not RGB
-- **20+ archetypes** — DNA analysis fingerprints each image and recommends separation parameters (Golden Hour, Commercial, Fine Art Scan, Dark Portrait, etc.)
+- **26 archetypes + 3 adaptive pseudo-archetypes** — DNA analysis fingerprints each image and recommends separation parameters (Golden Hour, Commercial, Fine Art Scan, Dark Portrait, etc.)
 - **Three distance metrics** — CIE76 (fast), CIE94 (perceptual), CIE2000 (museum-grade)
 - **Dithering** — Floyd-Steinberg, Atkinson, Stucki, Bayer, with mesh-aware LPI scaling
 - **Mechanical knobs** — Minimum coverage (minVolume), despeckle (speckleRescue), minimum opacity (shadowClamp), color trapping
 - **Neutral sovereignty** — Automatically isolates white/gray backgrounds to preserve the chromatic color budget
 - **8-bit and 16-bit Lab** — Full archival quality support
-- **Photoshop plugin** — Real-time archetype exploration at 800px proxy, production render to Lab fill+mask layers
+- **Photoshop plugin** — Real-time archetype exploration at 1000px proxy, blink comparator (click to toggle original/separated), trap zone overlay, production render to Lab fill+mask layers
 
 ## Validation
 

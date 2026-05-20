@@ -25,10 +25,16 @@ This is the main user-facing plugin. It opens as a command dialog (Plugins > Ele
 ## UI Overview
 
 ### Archetype Carousel
-Horizontal card strip showing 26+ archetypes ranked by match score. Filter chips (Natural, Soft, Graphic, Dramatic, Vibrant, Specialist) narrow the list. Sort by Score, ΔE, DNA, or screen count. Click a card to switch — the preview updates in real time.
+Horizontal card strip showing 26 archetypes plus 3 adaptive pseudo-archetypes (Chameleon, Distilled, Salamander), ranked by match score. Filter chips (Natural, Soft, Graphic, Dramatic, Vibrant, Specialist) narrow the list. Sort by Score, ΔE, DNA, or screen count. Click a card to switch — the preview updates in real time.
 
 ### Preview
-800px proxy of your separation. Shows exactly what the final output will look like. Click any palette swatch to isolate a single ink in the preview.
+1000px proxy of your separation (long edge). Shows exactly what the final output will look like.
+
+- **Click** — toggle between original image and separated preview (blink comparator)
+- **Hold click 300ms** — enter continuous blink mode (alternates automatically); release to snap back
+- **Show Traps** (status bar button) — overlay trap expansion zones on the preview; zones are painted at full ink color over a dimmed composite. Only available when Trap Width > 0 and no swatch is selected.
+
+Click any palette swatch to isolate a single ink in the preview (disables blink comparator and Show Traps while active).
 
 ### Palette Surgeon
 Extracted color palette as editable swatches:
@@ -48,7 +54,7 @@ Post-processing sliders:
 - **Ghost Screen Removal** — merges colors below coverage threshold
 - **Dust Removal** — morphological despeckle for isolated pixels
 - **Shadow Floor** — clamps faint mask values to printable density
-- **Trap Size** — color trapping width for misregistration compensation
+- **Trap Width** — color trapping width for misregistration compensation
 
 Advanced panels expose chroma, palette, weight, tone, substrate, and noise controls.
 
@@ -60,7 +66,7 @@ Renders the full-resolution document with the locked palette. Creates Lab fill+m
 ```bash
 npm run build        # Production build (webpack)
 npm run watch        # Watch mode
-npm test             # Vitest tests (110+)
+npm test             # Vitest tests
 ```
 
 ## License

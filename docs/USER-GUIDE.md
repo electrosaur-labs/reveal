@@ -39,8 +39,9 @@ to the nearest palette color, and creates one Photoshop layer per ink.
 - **Archetype** — A separation recipe. "Everyday Photo" favors earth tones and faithful reproduction. "Minkler"
   pushes contrast and saturation for bold graphic impact. "Fine Art Scan" protects subtle textures and tonal transitions.
   There are 26 archetypes grouped into Natural, Soft, Graphic, Dramatic, Vibrant, and Specialist families, plus 3
-  adaptive pseudo-archetypes (Chameleon, Distilled, Salamander) that tune their routing logic to your image
-  automatically.
+  adaptive pseudo-archetypes — **Chameleon** (Mk2 interpolator, adapts centroids to image DNA), **Distilled**
+  (furthest-point sampling for maximum color spread), and **Salamander** (DNA-driven color count) — that tune their
+  routing logic to your image automatically.
 - **DNA** — The image's structural fingerprint. It captures lightness, chroma, contrast, entropy, temperature, and hue
   distribution. You don't interact with it directly — it drives the automatic archetype ranking.
 - **Palette** — The set of spot colors extracted from your image, typically 5-8 colors. You can edit, merge, delete, or
@@ -78,8 +79,15 @@ good and the preview looks right, you're ready to separate.
 ### 2. Preview
 
 The large center panel. This is a live preview of your separation — same engine, same palette, same knobs as the final
-output. Click the preview to toggle between your original image and the separated version — a quick way to spot where
-colors shifted.
+output.
+
+**Blink comparator:** Click the preview to toggle between your original image and the separated version. Hold the click
+for 300ms to enter continuous blink mode — the view alternates automatically so you can spot color drift without
+clicking repeatedly. Release to snap back to the separated view.
+
+**Show Traps:** The status bar button (visible after analysis, grayed out when Trap Width = 0) overlays trap expansion
+zones on the preview. Trap zones are painted at full ink color over a dimmed composite — a quick check that trapping
+is covering the right edges before you commit. Disabled while a swatch is selected.
 
 The **Loupe** lets you zoom into any area. At full magnification (1-to-1) you see the actual pixels that will appear in the final
 separation.
