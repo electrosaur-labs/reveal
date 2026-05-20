@@ -703,6 +703,14 @@ class SessionState extends EventEmitter {
         const rgba = new Uint8ClampedArray(buf.length);
         rgba.set(buf);
 
+        // Dim the entire composite so trap zones pop out
+        for (let i = 0; i < rgba.length; i += 4) {
+            rgba[i]     = Math.round(rgba[i]     * 0.35);
+            rgba[i + 1] = Math.round(rgba[i + 1] * 0.35);
+            rgba[i + 2] = Math.round(rgba[i + 2] * 0.35);
+        }
+
+        // Paint trap zones in full ink color on top of the dimmed composite
         for (let ci = 0; ci < sep.palette.length; ci++) {
             const zone = zoneResult.zones[ci];
             const rgb = sep.rgbPalette?.[ci];
@@ -710,9 +718,9 @@ class SessionState extends EventEmitter {
             for (let p = 0; p < zone.length; p++) {
                 if (zone[p] !== 255) continue;
                 const off = p * 4;
-                rgba[off]     = Math.round(rgb.r * 0.7 + rgba[off]     * 0.3);
-                rgba[off + 1] = Math.round(rgb.g * 0.7 + rgba[off + 1] * 0.3);
-                rgba[off + 2] = Math.round(rgb.b * 0.7 + rgba[off + 2] * 0.3);
+                rgba[off]     = rgb.r;
+                rgba[off + 1] = rgb.g;
+                rgba[off + 2] = rgb.b;
             }
         }
 
