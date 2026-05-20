@@ -251,7 +251,11 @@ class SessionState extends EventEmitter {
         this._scheduleProxyUpdate();
     }
 
-    getKnobDefault(key) { return this._archetypeDefaults ? this._archetypeDefaults[key] : null; }
+    getKnobDefault(key) {
+        if (!this._archetypeDefaults) return null;
+        const v = this._archetypeDefaults[key];
+        return v !== undefined ? v : null;
+    }
 
     // ─── Parameter Updates (Reactive Loop) ───────────────────
 

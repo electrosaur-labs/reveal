@@ -163,7 +163,8 @@ class RevealMk20Engine {
 
         const medianCutTarget = Math.max(1, targetColors - numPreserved);
 
-        logger.log(`[Mk2.0] Slot budget: targetColors=${targetColors}, numPreserved=${numPreserved} → medianCutTarget=${medianCutTarget}`);
+        const numForced = forcedCentroids.length;
+        logger.log(`[Mk2.0] Slot budget: targetColors=${targetColors}, numForced=${numForced}, numPreserved=${numPreserved} → medianCutTarget=${medianCutTarget}`);
 
         // Extract non-preserved pixels
         let nonPreservedLabPixels = labPixels;
@@ -223,7 +224,8 @@ class RevealMk20Engine {
         // Step 2: Median cut
         let initialPaletteLab = LabMedianCut.medianCutInLabSpace(
             medianCutPixels, adjustedMedianCutTarget, grayscaleOnly, width, height,
-            null, 3.5, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost,
+            forcedCentroids.length > 0 ? forcedCentroids : null,
+            3.5, vibrancyMode, vibrancyBoost, highlightThreshold, highlightBoost,
             options.strategy || null, options.tuning || null
         );
 
