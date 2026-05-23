@@ -10,7 +10,7 @@
 
 **Reduction is revelation:** stripping an image down to a small number of spot colors forces you to find what matters in the image. The colors that survive are the ones that carry the meaning. The goal is not reproduction but *interpretation* — working within the constraints of screen printing and embracing those limitations instead of trying to hide them.
 
-Reveal analyzes your image and generates multiple possible separation palettes based on 20+ built-in archetypes. You select from these and further refine — adding, removing, and altering colors from the suggested palette. The engine recommends; the artist decides.
+Reveal analyzes your image and generates multiple possible separation palettes based on 26 built-in archetypes plus 3 adaptive pseudo-archetypes. You select from these and further refine — adding, removing, and altering colors from the suggested palette. The engine recommends; the artist decides.
 
 The Photoshop plugin gives you real-time preview, palette editing, and one-click export to separated Lab layers with masks. The core engine is **100% pure JavaScript with zero external dependencies**, so it also runs in Node.js, browsers, and batch pipelines.
 
@@ -29,7 +29,7 @@ The Photoshop plugin gives you real-time preview, palette editing, and one-click
 
 <p align="center">
   <img src="docs/images/reveal-annotated.png" width="600" alt="Reveal Navigator — Photoshop plugin">
-  <br><em>Navigator panel in Photoshop — archetype carousel, radar HUD, palette surgery, mechanical knobs</em>
+  <br><em>Navigator panel in Photoshop — archetype carousel, palette surgery, mechanical knobs</em>
 </p>
 
 ## Key Features

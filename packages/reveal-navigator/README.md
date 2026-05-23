@@ -45,9 +45,6 @@ Extracted color palette as editable swatches:
 
 Suggested colors (missing hues detected by K-Means++ analysis) appear below the palette.
 
-### Radar HUD
-7-axis parameter radar showing current settings (green polygon) vs archetype defaults (blue dots). Drag vertices to adjust parameters in real time.
-
 ### Mechanical Knobs
 Post-processing sliders:
 - **Target Colors** — number of ink screens

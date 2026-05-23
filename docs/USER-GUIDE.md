@@ -92,24 +92,7 @@ is covering the right edges before you commit. Disabled while a swatch is select
 The **Loupe** lets you zoom into any area. At full magnification (1-to-1) you see the actual pixels that will appear in the final
 separation.
 
-### 3. Palette Surgeon
-
-The swatch strip to the left of the preview. Each swatch represents one ink color in your separation.
-
-| Action                    | What it does                                                               |
-|---------------------------|----------------------------------------------------------------------------|
-| **Click** a swatch        | Isolate that ink in the preview — see exactly where it prints              |
-| **Ctrl+click** a swatch   | Open Photoshop's color picker to replace the color with an exact ink match |
-| **Drag** swatch A onto B  | Merge the two colors (B absorbs A's pixels)                                |
-| **Alt+click** on a swatch | Delete that color — pixels go to the nearest remaining color               |
-| **Click +**               | Add a new color via Photoshop's color picker                               |
-
-Below the palette, **suggested colors** may appear — hues the engine detected in your image that didn't make it into
-the palette (e.g., a green that got absorbed into a neighboring color). Click to preview it; Ctrl+click to mark it for
-inclusion at commit time. When included, every pixel is reassigned to whichever palette color it's closest to, so pixels
-that were forced into a neighbor now go to the new color if it's a better match.
-
-### 4. Archetype Carousel
+### 3. Archetype Carousel
 
 The gallery at the bottom. Each card represents a separation strategy — a different opinion about how your image should
 be interpreted.
@@ -122,15 +105,30 @@ be interpreted.
 The blue bar on each card shows how well that archetype fits your image (longer = better fit). Don't overthink scores —
 browse a few and pick the one that looks right in the preview.
 
-### 5. Radar HUD
+### 4. Suggested Colors
 
-The multi-axis chart to the right of the preview. It visualizes the current separation parameters as a polygon on
-seven axes: **L** (lightness), **C** (chroma), **Entropy** (hue diversity), **Temperature** (warm/cool bias),
-**σL** (lightness variation), **Sector** (primary hue dominance), and **K** (black content). The blue shape shows
-the current archetype's settings; green shows the comparable best-fit archetype for reference. You can drag vertices
-directly to adjust parameter values — the preview updates live.
+Hues the engine detected in your image that didn't make it into the palette — for example, a green that got absorbed
+into a neighboring color. Suggested colors appear below the palette swatches.
 
-### 6. Mechanical Knobs
+- **Click** — preview the color in isolation
+- **Ctrl+click** — mark it for inclusion at commit time
+
+When included, every pixel is reassigned to whichever palette color it's closest to, so pixels that were forced into a
+neighbor now go to the new color if it's a better match.
+
+### 5. Palette Surgeon
+
+The swatch strip to the left of the preview. Each swatch represents one ink color in your separation.
+
+| Action                    | What it does                                                               |
+|---------------------------|----------------------------------------------------------------------------|
+| **Click** a swatch        | Isolate that ink in the preview — see exactly where it prints              |
+| **Ctrl+click** a swatch   | Open Photoshop's color picker to replace the color with an exact ink match |
+| **Drag** swatch A onto B  | Merge the two colors (B absorbs A's pixels)                                |
+| **Alt+click** on a swatch | Delete that color — pixels go to the nearest remaining color               |
+| **Click +**               | Add a new color via Photoshop's color picker                               |
+
+### 6. Controls
 
 The controls in the right panel. These affect the final output without changing the palette:
 
@@ -168,18 +166,17 @@ Progress shows in the **stats line** (1). Takes 1-3 seconds depending on image s
 
 ### Step 3: Browse and Choose
 
-The **archetype carousel** (4) populates with ranked cards. Click cards to explore — the **preview** (2) updates live.
+The **archetype carousel** (3) populates with ranked cards. Click cards to explore — the **preview** (2) updates live.
 Click the preview to toggle between original and separated to check color fidelity.
 
 ### Step 4: Refine the Palette
 
-Use the **palette surgeon** (3) to edit colors. Click swatches to isolate inks in the preview. Merge, delete, replace,
+Use the **palette surgeon** (5) to edit colors. Click swatches to isolate inks in the preview. Merge, delete, replace,
 or add colors until the palette matches your ink set.
 
 ### Step 5: Dial In the Knobs
 
-Use the **mechanical knobs** (6) or drag the **radar HUD** (5) to adjust ghost screen removal, dust removal, shadow
-floor, and trap size. Watch the preview — it updates with every change.
+Use the **controls** (6) to adjust ghost screen removal, dust removal, shadow floor, and trap size. Watch the preview — it updates with every change.
 
 ### Step 6: Separate
 
