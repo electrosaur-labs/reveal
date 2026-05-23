@@ -162,11 +162,9 @@ class PaletteSurgeon {
             const isMergeSource = this._isMergeSource(i);
             const isBaseline = i < baselineCount;
 
-            // Spatial Consistency: 
-            // - Always keep baseline slots in place, even if they have 0 pixels (merged/deleted).
-            // - Keep user-added slots as long as they exist in the palette array.
-            // Only skip slots that are NOT baseline AND have 0 pixels (shouldn't happen with current logic).
-            if (counts[i] === 0 && !isDeleted && !isAdded && !isMergeSource && !isBaseline) continue;
+            // Skip slots with no pixels unless they carry surgery state (deleted/merged/added).
+            // Baseline slots at 0% are pruned by minVolume and show nothing in solo view — hide them.
+            if (counts[i] === 0 && !isDeleted && !isAdded && !isMergeSource) continue;
 
             const pct = (isDeleted || isMergeSource) ? '\u2014' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
             const isOverridden = this._session.paletteOverrides.has(i);

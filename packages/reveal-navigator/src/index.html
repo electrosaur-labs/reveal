@@ -1021,7 +1021,7 @@
             position: relative;
             touch-action: none;
             flex-shrink: 0;
-            min-width: 68px; /* Increased to fit label + revert button */
+            min-width: 0;
         }
         .surgeon-swatch:active:not(.surgeon-deleted) {
             opacity: 0.5;
@@ -1723,7 +1723,7 @@
                         <button class="knob-revert" id="revert-engineType" style="margin-left: auto;">&#x21BA;</button>
                         <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
                     </div>
-                    <span class="knob-help">Standard: Mk 2.0 engine with DNA-anchored quantization and generalised highlight rescue. Adaptive: over-quantize then distil to target count. Hue-Aware: Mk 1.0 with hue gap recovery. Fast: Mk 1.0 without hue analysis. Classic: simple RGB median cut. Stencil: luminance-only for single-color work.</span>
+                    <span class="knob-help">Standard: Lab median cut with hue gap recovery and generalised highlight rescue across all image sectors. Default for most archetypes. Adaptive: over-quantize then distil to target count via furthest-point sampling. Hue-Aware: Lab median cut with hue gap recovery (legacy). Fast: Lab median cut without hue analysis. Classic: simple RGB median cut. Stencil: luminance-only for single-color work.</span>
 
                     <div class="knob-row" style="justify-content: flex-start !important;">
                         <span class="knob-label">Color Mode</span>
