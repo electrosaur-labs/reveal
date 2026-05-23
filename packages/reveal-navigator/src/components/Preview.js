@@ -226,10 +226,14 @@ class Preview {
         try {
             if (!this._dimensions) return;
 
-            // Any highlight (swatch click or ghost) dismisses the trap overlay
-            if (this._trapOverlayActive && (data.colorIndex >= 0 || data.ghostBuffer)) {
-                this._trapOverlayActive = false;
-                if (this._trapsLabel) this._trapsLabel.style.display = 'none';
+            // Any highlight (swatch click or ghost) dismisses the trap overlay and original view
+            if (data.colorIndex >= 0 || data.ghostBuffer) {
+                this._showingOriginal = false;
+                if (this._originalLabel) this._originalLabel.style.display = 'none';
+                if (this._trapOverlayActive) {
+                    this._trapOverlayActive = false;
+                    if (this._trapsLabel) this._trapsLabel.style.display = 'none';
+                }
             }
 
             if (data.ghostBuffer) {
