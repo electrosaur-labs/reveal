@@ -370,8 +370,8 @@ class ProductionWorker {
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, labPalette.length, pixelCount);
 
         // Loupe tiles are native resolution — no originalWidth scaling needed
-        if (knobs.speckleRescue > 0) {
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, knobs.speckleRescue);
+        if (knobs.speckleRescue > 0 || knobs.meshSize > 0) {
+            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, knobs.speckleRescue, 0, knobs.meshSize || 0, knobs.imageDpi || 0);
         }
 
         if (knobs.shadowClamp > 0) {
@@ -427,7 +427,7 @@ class ProductionWorker {
      * @returns {Array<{labColor, hex, mask, width, height, name}>} Layer objects
      */
     _buildLayers(colorIndices, labPalette, hexColors, width, height, knobs) {
-        const { minVolume, speckleRescue, shadowClamp, trapSize } = knobs;
+        const { minVolume, speckleRescue, shadowClamp, trapSize, meshSize, imageDpi } = knobs;
         const layers = [];
         const pixelCount = width * height;
         // ── Apply minVolume (shared with ProxyEngine) ──
@@ -442,9 +442,10 @@ class ProductionWorker {
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, labPalette.length, pixelCount);
 
         // ── Apply speckleRescue (shared with ProxyEngine) ──
-        // No originalWidth scaling — production runs at full document resolution
-        if (speckleRescue > 0) {
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, speckleRescue);
+        // No originalWidth scaling — production runs at full document resolution.
+        // sliderPx=0 with meshSize set triggers auto-compute from press physics.
+        if (speckleRescue > 0 || meshSize > 0) {
+            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, speckleRescue, 0, meshSize || 0, imageDpi || 0);
         }
 
         // ── Apply shadowClamp (shared with ProxyEngine) ──

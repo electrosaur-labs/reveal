@@ -1635,7 +1635,7 @@
                     <button class="knob-help-btn" title="Help">?</button>
                 </div>
                 <sp-slider id="knob-speckleRescue" min="0" max="30" step="1" value="4" variant="filled"></sp-slider>
-                <span class="knob-help">Remove isolated pixel clusters smaller than this radius. Cleans up stray dots that appear as noise. Higher values = cleaner output but may lose fine detail.</span>
+                <span class="knob-help">Remove isolated pixel clusters below this size. Set to 0 to auto-compute from Mesh TPI — eliminates dots too small to survive printing at your mesh density. Set a value to override.</span>
 
                 <div class="knob-row">
                     <span class="knob-label">Minimum Opacity</span>

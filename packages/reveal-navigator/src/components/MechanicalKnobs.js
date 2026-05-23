@@ -166,7 +166,7 @@ class MechanicalKnobs {
         this._session.on('parameterChanged', ({ key, value }) => {
             const entry = this._elements[key];
             if (!entry) return;
-            
+
             let current;
             if (entry.el.type === 'checkbox') {
                 current = entry.el.checked;
@@ -181,15 +181,32 @@ class MechanicalKnobs {
                 this._updateDisplay(entry, value);
                 this._updateRevertIcon(key, entry);
             }
+
+            // Mesh TPI change affects the speckleRescue auto label
+            if (key === 'meshSize' || key === 'imageDpi') {
+                const speckleEntry = this._elements['speckleRescue'];
+                if (speckleEntry) {
+                    this._updateDisplay(speckleEntry, parseFloat(speckleEntry.el.value));
+                }
+            }
         });
     }
 
     // ─── Display ──────────────────────────────────────────────
 
     _updateDisplay(entry, value) {
-        if (entry.valEl) {
-            entry.valEl.textContent = value.toFixed(entry.def.decimals) + entry.def.unit;
+        if (!entry.valEl) return;
+        if (entry.def.key === 'speckleRescue' && value === 0) {
+            const state = this._session.getState();
+            const meshTPI = state.meshSize || 0;
+            if (meshTPI > 0) {
+                const dpi = state.imageDpi || 300;
+                const autoPx = Math.max(1, Math.ceil(7 * dpi / meshTPI));
+                entry.valEl.textContent = `auto (${autoPx}px)`;
+                return;
+            }
         }
+        entry.valEl.textContent = value.toFixed(entry.def.decimals) + entry.def.unit;
     }
 
     // ─── Revert Icons ────────────────────────────────────────
