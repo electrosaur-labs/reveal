@@ -8,7 +8,7 @@ const { Command } = require('commander');
 const path = require('path');
 const fs = require('fs');
 const { ingest } = require('./ingest');
-const { processSingle, computeDna, autoDetectArchetype, listArchetypes, PSEUDO_IDS } = require('./pipeline');
+const { processSingle, computeDna, autoDetectArchetype, listArchetypes, PSEUDO_IDS, applyBlackSnap } = require('./pipeline');
 const { loadRecipe, saveRecipe, mergeRecipeWithCli } = require('./recipe');
 const { writeFlat } = require('./output/flat');
 const { writePsd } = require('./output/psd');
@@ -32,6 +32,12 @@ program
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
     .option('--shadow-clamp <percent>', 'Ink body clamp (0-20%)', parseFloat)
     .option('--mesh-tpi <n>', 'Screen mesh threads-per-inch, e.g. 230, 305 (default: 230)', parseFloat)
+    .option('--black-snap', 'Snap near-black edge pixels to pure black before quantization (line art/engraving — opt-in, off by default)')
+    .option('--black-snap-dpi <n>', 'Document DPI for black-snap edge radius (default: 300)', parseFloat)
+    .option('--black-snap-lmax <n>', 'Black-snap: perceptual L* ceiling for "near black" (default: 32)', parseFloat)
+    .option('--black-snap-chroma-max <n>', 'Black-snap: perceptual chroma ceiling for "near black" (default: 11)', parseFloat)
+    .option('--black-snap-edge-delta <n>', 'Black-snap: perceptual delta-L threshold for "on an edge" (default: 25)', parseFloat)
+    .option('--black-snap-radius-mm <n>', 'Black-snap: edge-detection neighborhood radius in mm (default: 0.2)', parseFloat)
     .option('--single', 'Single archetype mode (default if --archetype provided)')
     .option('--compare', 'Compare mode: Chameleon, Distilled, Salamander + top DNA match (default)')
     .option('--recipe <path>', 'Load settings from recipe JSON')
@@ -131,6 +137,20 @@ async function run(inputFile, options) {
         const { lab16bit, width, height, inputFormat } = await ingest(inputFile);
         log(`Image: ${width}×${height} (${inputFormat})`);
         verbose(`Pixel count: ${width * height}`);
+
+        // Black snap (opt-in): runs ONCE on the full-resolution source,
+        // before any archetype pass, so every pass in compare mode (and
+        // single mode) sees the identical snapped buffer.
+        if (options.blackSnap) {
+            const snapResult = applyBlackSnap(lab16bit, width, height, {
+                dpi: options.blackSnapDpi,
+                lMax: options.blackSnapLmax,
+                chromaMax: options.blackSnapChromaMax,
+                edgeDeltaL: options.blackSnapEdgeDelta,
+                radiusMm: options.blackSnapRadiusMm,
+            });
+            log(`Black snap: ${snapResult.snappedPixels} px (${snapResult.snappedPercent.toFixed(2)}%), radius=${snapResult.radiusPx}px`);
+        }
 
         const basename = path.basename(inputFile, path.extname(inputFile));
         const inputDir = path.dirname(path.resolve(inputFile));

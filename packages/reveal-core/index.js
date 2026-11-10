@@ -20,6 +20,7 @@ const ImageHeuristicAnalyzer = require('./lib/analysis/ImageHeuristicAnalyzer');
 const LabDistance = require('./lib/color/LabDistance');
 const LabEncoding = require('./lib/color/LabEncoding');
 const BilateralFilter = require('./lib/preprocessing/BilateralFilter');
+const BlackSnap = require('./lib/preprocessing/BlackSnap');
 const ParameterGenerator = require('./lib/analysis/ParameterGenerator');
 const DNAGenerator = require('./lib/analysis/DNAGenerator');
 const ArchetypeMapper = require('./lib/analysis/ArchetypeMapper');
@@ -617,6 +618,7 @@ module.exports.engines = {
 
     // Preprocessing
     BilateralFilter,
+    BlackSnap,
     MedianFilter,
 
     // Post-processing & production
@@ -644,6 +646,7 @@ Object.assign(module.exports, {
     LabDistance,
     LabEncoding,
     BilateralFilter,
+    BlackSnap,
     ParameterGenerator,
     DNAGenerator,
     ArchetypeMapper,

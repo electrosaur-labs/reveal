@@ -52,6 +52,22 @@ const PSEUDO_ARCHETYPES = {
 const PSEUDO_IDS = new Set(Object.keys(PSEUDO_ARCHETYPES));
 
 /**
+ * Edge-aware near-black snap for line art (opt-in). Mutates lab16bit in
+ * place. Must run before computeDna/posterize — see BlackSnap.js for why
+ * this has to happen once, on the full-resolution source, before anything
+ * downstream derives from it.
+ *
+ * @param {Int32Array} lab16bit - Engine 16-bit Lab data
+ * @param {number} width
+ * @param {number} height
+ * @param {Object} [options] - Forwarded to Reveal.BlackSnap.applyBlackSnap
+ * @returns {{snappedPixels: number, snappedPercent: number, radiusPx: number}}
+ */
+function applyBlackSnap(lab16bit, width, height, options = {}) {
+    return Reveal.BlackSnap.applyBlackSnap(lab16bit, width, height, options);
+}
+
+/**
  * Compute image DNA from 16-bit Lab buffer.
  *
  * @param {Int32Array} lab16bit - Engine 16-bit Lab data
@@ -284,4 +300,4 @@ function listArchetypes() {
     return groups;
 }
 
-module.exports = { processSingle, computeDna, autoDetectArchetype, listArchetypes, PSEUDO_IDS };
+module.exports = { processSingle, computeDna, autoDetectArchetype, listArchetypes, PSEUDO_IDS, applyBlackSnap };
