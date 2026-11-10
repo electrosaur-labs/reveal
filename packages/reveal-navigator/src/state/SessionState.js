@@ -171,6 +171,22 @@ class SessionState extends EventEmitter {
                 dpi: this.imageResolution
             });
             logger.log(`[SessionState] Black snap: ${snapResult.snappedPixels} px (${snapResult.snappedPercent.toFixed(2)}%), radius=${snapResult.radiusPx}px`);
+        } else {
+            // Candidacy check (suggest-only, never auto-enable — Architect-
+            // approved on the collab channel 2026-11-10). Runs on this same
+            // proxy-resolution buffer; the suggestion is transient and never
+            // persisted, so it's re-evaluated from scratch on every load.
+            const candidacy = Reveal.BlackSnap.evaluateBlackSnapCandidacy(labPixels, width, height, {
+                dpi: this.imageResolution
+            });
+            if (candidacy.snappedPercent >= Reveal.BlackSnap.DEFAULT_CANDIDACY_THRESHOLD_PERCENT) {
+                logger.log(`[SessionState] Black snap candidacy: ${candidacy.snappedPercent.toFixed(2)}% (meanLDelta=${candidacy.meanLDelta.toFixed(1)}) — suggesting`);
+                this.emit('blackSnapSuggested', {
+                    snappedPercent: candidacy.snappedPercent,
+                    meanLDelta: candidacy.meanLDelta,
+                    reason: 'High-contrast edges detected',
+                });
+            }
         }
 
         this._sourceLabPixels = labPixels;

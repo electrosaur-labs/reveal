@@ -501,6 +501,41 @@ function initPlugin() {
             });
         }
 
+        // ─── Black Snap suggestion (candidacy heuristic — suggest only) ──
+        // SessionState evaluates candidacy on every load where blackSnap is
+        // currently off. This never auto-enables anything — the banner just
+        // offers to run the exact same confirm+reread flow as checking the
+        // box by hand. Transient: never persisted, re-evaluated from scratch
+        // on every load (see SessionState._loadImageImpl, _clearUI above).
+        const blackSnapSuggestion = document.getElementById('blacksnap-suggestion');
+        const blackSnapSuggestionText = document.getElementById('blacksnap-suggestion-text');
+        const blackSnapSuggestionAccept = document.getElementById('blacksnap-suggestion-accept');
+        const blackSnapSuggestionDismiss = document.getElementById('blacksnap-suggestion-dismiss');
+
+        if (blackSnapSuggestion && chkBlackSnap) {
+            sessionState.on('blackSnapSuggested', ({ reason }) => {
+                if (blackSnapSuggestionText) {
+                    blackSnapSuggestionText.textContent = `${reason} — enable Black Snap for this document?`;
+                }
+                blackSnapSuggestion.style.display = 'flex';
+            });
+
+            if (blackSnapSuggestionAccept) {
+                blackSnapSuggestionAccept.addEventListener('click', () => {
+                    blackSnapSuggestion.style.display = 'none';
+                    if (!chkBlackSnap.checked) {
+                        chkBlackSnap.checked = true;
+                        chkBlackSnap.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
+            if (blackSnapSuggestionDismiss) {
+                blackSnapSuggestionDismiss.addEventListener('click', () => {
+                    blackSnapSuggestion.style.display = 'none';
+                });
+            }
+        }
+
         // Wire error overlay OK button
         const btnOk = document.getElementById('btn-error-ok');
         if (btnOk) {
@@ -1124,6 +1159,11 @@ function _clearUI() {
 
     // Clear status
     setStatus('');
+
+    // Hide any stale Black Snap suggestion from the previous document —
+    // the suggestion is transient and re-evaluated fresh on every load.
+    const blackSnapSuggestion = document.getElementById('blacksnap-suggestion');
+    if (blackSnapSuggestion) blackSnapSuggestion.style.display = 'none';
 }
 
 /**

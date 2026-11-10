@@ -151,12 +151,80 @@ function _slidingMax1D(src, srcOffset, n, stride, radius, dst, dstOffset) {
     }
 }
 
+// Initial estimate for "is this candidate line art" — % of pixels that would
+// be snapped. Needs empirical tuning against the archetype library (same way
+// the near-black/edge-delta defaults above were tuned), same as any other
+// Black Snap constant.
+const DEFAULT_CANDIDACY_THRESHOLD_PERCENT = 2;
+
+/**
+ * Read-only candidacy check: measures what applyBlackSnap() WOULD do,
+ * without mutating labData. Used to decide whether to suggest enabling
+ * Black Snap — never to auto-enable it (that decision stays with the user).
+ *
+ * Deliberately a separate, self-contained implementation rather than a
+ * refactor of applyBlackSnap() — keeps the production snap path (already
+ * shipped, already tuned) untouched by this additive detection logic.
+ *
+ * @param {Uint16Array} labData
+ * @param {number} width
+ * @param {number} height
+ * @param {Object} [options] - Same options as applyBlackSnap.
+ * @returns {{snappedPercent: number, meanLDelta: number, radiusPx: number}}
+ *   snappedPercent: % of pixels that would be snapped.
+ *   meanLDelta: mean perceptual L* of the pixels that would be snapped
+ *     (the magnitude of the shift toward pure black, since L*=0 is the
+ *     target) — a high value means the "near-black" edge pixels are
+ *     closer to the lMax ceiling than to true black, i.e. the document
+ *     is more "muddy" than "crisp line art".
+ */
+function evaluateBlackSnapCandidacy(labData, width, height, options = {}) {
+    const lMax = options.lMax ?? DEFAULT_L_MAX;
+    const chromaMax = options.chromaMax ?? DEFAULT_CHROMA_MAX;
+    const edgeDeltaL = options.edgeDeltaL ?? DEFAULT_EDGE_DELTA_L;
+    const radiusMm = options.radiusMm ?? DEFAULT_RADIUS_MM;
+    const dpi = options.dpi ?? DEFAULT_DPI;
+    const radiusPx = radiusPxFromMm(radiusMm, dpi);
+
+    const pixelCount = width * height;
+    const L = new Float32Array(pixelCount);
+    const isNearBlack = new Uint8Array(pixelCount);
+
+    for (let i = 0; i < pixelCount; i++) {
+        const off = i * 3;
+        const p = engine16ToPerceptual(labData[off], labData[off + 1], labData[off + 2]);
+        L[i] = p.L;
+        const chroma = Math.sqrt(p.a * p.a + p.b * p.b);
+        if (p.L < lMax && chroma < chromaMax) isNearBlack[i] = 1;
+    }
+
+    const maxL = _maxFilterSeparable(L, width, height, radiusPx);
+
+    let snappedPixels = 0;
+    let lSum = 0;
+    for (let i = 0; i < pixelCount; i++) {
+        if (!isNearBlack[i]) continue;
+        if (maxL[i] - L[i] > edgeDeltaL) {
+            snappedPixels++;
+            lSum += L[i];
+        }
+    }
+
+    return {
+        snappedPercent: pixelCount > 0 ? (snappedPixels / pixelCount) * 100 : 0,
+        meanLDelta: snappedPixels > 0 ? lSum / snappedPixels : 0,
+        radiusPx,
+    };
+}
+
 module.exports = {
     applyBlackSnap,
+    evaluateBlackSnapCandidacy,
     radiusPxFromMm,
     DEFAULT_L_MAX,
     DEFAULT_CHROMA_MAX,
     DEFAULT_EDGE_DELTA_L,
     DEFAULT_RADIUS_MM,
     DEFAULT_DPI,
+    DEFAULT_CANDIDACY_THRESHOLD_PERCENT,
 };

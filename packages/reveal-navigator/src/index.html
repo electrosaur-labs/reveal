@@ -989,6 +989,36 @@
             border-color: #f0a030;
         }
 
+        #blacksnap-suggestion {
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 6px 8px;
+            background: #1a2a3a;
+            border: 1px solid #4a90d9;
+            border-radius: 3px;
+            margin: 4px 0 8px 0;
+            font-size: 11px;
+            color: #a0c8f0;
+        }
+        #blacksnap-suggestion button {
+            margin-left: 8px;
+            padding: 2px 10px;
+            border: 1px solid #888;
+            border-radius: 3px;
+            background: #444;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+        #blacksnap-suggestion button:hover {
+            background: #555;
+        }
+        #blacksnap-suggestion-accept {
+            border-color: #4a90d9;
+        }
+
         .surgeon-header {
             display: flex;
             align-items: center;
@@ -1687,6 +1717,12 @@
                     <span id="blacksnap-confirm-msg">This will reread the document from Photoshop. All palette edits and customizations will be lost. Continue?</span>
                     <button id="blacksnap-confirm-ok">OK</button>
                     <button id="blacksnap-confirm-cancel">Cancel</button>
+                </div>
+
+                <div id="blacksnap-suggestion" style="display: none;">
+                    <span id="blacksnap-suggestion-text">High-contrast edges detected — enable Black Snap for this document?</span>
+                    <button id="blacksnap-suggestion-accept">Enable</button>
+                    <button id="blacksnap-suggestion-dismiss">Dismiss</button>
                 </div>
 
                 <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
