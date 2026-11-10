@@ -72,7 +72,7 @@ const BilateralFilter = require('../preprocessing/BilateralFilter');
  *
  * PRODUCTION — affects production render only:
  * @property {number} [trapSize] - Trap size (set at session level, not by archetype)
- * @property {number} [meshSize] - Screen mesh TPI (set at session level, default 230)
+ * @property {number} [meshSize] - Screen mesh TPI (set at session level, default 355)
  * @property {string} ditherType - Dither algorithm ('atkinson'|'floyd-steinberg'|'bayer'|'stucki'|'none')
  *
  * STRUCTURAL (preprocessing):
@@ -124,7 +124,7 @@ class ParameterGenerator {
      */
     static KNOB_DEFAULTS = {
         MECHANICAL: { minVolume: 0, speckleRescue: 0, shadowClamp: 0 },
-        PRODUCTION: { trapSize: 0, meshSize: 230 },
+        PRODUCTION: { trapSize: 2, meshSize: 355 },
     };
 
     /**
@@ -140,7 +140,7 @@ class ParameterGenerator {
             speckleRescue: source.speckleRescue || 0,
             shadowClamp: source.shadowClamp || 0,
             trapSize: source.trapSize || 0,
-            meshSize: source.meshSize || source.meshCount || 230,
+            meshSize: source.meshSize || source.meshCount || 355,
             imageDpi: source.imageDpi || source.resolution || 300,
         };
     }
@@ -320,7 +320,7 @@ class ParameterGenerator {
 
             // Screen mesh — NOT set here; meshSize is a session-level equipment
             // setting (physical screen), not an archetype/image property.
-            // Default 230 TPI is applied in SessionState.
+            // Default 355 TPI is applied in SessionState.
 
             // DNA-derived inputs for RevealMk20Engine.
             // dnaCentroid: dominant sector centroid — replaces PeakFinder rescan.

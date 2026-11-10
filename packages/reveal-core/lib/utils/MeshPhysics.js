@@ -14,21 +14,21 @@
  */
 
 const PRINT_FACTOR = 7;
-const DEFAULT_MESH_TPI = 230;
+const DEFAULT_MESH_TPI = 355;
 const DEFAULT_DPI = 300;
 
 /**
  * Minimum linear dot dimension (in pixels) that spans PRINT_FACTOR mesh
  * openings, given a screen mesh count and image resolution.
  *
- * Falls back to industry-standard defaults (230 TPI / 300 DPI — the same
- * defaults used elsewhere in this codebase, e.g. ParameterGenerator's
+ * Falls back to the studio's default equipment (355 TPI / 300 DPI — the
+ * same defaults used elsewhere in this codebase, e.g. ParameterGenerator's
  * KNOB_DEFAULTS.PRODUCTION) when the caller doesn't know its press/image
  * specifics. This is intentional: the Rule of 7 is a hard physical
  * constraint, not an opt-in preference, so callers that omit mesh/dpi
  * still get a physically sane floor rather than no enforcement at all.
  *
- * @param {number} [meshTPI] - Screen mesh threads-per-inch (e.g. 230, 305)
+ * @param {number} [meshTPI] - Screen mesh threads-per-inch (e.g. 230, 305, 355)
  * @param {number} [dpi] - Image resolution in dots-per-inch
  * @returns {number} Minimum dot diameter, in pixels (always >= 1)
  */

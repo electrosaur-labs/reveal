@@ -191,7 +191,7 @@ class MechanicalKnobs {
      * @param {number}            height       Image height in pixels
      * @param {number}            sliderPx     Linear slider value (0 = auto from mesh physics, or no-op if meshTPI also 0)
      * @param {number}            [originalWidth] Full document width (for proxy scaling)
-     * @param {number}            [meshTPI=0]  Screen mesh threads-per-inch (e.g. 230)
+     * @param {number}            [meshTPI=0]  Screen mesh threads-per-inch (e.g. 230, 305, 355)
      * @param {number}            [imageDpi=0] Document DPI; 0 → assume 300
      */
     static applySpeckleRescue(masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI = 0, imageDpi = 0) {
@@ -224,7 +224,7 @@ class MechanicalKnobs {
      * PRINT_FACTOR mesh openings. Unlike `applySpeckleRescue` (the artist's
      * creative despeckle knob), this is a hard physical constraint on the
      * FINAL output and is always applied, unconditionally — meshTPI/imageDpi
-     * default to the industry-standard 230 TPI / 300 DPI (see MeshPhysics)
+     * default to 355 TPI / 300 DPI (see MeshPhysics)
      * when the caller doesn't know its press/image specifics.
      *
      * Call this once, at the point a separation is actually committed to a
@@ -237,7 +237,7 @@ class MechanicalKnobs {
      * @param {number}            width
      * @param {number}            height
      * @param {Object}            [options]
-     * @param {number}            [options.meshTPI=0]     Screen mesh TPI; 0 → default (230)
+     * @param {number}            [options.meshTPI=0]     Screen mesh TPI; 0 → default (355)
      * @param {number}            [options.imageDpi=0]    Document DPI; 0 → default (300)
      * @param {number}            [options.originalWidth] Full document width (for proxy scaling)
      * @returns {{clustersRemoved: number, pixelsRemoved: number}} Aggregate across all colors

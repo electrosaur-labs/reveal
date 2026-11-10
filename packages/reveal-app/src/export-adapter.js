@@ -25,7 +25,7 @@ async function separate(card, session) {
     const { lab16bit, width, height } = session;
     const { _paletteLab: paletteLab, _paletteRgb: paletteRgb, _config: config } = card;
 
-    // Rule of 7: mesh/dpi default to the industry-standard 230 TPI / 300 DPI
+    // Rule of 7: mesh/dpi default to 355 TPI / 300 DPI
     // (same canonical helper the Navigator uses) so dithering and despeckle
     // are always mesh-aware, even when the config never specified a mesh count.
     const meshKnobs = Reveal.ParameterGenerator.extractMechanicalKnobs(config);

@@ -31,7 +31,7 @@ program
     .option('--min-volume <percent>', 'Minimum coverage threshold (0-5%)', parseFloat)
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
     .option('--shadow-clamp <percent>', 'Ink body clamp (0-20%)', parseFloat)
-    .option('--mesh-tpi <n>', 'Screen mesh threads-per-inch, e.g. 230, 305 (default: 230)', parseFloat)
+    .option('--mesh-tpi <n>', 'Screen mesh threads-per-inch, e.g. 230, 305, 355 (default: 355)', parseFloat)
     .option('--black-snap', 'Snap near-black edge pixels to pure black before quantization (line art/engraving — opt-in, off by default)')
     .option('--black-snap-dpi <n>', 'Document DPI for black-snap edge radius (default: 300)', parseFloat)
     .option('--black-snap-lmax <n>', 'Black-snap: perceptual L* ceiling for "near black" (default: 32)', parseFloat)

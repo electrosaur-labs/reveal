@@ -5,13 +5,13 @@ describe('MeshPhysics.minDotPx', () => {
         expect(MeshPhysics.minDotPx(230, 300)).toBe(10);
     });
 
-    it('defaults to 230 TPI / 300 DPI when both args are omitted', () => {
-        expect(MeshPhysics.minDotPx()).toBe(MeshPhysics.minDotPx(230, 300));
+    it('defaults to 355 TPI / 300 DPI when both args are omitted', () => {
+        expect(MeshPhysics.minDotPx()).toBe(MeshPhysics.minDotPx(355, 300));
     });
 
     it('defaults meshTPI only, honoring an explicit dpi', () => {
-        // ceil(7*600/230) = 19
-        expect(MeshPhysics.minDotPx(0, 600)).toBe(19);
+        // ceil(7*600/355) = 12
+        expect(MeshPhysics.minDotPx(0, 600)).toBe(12);
     });
 
     it('defaults dpi only, honoring an explicit meshTPI', () => {

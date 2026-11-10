@@ -197,7 +197,7 @@ async function processSingle(lab16bit, width, height, options = {}) {
     progress('posterize', `Generated ${posterizeResult.paletteLab.length} colors`);
 
     // 7. Map full-res pixels to locked palette (nearest-neighbor, no re-posterize)
-    // Rule of 7: mesh/dpi default to the industry-standard 230 TPI / 300 DPI
+    // Rule of 7: mesh/dpi default to 355 TPI / 300 DPI
     // (same canonical helper the Navigator uses) so dithering is always
     // mesh-aware, even when the caller never specified a mesh count.
     const meshKnobs = Reveal.ParameterGenerator.extractMechanicalKnobs(config);

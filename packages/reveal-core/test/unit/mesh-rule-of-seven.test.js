@@ -7,7 +7,7 @@
  *     machinery depends on "zero knobs" reproducing the clean baseline.
  *   - enforceMeshRuleOfSeven: the hard physical floor on committed output.
  *     Always applies, regardless of input — meshTPI/imageDpi default to
- *     230 TPI / 300 DPI when unspecified.
+ *     355 TPI / 300 DPI when unspecified.
  */
 
 const MechanicalKnobs = require('../../lib/engines/MechanicalKnobs');
@@ -61,7 +61,7 @@ describe('MechanicalKnobs.enforceMeshRuleOfSeven — hard physical floor', () =>
         expect(colorIndices[10 * width + 10]).toBe(0); // healed into background
     });
 
-    it('is never skippable: explicit meshTPI=0/imageDpi=0 still falls back to the 230/300 default floor', () => {
+    it('is never skippable: explicit meshTPI=0/imageDpi=0 still falls back to the 355/300 default floor', () => {
         const width = 20, height = 20;
         const masks = makeSinglePixelSpeckle(width, height, 10, 10);
         const colorIndices = new Uint8Array(width * height);

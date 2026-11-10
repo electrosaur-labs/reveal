@@ -197,14 +197,19 @@ describe('Rule of 7 — jethro 800×547', () => {
         expect(totalViolations).toBeGreaterThan(0);
     }, 30000);
 
-    test('default options (no meshTPI/imageDpi passed) still enforce the 230 TPI / 300 DPI floor', async () => {
+    test('default options (no meshTPI/imageDpi passed) still enforce the MeshPhysics default floor', async () => {
         const { masks, colorIndices, width, height } = await separateFixture(fixture, 'atkinson');
 
         MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height);
 
+        // Verify against the ACTUAL default (not the explicit MESH_TPI/DPI
+        // constants above, which are a deliberately different explicit value
+        // used by the other tests in this block) so this test tracks
+        // whatever MeshPhysics.DEFAULT_MESH_TPI/DEFAULT_DPI actually are.
+        const defaultRequiredSpan = MeshPhysics.minDotPx();
         const allViolations = [];
         for (const mask of masks) {
-            allViolations.push(...findRuleOfSevenViolations(mask, width, height, REQUIRED_SPAN));
+            allViolations.push(...findRuleOfSevenViolations(mask, width, height, defaultRequiredSpan));
         }
         expect(allViolations).toEqual([]);
     }, 30000);
