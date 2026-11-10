@@ -173,8 +173,8 @@ describe('config round-trip preserves production-relevant fields', () => {
         const prodConfig = session.exportProductionConfig();
 
         // trapSize and meshSize come from SessionState defaults, not ParameterGenerator
-        expect(prodConfig.trapSize).toBe(0);
-        expect(prodConfig.meshSize).toBe(230);
+        expect(prodConfig.trapSize).toBe(2);
+        expect(prodConfig.meshSize).toBe(355);
     });
 });
 

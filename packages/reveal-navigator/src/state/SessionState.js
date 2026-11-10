@@ -41,8 +41,8 @@ class SessionState extends EventEmitter {
         this.state = {
             activeArchetypeId: null,
             isArchetypeDirty: false,
-            trapSize: 0,
-            meshSize: 230,
+            trapSize: 2,
+            meshSize: 355,
             blackSnap: false,
             isProcessing: false,
             productionRenderPending: false,
@@ -68,7 +68,13 @@ class SessionState extends EventEmitter {
         this.imageDNA = null;
         this.imageWidth = 0;
         this.imageHeight = 0;
-        this.imageResolution = 72;
+        // Deliberately not defaulted — the real value must come from the
+        // document (PhotoshopBridge.getDocumentInfo() reads doc.resolution
+        // directly, no fallback). null means "no document loaded yet"; any
+        // code that reads this before a document is loaded is a bug and
+        // should fail loudly (NaN/null propagating), not silently use a
+        // guessed DPI.
+        this.imageResolution = null;
         this.originalWidth = 0;
         this.originalHeight = 0;
         this.baselineColorCount = 0;
@@ -118,7 +124,7 @@ class SessionState extends EventEmitter {
         this._proxyTargetSize = 1000;
         this.imageWidth = 0;
         this.imageHeight = 0;
-        this.imageResolution = 72;
+        this.imageResolution = null; // see constructor comment
         this.originalWidth = 0;
         this.originalHeight = 0;
         this._archetypeDefaults = null;
@@ -135,8 +141,8 @@ class SessionState extends EventEmitter {
         this.state.proxyBufferReady = false;
         this.state.isKnobsCustomized = false;
         this.state.highlightColorIndex = -1;
-        this.state.trapSize = 0;
-        this.state.meshSize = 230;
+        this.state.trapSize = 2;
+        this.state.meshSize = 355;
     }
 
     // ─── Lifecycle ───────────────────────────────────────────
@@ -689,7 +695,13 @@ class SessionState extends EventEmitter {
     // ─── Getters & Helpers ────────────────────────────────────
 
     getState() { return Object.freeze({ ...this.state }); }
-    getMechanicalKnobs() { return Reveal.engines.ParameterGenerator.extractMechanicalKnobs(this.state); }
+    // this.state never carries a dpi field (it's the reactive per-knob
+    // object) — extractMechanicalKnobs would otherwise silently fall back
+    // to its own 300dpi default for the LIVE PREVIEW's mesh-aware
+    // despeckle, never the real document. imageResolution is the real
+    // value (see constructor); merge it in so the fallback is unreachable
+    // once a document is loaded.
+    getMechanicalKnobs() { return Reveal.engines.ParameterGenerator.extractMechanicalKnobs({ ...this.state, resolution: this.imageResolution }); }
     getPreview() { return this.previewBuffer; }
     getPalette() { return this._paletteSurgery.buildOverriddenPalette(); }
     getDNA() { return this.imageDNA; }
@@ -709,8 +721,11 @@ class SessionState extends EventEmitter {
         const trapSizePts = this.state.trapSize;
         if (!(trapSizePts > 0)) return null;
 
-        const dpi = this.imageResolution || 72;
-        const fullTrapPx = trapSizePts * dpi / 72;
+        // this.previewBuffer existing (checked above) implies a document is
+        // loaded, so imageResolution must already be the real value — no
+        // fallback. The trailing /72 is the points-per-inch unit constant
+        // (1pt = 1/72in), not a DPI guess.
+        const fullTrapPx = trapSizePts * this.imageResolution / 72;
         const proxyTrapPx = Math.max(1, Math.round(fullTrapPx * sep.width / this.imageWidth));
 
         const zoneResult = Reveal.TrapEngine.computeTrapZones(

@@ -447,6 +447,60 @@ function initPlugin() {
             });
         }
 
+        // ─── Black Snap (preprocessing — load-time only) ─────────
+        // Not a reactive knob: it must run once, on the full-resolution
+        // source, before DNA/proxy/anything derives from it (see
+        // SessionState._loadImageImpl). Changing it after a document is
+        // already loaded can't take effect without rereading the document
+        // from Photoshop — which also wipes palette edits (SessionState.reset()
+        // is unconditional on reread) — so this is wired as its own confirm
+        // flow instead of going through MechanicalKnobs/updateParameter().
+        const chkBlackSnap = document.getElementById('chk-blackSnap');
+        const blackSnapConfirm = document.getElementById('blacksnap-confirm');
+        const blackSnapConfirmOk = document.getElementById('blacksnap-confirm-ok');
+        const blackSnapConfirmCancel = document.getElementById('blacksnap-confirm-cancel');
+
+        if (chkBlackSnap) {
+            // Reflect the session's current value whenever a document loads
+            // (covers both initial load and post-reread re-sync).
+            sessionState.on('proxyReady', () => {
+                chkBlackSnap.checked = !!sessionState.state.blackSnap;
+            });
+
+            chkBlackSnap.addEventListener('change', () => {
+                const newValue = chkBlackSnap.checked;
+
+                // No document loaded yet — nothing to reread, just set the
+                // value for the next initial load.
+                if (!sessionState.proxyEngine) {
+                    sessionState.state.blackSnap = newValue;
+                    return;
+                }
+
+                chkBlackSnap.disabled = true;
+                if (blackSnapConfirm) blackSnapConfirm.setAttribute('style', 'display: block');
+
+                const cleanup = () => {
+                    if (blackSnapConfirm) blackSnapConfirm.setAttribute('style', 'display: none');
+                    chkBlackSnap.disabled = false;
+                    blackSnapConfirmOk.removeEventListener('click', onOk);
+                    blackSnapConfirmCancel.removeEventListener('click', onCancel);
+                };
+                const onOk = () => {
+                    sessionState.state.blackSnap = newValue;
+                    cleanup();
+                    ingestActiveDocument(true);
+                };
+                const onCancel = () => {
+                    chkBlackSnap.checked = !newValue; // revert the visual toggle
+                    cleanup();
+                };
+
+                blackSnapConfirmOk.addEventListener('click', onOk);
+                blackSnapConfirmCancel.addEventListener('click', onCancel);
+            });
+        }
+
         // Wire error overlay OK button
         const btnOk = document.getElementById('btn-error-ok');
         if (btnOk) {
@@ -715,10 +769,20 @@ async function ingestActiveDocument(showDialog) {
             await PhotoshopBridge.getDocumentLab();
         logger.log(`[Navigator] Ingested ${width}x${height} from ${validation.info.name}`);
 
+        // Must be set BEFORE loadImage() -- _loadImageImpl reads
+        // this.imageResolution during the load itself (black snap's edge
+        // radius, mechanical knobs' mesh dpi), not just afterward (trap
+        // overlay, production commit). sessionState.reset() (called at the
+        // top of this function) already zeroed it back to null; setting it
+        // after loadImage would mean the load runs on unknown/stale data.
+        // No fallback: validation.info.resolution is the real document
+        // resolution (PhotoshopBridge reads doc.resolution directly), and
+        // validateDocument() above already rejected the "no document" case.
+        sessionState.imageResolution = validation.info.resolution;
+
         // ── Phases 2-3 are driven by SessionState.loadImage progress events ──
         // Progress screen stays visible until background scoring completes (scoringComplete event).
         await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
-        sessionState.imageResolution = validation.info.resolution || 72;
         _showProgress('Scoring archetypes\u2026', 85);
 
     } catch (err) {

@@ -459,8 +459,8 @@ describe('_applyConfigToState injects production knob defaults into config', () 
 
         session._applyConfigToState(config);
 
-        expect(config.trapSize).toBe(0);
-        expect(session.state.trapSize).toBe(0);
+        expect(config.trapSize).toBe(2);
+        expect(session.state.trapSize).toBe(2);
     });
 
     it('swapArchetype emits configChanged with trapSize for fresh archetypes', async () => {
@@ -473,7 +473,7 @@ describe('_applyConfigToState injects production knob defaults into config', () 
         await s.swapArchetype(ARCHETYPE_B);
 
         expect(configs.length).toBeGreaterThan(0);
-        expect(configs[configs.length - 1].trapSize).toBe(0);
+        expect(configs[configs.length - 1].trapSize).toBe(2);
     });
 
     it('swapArchetype emits configChanged with default trapSize (session-level, not cached)', async () => {
@@ -488,7 +488,7 @@ describe('_applyConfigToState injects production knob defaults into config', () 
         await s.swapArchetype(ARCHETYPE_A);
 
         expect(configs.length).toBeGreaterThan(0);
-        expect(configs[configs.length - 1].trapSize).toBe(0);
+        expect(configs[configs.length - 1].trapSize).toBe(2);
     });
 });
 

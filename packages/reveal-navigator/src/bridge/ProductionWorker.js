@@ -50,6 +50,13 @@ class ProductionWorker {
         if (!labPalette || labPalette.length === 0) {
             throw new Error('No palette available — run navigation first');
         }
+        // Resolution must always come from the document (SessionState.imageResolution,
+        // read from doc.resolution at ingest). No fallback — if this is ever
+        // missing, every downstream mesh/trap/black-snap calculation would be
+        // silently wrong, so fail loudly here instead.
+        if (!(prodConfig.resolution > 0)) {
+            throw new Error(`Document resolution unknown (${prodConfig.resolution}) — cannot compute mesh/trap physics. This should never happen for a loaded document; re-open the Navigator panel.`);
+        }
 
         // ── DIAGNOSTIC: dump archetype + metric + palette ──
         logger.log(`[ProductionWorker] ── FINALIZE CONFIG ──`);
@@ -57,7 +64,7 @@ class ProductionWorker {
         logger.log(`[ProductionWorker]   distanceMetric: ${prodConfig.distanceMetric}`);
         logger.log(`[ProductionWorker]   targetColors: ${prodConfig.targetColors}`);
         logger.log(`[ProductionWorker]   preprocessing: ${prodConfig.preprocessingIntensity}, dither: ${prodConfig.ditherType}`);
-        logger.log(`[ProductionWorker]   knobs: minVol=${prodConfig.minVolume} spkl=${prodConfig.speckleRescue} shd=${prodConfig.shadowClamp} trap=${prodConfig.trapSize || 0}pt (${Math.round((prodConfig.trapSize || 0) * (prodConfig.resolution || 72) / 72)}px @ ${prodConfig.resolution || 72}dpi)`);
+        logger.log(`[ProductionWorker]   knobs: minVol=${prodConfig.minVolume} spkl=${prodConfig.speckleRescue} shd=${prodConfig.shadowClamp} trap=${prodConfig.trapSize || 0}pt (${Math.round((prodConfig.trapSize || 0) * prodConfig.resolution / 72)}px @ ${prodConfig.resolution}dpi)`);
         logger.log(`[ProductionWorker]   separationPalette: ${prodConfig.separationPalette ? prodConfig.separationPalette.length + ' colors' : 'MISSING'}`);
         if (prodConfig.separationPalette) {
             for (let i = 0; i < prodConfig.separationPalette.length; i++) {
@@ -169,12 +176,12 @@ class ProductionWorker {
             // Separation uses BASELINE palette so palette overrides do not
             // deflect the nearest-neighbour search. Override colours are layer
             // fill colours only — they live in labPalette, not separationPalette.
-            // dpi MUST match the document's real resolution convention used
-            // elsewhere in this file (trap sizing below) — mapPixelsToPaletteAsync
-            // defaults to 300 internally, which silently mismatches a 72dpi
-            // document and inflates Macro-Cell dithering ~4x too coarse.
+            // dpi MUST be the document's real resolution (guarded above) — it
+            // has to match what trap sizing below uses, and mapPixelsToPaletteAsync
+            // defaults to 300 internally if omitted, which would silently
+            // mismatch and inflate Macro-Cell dithering.
             const meshCount = prodConfig.meshSize || null;
-            const dpi = prodConfig.resolution || 72;
+            const dpi = prodConfig.resolution;
             logger.log(`[ProductionWorker] Separating: ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'} @ ${dpi} dpi`);
             const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
                 labPixels, separationPalette, null, actualWidth, actualHeight,
@@ -396,9 +403,10 @@ class ProductionWorker {
             MechanicalKnobs.applyShadowClamp(masks, colorIndices, labPalette, width, height, knobs.shadowClamp);
         }
 
-        // Apply trapping — convert points → pixels using document DPI
-        const dpi = this._sessionState.imageResolution || 72;
-        const trapPx = Math.round((knobs.trapSize || 0) * dpi / 72);
+        // Apply trapping — convert points → pixels using document DPI.
+        // A loupe tile only generates for an already-loaded document, so
+        // imageResolution is always the real value here — no fallback.
+        const trapPx = Math.round((knobs.trapSize || 0) * this._sessionState.imageResolution / 72);
         if (trapPx > 0) {
             const TrapEngine = Reveal.TrapEngine;
             TrapEngine.applyTrapping(masks, labPalette, width, height, trapPx);
