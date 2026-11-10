@@ -143,6 +143,7 @@ class SessionState extends EventEmitter {
         this.state.highlightColorIndex = -1;
         this.state.trapSize = 2;
         this.state.meshSize = 355;
+        this.state.blackSnap = false;
     }
 
     // ─── Lifecycle ───────────────────────────────────────────
