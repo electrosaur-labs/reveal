@@ -20,6 +20,7 @@
 
 const logger = require("../utils/logger");
 const DitheringStrategies = require("./DitheringStrategies");
+const { PRINT_FACTOR } = require("../utils/MeshPhysics");
 const {
     DistanceMetric,
     // Perceptual space functions (deprecated for 16-bit pipelines)
@@ -111,7 +112,7 @@ class SeparationEngine {
         // If no meshCount provided, scale = 1 (no clustering)
         let scale = 1;
         if (meshCount) {
-            const maxLPI = meshCount / 7;
+            const maxLPI = meshCount / PRINT_FACTOR;
             scale = Math.max(1, Math.round(dpi / maxLPI));
         }
 
@@ -123,16 +124,87 @@ class SeparationEngine {
         // Route to appropriate dithering strategy
         const strategy = DitheringStrategies.DitheringStrategies[ditherType];
         if (strategy) {
-            // Ordered dithering (bayer) needs scale parameter
+            // Ordered dithering (bayer) threshold-samples at Macro-Cell granularity
             if (ditherType === 'bayer') {
                 return strategy(rawBytes, labPalette, width, height, onProgress, scale);
             }
-            // Error diffusion (floyd-steinberg, atkinson, stucki) doesn't need scale
+            // Error diffusion (floyd-steinberg, atkinson, stucki): at scale > 1, run the
+            // diffusion at reduced (Macro-Cell) resolution so every dot it produces is
+            // guaranteed >= scale px wide, then replicate back to full resolution. Without
+            // this, error diffusion decides per-PIXEL and routinely emits 1px dots —
+            // nowhere near the mesh-opening minimum regardless of meshCount.
+            if (scale > 1) {
+                return this._mapPixelsBlockDithered(rawBytes, labPalette, width, height, onProgress, strategy, scale);
+            }
             return strategy(rawBytes, labPalette, width, height, onProgress);
         }
 
         // Fallback to nearest-neighbor for unknown types
         return this._mapPixelsNearestNeighbor(rawBytes, labPalette, onProgress);
+    }
+
+    /**
+     * Run a per-pixel dithering strategy at reduced (Macro-Cell) resolution,
+     * then replicate each decision back to a full-resolution block.
+     *
+     * Each full-res pixel in a `scale`×`scale` block is collapsed to one
+     * block-average Lab sample (16-bit channel averaging is exact here —
+     * the perceptual<->16-bit mapping is affine, so averaging commutes),
+     * the dithering strategy runs once per block, and the resulting index
+     * is replicated to every pixel in that block. This guarantees every
+     * isolated dot the strategy can produce is exactly `scale` px wide in
+     * both dimensions — a hard structural guarantee, not a statistical one.
+     *
+     * @param {Uint16Array} rawBytes
+     * @param {Array<{L,a,b}>} labPalette
+     * @param {number} width
+     * @param {number} height
+     * @param {Function} onProgress
+     * @param {Function} strategy - One of DitheringStrategies' per-pixel functions
+     * @param {number} scale - Macro-Cell size in pixels (> 1)
+     * @returns {Promise<Uint8Array>}
+     */
+    static async _mapPixelsBlockDithered(rawBytes, labPalette, width, height, onProgress, strategy, scale) {
+        const blockW = Math.ceil(width / scale);
+        const blockH = Math.ceil(height / scale);
+
+        const blockSums = new Float64Array(blockW * blockH * 3);
+        const blockCounts = new Uint32Array(blockW * blockH);
+
+        for (let y = 0; y < height; y++) {
+            const by = Math.floor(y / scale);
+            for (let x = 0; x < width; x++) {
+                const bx = Math.floor(x / scale);
+                const bi = by * blockW + bx;
+                const pi = (y * width + x) * 3;
+                blockSums[bi * 3] += rawBytes[pi];
+                blockSums[bi * 3 + 1] += rawBytes[pi + 1];
+                blockSums[bi * 3 + 2] += rawBytes[pi + 2];
+                blockCounts[bi]++;
+            }
+        }
+
+        const blockBytes = new Uint16Array(blockW * blockH * 3);
+        for (let bi = 0; bi < blockW * blockH; bi++) {
+            const n = blockCounts[bi] || 1;
+            blockBytes[bi * 3] = Math.round(blockSums[bi * 3] / n);
+            blockBytes[bi * 3 + 1] = Math.round(blockSums[bi * 3 + 1] / n);
+            blockBytes[bi * 3 + 2] = Math.round(blockSums[bi * 3 + 2] / n);
+        }
+
+        const blockIndices = await strategy(blockBytes, labPalette, blockW, blockH, null);
+
+        const colorIndices = new Uint8Array(width * height);
+        for (let y = 0; y < height; y++) {
+            const by = Math.floor(y / scale);
+            for (let x = 0; x < width; x++) {
+                const bx = Math.floor(x / scale);
+                colorIndices[y * width + x] = blockIndices[by * blockW + bx];
+            }
+        }
+
+        if (onProgress) onProgress(100);
+        return colorIndices;
     }
 
     /**
@@ -559,6 +631,151 @@ class SeparationEngine {
         for (const cluster of clustersToRemove) {
             for (const pixelIdx of cluster) {
                 mask[pixelIdx] = 0;
+            }
+        }
+
+        return { clustersRemoved, pixelsRemoved };
+    }
+
+    /**
+     * Exact squared Euclidean distance transform: for every pixel, the
+     * squared distance to the nearest BACKGROUND (mask value 0) pixel.
+     *
+     * This is the basis for an erosion test: a foreground pixel whose
+     * distance to the nearest background pixel is >= r means a disk of
+     * radius r centered there fits entirely inside the mask.
+     *
+     * Felzenszwalb & Huttenlocher two-pass algorithm (lower envelope of
+     * parabolas) — O(width * height), exact (not an approximation).
+     *
+     * @param {Uint8Array} mask - Binary mask (0 = background, >0 = foreground)
+     * @param {number} width
+     * @param {number} height
+     * @returns {Float64Array} Squared distance to nearest background pixel
+     */
+    static _squaredDistanceToBackground(mask, width, height) {
+        const INF = width * width + height * height + 1;
+        const g = new Float64Array(width * height);
+        for (let i = 0; i < g.length; i++) g[i] = mask[i] === 0 ? 0 : INF;
+
+        // 1D lower-envelope distance transform: d[q] = min_p (q-p)^2 + f[p]
+        const dt1d = (f, n, out) => {
+            const v = new Int32Array(n);
+            const z = new Float64Array(n + 1);
+            let k = 0;
+            v[0] = 0;
+            z[0] = -Infinity;
+            z[1] = Infinity;
+            for (let q = 1; q < n; q++) {
+                let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+                while (s <= z[k]) {
+                    k--;
+                    s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+                }
+                k++;
+                v[k] = q;
+                z[k] = s;
+                z[k + 1] = Infinity;
+            }
+            k = 0;
+            for (let q = 0; q < n; q++) {
+                while (z[k + 1] < q) k++;
+                out[q] = (q - v[k]) * (q - v[k]) + f[v[k]];
+            }
+        };
+
+        // Pass 1: transform along columns (y)
+        const colIn = new Float64Array(height);
+        const colOut = new Float64Array(height);
+        for (let x = 0; x < width; x++) {
+            for (let y = 0; y < height; y++) colIn[y] = g[y * width + x];
+            dt1d(colIn, height, colOut);
+            for (let y = 0; y < height; y++) g[y * width + x] = colOut[y];
+        }
+
+        // Pass 2: transform along rows (x)
+        const rowIn = new Float64Array(width);
+        const rowOut = new Float64Array(width);
+        for (let y = 0; y < height; y++) {
+            const base = y * width;
+            for (let x = 0; x < width; x++) rowIn[x] = g[base + x];
+            dt1d(rowIn, width, rowOut);
+            for (let x = 0; x < width; x++) g[base + x] = rowOut[x];
+        }
+
+        return g;
+    }
+
+    /**
+     * Span-aware despeckle: removes connected components that never attain
+     * the minimum span, i.e. no point inside the component is far enough
+     * from its boundary to fit an inscribed disk of diameter `minSpanPx`.
+     *
+     * This differs from `_despeckleMask`, which only compares total pixel
+     * AREA to a threshold. Area is not a valid proxy for "span" — a thin,
+     * elongated cluster (a hairline, an antialiasing sliver) can have
+     * enough total area to clear an area threshold while being far narrower
+     * than `minSpanPx` in its thin dimension. The erosion test below catches
+     * that case: it only keeps a component if it is wide enough SOMEWHERE,
+     * which is the physically correct test for "does this fit through (or
+     * past) a screen mesh opening of the given size."
+     *
+     * @param {Uint8Array} mask - Binary mask (mutated in place)
+     * @param {number} width
+     * @param {number} height
+     * @param {number} minSpanPx - Required minimum diameter, in pixels
+     * @returns {{clustersRemoved: number, pixelsRemoved: number}}
+     */
+    static _despeckleMaskBySpan(mask, width, height, minSpanPx) {
+        if (!(minSpanPx > 1)) return { clustersRemoved: 0, pixelsRemoved: 0 };
+
+        const pixelCount = width * height;
+        const sqDist = SeparationEngine._squaredDistanceToBackground(mask, width, height);
+        const requiredRadius = minSpanPx / 2;
+        const requiredSqRadius = requiredRadius * requiredRadius;
+
+        const visited = new Uint8Array(pixelCount);
+        const stack = new Uint32Array(pixelCount);
+        let clustersRemoved = 0;
+        let pixelsRemoved = 0;
+
+        for (let i = 0; i < pixelCount; i++) {
+            if (mask[i] === 0 || visited[i] === 1) continue;
+
+            const clusterPixels = [];
+            let stackPtr = 0;
+            let hasRequiredSpan = false;
+
+            stack[stackPtr++] = i;
+            visited[i] = 1;
+
+            while (stackPtr > 0) {
+                const idx = stack[--stackPtr];
+                clusterPixels.push(idx);
+                if (sqDist[idx] >= requiredSqRadius) hasRequiredSpan = true;
+
+                const x = idx % width;
+                const y = Math.floor(idx / width);
+
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                        const nIdx = ny * width + nx;
+                        if (mask[nIdx] > 0 && visited[nIdx] === 0) {
+                            stack[stackPtr++] = nIdx;
+                            visited[nIdx] = 1;
+                        }
+                    }
+                }
+            }
+
+            if (!hasRequiredSpan) {
+                clustersRemoved++;
+                pixelsRemoved += clusterPixels.length;
+                for (const idx of clusterPixels) mask[idx] = 0;
             }
         }
 

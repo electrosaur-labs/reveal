@@ -367,6 +367,9 @@ async function posterizeImage(labPixels, width, height, colorCount, parameters =
  * @param {Object} [parameters.cie94Params] - CIE94 parameters { kL, k1, k2 }
  * @param {number} [parameters.lWeight=1.5] - Lightness weight for distance (CIE76 only)
  * @param {number} [parameters.snapThreshold=2.0] - Early exit threshold (ΔE)
+ * @param {number} [parameters.meshCount] - Screen mesh TPI (e.g. 230) — enables mesh-aware
+ *   Macro-Cell dithering so dots can't be smaller than the Rule-of-7 minimum
+ * @param {number} [parameters.dpi=300] - Image DPI, used with meshCount for scale calculation
  * @param {Function} [onProgress] - Progress callback (percent: 0-100)
  * @returns {Promise<Object>} Separation result
  * @returns {Uint8Array} returns.colorIndices - Palette index per pixel (0 to palette.length-1)
@@ -383,6 +386,8 @@ async function separateImage(labPixels, palette, width, height, parameters = {},
     const ditherType = parameters.ditherType || 'none';
     const distanceMetric = parameters.distanceMetric || 'cie76';
     const cie94Params = parameters.cie94Params;
+    const meshCount = parameters.meshCount;
+    const dpi = parameters.dpi;
 
     const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
         labPixels,
@@ -390,7 +395,7 @@ async function separateImage(labPixels, palette, width, height, parameters = {},
         onProgress,
         width,
         height,
-        { ditherType, distanceMetric, cie94Params }
+        { ditherType, distanceMetric, cie94Params, meshCount, dpi }
     );
 
     return {

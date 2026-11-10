@@ -448,6 +448,14 @@ class ProductionWorker {
             MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, speckleRescue, 0, meshSize || 0, imageDpi || 0);
         }
 
+        // ── Rule of 7: hard physical floor on the committed output ──
+        // Always enforced here (production commit), independent of the
+        // speckleRescue slider/meshSize defaulting above — this is the actual
+        // deliverable, not interactive preview state.
+        MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+            meshTPI: meshSize || 0, imageDpi: imageDpi || 0
+        });
+
         // ── Apply shadowClamp (shared with ProxyEngine) ──
         // Uses tonal-aware edge erosion (same algorithm as proxy preview)
         if (shadowClamp > 0) {

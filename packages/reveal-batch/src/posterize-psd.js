@@ -229,7 +229,11 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
     console.log(`  Generated ${posterizeResult.paletteLab.length} colors`);
 
     // 7. Map pixels to palette (initial assignment)
-    console.log(`  Mapping pixels to palette...`);
+    // Rule of 7: mesh/dpi default to the industry-standard 230 TPI / 300 DPI
+    // (same canonical helper the Navigator uses) so dithering is always
+    // mesh-aware, even when the config never specified a mesh count.
+    const meshKnobs = ParameterGenerator.extractMechanicalKnobs(config);
+    console.log(`  Mapping pixels to palette (mesh=${meshKnobs.meshSize} TPI @ ${meshKnobs.imageDpi} DPI)...`);
     const SeparationEngine = Reveal.engines.SeparationEngine;
 
     let colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
@@ -240,7 +244,9 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         height,
         {
             ditherType: config.ditherType,
-            distanceMetric: config.distanceMetric
+            distanceMetric: config.distanceMetric,
+            meshCount: meshKnobs.meshSize,
+            dpi: meshKnobs.imageDpi
         }
     );
 
@@ -280,6 +286,13 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
         console.log(chalk.yellow(`  🧹 speckleRescue=${config.speckleRescue}px`));
         MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, config.speckleRescue);
     }
+
+    // Rule of 7 is a hard physical floor on the final output — always
+    // enforced, independent of the speckleRescue slider above.
+    console.log(chalk.yellow(`  🧹 mesh floor: ${meshKnobs.meshSize} TPI @ ${meshKnobs.imageDpi} DPI`));
+    MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+        meshTPI: meshKnobs.meshSize, imageDpi: meshKnobs.imageDpi
+    });
 
     // NOTE: shadowClamp is a no-op on binary masks (all values are 0 or 255).
     // The old inline code (`if mask[i] > 0 && mask[i] < threshold`) never triggered.

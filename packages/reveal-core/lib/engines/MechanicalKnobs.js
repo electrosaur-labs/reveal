@@ -18,6 +18,7 @@
  */
 
 const SeparationEngine = require('./SeparationEngine');
+const MeshPhysics = require('../utils/MeshPhysics');
 
 class MechanicalKnobs {
 
@@ -163,64 +164,105 @@ class MechanicalKnobs {
     /**
      * Apply speckleRescue: morphological despeckle + BFS healing.
      *
-     * Removes isolated pixel clusters whose area falls below a threshold derived
-     * from the slider value, then BFS-heals orphaned pixels into surrounding colors.
+     * Removes isolated pixel clusters whose SPAN (minimum diameter — see
+     * `SeparationEngine._despeckleMaskBySpan`) falls below a threshold
+     * derived from the slider value, then BFS-heals orphaned pixels into
+     * surrounding colors.
      *
-     * UNITS: the slider and `meshTPI`-derived value are LINEAR pixel dimensions.
-     * They are squared internally before being compared to `clusterPixels.length`
-     * (which is a pixel count / area). A slider value of 7 means "remove blobs
-     * smaller than 7×7 = 49 pixels", not "smaller than 7 pixels".
+     * This is the artist's creative despeckle control: sliderPx=0 with no
+     * meshTPI is a deliberate no-op (ProxyEngine's preview/undo machinery
+     * relies on "zero knobs" reproducing the clean baseline exactly). The
+     * mesh-physics HARD FLOOR (Rule of 7 — no isolated element may span
+     * less than PRINT_FACTOR mesh openings) is enforced separately, always,
+     * at final-output time — see `enforceMeshRuleOfSeven`.
      *
-     * AUTO-COMPUTE (sliderPx = 0): derives the minimum printable dot size from
-     * press physics — PRINT_FACTOR × (imageDpi / meshTPI). At 300 DPI / 230 TPI
-     * with PRINT_FACTOR=7 this yields 10 px linear → 100 px area. Dots smaller
-     * than this fall through the mesh opening and either wash out or clog the screen.
+     * AUTO-COMPUTE (sliderPx = 0, meshTPI > 0): derives a size from press
+     * physics via MeshPhysics.minDotPx(meshTPI, imageDpi).
      *
-     * PROXY SCALING: the linear dimension is divided by linearScale (not sqrt)
-     * so the proxy area threshold correctly mirrors the production threshold.
+     * UNITS: `sliderPx` and the mesh-derived value are LINEAR pixel
+     * dimensions (minimum diameter), not area.
+     *
+     * PROXY SCALING: the linear dimension is divided by linearScale so the
+     * proxy threshold correctly mirrors the production threshold.
      *
      * @param {Array<Uint8Array>} masks        Per-color binary masks (mutated)
      * @param {Uint8Array}        colorIndices Per-pixel palette index (mutated by healing)
      * @param {number}            width        Image width in pixels
      * @param {number}            height       Image height in pixels
-     * @param {number}            sliderPx     Linear slider value (0 = auto from mesh physics)
+     * @param {number}            sliderPx     Linear slider value (0 = auto from mesh physics, or no-op if meshTPI also 0)
      * @param {number}            [originalWidth] Full document width (for proxy scaling)
      * @param {number}            [meshTPI=0]  Screen mesh threads-per-inch (e.g. 230)
      * @param {number}            [imageDpi=0] Document DPI; 0 → assume 300
      */
     static applySpeckleRescue(masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI = 0, imageDpi = 0) {
-        const PRINT_FACTOR = 7;
-
-        // Resolve linear threshold (px):
-        //   sliderPx > 0 → user-specified linear dimension
-        //   sliderPx = 0 → auto-compute from press physics: PRINT_FACTOR × (dpi / meshTPI)
-        //                   At 300 DPI / 230 TPI: ceil(7 × 300 / 230) = 10 px → 100 px² area
         let linearPx;
         if (sliderPx > 0) {
             linearPx = sliderPx;
         } else if (meshTPI > 0) {
-            const dpi = imageDpi > 0 ? imageDpi : 300;
-            linearPx = Math.max(1, Math.ceil(PRINT_FACTOR * dpi / meshTPI));
+            linearPx = MeshPhysics.minDotPx(meshTPI, imageDpi);
         } else {
             return;
         }
 
         // Scale down for proxy: a blob N px wide at full-res is N/linearScale px
-        // wide at proxy, so divide the linear dimension (area scales as 1/scale²).
+        // wide at proxy.
         let effectiveLinearPx = linearPx;
         if (originalWidth && originalWidth > width) {
             const linearScale = originalWidth / width;
             effectiveLinearPx = Math.max(1, Math.round(linearPx / linearScale));
         }
 
-        // _despeckleMask compares clusterPixels.length (area) to this threshold.
-        const areaThreshold = effectiveLinearPx * effectiveLinearPx;
-
         for (let colorIdx = 0; colorIdx < masks.length; colorIdx++) {
-            SeparationEngine._despeckleMask(masks[colorIdx], width, height, areaThreshold);
+            SeparationEngine._despeckleMaskBySpan(masks[colorIdx], width, height, effectiveLinearPx);
         }
 
         MechanicalKnobs.healOrphanedPixels(masks, colorIndices, width, height);
+    }
+
+    /**
+     * Enforce the Rule of 7: no isolated printed element may span less than
+     * PRINT_FACTOR mesh openings. Unlike `applySpeckleRescue` (the artist's
+     * creative despeckle knob), this is a hard physical constraint on the
+     * FINAL output and is always applied, unconditionally — meshTPI/imageDpi
+     * default to the industry-standard 230 TPI / 300 DPI (see MeshPhysics)
+     * when the caller doesn't know its press/image specifics.
+     *
+     * Call this once, at the point a separation is actually committed to a
+     * deliverable (PSD/plates/export, or a Photoshop production render) —
+     * not inside interactive preview/undo state, which intentionally keeps
+     * "zero knobs" identical to the clean baseline.
+     *
+     * @param {Array<Uint8Array>} masks        Per-color binary masks (mutated)
+     * @param {Uint8Array}        colorIndices Per-pixel palette index (mutated by healing)
+     * @param {number}            width
+     * @param {number}            height
+     * @param {Object}            [options]
+     * @param {number}            [options.meshTPI=0]     Screen mesh TPI; 0 → default (230)
+     * @param {number}            [options.imageDpi=0]    Document DPI; 0 → default (300)
+     * @param {number}            [options.originalWidth] Full document width (for proxy scaling)
+     * @returns {{clustersRemoved: number, pixelsRemoved: number}} Aggregate across all colors
+     */
+    static enforceMeshRuleOfSeven(masks, colorIndices, width, height, options = {}) {
+        const { meshTPI = 0, imageDpi = 0, originalWidth = 0 } = options;
+        const floorPx = MeshPhysics.minDotPx(meshTPI, imageDpi);
+
+        let effectiveFloorPx = floorPx;
+        if (originalWidth && originalWidth > width) {
+            const linearScale = originalWidth / width;
+            effectiveFloorPx = Math.max(1, Math.round(floorPx / linearScale));
+        }
+
+        let clustersRemoved = 0;
+        let pixelsRemoved = 0;
+        for (let colorIdx = 0; colorIdx < masks.length; colorIdx++) {
+            const result = SeparationEngine._despeckleMaskBySpan(masks[colorIdx], width, height, effectiveFloorPx);
+            clustersRemoved += result.clustersRemoved;
+            pixelsRemoved += result.pixelsRemoved;
+        }
+
+        MechanicalKnobs.healOrphanedPixels(masks, colorIndices, width, height);
+
+        return { clustersRemoved, pixelsRemoved };
     }
 
     /**

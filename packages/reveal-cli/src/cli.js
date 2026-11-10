@@ -31,6 +31,7 @@ program
     .option('--min-volume <percent>', 'Minimum coverage threshold (0-5%)', parseFloat)
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
     .option('--shadow-clamp <percent>', 'Ink body clamp (0-20%)', parseFloat)
+    .option('--mesh-tpi <n>', 'Screen mesh threads-per-inch, e.g. 230, 305 (default: 230)', parseFloat)
     .option('--single', 'Single archetype mode (default if --archetype provided)')
     .option('--compare', 'Compare mode: Chameleon, Distilled, Salamander + top DNA match (default)')
     .option('--recipe <path>', 'Load settings from recipe JSON')
@@ -107,6 +108,7 @@ async function run(inputFile, options) {
                 minVolume: options.minVolume,
                 speckleRescue: options.speckleRescue,
                 shadowClamp: options.shadowClamp,
+                meshTpi: options.meshTpi,
             });
             // Merge recipe outputs with CLI formats
             const recipeFormats = recipe.outputs || [];
@@ -160,6 +162,7 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
         minVolume: options.minVolume,
         speckleRescue: options.speckleRescue,
         shadowClamp: options.shadowClamp,
+        meshTpi: options.meshTpi,
         trap: options.trap,
         onProgress,
     });
@@ -223,6 +226,7 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
             minVolume: result.config.minVolume,
             speckleRescue: result.config.speckleRescue,
             shadowClamp: result.config.shadowClamp,
+            meshTpi: result.config.meshSize,
         });
         log(`Saved recipe: ${options.saveRecipe}`);
     }
@@ -258,6 +262,7 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
             minVolume: options.minVolume,
             speckleRescue: options.speckleRescue,
             shadowClamp: options.shadowClamp,
+            meshTpi: options.meshTpi,
             trap: options.trap,
             dna, // Shared DNA
             onProgress: (phase, msg) => verbose(`[${archId}/${phase}] ${msg}`),
@@ -313,6 +318,7 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
                     minVolume: result.config.minVolume,
                     speckleRescue: result.config.speckleRescue,
                     shadowClamp: result.config.shadowClamp,
+                    meshTpi: result.config.meshSize,
                 });
             }
         }

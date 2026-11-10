@@ -25,10 +25,18 @@ async function separate(card, session) {
     const { lab16bit, width, height } = session;
     const { _paletteLab: paletteLab, _paletteRgb: paletteRgb, _config: config } = card;
 
+    // Rule of 7: mesh/dpi default to the industry-standard 230 TPI / 300 DPI
+    // (same canonical helper the Navigator uses) so dithering and despeckle
+    // are always mesh-aware, even when the config never specified a mesh count.
+    const meshKnobs = Reveal.ParameterGenerator.extractMechanicalKnobs(config);
+
     const SeparationEngine = Reveal.engines.SeparationEngine;
     const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
         lab16bit, paletteLab, null, width, height,
-        { ditherType: config.ditherType, distanceMetric: config.distanceMetric }
+        {
+            ditherType: config.ditherType, distanceMetric: config.distanceMetric,
+            meshCount: meshKnobs.meshSize, dpi: meshKnobs.imageDpi
+        }
     );
 
     const pixelCount = width * height;
@@ -38,6 +46,12 @@ async function separate(card, session) {
     if (config.speckleRescue > 0) {
         MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, config.speckleRescue);
     }
+
+    // Rule of 7 is a hard physical floor on the final output — always
+    // enforced, independent of the speckleRescue slider above.
+    MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+        meshTPI: meshKnobs.meshSize, imageDpi: meshKnobs.imageDpi
+    });
 
     const hexColors = paletteRgb.map(rgb =>
         '#' + [rgb.r, rgb.g, rgb.b].map(c => Math.round(c).toString(16).padStart(2, '0')).join('').toUpperCase()

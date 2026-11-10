@@ -151,6 +151,7 @@ async function processSingle(lab16bit, width, height, options = {}) {
     if (options.minVolume !== undefined) config.minVolume = options.minVolume;
     if (options.speckleRescue !== undefined) config.speckleRescue = options.speckleRescue;
     if (options.shadowClamp !== undefined) config.shadowClamp = options.shadowClamp;
+    if (options.meshTpi !== undefined) config.meshSize = options.meshTpi;
 
     // 3. Stride subsample to proxy (matches ProxyEngine._strideSubsample exactly)
     const proxy = strideSubsample(lab16bit, width, height, 1000);
@@ -180,11 +181,18 @@ async function processSingle(lab16bit, width, height, options = {}) {
     progress('posterize', `Generated ${posterizeResult.paletteLab.length} colors`);
 
     // 7. Map full-res pixels to locked palette (nearest-neighbor, no re-posterize)
-    progress('map', `Mapping ${width}x${height} full-res pixels to palette...`);
+    // Rule of 7: mesh/dpi default to the industry-standard 230 TPI / 300 DPI
+    // (same canonical helper the Navigator uses) so dithering is always
+    // mesh-aware, even when the caller never specified a mesh count.
+    const meshKnobs = Reveal.ParameterGenerator.extractMechanicalKnobs(config);
+    progress('map', `Mapping ${width}x${height} full-res pixels to palette (mesh=${meshKnobs.meshSize} TPI @ ${meshKnobs.imageDpi} DPI)...`);
     const SeparationEngine = Reveal.engines.SeparationEngine;
     let colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
         lab16bit, posterizeResult.paletteLab, null, width, height,
-        { ditherType: config.ditherType, distanceMetric: config.distanceMetric }
+        {
+            ditherType: config.ditherType, distanceMetric: config.distanceMetric,
+            meshCount: meshKnobs.meshSize, dpi: meshKnobs.imageDpi
+        }
     );
 
     let paletteLab = posterizeResult.paletteLab;
@@ -212,6 +220,13 @@ async function processSingle(lab16bit, width, height, options = {}) {
         progress('knobs', `speckleRescue=${config.speckleRescue}px`);
         MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, config.speckleRescue);
     }
+
+    // Rule of 7 is a hard physical floor on the final output — always
+    // enforced, independent of the speckleRescue slider above.
+    progress('knobs', `mesh floor: ${meshKnobs.meshSize} TPI @ ${meshKnobs.imageDpi} DPI`);
+    MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+        meshTPI: meshKnobs.meshSize, imageDpi: meshKnobs.imageDpi
+    });
 
     // 9. Trapping
     const trapPx = options.trap || 0;

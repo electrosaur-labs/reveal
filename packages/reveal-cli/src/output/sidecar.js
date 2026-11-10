@@ -46,6 +46,7 @@ function writeSidecar(outputPath, result, extra = {}) {
             minVolume: config.minVolume,
             speckleRescue: config.speckleRescue,
             shadowClamp: config.shadowClamp,
+            meshTpi: config.meshSize || 230,
             trap: extra.trap || 0,
         },
         outputs: extra.outputFiles || [],

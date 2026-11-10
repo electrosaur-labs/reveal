@@ -316,6 +316,98 @@ describe('SeparationEngine._despeckleMask', () => {
 });
 
 // ─────────────────────────────────────────────────
+// _despeckleMaskBySpan — the Rule-of-7 "mesh opening" test.
+//
+// Unlike _despeckleMask (area), this must catch elements that are too
+// NARROW even when they have plenty of total pixel area — the exact
+// failure mode area-based despeckle misses (a thin hairline/sliver).
+// ─────────────────────────────────────────────────
+
+describe('SeparationEngine._despeckleMaskBySpan', () => {
+    it('keeps a compact block that meets the minimum span', () => {
+        // 10x10 solid block — easily contains an inscribed 6px disk.
+        const width = 12, height = 12;
+        const mask = new Uint8Array(width * height);
+        for (let y = 1; y <= 10; y++) {
+            for (let x = 1; x <= 10; x++) mask[y * width + x] = 255;
+        }
+
+        const result = SeparationEngine._despeckleMaskBySpan(mask, width, height, 6);
+        expect(result.clustersRemoved).toBe(0);
+        expect(mask[5 * width + 5]).toBe(255);
+    });
+
+    it('removes a thin sliver that has MORE area than the required span^2 but is nowhere wide enough', () => {
+        // A 2px-wide x 40px-long sliver: area = 80, which would SURVIVE an
+        // area-based despeckle at threshold 6*6=36 (80 >= 36), but its width
+        // (2px) is far below the required 6px span in its narrow dimension.
+        const width = 45, height = 10;
+        const mask = new Uint8Array(width * height);
+        for (let x = 2; x < 42; x++) {
+            mask[4 * width + x] = 255;
+            mask[5 * width + x] = 255;
+        }
+        expect(mask.filter(v => v === 255).length).toBe(80); // sanity: area check would pass
+
+        const result = SeparationEngine._despeckleMaskBySpan(mask, width, height, 6);
+        expect(result.clustersRemoved).toBe(1);
+        expect(result.pixelsRemoved).toBe(80);
+        expect(mask.every(v => v === 0)).toBe(true);
+    });
+
+    it('keeps the compact blob and removes the thin sliver in the same mask', () => {
+        const width = 50, height = 20;
+        const mask = new Uint8Array(width * height);
+
+        // Compact 8x8 blob (meets span 6) at top-left.
+        for (let y = 1; y <= 8; y++) {
+            for (let x = 1; x <= 8; x++) mask[y * width + x] = 255;
+        }
+        // Thin 1px-wide, 30px-long line (fails span 6) across the bottom.
+        for (let x = 10; x < 40; x++) mask[15 * width + x] = 255;
+
+        const result = SeparationEngine._despeckleMaskBySpan(mask, width, height, 6);
+        expect(result.clustersRemoved).toBe(1);
+        expect(result.pixelsRemoved).toBe(30);
+        expect(mask[4 * width + 4]).toBe(255);   // compact blob survives
+        expect(mask[15 * width + 25]).toBe(0);   // thin line removed
+    });
+
+    it('is a no-op when minSpanPx <= 1', () => {
+        const mask = new Uint8Array(16);
+        mask[0] = 255;
+        const result = SeparationEngine._despeckleMaskBySpan(mask, 4, 4, 1);
+        expect(result.clustersRemoved).toBe(0);
+        expect(mask[0]).toBe(255);
+    });
+
+    it('handles an empty mask', () => {
+        const mask = new Uint8Array(100);
+        const result = SeparationEngine._despeckleMaskBySpan(mask, 10, 10, 6);
+        expect(result.clustersRemoved).toBe(0);
+        expect(result.pixelsRemoved).toBe(0);
+    });
+
+    it('keeps a square block that meets the span and removes a clearly-smaller one', () => {
+        // Two separate square blocks: side S (must survive) and side S/2
+        // (clearly too small in both dims — not a tight boundary case).
+        const width = 40, height = 20;
+        const S = 8;
+        const mask = new Uint8Array(width * height);
+
+        // Block A: S x S — must survive (inscribed disk of diameter S fits).
+        for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) mask[y * width + x] = 255;
+        // Block B: (S/2) x (S/2) — clearly too small, must be removed.
+        for (let y = 0; y < S / 2; y++) for (let x = 20; x < 20 + S / 2; x++) mask[y * width + x] = 255;
+
+        const result = SeparationEngine._despeckleMaskBySpan(mask, width, height, S);
+        expect(result.clustersRemoved).toBe(1);
+        expect(mask[3 * width + 3]).toBe(255);     // Block A survives
+        expect(mask[1 * width + 21]).toBe(0);      // Block B removed
+    });
+});
+
+// ─────────────────────────────────────────────────
 // pruneWeakColors
 // ─────────────────────────────────────────────────
 
