@@ -20,7 +20,7 @@
 
 const logger = require("../utils/logger");
 const DitheringStrategies = require("./DitheringStrategies");
-const { PRINT_FACTOR } = require("../utils/MeshPhysics");
+const { minDotPx } = require("../utils/MeshPhysics");
 const {
     DistanceMetric,
     // Perceptual space functions (deprecated for 16-bit pipelines)
@@ -72,7 +72,9 @@ class SeparationEngine {
      * LPI-AWARE DITHERING (Rule of 7):
      * - When meshCount is provided, dithering patterns are scaled to form "Macro-Cells"
      * - Prevents "Sieve Effect" where dots fall through mesh openings
-     * - Formula: maxLPI = meshCount / 7, scale = Math.round(dpi / maxLPI)
+     * - scale = MeshPhysics.minDotPx(meshCount, dpi) — same rounding as the
+     *   despeckle floor (MechanicalKnobs.enforceMeshRuleOfSeven), so Macro-Cells
+     *   are never built smaller than what the despeckle pass requires
      *
      * CONFIGURABLE DISTANCE METRIC (v2.1):
      * - distanceMetric: 'cie76' (default) or 'cie94'
@@ -108,12 +110,16 @@ class SeparationEngine {
         const dpi = options.dpi || 300;
         const distanceConfig = normalizeDistanceConfig(options);
 
-        // Calculate LPI-aware scale factor (Rule of 7)
-        // If no meshCount provided, scale = 1 (no clustering)
+        // Calculate LPI-aware scale factor (Rule of 7).
+        // MUST use the exact same rounding as MechanicalKnobs' despeckle floor
+        // (MeshPhysics.minDotPx, which rounds UP) — if this used a different
+        // rounding (e.g. nearest), Macro-Cells could be built 1px smaller than
+        // the despeckle floor and get immediately eaten by enforceMeshRuleOfSeven,
+        // destroying legitimate dithered texture on every dithered patch.
+        // If no meshCount provided, scale = 1 (no clustering).
         let scale = 1;
         if (meshCount) {
-            const maxLPI = meshCount / PRINT_FACTOR;
-            scale = Math.max(1, Math.round(dpi / maxLPI));
+            scale = minDotPx(meshCount, dpi);
         }
 
         // If no width/height or ditherType is 'none', use fast nearest-neighbor
@@ -707,23 +713,30 @@ class SeparationEngine {
     }
 
     /**
-     * Span-aware despeckle: removes connected components that never attain
-     * the minimum span, i.e. no point inside the component is far enough
-     * from its boundary to fit an inscribed disk of diameter `minSpanPx`.
+     * Span-aware despeckle: removes connected components that are neither
+     * a big-enough DOT nor a thin-but-genuinely-elongated LINE.
      *
      * This differs from `_despeckleMask`, which only compares total pixel
      * AREA to a threshold. Area is not a valid proxy for "span" — a thin,
      * elongated cluster (a hairline, an antialiasing sliver) can have
      * enough total area to clear an area threshold while being far narrower
-     * than `minSpanPx` in its thin dimension. The erosion test below catches
-     * that case: it only keeps a component if it is wide enough SOMEWHERE,
-     * which is the physically correct test for "does this fit through (or
-     * past) a screen mesh opening of the given size."
+     * than `minSpanPx` in its thin dimension.
+     *
+     * Two acceptance rules, either is sufficient:
+     *   - DOT: an inscribed disk of diameter `minSpanPx` fits somewhere in
+     *     the component (the erosion test — physically correct for "does
+     *     this isolated blob fit through/past a mesh opening").
+     *   - LINE: a continuous stroke can print reliably narrower than an
+     *     isolated dot, because it has continuous ink support along its
+     *     length rather than needing to land on open mesh in isolation.
+     *     A component that's thin (down to half the dot diameter) but
+     *     clearly elongated (bounding-box diagonal at least 2x the dot
+     *     diameter) survives as a line even though it fails the DOT rule.
      *
      * @param {Uint8Array} mask - Binary mask (mutated in place)
      * @param {number} width
      * @param {number} height
-     * @param {number} minSpanPx - Required minimum diameter, in pixels
+     * @param {number} minSpanPx - Required minimum dot diameter, in pixels
      * @returns {{clustersRemoved: number, pixelsRemoved: number}}
      */
     static _despeckleMaskBySpan(mask, width, height, minSpanPx) {
@@ -731,8 +744,15 @@ class SeparationEngine {
 
         const pixelCount = width * height;
         const sqDist = SeparationEngine._squaredDistanceToBackground(mask, width, height);
-        const requiredRadius = minSpanPx / 2;
-        const requiredSqRadius = requiredRadius * requiredRadius;
+
+        const dotRadius = minSpanPx / 2;
+        const dotSqRadius = dotRadius * dotRadius;
+
+        // Half the dot diameter is the standard rule of thumb for minimum
+        // printable line width vs. minimum printable isolated dot diameter.
+        const lineRadius = Math.max(0.5, minSpanPx / 4);
+        const lineSqRadius = lineRadius * lineRadius;
+        const minLineLength = minSpanPx * 2;
 
         const visited = new Uint8Array(pixelCount);
         const stack = new Uint32Array(pixelCount);
@@ -744,7 +764,9 @@ class SeparationEngine {
 
             const clusterPixels = [];
             let stackPtr = 0;
-            let hasRequiredSpan = false;
+            let hasDotSpan = false;
+            let hasLineWidth = false;
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
 
             stack[stackPtr++] = i;
             visited[i] = 1;
@@ -752,10 +774,15 @@ class SeparationEngine {
             while (stackPtr > 0) {
                 const idx = stack[--stackPtr];
                 clusterPixels.push(idx);
-                if (sqDist[idx] >= requiredSqRadius) hasRequiredSpan = true;
+                if (sqDist[idx] >= dotSqRadius) hasDotSpan = true;
+                if (sqDist[idx] >= lineSqRadius) hasLineWidth = true;
 
                 const x = idx % width;
                 const y = Math.floor(idx / width);
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
 
                 for (let dy = -1; dy <= 1; dy++) {
                     for (let dx = -1; dx <= 1; dx++) {
@@ -772,7 +799,15 @@ class SeparationEngine {
                 }
             }
 
-            if (!hasRequiredSpan) {
+            let survives = hasDotSpan;
+            if (!survives && hasLineWidth) {
+                const bboxW = maxX - minX;
+                const bboxH = maxY - minY;
+                const diagonal = Math.sqrt(bboxW * bboxW + bboxH * bboxH);
+                survives = diagonal >= minLineLength;
+            }
+
+            if (!survives) {
                 clustersRemoved++;
                 pixelsRemoved += clusterPixels.length;
                 for (const idx of clusterPixels) mask[idx] = 0;

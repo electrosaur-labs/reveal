@@ -31,17 +31,16 @@ function loadFixture(filename) {
 
 /**
  * Independent Rule-of-7 verifier: returns the sizes of connected
- * components that do NOT contain an inscribed disk of diameter
- * `requiredSpan` anywhere. An empty return means every isolated element
- * in the mask spans at least `requiredSpan` px somewhere.
+ * components that are neither a big-enough DOT nor a thin-but-elongated
+ * LINE. An empty return means every isolated element in the mask is
+ * Rule-of-7 compliant.
  *
- * This checks the same geometric property the fix relies on (a disk —
- * not a stricter axis-aligned square — fits inside the component
- * somewhere, which is the physically correct test for a round printed
- * dot), but via a brute-force per-pixel radius scan rather than the
- * Felzenszwalb two-pass distance transform SeparationEngine uses
- * internally — a different algorithm, so this test can't share a bug
- * with the implementation it's checking.
+ * Mirrors the contract SeparationEngine._despeckleMaskBySpan implements
+ * (inscribed disk of the full diameter ANYWHERE = dot; thin but with
+ * bounding-box diagonal >= 2x the dot diameter = line), but via a
+ * brute-force per-pixel radius scan rather than the Felzenszwalb two-pass
+ * distance transform used internally — a different algorithm, so this
+ * test can't share a bug with the implementation it's checking.
  */
 function hasInscribedDisk(mask, width, height, cx, cy, radius) {
     const r2 = radius * radius;
@@ -89,21 +88,41 @@ function findRuleOfSevenViolations(mask, width, height, requiredSpan) {
 
     if (numComponents === 0) return [];
 
-    const radius = requiredSpan / 2;
-    const satisfied = new Uint8Array(numComponents);
+    const dotRadius = requiredSpan / 2;
+    const lineRadius = Math.max(0.5, requiredSpan / 4);
+    const minLineLength = requiredSpan * 2;
+
+    const hasDotSpan = new Uint8Array(numComponents);
+    const hasLineWidth = new Uint8Array(numComponents);
     const sizes = new Int32Array(numComponents);
+    const minX = new Int32Array(numComponents).fill(Infinity);
+    const maxX = new Int32Array(numComponents).fill(-Infinity);
+    const minY = new Int32Array(numComponents).fill(Infinity);
+    const maxY = new Int32Array(numComponents).fill(-Infinity);
+
     for (let i = 0; i < pixelCount; i++) {
         const id = componentId[i];
         if (id < 0) continue;
         sizes[id]++;
-        if (satisfied[id]) continue;
         const x = i % width, y = (i / width) | 0;
-        if (hasInscribedDisk(mask, width, height, x, y, radius)) satisfied[id] = 1;
+        if (x < minX[id]) minX[id] = x;
+        if (x > maxX[id]) maxX[id] = x;
+        if (y < minY[id]) minY[id] = y;
+        if (y > maxY[id]) maxY[id] = y;
+        if (!hasDotSpan[id] && hasInscribedDisk(mask, width, height, x, y, dotRadius)) hasDotSpan[id] = 1;
+        if (!hasLineWidth[id] && hasInscribedDisk(mask, width, height, x, y, lineRadius)) hasLineWidth[id] = 1;
     }
 
     const violations = [];
     for (let id = 0; id < numComponents; id++) {
-        if (!satisfied[id]) violations.push(sizes[id]);
+        let survives = !!hasDotSpan[id];
+        if (!survives && hasLineWidth[id]) {
+            const bboxW = maxX[id] - minX[id];
+            const bboxH = maxY[id] - minY[id];
+            const diagonal = Math.sqrt(bboxW * bboxW + bboxH * bboxH);
+            survives = diagonal >= minLineLength;
+        }
+        if (!survives) violations.push(sizes[id]);
     }
     return violations;
 }

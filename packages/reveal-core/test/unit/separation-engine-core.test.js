@@ -373,6 +373,40 @@ describe('SeparationEngine._despeckleMaskBySpan', () => {
         expect(mask[15 * width + 25]).toBe(0);   // thin line removed
     });
 
+    it('LINE rule: keeps a thin but clearly elongated stroke that fails the dot rule', () => {
+        // requiredSpan=10 -> dot needs a 10px inscribed disk. A 6px-wide,
+        // 60px-long straight stroke never fits one (max local width ~6px),
+        // but it's unambiguously a continuous line, not an isolated speck.
+        // Margined away from the canvas edge so the distance transform sees
+        // real background on every side (a shape touching the array bounds
+        // has no background pixel to measure against on that side, which
+        // would artificially inflate its apparent width).
+        const width = 80, height = 20;
+        const mask = new Uint8Array(width * height);
+        for (let y = 7; y < 13; y++) {
+            for (let x = 10; x < 70; x++) mask[y * width + x] = 255;
+        }
+
+        const result = SeparationEngine._despeckleMaskBySpan(mask, width, height, 10);
+        expect(result.clustersRemoved).toBe(0);
+        expect(mask[9 * width + 40]).toBe(255);
+    });
+
+    it('LINE rule: still removes a thin blob of similar width that is NOT elongated', () => {
+        // Same ~6px width as the surviving stroke above, but only 8px long —
+        // short bounding-box diagonal means this reads as a blob, not a line,
+        // so it must still be despeckled even though it "has some width."
+        const width = 20, height = 20;
+        const mask = new Uint8Array(width * height);
+        for (let y = 5; y < 11; y++) {
+            for (let x = 5; x < 13; x++) mask[y * width + x] = 255;
+        }
+
+        const result = SeparationEngine._despeckleMaskBySpan(mask, width, height, 10);
+        expect(result.clustersRemoved).toBe(1);
+        expect(mask[7 * width + 8]).toBe(0);
+    });
+
     it('is a no-op when minSpanPx <= 1', () => {
         const mask = new Uint8Array(16);
         mask[0] = 255;
