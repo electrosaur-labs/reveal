@@ -43,6 +43,7 @@ class SessionState extends EventEmitter {
             isArchetypeDirty: false,
             trapSize: 0,
             meshSize: 230,
+            blackSnap: false,
             isProcessing: false,
             productionRenderPending: false,
             proxyBufferReady: false,
@@ -152,6 +153,19 @@ class SessionState extends EventEmitter {
 
     /** @private */
     async _loadImageImpl(labPixels, width, height, originalWidth, originalHeight) {
+        // Black snap (opt-in, session-level): must run ONCE, here, before
+        // DNA/proxy/anything else touches labPixels \u2014 not as a reactive knob.
+        // DNA and the proxy are both derived from this same buffer below, and
+        // ProductionWorker re-applies the identical transform to its own
+        // full-res read (see exportProductionConfig) so preview and commit
+        // can't silently disagree the way the mesh-dpi mismatch once did.
+        if (this.state.blackSnap) {
+            const snapResult = Reveal.BlackSnap.applyBlackSnap(labPixels, width, height, {
+                dpi: this.imageResolution
+            });
+            logger.log(`[SessionState] Black snap: ${snapResult.snappedPixels} px (${snapResult.snappedPercent.toFixed(2)}%), radius=${snapResult.radiusPx}px`);
+        }
+
         this._sourceLabPixels = labPixels;
         this.imageWidth = width;
         this.imageHeight = height;
@@ -162,7 +176,7 @@ class SessionState extends EventEmitter {
 
         this.emit('progress', { label: 'Analyzing image DNA\u2026', percent: 35 });
         await new Promise(r => setTimeout(r, 20)); // yield
-        
+
         const dnaGen = new Reveal.DNAGenerator();
         this.imageDNA = dnaGen.generate(labPixels, width, height, { bitDepth: 16 });
         this.emit('dnaReady', this.imageDNA);
@@ -178,6 +192,11 @@ class SessionState extends EventEmitter {
         const topMatch = mapper.getBestMatch(this.imageDNA);
 
         this.currentConfig = Reveal.generateConfiguration(this.imageDNA, { manualArchetypeId: topMatch.id });
+        // Not an archetype/reactive knob — set once here and left alone by
+        // _rebuildConfigFromState (blackSnap isn't in ALL_KNOBS), so it
+        // carries unchanged into exportProductionConfig() for the rest of
+        // the session regardless of archetype swaps.
+        this.currentConfig.blackSnap = this.state.blackSnap;
         this._applyConfigToState(this.currentConfig);
         this.state.activeArchetypeId = topMatch.id;
         this.state.initialArchetypeId = topMatch.id;

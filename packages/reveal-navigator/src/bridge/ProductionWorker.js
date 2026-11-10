@@ -137,6 +137,18 @@ class ProductionWorker {
 
             logger.log(`[ProductionWorker] Got ${actualWidth}x${actualHeight} (${pixelCount} pixels)`);
 
+            // ── Step 1a: Black snap (matches SessionState._loadImageImpl) ──
+            // Same opt-in transform, same settings (prodConfig.blackSnap was
+            // set once at ingest and never changed reactively) — applied here
+            // to this independent full-res read so production can't drift
+            // from what the proxy preview already baked in.
+            if (prodConfig.blackSnap) {
+                const snapResult = Reveal.BlackSnap.applyBlackSnap(labPixels, actualWidth, actualHeight, {
+                    dpi: prodConfig.resolution
+                });
+                logger.log(`[ProductionWorker] Black snap: ${snapResult.snappedPixels} px (${snapResult.snappedPercent.toFixed(2)}%), radius=${snapResult.radiusPx}px`);
+            }
+
             // ── Step 1b: Bilateral filter (matches proxy preprocessing) ──
             const preprocessing = prodConfig.preprocessingIntensity || 'off';
             if (preprocessing !== 'off' && preprocessing !== 'none') {
