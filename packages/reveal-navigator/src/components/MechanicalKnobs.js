@@ -196,15 +196,17 @@ class MechanicalKnobs {
 
     _updateDisplay(entry, value) {
         if (!entry.valEl) return;
-        if (entry.def.key === 'speckleRescue' && value === 0) {
-            const state = this._session.getState();
-            const meshTPI = state.meshSize || 0;
-            if (meshTPI > 0) {
-                const dpi = state.imageDpi || 300;
-                const autoPx = Math.max(1, Math.ceil(7 * dpi / meshTPI));
-                entry.valEl.textContent = `auto (${autoPx}px)`;
-                return;
+        if (entry.def.key === 'speckleRescue') {
+            if (value === 0) {
+                const state = this._session.getState();
+                const meshTPI = state.meshSize || 0;
+                if (meshTPI > 0) {
+                    entry.valEl.textContent = 'auto';
+                    entry.el.style.opacity = '0.45';
+                    return;
+                }
             }
+            entry.el.style.opacity = '';
         }
         entry.valEl.textContent = value.toFixed(entry.def.decimals) + entry.def.unit;
     }
