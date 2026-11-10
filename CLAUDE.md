@@ -51,6 +51,20 @@ No linters, formatters, or CI/CD. Code style: 4-space indent, single quotes, `co
 - **16-bit engine encoding is canonical:** L: 0–32768, a/b: 0–32768 (16384 = neutral). Conversions to 8-bit PSD or perceptual space only at system boundaries.
 - **Do not run `npm install` from inside the devcontainer** — breaks Mac-native sharp/rollup binaries.
 
+## Engineering Standards (from GEMINI.md)
+
+These mandates apply to any AI agent (Claude or Gemini) working in this repo — see `GEMINI.md`:
+
+- **Consultation first:** don't assume UI behavior or architectural direction without explicit confirmation when there's a choice to be made.
+- **Minimal intervention:** surgical, targeted changes over broad refactors unless a refactor was specifically requested.
+- **Bit parity:** always prioritize matching the JS reference implementation's output when work touches `pyreveal`/`libreveal`/`krita-reveal` (see workspace-level `CLAUDE.md`).
+
+## Stray / Dead Directories — Don't Trust Without Checking
+
+- **`build:adobe` / `test:adobe` npm scripts are dead.** The `@electrosaur-labs/adobe` package was deliberately removed from `main` (see git history: "chore: remove reveal-adobe package"). Running them errors with `npm error No workspaces found`.
+- **`packages/reveal-adobe/` and `packages/reveal-engineer/`** exist on disk but are untracked by git and have no `package.json` — they're leftover build artifacts from other branches (`engineer/pipeline-fixes`, `origin/engineer-legacy`), not real npm workspace members on `main`. Don't treat anything found there as current source.
+- **`SAVE/`** at the repo root is an untracked local scratch backup, not part of the codebase.
+
 ## Package Dependency Graph
 
 ```
