@@ -157,11 +157,16 @@ class ProductionWorker {
             // Separation uses BASELINE palette so palette overrides do not
             // deflect the nearest-neighbour search. Override colours are layer
             // fill colours only — they live in labPalette, not separationPalette.
+            // dpi MUST match the document's real resolution convention used
+            // elsewhere in this file (trap sizing below) — mapPixelsToPaletteAsync
+            // defaults to 300 internally, which silently mismatches a 72dpi
+            // document and inflates Macro-Cell dithering ~4x too coarse.
             const meshCount = prodConfig.meshSize || null;
-            logger.log(`[ProductionWorker] Separating: ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'}`);
+            const dpi = prodConfig.resolution || 72;
+            logger.log(`[ProductionWorker] Separating: ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'} @ ${dpi} dpi`);
             const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
                 labPixels, separationPalette, null, actualWidth, actualHeight,
-                { ditherType, distanceMetric: metric, meshCount }
+                { ditherType, distanceMetric: metric, meshCount, dpi }
             );
 
             logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms (metric=${metric})`);
@@ -197,7 +202,6 @@ class ProductionWorker {
             self._onProgress(3, 4, 'Building masks...');
 
             // Convert trap size from points (UI) to pixels using document DPI
-            const dpi = prodConfig.resolution || 72;
             const trapPx = Math.round((prodConfig.trapSize || 0) * dpi / 72);
 
             const knobs = {
@@ -205,6 +209,8 @@ class ProductionWorker {
                 speckleRescue: prodConfig.speckleRescue,
                 shadowClamp: prodConfig.shadowClamp,
                 trapSize: trapPx,
+                meshSize: prodConfig.meshSize,
+                imageDpi: dpi,
             };
             const layers = self._buildLayers(
                 colorIndices, labPalette, hexColors,
