@@ -22,12 +22,13 @@ function ensureOutDir() {
  * Returns colorIndices, masks, and derived data needed by all formats.
  */
 async function separate(card, session) {
-    const { lab16bit, width, height } = session;
+    const { lab16bit, width, height, dpi } = session;
     const { _paletteLab: paletteLab, _paletteRgb: paletteRgb, _config: config } = card;
 
-    // Rule of 7: mesh/dpi default to 355 TPI / 300 DPI
-    // (same canonical helper the Navigator uses) so dithering and despeckle
-    // are always mesh-aware, even when the config never specified a mesh count.
+    // Rule of 7: mesh defaults to 355 TPI if unset; dpi comes from the
+    // resolved document DPI (ingest-time resolver in server.js — file
+    // metadata or a warned 300 fallback), never re-guessed here.
+    config.imageDpi = dpi;
     const meshKnobs = Reveal.ParameterGenerator.extractMechanicalKnobs(config);
 
     const SeparationEngine = Reveal.engines.SeparationEngine;

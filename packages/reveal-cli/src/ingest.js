@@ -54,7 +54,7 @@ async function ingestPsd(filePath) {
     const { readPsd } = require('@electrosaur-labs/psd-reader');
     const buffer = fs.readFileSync(filePath);
     const psd = readPsd(buffer);
-    const { width, height, depth, data: labData } = psd;
+    const { width, height, depth, data: labData, dpi } = psd;
     const pixelCount = width * height;
 
     let lab16bit;
@@ -64,7 +64,10 @@ async function ingestPsd(filePath) {
         lab16bit = LabEncoding.convertPsd16bitToEngineLab(labData, pixelCount);
     }
 
-    return { lab16bit, width, height, inputFormat: 'psd' };
+    // dpi is the real value from the PSD's ResolutionInfo resource, or null
+    // if the file doesn't carry one — resolved (with fallback + warning)
+    // by the caller, not guessed here.
+    return { lab16bit, width, height, inputFormat: 'psd', dpi };
 }
 
 /**
@@ -127,6 +130,28 @@ function convertRgb8(rawData, lab16bit, pixelCount, samplesPerPixel) {
 }
 
 /**
+ * Extract real DPI from a decoded TIFF IFD's XResolution (282, RATIONAL)
+ * and ResolutionUnit (296) tags. utif2 decodes RATIONAL as [[num, denom]].
+ * ResolutionUnit 1 = "no absolute unit" per the TIFF spec — a ratio may
+ * still be present (utif2's own encoder defaults to 72/1 with unit 1) but
+ * doesn't represent a real physical resolution, so that's treated as
+ * "no dpi", same as the tags being absent entirely.
+ *
+ * @param {Object} ifd - Decoded TIFF image file directory (from UTIF.decode)
+ * @returns {number|null}
+ */
+function extractTiffDpi(ifd) {
+    const xRes = ifd.t282 && ifd.t282[0];
+    const unit = ifd.t296 && ifd.t296[0];
+    if (!xRes || !xRes[1]) return null;
+
+    const dpi = xRes[0] / xRes[1];
+    if (unit === 3) return dpi > 0 ? dpi * 2.54 : null; // pixels/cm -> pixels/inch
+    if (unit === 2) return dpi > 0 ? dpi : null;         // pixels/inch
+    return null; // unit 1 (none) or missing — not a real physical resolution
+}
+
+/**
  * Ingest a TIFF via utif2 (pure JS). Handles Lab and RGB, 8-bit and 16-bit.
  * Sharp is unreliable for TIFFs (mangles 16-bit data, inflates channels).
  */
@@ -162,7 +187,8 @@ function ingestTiff(filePath) {
         }
     }
 
-    return { lab16bit, width, height, inputFormat: 'tiff' };
+    const dpi = extractTiffDpi(ifd);
+    return { lab16bit, width, height, inputFormat: 'tiff', dpi };
 }
 
 /**
@@ -171,7 +197,15 @@ function ingestTiff(filePath) {
  * Sharp's .toColourspace('lab') is unreliable — same issues as with TIFFs.
  */
 async function ingestRgb(filePath, ext) {
-    const { data, info } = await sharp(filePath)
+    const img = sharp(filePath);
+    // density is the real DPI from the file's embedded metadata (PNG pHYs
+    // chunk, JPEG JFIF density marker) — undefined if the file doesn't
+    // carry one, never a guess. Resolved (with fallback + warning) by the
+    // caller, not here.
+    const metadata = await img.metadata();
+    const dpi = metadata.density || null;
+
+    const { data, info } = await img
         .removeAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
@@ -193,11 +227,11 @@ async function ingestRgb(filePath, ext) {
     if (ext === '.png') inputFormat = 'png';
     else inputFormat = 'jpeg';
 
-    return { lab16bit, width, height, inputFormat };
+    return { lab16bit, width, height, inputFormat, dpi };
 }
 
 module.exports = {
     ingest, SUPPORTED_EXTENSIONS,
     // Exported for unit testing (pure conversion functions, no I/O)
-    convertCieLab16, convertCieLab8, convertRgb16, convertRgb8,
+    convertCieLab16, convertCieLab8, convertRgb16, convertRgb8, extractTiffDpi,
 };

@@ -80,6 +80,36 @@ describe('recipe', () => {
             expect(() => loadRecipe(filePath)).toThrow('shadowClamp" must be 0-20');
         });
 
+        it('loads a valid meshTpi', () => {
+            const filePath = path.join(tmpDir, 'recipe.json');
+            fs.writeFileSync(filePath, JSON.stringify({ meshTpi: 305 }));
+            expect(loadRecipe(filePath).meshTpi).toBe(305);
+        });
+
+        it('rejects a non-positive meshTpi', () => {
+            const filePath = path.join(tmpDir, 'recipe.json');
+            fs.writeFileSync(filePath, JSON.stringify({ meshTpi: 0 }));
+            expect(() => loadRecipe(filePath)).toThrow('meshTpi" must be > 0');
+
+            fs.writeFileSync(filePath, JSON.stringify({ meshTpi: -10 }));
+            expect(() => loadRecipe(filePath)).toThrow('meshTpi" must be > 0');
+        });
+
+        it('loads a valid dpi', () => {
+            const filePath = path.join(tmpDir, 'recipe.json');
+            fs.writeFileSync(filePath, JSON.stringify({ dpi: 600 }));
+            expect(loadRecipe(filePath).dpi).toBe(600);
+        });
+
+        it('rejects a non-positive dpi', () => {
+            const filePath = path.join(tmpDir, 'recipe.json');
+            fs.writeFileSync(filePath, JSON.stringify({ dpi: 0 }));
+            expect(() => loadRecipe(filePath)).toThrow('dpi" must be > 0');
+
+            fs.writeFileSync(filePath, JSON.stringify({ dpi: -300 }));
+            expect(() => loadRecipe(filePath)).toThrow('dpi" must be > 0');
+        });
+
         it('validates outputs array', () => {
             const filePath = path.join(tmpDir, 'recipe.json');
             fs.writeFileSync(filePath, JSON.stringify({ outputs: 'psd' }));
@@ -155,6 +185,15 @@ describe('recipe', () => {
 
             const saved = JSON.parse(fs.readFileSync(filePath, 'utf8'));
             expect(Object.keys(saved)).toEqual(['archetype']);
+        });
+
+        it('saves meshTpi and dpi (pins the resolved values for repeatable runs)', () => {
+            const filePath = path.join(tmpDir, 'out.json');
+            saveRecipe(filePath, { archetype: 'chameleon', meshTpi: 355, dpi: 300 });
+
+            const saved = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            expect(saved.meshTpi).toBe(355);
+            expect(saved.dpi).toBe(300);
         });
     });
 

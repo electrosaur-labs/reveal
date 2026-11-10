@@ -99,10 +99,23 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
     // 1. Read Lab PSD
     const buffer = fs.readFileSync(inputPath);
     const psd = readPsd(buffer);
-    const { width, height, depth, data: labData } = psd;
+    const { width, height, depth, data: labData, dpi: psdDpi } = psd;
     const pixelCount = width * height;
 
     console.log(`  Size: ${width}×${height} (${depth}-bit Lab)`);
+
+    // Resolve document DPI: embedded PSD ResolutionInfo (0x03ED) > 300
+    // fallback with a visible warning. Mirrors reveal-cli's resolver so
+    // mesh-aware dithering/Rule-of-7 never silently assumes 72/300 on a
+    // document that actually specifies its own resolution.
+    let resolvedDpi;
+    if (psdDpi) {
+        resolvedDpi = psdDpi;
+        console.log(`  DPI: ${resolvedDpi} (read from PSD ResolutionInfo)`);
+    } else {
+        resolvedDpi = 300;
+        console.log(chalk.yellow(`  Warning: ${basename} has no embedded resolution metadata — assuming ${resolvedDpi} DPI.`));
+    }
 
     // Verify bit depth matches expectation
     if (expectedBitDepth && depth !== expectedBitDepth) {
@@ -179,6 +192,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
     }
 
     dna.archetype = config.meta?.archetypeId;
+    config.imageDpi = resolvedDpi;
     console.log(`  Colors: ${config.targetColors}, BlackBias: ${config.blackBias || 'n/a'}, Dither: ${config.ditherType || 'none'}`);
 
     // 4a. Bilateral prefilter (edge-preserving noise reduction)

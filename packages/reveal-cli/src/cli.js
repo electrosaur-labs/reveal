@@ -32,6 +32,7 @@ program
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
     .option('--shadow-clamp <percent>', 'Ink body clamp (0-20%)', parseFloat)
     .option('--mesh-tpi <n>', 'Screen mesh threads-per-inch, e.g. 230, 305, 355 (default: 355)', parseFloat)
+    .option('--dpi <n>', 'Override document DPI (default: read from the file; falls back to 300 with a warning if the file has none)', parseFloat)
     .option('--black-snap', 'Snap near-black edge pixels to pure black before quantization (line art/engraving — opt-in, off by default)')
     .option('--black-snap-dpi <n>', 'Document DPI for black-snap edge radius (default: 300)', parseFloat)
     .option('--black-snap-lmax <n>', 'Black-snap: perceptual L* ceiling for "near black" (default: 32)', parseFloat)
@@ -115,6 +116,7 @@ async function run(inputFile, options) {
                 speckleRescue: options.speckleRescue,
                 shadowClamp: options.shadowClamp,
                 meshTpi: options.meshTpi,
+                dpi: options.dpi,
             });
             // Merge recipe outputs with CLI formats
             const recipeFormats = recipe.outputs || [];
@@ -134,16 +136,34 @@ async function run(inputFile, options) {
 
         // Ingest
         log(`Reading: ${inputFile}`);
-        const { lab16bit, width, height, inputFormat } = await ingest(inputFile);
+        const { lab16bit, width, height, inputFormat, dpi } = await ingest(inputFile);
         log(`Image: ${width}×${height} (${inputFormat})`);
         verbose(`Pixel count: ${width * height}`);
+
+        // Resolve document DPI: --dpi flag > file metadata > 300 fallback
+        // (warned). This is the one place that decision gets made —
+        // everything downstream (mesh dithering, despeckle, black snap,
+        // trap) receives the resolved value explicitly and never re-guesses
+        // its own default.
+        let resolvedDpi;
+        if (mergedOptions.dpi !== undefined) {
+            resolvedDpi = mergedOptions.dpi;
+            verbose(`DPI: ${resolvedDpi} (explicit --dpi / recipe override)`);
+        } else if (dpi) {
+            resolvedDpi = dpi;
+            verbose(`DPI: ${resolvedDpi} (read from file)`);
+        } else {
+            resolvedDpi = 300;
+            log(`Warning: ${inputFile} has no embedded resolution metadata — assuming ${resolvedDpi} DPI. Pass --dpi <n> to override.`);
+        }
+        mergedOptions.dpi = resolvedDpi;
 
         // Black snap (opt-in): runs ONCE on the full-resolution source,
         // before any archetype pass, so every pass in compare mode (and
         // single mode) sees the identical snapped buffer.
         if (options.blackSnap) {
             const snapResult = applyBlackSnap(lab16bit, width, height, {
-                dpi: options.blackSnapDpi,
+                dpi: options.blackSnapDpi !== undefined ? options.blackSnapDpi : resolvedDpi,
                 lMax: options.blackSnapLmax,
                 chromaMax: options.blackSnapChromaMax,
                 edgeDeltaL: options.blackSnapEdgeDelta,
@@ -183,6 +203,7 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
         speckleRescue: options.speckleRescue,
         shadowClamp: options.shadowClamp,
         meshTpi: options.meshTpi,
+        dpi: options.dpi,
         trap: options.trap,
         onProgress,
     });
@@ -247,6 +268,7 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
             speckleRescue: result.config.speckleRescue,
             shadowClamp: result.config.shadowClamp,
             meshTpi: result.config.meshSize,
+            dpi: result.config.imageDpi,
         });
         log(`Saved recipe: ${options.saveRecipe}`);
     }
@@ -283,6 +305,7 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
             speckleRescue: options.speckleRescue,
             shadowClamp: options.shadowClamp,
             meshTpi: options.meshTpi,
+            dpi: options.dpi,
             trap: options.trap,
             dna, // Shared DNA
             onProgress: (phase, msg) => verbose(`[${archId}/${phase}] ${msg}`),
@@ -339,6 +362,7 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
                     speckleRescue: result.config.speckleRescue,
                     shadowClamp: result.config.shadowClamp,
                     meshTpi: result.config.meshSize,
+                    dpi: result.config.imageDpi,
                 });
             }
         }

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { execFileSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -38,21 +38,20 @@ async function createTestImage(outputPath) {
         .toFile(outputPath);
 }
 
+// spawnSync gives separate, always-correct stdout/stderr buffers regardless
+// of exit code (execFileSync only returns stdout on success and discards it
+// in the catch path, which made real stderr content unobservable on a
+// successful run — needed to verify warnings like the DPI fallback notice).
 function runCli(args) {
-    try {
-        const stderr = execFileSync('node', [CLI, ...args], {
-            encoding: 'utf8',
-            timeout: 30000,
-            stdio: ['pipe', 'pipe', 'pipe'],
-        });
-        return { stdout: stderr, stderr: '', exitCode: 0 };
-    } catch (err) {
-        return {
-            stdout: (err.stdout || '').toString(),
-            stderr: (err.stderr || '').toString(),
-            exitCode: err.status,
-        };
-    }
+    const result = spawnSync('node', [CLI, ...args], {
+        encoding: 'utf8',
+        timeout: 30000,
+    });
+    return {
+        stdout: result.stdout || '',
+        stderr: result.stderr || '',
+        exitCode: result.status,
+    };
 }
 
 beforeAll(async () => {
@@ -243,6 +242,65 @@ describe('compare mode', () => {
             const flat = path.join(parentDir, sub, 'test.png');
             expect(fs.existsSync(flat)).toBe(true);
         }
+    });
+});
+
+describe('dpi resolution', () => {
+    async function createTestImageWithDpi(outputPath, dpi) {
+        const w = 50, h = 50;
+        const buf = Buffer.alloc(w * h * 3, 128);
+        await sharp(buf, { raw: { width: w, height: h, channels: 3 } })
+            .withMetadata({ density: dpi })
+            .png()
+            .toFile(outputPath);
+    }
+
+    it('falls back to 300 with a visible warning when the file has no resolution metadata', () => {
+        const outDir = path.join(tmpDir, 'dpi-fallback');
+        const { stderr } = runCli([testImage, '-o', outDir]);
+
+        expect(stderr).toContain('no embedded resolution metadata');
+        expect(stderr).toContain('assuming 300 DPI');
+
+        const sidecar = JSON.parse(fs.readFileSync(path.join(outDir, 'test_reveal.json'), 'utf8'));
+        expect(sidecar.parameters.dpi).toBe(300);
+    });
+
+    it('reads DPI from embedded file metadata when present', async () => {
+        const dpiImage = path.join(tmpDir, 'dpi-600.png');
+        await createTestImageWithDpi(dpiImage, 600);
+
+        const outDir = path.join(tmpDir, 'dpi-from-file');
+        const { stderr } = runCli([dpiImage, '-o', outDir, '-v']);
+
+        expect(stderr).not.toContain('no embedded resolution metadata');
+        expect(stderr).toContain('DPI: 600 (read from file)');
+
+        const sidecar = JSON.parse(fs.readFileSync(path.join(outDir, 'dpi-600_reveal.json'), 'utf8'));
+        expect(sidecar.parameters.dpi).toBe(600);
+    });
+
+    it('--dpi overrides embedded file metadata', async () => {
+        const dpiImage = path.join(tmpDir, 'dpi-300-override.png');
+        await createTestImageWithDpi(dpiImage, 300);
+
+        const outDir = path.join(tmpDir, 'dpi-override');
+        const { stderr } = runCli([dpiImage, '-o', outDir, '-v', '--dpi', '600']);
+
+        expect(stderr).toContain('DPI: 600 (explicit --dpi / recipe override)');
+
+        const sidecar = JSON.parse(fs.readFileSync(path.join(outDir, 'dpi-300-override_reveal.json'), 'utf8'));
+        expect(sidecar.parameters.dpi).toBe(600);
+    });
+
+    it('--dpi overrides the no-metadata fallback (no warning)', () => {
+        const outDir = path.join(tmpDir, 'dpi-override-fallback');
+        const { stderr } = runCli([testImage, '-o', outDir, '--dpi', '150']);
+
+        expect(stderr).not.toContain('no embedded resolution metadata');
+
+        const sidecar = JSON.parse(fs.readFileSync(path.join(outDir, 'test_reveal.json'), 'utf8'));
+        expect(sidecar.parameters.dpi).toBe(150);
     });
 });
 

@@ -11,7 +11,7 @@ const fs = require('fs');
 
 const VALID_FIELDS = new Set([
     'archetype', 'colors', 'trap', 'minVolume',
-    'speckleRescue', 'shadowClamp', 'meshTpi', 'outputs', 'outputDir'
+    'speckleRescue', 'shadowClamp', 'meshTpi', 'dpi', 'outputs', 'outputDir'
 ]);
 
 const VALID_OUTPUTS = new Set(['flat', 'psd', 'ora', 'plates']);
@@ -88,6 +88,12 @@ function loadRecipe(filePath) {
         recipe.meshTpi = m;
     }
 
+    if (raw.dpi !== undefined) {
+        const d = Number(raw.dpi);
+        if (!Number.isFinite(d) || d <= 0) throw new Error('Recipe "dpi" must be > 0');
+        recipe.dpi = d;
+    }
+
     if (raw.outputs !== undefined) {
         if (!Array.isArray(raw.outputs)) throw new Error('Recipe "outputs" must be an array');
         for (const o of raw.outputs) {
@@ -119,6 +125,7 @@ function saveRecipe(filePath, params) {
     if (params.speckleRescue !== undefined) recipe.speckleRescue = params.speckleRescue;
     if (params.shadowClamp !== undefined) recipe.shadowClamp = params.shadowClamp;
     if (params.meshTpi !== undefined) recipe.meshTpi = params.meshTpi;
+    if (params.dpi !== undefined) recipe.dpi = params.dpi;
     if (params.outputs) recipe.outputs = params.outputs;
     if (params.outputDir) recipe.outputDir = params.outputDir;
 

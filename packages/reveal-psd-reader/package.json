@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Minimal PSD file reader for Lab color documents",
   "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "files": [
     "index.js",
     "lib/",

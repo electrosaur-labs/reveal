@@ -47,6 +47,7 @@ function writeSidecar(outputPath, result, extra = {}) {
             speckleRescue: config.speckleRescue,
             shadowClamp: config.shadowClamp,
             meshTpi: config.meshSize || 355,
+            dpi: config.imageDpi || 300,
             trap: extra.trap || 0,
         },
         outputs: extra.outputFiles || [],

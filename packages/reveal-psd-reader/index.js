@@ -6,10 +6,72 @@
  */
 
 /**
+ * Parse the ResolutionInfo image resource (ID 0x03ED / 1005) out of the
+ * Image Resources section, if present. This is the document's real DPI as
+ * saved by Photoshop — not a guess. Returns null if the section doesn't
+ * contain a ResolutionInfo block (e.g. a non-Photoshop PSD writer).
+ *
+ * Deliberately narrow: walks the 8BIM resource blocks just far enough to
+ * find 0x03ED, not a general-purpose resource parser. Image Resource Block
+ * layout (repeated until the section is exhausted):
+ *   Signature   4 bytes  '8BIM'
+ *   Resource ID 2 bytes  UInt16BE
+ *   Name        Pascal string (1 + N bytes), padded to even total length
+ *   Data size   4 bytes  UInt32BE
+ *   Data        `size` bytes, padded to even length
+ *
+ * ResolutionInfo data (first 6 of its 16 bytes — we only need horizontal):
+ *   hRes      4 bytes  Fixed32 (16.16 fixed point) — px/inch or px/cm
+ *   hResUnit  2 bytes  1 = pixels/inch, 2 = pixels/cm
+ *
+ * @param {Buffer} buffer
+ * @param {number} start - Offset of the Image Resources section's data
+ * @param {number} length - Length of the Image Resources section
+ * @returns {number|null} DPI, or null if not found
+ */
+function parseResolutionInfo(buffer, start, length) {
+    const end = start + length;
+    let offset = start;
+
+    while (offset < end - 10) {
+        const sig = buffer.toString('ascii', offset, offset + 4);
+        if (sig !== '8BIM') break; // malformed/unexpected — bail out safely
+
+        const resourceId = buffer.readUInt16BE(offset + 4);
+        offset += 6;
+
+        // Pascal string name: length byte + chars, padded to even total.
+        const nameLen = buffer.readUInt8(offset);
+        let nameBlockLen = 1 + nameLen;
+        if (nameBlockLen % 2 !== 0) nameBlockLen += 1;
+        offset += nameBlockLen;
+
+        const dataSize = buffer.readUInt32BE(offset);
+        offset += 4;
+        const dataStart = offset;
+
+        if (resourceId === 0x03ED && dataSize >= 6) {
+            const hResFixed = buffer.readInt32BE(dataStart);
+            const hResUnit = buffer.readUInt16BE(dataStart + 4);
+            let dpi = hResFixed / 65536;
+            if (hResUnit === 2) dpi *= 2.54; // pixels/cm -> pixels/inch
+            return dpi > 0 ? dpi : null;
+        }
+
+        offset += dataSize;
+        if (dataSize % 2 !== 0) offset += 1; // pad to even
+    }
+
+    return null;
+}
+
+/**
  * Read a Lab PSD file and extract the first pixel layer's image data
  * @param {Buffer} buffer - PSD file buffer
- * @returns {Object} - { width, height, colorMode, depth, channels, data }
+ * @returns {Object} - { width, height, colorMode, depth, channels, data, dpi }
  *   - data: Uint8Array for 8-bit, Uint16Array for 16-bit (interleaved L,a,b)
+ *   - dpi: Document resolution read from ResolutionInfo (0x03ED), or null
+ *     if the PSD doesn't carry one
  */
 function readPsd(buffer) {
     let offset = 0;
@@ -55,6 +117,8 @@ function readPsd(buffer) {
 
     // ===== IMAGE RESOURCES SECTION =====
     const imageResourcesLength = readUInt32BE();
+    const imageResourcesStart = offset;
+    const dpi = parseResolutionInfo(buffer, imageResourcesStart, imageResourcesLength);
     skip(imageResourcesLength);
 
     // ===== LAYER AND MASK INFORMATION SECTION =====
@@ -124,7 +188,7 @@ function readPsd(buffer) {
             data[i * 3 + 1] = channelData[1][i];
             data[i * 3 + 2] = channelData[2][i];
         }
-        return { width, height, colorMode, depth, channels: 3, data };
+        return { width, height, colorMode, depth, channels: 3, data, dpi };
     } else {
         // 16-bit: return full 16-bit values as Uint16Array
         const data = new Uint16Array(pixelCount * 3);
@@ -134,7 +198,7 @@ function readPsd(buffer) {
             data[i * 3 + 1] = (channelData[1][i * 2] << 8) | channelData[1][i * 2 + 1];
             data[i * 3 + 2] = (channelData[2][i * 2] << 8) | channelData[2][i * 2 + 1];
         }
-        return { width, height, colorMode, depth, channels: 3, data };
+        return { width, height, colorMode, depth, channels: 3, data, dpi };
     }
 }
 
@@ -361,4 +425,4 @@ function decompressRLEComposite(buffer, rowCountOffset, dataOffset, numRows, exp
     return result;
 }
 
-module.exports = { readPsd };
+module.exports = { readPsd, parseResolutionInfo };

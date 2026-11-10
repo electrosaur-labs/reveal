@@ -36,7 +36,7 @@ async function ingestPsd(filePath) {
     const { readPsd } = require('@electrosaur-labs/psd-reader');
     const buffer = fs.readFileSync(filePath);
     const psd = readPsd(buffer);
-    const { width, height, depth, data: labData } = psd;
+    const { width, height, depth, data: labData, dpi } = psd;
     const pixelCount = width * height;
 
     let lab16bit;
@@ -46,7 +46,21 @@ async function ingestPsd(filePath) {
         lab16bit = LabEncoding.convertPsd16bitToEngineLab(labData, pixelCount);
     }
 
-    return { lab16bit, width, height, inputFormat: 'psd' };
+    return { lab16bit, width, height, inputFormat: 'psd', dpi };
+}
+
+/**
+ * Extract DPI from a TIFF IFD's XResolution (282) + ResolutionUnit (296) tags.
+ * Mirrors reveal-cli/src/ingest.js's extractTiffDpi.
+ */
+function extractTiffDpi(ifd) {
+    const xRes = ifd.t282 && ifd.t282[0];
+    const unit = ifd.t296 && ifd.t296[0];
+    if (!xRes || !xRes[1]) return null;
+    const dpi = xRes[0] / xRes[1];
+    if (unit === 3) return dpi > 0 ? dpi * 2.54 : null; // pixels/cm -> pixels/inch
+    if (unit === 2) return dpi > 0 ? dpi : null;         // pixels/inch
+    return null; // unit 1 (none) or missing
 }
 
 function ingestTiff(filePath) {
@@ -111,11 +125,15 @@ function ingestTiff(filePath) {
         }
     }
 
-    return { lab16bit, width, height, inputFormat: 'tiff' };
+    return { lab16bit, width, height, inputFormat: 'tiff', dpi: extractTiffDpi(ifd) };
 }
 
 async function ingestRgb(filePath, ext) {
-    const { data, info } = await sharp(filePath)
+    const img = sharp(filePath);
+    const metadata = await img.metadata();
+    const dpi = metadata.density || null;
+
+    const { data, info } = await img
         .removeAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
@@ -132,7 +150,7 @@ async function ingestRgb(filePath, ext) {
         lab16bit[di + 2] = Math.round(((lab.b + 128) / 256) * 32768);
     }
 
-    return { lab16bit, width, height, inputFormat: ext === '.png' ? 'png' : 'jpeg' };
+    return { lab16bit, width, height, inputFormat: ext === '.png' ? 'png' : 'jpeg', dpi };
 }
 
 module.exports = { ingest, SUPPORTED_EXTENSIONS };

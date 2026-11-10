@@ -64,11 +64,26 @@ app.post('/ingest', upload.single('image'), async (req, res) => {
     try {
         broadcast({ type: 'status', message: `Ingesting ${originalName}...` });
 
-        const { lab16bit, width, height, inputFormat } = await ingest(filePath, originalName);
+        const { lab16bit, width, height, inputFormat, dpi } = await ingest(filePath, originalName);
         broadcast({ type: 'status', message: `Ingested: ${width}x${height} ${inputFormat}` });
 
+        // Resolve document DPI: embedded file metadata > 300 fallback with a
+        // visible warning in the run log. No CLI-style override exists in
+        // this headless server, so file metadata is the only non-fallback
+        // source. Mirrors reveal-cli's resolver.
+        let resolvedDpi;
+        if (dpi) {
+            resolvedDpi = dpi;
+            console.log(`[ingest] DPI: ${resolvedDpi} (read from file)`);
+        } else {
+            resolvedDpi = 300;
+            const warning = `${originalName} has no embedded resolution metadata — assuming ${resolvedDpi} DPI.`;
+            console.warn(`[ingest] Warning: ${warning}`);
+            broadcast({ type: 'status', message: `Warning: ${warning}` });
+        }
+
         // Store session for user-pick
-        currentSession = { lab16bit, width, height, filePath, originalName };
+        currentSession = { lab16bit, width, height, filePath, originalName, dpi: resolvedDpi };
 
         // Run the 3+1 comparison (auto, chameleon, distilled)
         // Results streamed progressively via broadcast

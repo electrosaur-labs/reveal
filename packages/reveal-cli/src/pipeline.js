@@ -113,6 +113,7 @@ function autoDetectArchetype(dna, width, height) {
  * @param {number} [options.minVolume] - Ghost plate threshold
  * @param {number} [options.speckleRescue] - Despeckle threshold
  * @param {number} [options.shadowClamp] - Ink body clamp
+ * @param {number} [options.dpi] - Resolved document DPI (see cli.js's resolver)
  * @param {number} [options.trap] - Trap width in pixels
  * @param {Object} [options.dna] - Pre-computed DNA (for compare mode)
  * @param {Function} [options.onProgress] - Progress callback (phase, message)
@@ -168,6 +169,11 @@ async function processSingle(lab16bit, width, height, options = {}) {
     if (options.speckleRescue !== undefined) config.speckleRescue = options.speckleRescue;
     if (options.shadowClamp !== undefined) config.shadowClamp = options.shadowClamp;
     if (options.meshTpi !== undefined) config.meshSize = options.meshTpi;
+    // Real document DPI, already resolved by the caller (--dpi flag > file
+    // metadata > fallback+warning — see cli.js). extractMechanicalKnobs
+    // below reads config.imageDpi; without this it always fell through to
+    // its own 300 default regardless of what the file actually said.
+    if (options.dpi !== undefined) config.imageDpi = options.dpi;
 
     // 3. Stride subsample to proxy (matches ProxyEngine._strideSubsample exactly)
     const proxy = strideSubsample(lab16bit, width, height, 1000);
