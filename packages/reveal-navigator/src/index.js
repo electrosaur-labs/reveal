@@ -2,12 +2,24 @@
  * Navigator - Screen Print Color Separation UI
  *
  * Command plugin: invoked from Plugins → Navigator...
- * Opens a non-modal dialog, auto-ingests the active document,
+ * Opens a modal dialog, auto-ingests the active document,
  * and dismisses itself after production render completes.
+ *
+ * Modal (not modeless/panel) deliberately: Photoshop routes keyboard
+ * events to its own main window while a non-modal UXP dialog is open,
+ * so Ctrl/Alt+digit combos used for knob interaction were leaking
+ * through as native PS shortcuts (e.g. layer opacity change) and
+ * polluting the document's history. A true modal dialog gives this
+ * panel exclusive keyboard focus, which stops that leak — verified to
+ * not break executeAsModal-based production commit or the native
+ * showColorPicker call nested inside this dialog (PaletteSurgeon).
+ * Cost: the document can't be switched while this dialog is open,
+ * which is why the document-lock/snap-back logic that used to guard
+ * against that was removed as dead code.
  */
 
 const { entrypoints } = require("uxp");
-const { app, action } = require("photoshop");
+const { app } = require("photoshop");
 const Reveal = require("@electrosaur-labs/core");
 const SessionState = require("./state/SessionState");
 const PhotoshopBridge = require("./bridge/PhotoshopBridge");
@@ -613,8 +625,6 @@ function initPlugin() {
         }
 
         // Keyboard shortcuts
-        // NOTE: UXP non-modal dialogs do NOT receive keyboard events.
-        // Photoshop intercepts them at the application level.
         // Blink comparator uses pointer events on Preview instead.
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && surgeon) {
@@ -622,13 +632,10 @@ function initPlugin() {
             }
         });
 
-        // Snap back to originating document if user switches tabs
-        setupDocumentChangeListener();
-
         // Listen for manual dialog dismiss (X button / Escape).
-        // UXP non-modal dialogs don't honor preventDefault() on cancel,
-        // so we catch the close event and re-show immediately if the
-        // Photoshop color picker is still open.
+        // Re-show immediately if the Photoshop color picker is still open
+        // (its own batchPlay/executeAsModal call can trigger a close event
+        // on this dialog before the picker interaction has finished).
         const dialogEl = document.getElementById('navigatorDialog');
         if (dialogEl) {
             dialogEl.addEventListener('close', () => {
@@ -648,36 +655,6 @@ function initPlugin() {
     } catch (err) {
         logger.log('[Navigator] FATAL init error: ' + err.message);
         setStatus('Init error: ' + err.message);
-    }
-}
-
-// ─── Document Lock (snap-back) ───────────────────────────
-
-function setupDocumentChangeListener() {
-    try {
-        action.addNotificationListener(["open", "select"], onDocumentChanged);
-        logger.log('[Navigator] Document lock listener registered');
-    } catch (err) {
-        logger.log('[Navigator] Could not register document listener: ' + err.message);
-    }
-}
-
-function onDocumentChanged() {
-    if (!dialogOpen || !currentDocId) return;
-
-    try {
-        const newDocId = app.activeDocument ? app.activeDocument.id : null;
-        if (newDocId && newDocId !== currentDocId) {
-            logger.log(`[Navigator] Tab switch blocked — snapping back to doc ${currentDocId}`);
-            require("photoshop").core.executeAsModal(async () => {
-                await action.batchPlay([{
-                    _obj: "select",
-                    _target: [{ _ref: "document", _id: currentDocId }]
-                }], {});
-            }, { commandName: "Navigator: return to locked document" });
-        }
-    } catch (_) {
-        // No document open or snap-back failed — ignore
     }
 }
 
