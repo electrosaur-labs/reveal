@@ -634,7 +634,7 @@ function initPlugin() {
             dialogEl.addEventListener('close', () => {
                 if (surgeon && surgeon.isPickerOpen()) {
                     logger.log('[Navigator] Dialog closed while picker open — re-showing');
-                    dialogEl.show({
+                    dialogEl.showModal({
                         resize: "both",
                         size: { width: 1100, height: 850, minWidth: 500, minHeight: 400, maxWidth: 3000, maxHeight: 3000 }
                     });
@@ -1217,7 +1217,12 @@ async function showDialog() {
 
         // Show dialog immediately — user sees empty Navigator with status text.
         // Ingest runs inside the visible dialog; UI populates when ready.
-        dialog.show({
+        // EXPERIMENT (showModal): was dialog.show(...) — testing whether a
+        // true modal dialog stops Ctrl/Alt+digit from leaking to Photoshop's
+        // main window and firing its opacity shortcut (see history pollution
+        // bug). Must verify executeAsModal-based production commit and the
+        // native showColorPicker batchPlay still work from inside this.
+        dialog.showModal({
             resize: "both",
             size: {
                 width: 1100,
