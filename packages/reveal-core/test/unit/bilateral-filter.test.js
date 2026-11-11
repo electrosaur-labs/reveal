@@ -491,5 +491,50 @@ describe('BilateralFilter', () => {
             // Should be the same array (modified in place)
             expect(labData).toBe(originalRef);
         });
+
+        test('applies real Gaussian spatial falloff, not a flat weight (Architect-approved fix, 2026-11-10)', () => {
+            // A single bright pixel in an otherwise uniform dark field. With
+            // a flat spatialWeight=1.0 (the bug), a center sitting exactly ON
+            // the hotspot and a center reaching it only at the edge of its
+            // window would be pulled toward it by comparable amounts (purely
+            // range-driven). With real Gaussian spatial falloff, the center
+            // directly on the hotspot must shift far more.
+            //
+            // radius=4 -> step=2 (radius>3), stepped offsets are
+            // {-4,-2,0,2,4} in each axis, so 0 (dead center) and 4 (edge)
+            // are both exactly sampled — no stepping-parity ambiguity.
+            const width = 15, height = 15;
+            const radius = 4;
+            const makeLabData = () => {
+                const labData = new Uint16Array(width * height * 3);
+                for (let i = 0; i < labData.length; i += 3) {
+                    labData[i] = 5000;       // uniform dark field
+                    labData[i + 1] = 16384;
+                    labData[i + 2] = 16384;
+                }
+                // One bright outlier at (7,7). Generous sigmaR so the range
+                // weight doesn't dominate and the spatial term is what's
+                // actually being measured.
+                labData[(7 * width + 7) * 3] = 20000;
+                return labData;
+            };
+
+            const atHotspot = makeLabData();
+            BilateralFilter.applyBilateralFilterLab(atHotspot, width, height, radius, 20000);
+            // Center = (7,7): the hotspot IS the center (dx=0,dy=0 is sampled).
+            const shiftAtCenter = atHotspot[(7 * width + 7) * 3] - 5000;
+
+            const farFromHotspot = makeLabData();
+            BilateralFilter.applyBilateralFilterLab(farFromHotspot, width, height, radius, 20000);
+            // Center = (3,7): hotspot reached only at dx=4 (the window edge).
+            const shiftNearEdge = farFromHotspot[(7 * width + 3) * 3] - 5000;
+
+            expect(shiftAtCenter).toBeGreaterThan(0);
+            expect(shiftNearEdge).toBeGreaterThan(0);
+            // The pixel sitting ON the hotspot should be pulled toward it
+            // far more than one only reached by the hotspot at the edge of
+            // its window — this ONLY holds with real spatial decay.
+            expect(shiftAtCenter).toBeGreaterThan(shiftNearEdge * 2);
+        });
     });
 });

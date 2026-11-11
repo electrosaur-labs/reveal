@@ -96,6 +96,22 @@ function applyBilateralFilter(imageData, width, height, radius = 4, sigmaR = 30)
         expLUT[d] = Math.exp(-(d * d) / sigmaR2x2);
     }
 
+    // Spatial weight lookup table (Architect-approved 2026-11-10): sigmaS
+    // derived from radius rather than exposed as a new parameter. Precomputed
+    // once per filter pass, not per-pixel — radius/window geometry is
+    // constant for the whole pass, so exp() has no business being in the
+    // O(width*height*radius^2) inner loop.
+    const spatialSize = 2 * radius + 1;
+    const sigmaS = Math.max(radius, 1) / 2;
+    const sigmaS2x2 = 2 * sigmaS * sigmaS;
+    const spatialLUT = new Float32Array(spatialSize * spatialSize);
+    for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+            const distSq = dx * dx + dy * dy;
+            spatialLUT[(dy + radius) * spatialSize + (dx + radius)] = Math.exp(-distSq / sigmaS2x2);
+        }
+    }
+
     // Clone original for reading
     const original = new Uint8ClampedArray(imageData);
 
@@ -132,8 +148,8 @@ function applyBilateralFilter(imageData, width, height, radius = 4, sigmaR = 30)
                                      Math.abs(centerB - nB);
                     const rangeWeight = expLUT[Math.min(255, Math.floor(colorDist / 3))];
 
-                    // Spatial weight (simplified - could add Gaussian)
-                    const spatialWeight = 1.0;
+                    // Spatial weight (Gaussian falloff — was hardcoded to 1.0)
+                    const spatialWeight = spatialLUT[(dy + radius) * spatialSize + (dx + radius)];
 
                     const weight = rangeWeight * spatialWeight;
                     sumR += nR * weight;
@@ -519,6 +535,22 @@ function applyBilateralFilterLab(labData, width, height, radius = 4, sigmaR = 30
         expLUT[i] = Math.exp(-(d * d) / sigmaR2x2);
     }
 
+    // Spatial weight lookup table (Architect-approved 2026-11-10): sigmaS
+    // derived from radius rather than exposed as a new parameter. Precomputed
+    // once per filter pass, not per-pixel — radius/window geometry is
+    // constant for the whole pass, so exp() has no business being in the
+    // O(width*height*radius^2) inner loop.
+    const spatialSize = 2 * radius + 1;
+    const sigmaS = Math.max(radius, 1) / 2;
+    const sigmaS2x2 = 2 * sigmaS * sigmaS;
+    const spatialLUT = new Float32Array(spatialSize * spatialSize);
+    for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+            const distSq = dx * dx + dy * dy;
+            spatialLUT[(dy + radius) * spatialSize + (dx + radius)] = Math.exp(-distSq / sigmaS2x2);
+        }
+    }
+
     // Clone original for reading
     const original = new Uint16Array(labData);
 
@@ -560,8 +592,8 @@ function applyBilateralFilterLab(labData, width, height, radius = 4, sigmaR = 30
                     const lutIdx = Math.min(255, Math.floor(colorDist * lutScale));
                     const rangeWeight = expLUT[lutIdx];
 
-                    // Spatial weight (simplified - could add Gaussian)
-                    const spatialWeight = 1.0;
+                    // Spatial weight (Gaussian falloff — was hardcoded to 1.0)
+                    const spatialWeight = spatialLUT[(dy + radius) * spatialSize + (dx + radius)];
 
                     const weight = rangeWeight * spatialWeight;
                     sumL += nL * weight;

@@ -21,7 +21,17 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: ['lib/**/*.js', 'index.js'],
-      exclude: ['test/**']
+      exclude: ['test/**'],
+      // Set a few points below current actuals (2026-11-10: 75.8/81.8/71.6/75.8)
+      // — enough slack for normal fluctuation, tight enough to catch a real
+      // regression. Ratchet up over time as coverage improves; never lower
+      // without a documented reason.
+      thresholds: {
+        statements: 70,
+        branches: 75,
+        functions: 65,
+        lines: 70
+      }
     }
   }
 });
