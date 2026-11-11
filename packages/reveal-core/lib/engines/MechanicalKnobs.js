@@ -240,7 +240,7 @@ class MechanicalKnobs {
      * @param {number}            [options.meshTPI=0]     Screen mesh TPI; 0 → default (355)
      * @param {number}            [options.imageDpi=0]    Document DPI; 0 → default (300)
      * @param {number}            [options.originalWidth] Full document width (for proxy scaling)
-     * @returns {{clustersRemoved: number, pixelsRemoved: number}} Aggregate across all colors
+     * @returns {{clustersRemoved: number, pixelsRemoved: number, pixelsPruned: number}} Aggregate across all colors
      */
     static enforceMeshRuleOfSeven(masks, colorIndices, width, height, options = {}) {
         const { meshTPI = 0, imageDpi = 0, originalWidth = 0 } = options;
@@ -260,9 +260,30 @@ class MechanicalKnobs {
             pixelsRemoved += result.pixelsRemoved;
         }
 
+        // Filament Pruning Pass (additive, Architect-approved 2026-11-10) —
+        // prunes unsupported interior stretches WITHIN components that
+        // already survived the whole-component check above (e.g. the thin
+        // interior of a large interconnected hatching network, far from any
+        // intersection wide enough to anchor it). A second despeckle pass
+        // mops up any newly-orphaned debris this creates — reuses the
+        // already-vetted DOT-or-LINE logic rather than new orphan-detection
+        // code, per the Architect's "must not create new specks" directive.
+        let pixelsPruned = 0;
+        for (let colorIdx = 0; colorIdx < masks.length; colorIdx++) {
+            const pruneResult = SeparationEngine._pruneUnsupportedFilaments(masks[colorIdx], width, height, effectiveFloorPx);
+            pixelsPruned += pruneResult.pixelsPruned;
+        }
+        if (pixelsPruned > 0) {
+            for (let colorIdx = 0; colorIdx < masks.length; colorIdx++) {
+                const result = SeparationEngine._despeckleMaskBySpan(masks[colorIdx], width, height, effectiveFloorPx);
+                clustersRemoved += result.clustersRemoved;
+                pixelsRemoved += result.pixelsRemoved;
+            }
+        }
+
         MechanicalKnobs.healOrphanedPixels(masks, colorIndices, width, height);
 
-        return { clustersRemoved, pixelsRemoved };
+        return { clustersRemoved, pixelsRemoved, pixelsPruned };
     }
 
     /**

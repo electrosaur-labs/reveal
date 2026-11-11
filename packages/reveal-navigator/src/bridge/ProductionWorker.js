@@ -151,9 +151,10 @@ class ProductionWorker {
             // from what the proxy preview already baked in.
             if (prodConfig.blackSnap) {
                 const snapResult = Reveal.BlackSnap.applyBlackSnap(labPixels, actualWidth, actualHeight, {
-                    dpi: prodConfig.resolution
+                    dpi: prodConfig.resolution,
+                    lMax: prodConfig.blackSnapLMax
                 });
-                logger.log(`[ProductionWorker] Black snap: ${snapResult.snappedPixels} px (${snapResult.snappedPercent.toFixed(2)}%), radius=${snapResult.radiusPx}px`);
+                logger.log(`[ProductionWorker] Black snap: ${snapResult.snappedPixels} px (${snapResult.snappedPercent.toFixed(2)}%), radius=${snapResult.radiusPx}px, lMax=${prodConfig.blackSnapLMax}`);
             }
 
             // ── Step 1b: Bilateral filter (matches proxy preprocessing) ──
@@ -478,9 +479,15 @@ class ProductionWorker {
         // Always enforced here (production commit), independent of the
         // speckleRescue slider/meshSize defaulting above — this is the actual
         // deliverable, not interactive preview state.
-        MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+        const ruleOfSevenResult = MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
             meshTPI: meshSize || 0, imageDpi: imageDpi || 0
         });
+        // Architect-requested metric (2026-11-10): track how much of the
+        // committed ink the Filament Pruning Pass removed, per archetype —
+        // a consistently high ratio on a given archetype would flag the
+        // maxSpanPx estimate as too aggressive for that content style.
+        const prunedPct = pixelCount > 0 ? (ruleOfSevenResult.pixelsPruned / pixelCount) * 100 : 0;
+        logger.log(`[ProductionWorker] Rule-of-7: clusters=${ruleOfSevenResult.clustersRemoved} removed=${ruleOfSevenResult.pixelsRemoved}px pruned=${ruleOfSevenResult.pixelsPruned}px (${prunedPct.toFixed(3)}% of image, archetype=${prodConfig.activeArchetypeId})`);
 
         // ── Apply shadowClamp (shared with ProxyEngine) ──
         // Uses tonal-aware edge erosion (same algorithm as proxy preview)

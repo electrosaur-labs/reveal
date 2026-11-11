@@ -818,6 +818,109 @@ class SeparationEngine {
     }
 
     /**
+     * Filament Pruning Pass (Architect-approved, 2026-11-10 — see collab
+     * debate.md, "Rule-of-7 gap: whole-component DOT-or-LINE test passes
+     * thin interior stretches of interconnected hatching networks").
+     *
+     * `_despeckleMaskBySpan` decides survival per whole connected component.
+     * That's correct for macro-scale speck rejection, but dense cross-
+     * hatching merges many strokes into one giant component (hatch lines
+     * touch/cross each other) — that component trivially survives as a
+     * unit (it's huge, with wide intersections providing dot-span), which
+     * means its many genuinely 1px-wide interior stretches, FAR from any
+     * intersection, survive for free even though no single point out there
+     * is physically supported.
+     *
+     * Physical model: a thin stretch of ink is a bridge. It holds only
+     * within reach of a supported point ("Anchor" — any point wide enough
+     * to satisfy the DOT rule on its own) on either side; past some
+     * unsupported span, the bridge collapses.
+     *
+     * This is an ADDITIVE pass, not a replacement for `_despeckleMaskBySpan`
+     * — it only prunes WITHIN components that already survived that check,
+     * and never widens what that check already removes. Components with NO
+     * anchor anywhere (e.g. a uniform hairline that never reaches full dot
+     * width but survived via the LINE rule's length test) are left
+     * untouched — there's no local anchor to measure span against, and the
+     * original LINE-rule verdict for "thick/short enough to hold ink"
+     * already covers them correctly.
+     *
+     * O(width*height): multi-source BFS from anchor pixels gives exact
+     * geodesic (through-the-shape, not through background) hop-distance to
+     * the nearest anchor in one linear pass — no skeleton/medial-axis
+     * transform needed.
+     *
+     * @param {Uint8Array} mask - Binary mask (mutated in place)
+     * @param {number} width
+     * @param {number} height
+     * @param {number} minSpanPx - Same Rule-of-7 floor passed to `_despeckleMaskBySpan`
+     * @returns {{pixelsPruned: number}}
+     */
+    static _pruneUnsupportedFilaments(mask, width, height, minSpanPx) {
+        if (!(minSpanPx > 1)) return { pixelsPruned: 0 };
+
+        const pixelCount = width * height;
+        const sqDist = SeparationEngine._squaredDistanceToBackground(mask, width, height);
+
+        const dotRadius = minSpanPx / 2;
+        const dotSqRadius = dotRadius * dotRadius;
+
+        // Max unsupported span: half of minLineLength (2x minSpanPx), i.e.
+        // the same reach a line's own length test already implies — a point
+        // at most minSpanPx away (geodesically) from a supported anchor
+        // holds; beyond that it's pruned. Initial estimate, same as every
+        // other Rule-of-7 constant — needs empirical/print-test tuning.
+        const maxSpanPx = minSpanPx;
+
+        // Multi-source BFS seeded from every anchor pixel (sqDist >=
+        // dotSqRadius), propagating only through mask pixels. A pixel never
+        // reached (geoDist stays -1) belongs to a component with no anchor
+        // anywhere — left untouched, per the LINE-rule carve-out above.
+        const geoDist = new Int32Array(pixelCount).fill(-1);
+        const queue = new Uint32Array(pixelCount);
+        let qHead = 0, qTail = 0;
+
+        for (let i = 0; i < pixelCount; i++) {
+            if (mask[i] > 0 && sqDist[i] >= dotSqRadius) {
+                geoDist[i] = 0;
+                queue[qTail++] = i;
+            }
+        }
+
+        while (qHead < qTail) {
+            const idx = queue[qHead++];
+            const d = geoDist[idx];
+            const x = idx % width;
+            const y = Math.floor(idx / width);
+
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                    const nIdx = ny * width + nx;
+                    if (mask[nIdx] > 0 && geoDist[nIdx] === -1) {
+                        geoDist[nIdx] = d + 1;
+                        queue[qTail++] = nIdx;
+                    }
+                }
+            }
+        }
+
+        let pixelsPruned = 0;
+        for (let i = 0; i < pixelCount; i++) {
+            if (mask[i] === 0) continue;
+            if (geoDist[i] >= 0 && geoDist[i] > maxSpanPx) {
+                mask[i] = 0;
+                pixelsPruned++;
+            }
+        }
+
+        return { pixelsPruned };
+    }
+
+    /**
      * Palette Post-Pruning: Merge colors below minVolume threshold
      *
      * SOVEREIGN SOLUTION: Treats color selection as resource allocation.
