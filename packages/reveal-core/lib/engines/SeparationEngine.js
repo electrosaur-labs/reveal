@@ -664,10 +664,16 @@ class SeparationEngine {
         const g = new Float64Array(width * height);
         for (let i = 0; i < g.length; i++) g[i] = mask[i] === 0 ? 0 : INF;
 
+        // Scratch buffers sized once and reused across every row/column call
+        // below (width + height calls total) — dt1d used to allocate these
+        // fresh on every call, which at production scale (thousands of rows
+        // and columns) was a measurable share of this function's cost.
+        const maxDim = Math.max(width, height);
+        const v = new Int32Array(maxDim);
+        const z = new Float64Array(maxDim + 1);
+
         // 1D lower-envelope distance transform: d[q] = min_p (q-p)^2 + f[p]
         const dt1d = (f, n, out) => {
-            const v = new Int32Array(n);
-            const z = new Float64Array(n + 1);
             let k = 0;
             v[0] = 0;
             z[0] = -Infinity;
@@ -737,13 +743,18 @@ class SeparationEngine {
      * @param {number} width
      * @param {number} height
      * @param {number} minSpanPx - Required minimum dot diameter, in pixels
+     * @param {Float64Array} [precomputedSqDist] - Reuse an already-computed
+     *   distance-to-background field instead of recomputing it (perf — the
+     *   full-canvas distance transform is the dominant cost at production
+     *   scale). Caller's responsibility to ensure it's still valid for this
+     *   mask's current state.
      * @returns {{clustersRemoved: number, pixelsRemoved: number}}
      */
-    static _despeckleMaskBySpan(mask, width, height, minSpanPx) {
+    static _despeckleMaskBySpan(mask, width, height, minSpanPx, precomputedSqDist) {
         if (!(minSpanPx > 1)) return { clustersRemoved: 0, pixelsRemoved: 0 };
 
         const pixelCount = width * height;
-        const sqDist = SeparationEngine._squaredDistanceToBackground(mask, width, height);
+        const sqDist = precomputedSqDist || SeparationEngine._squaredDistanceToBackground(mask, width, height);
 
         const dotRadius = minSpanPx / 2;
         const dotSqRadius = dotRadius * dotRadius;
@@ -854,13 +865,15 @@ class SeparationEngine {
      * @param {number} width
      * @param {number} height
      * @param {number} minSpanPx - Same Rule-of-7 floor passed to `_despeckleMaskBySpan`
+     * @param {Float64Array} [precomputedSqDist] - Reuse an already-computed
+     *   distance-to-background field (perf — see `_despeckleMaskBySpan`).
      * @returns {{pixelsPruned: number}}
      */
-    static _pruneUnsupportedFilaments(mask, width, height, minSpanPx) {
+    static _pruneUnsupportedFilaments(mask, width, height, minSpanPx, precomputedSqDist) {
         if (!(minSpanPx > 1)) return { pixelsPruned: 0 };
 
         const pixelCount = width * height;
-        const sqDist = SeparationEngine._squaredDistanceToBackground(mask, width, height);
+        const sqDist = precomputedSqDist || SeparationEngine._squaredDistanceToBackground(mask, width, height);
 
         const dotRadius = minSpanPx / 2;
         const dotSqRadius = dotRadius * dotRadius;

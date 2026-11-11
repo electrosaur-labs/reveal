@@ -254,31 +254,42 @@ class MechanicalKnobs {
 
         let clustersRemoved = 0;
         let pixelsRemoved = 0;
-        for (let colorIdx = 0; colorIdx < masks.length; colorIdx++) {
-            const result = SeparationEngine._despeckleMaskBySpan(masks[colorIdx], width, height, effectiveFloorPx);
-            clustersRemoved += result.clustersRemoved;
-            pixelsRemoved += result.pixelsRemoved;
-        }
+        let pixelsPruned = 0;
+        const prunedColorIndices = [];
 
         // Filament Pruning Pass (additive, Architect-approved 2026-11-10) —
         // prunes unsupported interior stretches WITHIN components that
-        // already survived the whole-component check above (e.g. the thin
-        // interior of a large interconnected hatching network, far from any
-        // intersection wide enough to anchor it). A second despeckle pass
-        // mops up any newly-orphaned debris this creates — reuses the
-        // already-vetted DOT-or-LINE logic rather than new orphan-detection
-        // code, per the Architect's "must not create new specks" directive.
-        let pixelsPruned = 0;
+        // already survived the DOT-or-LINE check (e.g. the thin interior of
+        // a large interconnected hatching network, far from any intersection
+        // wide enough to anchor it). The full-canvas distance-to-background
+        // transform is the dominant cost at production scale, so it's
+        // computed ONCE per color here and shared between despeckle and
+        // pruning — removed specks are, in the overwhelming majority of
+        // cases, disjoint from and far from a surviving component's own
+        // boundary, so the pre-despeckle field remains an accurate enough
+        // basis for the immediately-following prune pass on the same color.
         for (let colorIdx = 0; colorIdx < masks.length; colorIdx++) {
-            const pruneResult = SeparationEngine._pruneUnsupportedFilaments(masks[colorIdx], width, height, effectiveFloorPx);
+            const mask = masks[colorIdx];
+            const sqDist = SeparationEngine._squaredDistanceToBackground(mask, width, height);
+
+            const despeckleResult = SeparationEngine._despeckleMaskBySpan(mask, width, height, effectiveFloorPx, sqDist);
+            clustersRemoved += despeckleResult.clustersRemoved;
+            pixelsRemoved += despeckleResult.pixelsRemoved;
+
+            const pruneResult = SeparationEngine._pruneUnsupportedFilaments(mask, width, height, effectiveFloorPx, sqDist);
             pixelsPruned += pruneResult.pixelsPruned;
+            if (pruneResult.pixelsPruned > 0) prunedColorIndices.push(colorIdx);
         }
-        if (pixelsPruned > 0) {
-            for (let colorIdx = 0; colorIdx < masks.length; colorIdx++) {
-                const result = SeparationEngine._despeckleMaskBySpan(masks[colorIdx], width, height, effectiveFloorPx);
-                clustersRemoved += result.clustersRemoved;
-                pixelsRemoved += result.pixelsRemoved;
-            }
+
+        // Safety-net re-despeckle only for colors actually touched by pruning
+        // — mops up any newly-orphaned debris, recomputing a fresh distance
+        // field since pruning changed this color's mask (reuses the
+        // already-vetted DOT-or-LINE logic rather than new orphan-detection
+        // code, per the Architect's "must not create new specks" directive).
+        for (const colorIdx of prunedColorIndices) {
+            const result = SeparationEngine._despeckleMaskBySpan(masks[colorIdx], width, height, effectiveFloorPx);
+            clustersRemoved += result.clustersRemoved;
+            pixelsRemoved += result.pixelsRemoved;
         }
 
         MechanicalKnobs.healOrphanedPixels(masks, colorIndices, width, height);
