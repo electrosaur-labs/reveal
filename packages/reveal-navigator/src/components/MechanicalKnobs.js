@@ -216,7 +216,7 @@ class MechanicalKnobs {
     _updateRevertIcon(key, entry) {
         if (!entry.revertEl) return;
         const dflt = this._session.getKnobDefault(key);
-        if (dflt === null) {
+        if (dflt === null || dflt === undefined) {
             entry.revertEl.style.display = 'none';
             return;
         }
@@ -230,9 +230,19 @@ class MechanicalKnobs {
             current = parseFloat(entry.el.value);
         }
 
-        const isDirty = (typeof dflt === 'number') 
-            ? Math.abs(current - dflt) > 0.0001 
-            : current.toString() !== dflt.toString();
+        // current can be NaN (unparsed slider value) or, for not-yet-upgraded
+        // custom elements, undefined — neither has a meaningful "is this
+        // dirty" answer, so just hide the revert arrow rather than throw.
+        if (current === undefined || current === null || (typeof current === 'number' && Number.isNaN(current))) {
+            entry.revertEl.style.display = 'none';
+            return;
+        }
+
+        // String(), not .toString() — can't throw even if a future KNOB_DEFS
+        // entry ends up with a non-primitive default.
+        const isDirty = (typeof dflt === 'number')
+            ? Math.abs(current - dflt) > 0.0001
+            : String(current) !== String(dflt);
 
         entry.revertEl.style.display = isDirty ? 'inline-block' : 'none';
     }
