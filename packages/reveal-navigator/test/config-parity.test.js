@@ -206,6 +206,8 @@ describe('every ParameterGenerator production field is categorized', () => {
         'peakFinderBlacklistedSectors',     // Mk 1.5 sector blacklist
         'shadowChromaGateL',               // dark pixel chroma gate
         'neutralCentroidClampThreshold',    // hardcoded 0.5, not user-tunable
+        'dnaCentroid',                      // RevealMk20Engine: DNA-derived chromatic anchor (replaces PeakFinder)
+        'dnaSectors',                       // RevealMk20Engine: full sector map for generalised highlight rescue
     ]);
 
     it('all config fields are either categorized or explicitly whitelisted', () => {
