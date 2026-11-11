@@ -43,6 +43,7 @@ let isIngesting = false;
 let isProductionRunning = false;
 let currentDocId = null;    // Track which document we've ingested
 let dialogOpen = false;
+let _blackSnapJustChecked = false;  // one-shot: warn only on the click that turned it on, not every reread
 
 // ─── Bootstrap ───────────────────────────────────────────
 
@@ -472,12 +473,31 @@ function initPlugin() {
         if (chkBlackSnap) {
             // Reflect the session's current value whenever a document loads
             // (covers both initial load and post-reread re-sync).
+            //
+            // Black Snap + dithering fight each other (dithering reintroduces
+            // the dot-level noise Black Snap exists to clean up), so whenever
+            // Black Snap is on, dithering is forced to 'none' here — after
+            // the reread/archetype-match has run, since that's what actually
+            // sets ditherType and would otherwise clobber a value set any
+            // earlier. Only warns on the reread caused by actually checking
+            // the box, not on every subsequent reread while it stays checked.
             sessionState.on('proxyReady', () => {
                 chkBlackSnap.checked = !!sessionState.state.blackSnap;
+
+                if (sessionState.state.blackSnap && sessionState.state.ditherType !== 'none') {
+                    sessionState.updateParameter('ditherType', 'none');
+                    const ditherPicker = document.getElementById('picker-ditherType');
+                    if (ditherPicker) ditherPicker.value = 'none';
+                    if (_blackSnapJustChecked) {
+                        showToast('Dithering disabled — Black Snap works best without it.');
+                    }
+                }
+                _blackSnapJustChecked = false;
             });
 
             chkBlackSnap.addEventListener('change', () => {
                 sessionState.state.blackSnap = chkBlackSnap.checked;
+                if (chkBlackSnap.checked) _blackSnapJustChecked = true;
                 // No document loaded yet — nothing to reread, just set the
                 // value for the next initial load.
                 if (sessionState.proxyEngine) {
@@ -908,6 +928,17 @@ function updateDNADisplay() {
 function setStatus(text) {
     const el = document.getElementById('status-text');
     if (el) el.textContent = text;
+}
+
+let _toastTimer = null;
+/** Brief, non-blocking notice (e.g. an automatic side-effect the user should know about). */
+function showToast(message, durationMs = 3500) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    clearTimeout(_toastTimer);
+    el.textContent = message;
+    el.classList.add('visible');
+    _toastTimer = setTimeout(() => el.classList.remove('visible'), durationMs);
 }
 
 // Phase swatch colors — one per progress step

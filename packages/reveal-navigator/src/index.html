@@ -790,6 +790,32 @@
             letter-spacing: 1px;
         }
 
+        /* ─── Toast: brief, non-blocking notice ─── */
+        #toast {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e1e1e;
+            color: #fff;
+            border: 1px solid #4a9eff;
+            border-radius: 6px;
+            padding: 10px 16px;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            z-index: 10001;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.25s ease;
+            max-width: 80%;
+            text-align: center;
+            pointer-events: none;
+        }
+        #toast.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
         .carousel-card.recommended {
             border-left: 3px solid #d4a017;
         }
@@ -1431,6 +1457,7 @@
 </head>
 <body>
     <dialog id="navigatorDialog">
+    <div id="toast"></div>
     <div id="processing-overlay">
         <sp-progress-circle size="large" indeterminate></sp-progress-circle>
         <span style="margin-top: 12px;">Processing…</span>
