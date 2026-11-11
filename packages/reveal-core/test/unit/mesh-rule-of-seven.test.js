@@ -59,26 +59,26 @@ describe('MechanicalKnobs.applySpeckleRescue — creative knob (unchanged contra
 });
 
 describe('MechanicalKnobs.enforceMeshRuleOfSeven — hard physical floor', () => {
-    it('removes a sub-minimum isolated speckle with NO options at all (defaults apply)', () => {
+    it('removes a sub-minimum isolated speckle with NO options at all (defaults apply)', async () => {
         const width = 20, height = 20;
         const masks = makeSinglePixelSpeckle(width, height, 10, 10);
         const colorIndices = new Uint8Array(width * height);
         colorIndices[10 * width + 10] = 1;
 
-        const result = MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height);
+        const result = await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height);
 
         expect(result.clustersRemoved).toBeGreaterThan(0);
         expect(masks[1][10 * width + 10]).toBe(0);
         expect(colorIndices[10 * width + 10]).toBe(0); // healed into background
     });
 
-    it('is never skippable: explicit meshTPI=0/imageDpi=0 still falls back to the 355/300 default floor', () => {
+    it('is never skippable: explicit meshTPI=0/imageDpi=0 still falls back to the 355/300 default floor', async () => {
         const width = 20, height = 20;
         const masks = makeSinglePixelSpeckle(width, height, 10, 10);
         const colorIndices = new Uint8Array(width * height);
         colorIndices[10 * width + 10] = 1;
 
-        const result = MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+        const result = await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
             meshTPI: 0, imageDpi: 0
         });
 
@@ -86,7 +86,7 @@ describe('MechanicalKnobs.enforceMeshRuleOfSeven — hard physical floor', () =>
         expect(masks[1][10 * width + 10]).toBe(0);
     });
 
-    it('keeps a dot that already meets the mesh floor', () => {
+    it('keeps a dot that already meets the mesh floor', async () => {
         const meshTPI = 230, dpi = 300;
         const floorPx = MeshPhysics.minDotPx(meshTPI, dpi); // 10
         const width = floorPx + 10, height = floorPx + 10;
@@ -96,12 +96,12 @@ describe('MechanicalKnobs.enforceMeshRuleOfSeven — hard physical floor', () =>
         }
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, 2, width * height);
 
-        MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, { meshTPI, imageDpi: dpi });
+        await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, { meshTPI, imageDpi: dpi });
 
         expect(masks[1][5 * width + 5]).toBe(255);
     });
 
-    it('always preserves full mask coverage (every pixel assigned exactly one color) after healing', () => {
+    it('always preserves full mask coverage (every pixel assigned exactly one color) after healing', async () => {
         const width = 30, height = 30;
         const colorIndices = new Uint8Array(width * height); // all background (0)
         // Scatter several isolated speckles of color 1, all sub-minimum.
@@ -110,7 +110,7 @@ describe('MechanicalKnobs.enforceMeshRuleOfSeven — hard physical floor', () =>
         }
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, 2, width * height);
 
-        MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height);
+        await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height);
 
         for (let i = 0; i < width * height; i++) {
             let covered = 0;
@@ -119,7 +119,7 @@ describe('MechanicalKnobs.enforceMeshRuleOfSeven — hard physical floor', () =>
         }
     });
 
-    it('scales the floor down correctly for a proxy (originalWidth > width)', () => {
+    it('scales the floor down correctly for a proxy (originalWidth > width)', async () => {
         // Full-res floor at 230 TPI / 300 DPI is 10px. At 2x downscale (proxy
         // half the original width), the proxy floor should be ~5px.
         const meshTPI = 230, dpi = 300;
@@ -130,7 +130,7 @@ describe('MechanicalKnobs.enforceMeshRuleOfSeven — hard physical floor', () =>
         for (let y = 2; y < 6; y++) for (let x = 2; x < 6; x++) colorIndices[y * width + x] = 1;
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, 2, width * height);
 
-        MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+        await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
             meshTPI, imageDpi: dpi, originalWidth: fullWidth
         });
 
@@ -180,14 +180,14 @@ describe('SeparationEngine._pruneUnsupportedFilaments — Architect-approved add
 });
 
 describe('MechanicalKnobs.enforceMeshRuleOfSeven — filament pruning integration', () => {
-    it('prunes unsupported filament pixels and cleans up resulting debris (no orphans after healing)', () => {
+    it('prunes unsupported filament pixels and cleans up resulting debris (no orphans after healing)', async () => {
         const width = 60, height = 20;
         const colorIndices = new Uint8Array(width * height); // 0 = background
         for (let y = 2; y < 18; y++) for (let x = 2; x < 22; x++) colorIndices[y * width + x] = 1;
         for (let x = 22; x < 55; x++) colorIndices[10 * width + x] = 1;
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, 2, width * height);
 
-        const result = MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+        const result = await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
             meshTPI: 355, imageDpi: 300
         });
 
@@ -202,7 +202,7 @@ describe('MechanicalKnobs.enforceMeshRuleOfSeven — filament pruning integratio
         }
     });
 
-    it('does not prune a thin, anchor-less line that survives via the LINE rule', () => {
+    it('does not prune a thin, anchor-less line that survives via the LINE rule', async () => {
         // 3px-thick strip: locally wide enough to pass the LINE rule's width
         // test (sqDist reaches lineSqRadius=2.25 at its center row) but never
         // reaches dot-width (dotSqRadius=9) anywhere — exactly the "no anchor
@@ -214,7 +214,7 @@ describe('MechanicalKnobs.enforceMeshRuleOfSeven — filament pruning integratio
         }
         const masks = MechanicalKnobs.rebuildMasks(colorIndices, 2, width * height);
 
-        const result = MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+        const result = await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
             meshTPI: 355, imageDpi: 300
         });
 

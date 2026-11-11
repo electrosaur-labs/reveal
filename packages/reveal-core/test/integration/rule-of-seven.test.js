@@ -170,7 +170,7 @@ describe('Rule of 7 — jethro 800×547', () => {
         test(`${ditherType}: zero violations after enforceMeshRuleOfSeven`, async () => {
             const { masks, colorIndices, width, height } = await separateFixture(fixture, ditherType);
 
-            MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+            await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
                 meshTPI: MESH_TPI, imageDpi: DPI
             });
 
@@ -200,7 +200,7 @@ describe('Rule of 7 — jethro 800×547', () => {
     test('default options (no meshTPI/imageDpi passed) still enforce the MeshPhysics default floor', async () => {
         const { masks, colorIndices, width, height } = await separateFixture(fixture, 'atkinson');
 
-        MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height);
+        await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height);
 
         // Verify against the ACTUAL default (not the explicit MESH_TPI/DPI
         // constants above, which are a deliberately different explicit value
@@ -228,7 +228,7 @@ describe('Rule of 7 — horse 350×512', () => {
         test(`${ditherType} @ 305 TPI: zero violations after enforceMeshRuleOfSeven`, async () => {
             const { masks, colorIndices, width, height } = await separateFixture(fixture, ditherType);
 
-            MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+            await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
                 meshTPI: MESH_TPI, imageDpi: DPI
             });
 

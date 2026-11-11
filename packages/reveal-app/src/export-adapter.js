@@ -50,7 +50,7 @@ async function separate(card, session) {
 
     // Rule of 7 is a hard physical floor on the final output — always
     // enforced, independent of the speckleRescue slider above.
-    MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+    await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
         meshTPI: meshKnobs.meshSize, imageDpi: meshKnobs.imageDpi
     });
 

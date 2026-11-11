@@ -246,7 +246,7 @@ async function processSingle(lab16bit, width, height, options = {}) {
     // Rule of 7 is a hard physical floor on the final output — always
     // enforced, independent of the speckleRescue slider above.
     progress('knobs', `mesh floor: ${meshKnobs.meshSize} TPI @ ${meshKnobs.imageDpi} DPI`);
-    MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+    await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
         meshTPI: meshKnobs.meshSize, imageDpi: meshKnobs.imageDpi
     });
 

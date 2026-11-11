@@ -232,7 +232,7 @@ class ProductionWorker {
                 meshSize: prodConfig.meshSize,
                 imageDpi: dpi,
             };
-            const layers = self._buildLayers(
+            const layers = await self._buildLayers(
                 colorIndices, labPalette, hexColors,
                 actualWidth, actualHeight, knobs
             );
@@ -453,7 +453,7 @@ class ProductionWorker {
      * @param {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number}} knobs
      * @returns {Array<{labColor, hex, mask, width, height, name}>} Layer objects
      */
-    _buildLayers(colorIndices, labPalette, hexColors, width, height, knobs) {
+    async _buildLayers(colorIndices, labPalette, hexColors, width, height, knobs) {
         const { minVolume, speckleRescue, shadowClamp, trapSize, meshSize, imageDpi } = knobs;
         const layers = [];
         const pixelCount = width * height;
@@ -479,7 +479,7 @@ class ProductionWorker {
         // Always enforced here (production commit), independent of the
         // speckleRescue slider/meshSize defaulting above — this is the actual
         // deliverable, not interactive preview state.
-        const ruleOfSevenResult = MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+        const ruleOfSevenResult = await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
             meshTPI: meshSize || 0, imageDpi: imageDpi || 0
         });
         // Architect-requested metric (2026-11-10): track how much of the

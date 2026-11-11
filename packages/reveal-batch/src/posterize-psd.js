@@ -304,7 +304,7 @@ async function posterizePsd(inputPath, outputDir, expectedBitDepth, cliOptions =
     // Rule of 7 is a hard physical floor on the final output — always
     // enforced, independent of the speckleRescue slider above.
     console.log(chalk.yellow(`  🧹 mesh floor: ${meshKnobs.meshSize} TPI @ ${meshKnobs.imageDpi} DPI`));
-    MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+    await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
         meshTPI: meshKnobs.meshSize, imageDpi: meshKnobs.imageDpi
     });
 

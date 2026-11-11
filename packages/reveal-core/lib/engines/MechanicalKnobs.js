@@ -232,6 +232,13 @@ class MechanicalKnobs {
      * not inside interactive preview/undo state, which intentionally keeps
      * "zero knobs" identical to the clean baseline.
      *
+     * ASYNC: yields back to the host between colors (setTimeout(0)). At
+     * production scale with many colors, running this fully synchronously
+     * inside a single executeAsModal call made UXP/Photoshop treat the
+     * plugin as unresponsive and abort the operation — callers MUST await
+     * this (it was previously synchronous; this is a breaking signature
+     * change for any caller not already awaiting it).
+     *
      * @param {Array<Uint8Array>} masks        Per-color binary masks (mutated)
      * @param {Uint8Array}        colorIndices Per-pixel palette index (mutated by healing)
      * @param {number}            width
@@ -240,9 +247,9 @@ class MechanicalKnobs {
      * @param {number}            [options.meshTPI=0]     Screen mesh TPI; 0 → default (355)
      * @param {number}            [options.imageDpi=0]    Document DPI; 0 → default (300)
      * @param {number}            [options.originalWidth] Full document width (for proxy scaling)
-     * @returns {{clustersRemoved: number, pixelsRemoved: number, pixelsPruned: number}} Aggregate across all colors
+     * @returns {Promise<{clustersRemoved: number, pixelsRemoved: number, pixelsPruned: number}>} Aggregate across all colors
      */
-    static enforceMeshRuleOfSeven(masks, colorIndices, width, height, options = {}) {
+    static async enforceMeshRuleOfSeven(masks, colorIndices, width, height, options = {}) {
         const { meshTPI = 0, imageDpi = 0, originalWidth = 0 } = options;
         const floorPx = MeshPhysics.minDotPx(meshTPI, imageDpi);
 
@@ -256,6 +263,18 @@ class MechanicalKnobs {
         let pixelsRemoved = 0;
         let pixelsPruned = 0;
         const prunedColorIndices = [];
+
+        // Yield back to the host between colors (matches the CHUNK_SIZE /
+        // setTimeout(0) pattern already used in mapPixelsToPaletteAsync).
+        // The full-canvas distance transform + despeckle + pruning per color
+        // is now ~a few hundred ms, but across 10+ colors in one unbroken
+        // synchronous stretch inside executeAsModal, UXP/Photoshop can treat
+        // the plugin as unresponsive and abort the modal operation — this
+        // was the actual cause of "Production failed" (err.message
+        // undefined — a host-level abort, not a JS exception), not raw
+        // per-call cost. Async + a yield per color keeps every synchronous
+        // stretch short regardless of total color count or image size.
+        const yieldToHost = () => new Promise(resolve => setTimeout(resolve, 0));
 
         // Filament Pruning Pass (additive, Architect-approved 2026-11-10) —
         // prunes unsupported interior stretches WITHIN components that
@@ -279,6 +298,8 @@ class MechanicalKnobs {
             const pruneResult = SeparationEngine._pruneUnsupportedFilaments(mask, width, height, effectiveFloorPx, sqDist);
             pixelsPruned += pruneResult.pixelsPruned;
             if (pruneResult.pixelsPruned > 0) prunedColorIndices.push(colorIdx);
+
+            await yieldToHost();
         }
 
         // Safety-net re-despeckle only for colors actually touched by pruning
@@ -290,6 +311,7 @@ class MechanicalKnobs {
             const result = SeparationEngine._despeckleMaskBySpan(masks[colorIdx], width, height, effectiveFloorPx);
             clustersRemoved += result.clustersRemoved;
             pixelsRemoved += result.pixelsRemoved;
+            await yieldToHost();
         }
 
         MechanicalKnobs.healOrphanedPixels(masks, colorIndices, width, height);
