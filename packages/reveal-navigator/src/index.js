@@ -1046,7 +1046,20 @@ async function handleFinalize() {
         _closeDialog();
 
     } catch (err) {
+        // DIAGNOSTIC (2026-11-11): err.message has been showing up as the
+        // literal string "undefined" — meaning err is NOT a standard Error
+        // (or at least .message isn't populated). Dumping everything we can
+        // get out of it to find out what it actually is before guessing
+        // again at the root cause.
+        let diag = `typeof=${typeof err}`;
+        try { diag += ` name=${err && err.name}`; } catch (_) {}
+        try { diag += ` number=${err && err.number}`; } catch (_) {}
+        try { diag += ` description=${err && err.description}`; } catch (_) {}
+        try { diag += ` keys=${err ? Object.getOwnPropertyNames(err).join(',') : 'n/a'}`; } catch (_) {}
+        try { diag += ` json=${JSON.stringify(err)}`; } catch (_) {}
+        try { diag += ` stack=${err && err.stack}`; } catch (_) {}
         logger.log('[Navigator] Production render failed: ' + err.message);
+        logger.log('[Navigator] Production render failure DIAGNOSTIC: ' + diag);
         showErrorDialog('Production Failed', err.message);
         // Restore UI on failure
         if (btn) btn.disabled = false;

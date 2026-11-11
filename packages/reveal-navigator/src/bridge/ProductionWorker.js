@@ -231,6 +231,7 @@ class ProductionWorker {
                 trapSize: trapPx,
                 meshSize: prodConfig.meshSize,
                 imageDpi: dpi,
+                activeArchetypeId: prodConfig.activeArchetypeId,
             };
             const layers = await self._buildLayers(
                 colorIndices, labPalette, hexColors,
@@ -454,7 +455,7 @@ class ProductionWorker {
      * @returns {Array<{labColor, hex, mask, width, height, name}>} Layer objects
      */
     async _buildLayers(colorIndices, labPalette, hexColors, width, height, knobs) {
-        const { minVolume, speckleRescue, shadowClamp, trapSize, meshSize, imageDpi } = knobs;
+        const { minVolume, speckleRescue, shadowClamp, trapSize, meshSize, imageDpi, activeArchetypeId } = knobs;
         const layers = [];
         const pixelCount = width * height;
         // ── Apply minVolume (shared with ProxyEngine) ──
@@ -487,7 +488,7 @@ class ProductionWorker {
         // a consistently high ratio on a given archetype would flag the
         // maxSpanPx estimate as too aggressive for that content style.
         const prunedPct = pixelCount > 0 ? (ruleOfSevenResult.pixelsPruned / pixelCount) * 100 : 0;
-        logger.log(`[ProductionWorker] Rule-of-7: clusters=${ruleOfSevenResult.clustersRemoved} removed=${ruleOfSevenResult.pixelsRemoved}px pruned=${ruleOfSevenResult.pixelsPruned}px (${prunedPct.toFixed(3)}% of image, archetype=${prodConfig.activeArchetypeId})`);
+        logger.log(`[ProductionWorker] Rule-of-7: clusters=${ruleOfSevenResult.clustersRemoved} removed=${ruleOfSevenResult.pixelsRemoved}px pruned=${ruleOfSevenResult.pixelsPruned}px (${prunedPct.toFixed(3)}% of image, archetype=${activeArchetypeId})`);
 
         // ── Apply shadowClamp (shared with ProxyEngine) ──
         // Uses tonal-aware edge erosion (same algorithm as proxy preview)
