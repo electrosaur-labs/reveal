@@ -453,12 +453,9 @@ function initPlugin() {
         // SessionState._loadImageImpl). Changing it after a document is
         // already loaded can't take effect without rereading the document
         // from Photoshop — which also wipes palette edits (SessionState.reset()
-        // is unconditional on reread) — so this is wired as its own confirm
-        // flow instead of going through MechanicalKnobs/updateParameter().
+        // is unconditional on reread). The knob-help bubble text is the only
+        // warning given for this; toggling just rereads immediately.
         const chkBlackSnap = document.getElementById('chk-blackSnap');
-        const blackSnapConfirm = document.getElementById('blacksnap-confirm');
-        const blackSnapConfirmOk = document.getElementById('blacksnap-confirm-ok');
-        const blackSnapConfirmCancel = document.getElementById('blacksnap-confirm-cancel');
 
         if (chkBlackSnap) {
             // Reflect the session's current value whenever a document loads
@@ -468,72 +465,44 @@ function initPlugin() {
             });
 
             chkBlackSnap.addEventListener('change', () => {
-                const newValue = chkBlackSnap.checked;
-
+                sessionState.state.blackSnap = chkBlackSnap.checked;
                 // No document loaded yet — nothing to reread, just set the
                 // value for the next initial load.
-                if (!sessionState.proxyEngine) {
-                    sessionState.state.blackSnap = newValue;
-                    return;
-                }
-
-                chkBlackSnap.disabled = true;
-                if (blackSnapConfirm) blackSnapConfirm.setAttribute('style', 'display: block');
-
-                const cleanup = () => {
-                    if (blackSnapConfirm) blackSnapConfirm.setAttribute('style', 'display: none');
-                    chkBlackSnap.disabled = false;
-                    blackSnapConfirmOk.removeEventListener('click', onOk);
-                    blackSnapConfirmCancel.removeEventListener('click', onCancel);
-                };
-                const onOk = () => {
-                    sessionState.state.blackSnap = newValue;
-                    cleanup();
+                if (sessionState.proxyEngine) {
                     ingestActiveDocument(true);
-                };
-                const onCancel = () => {
-                    chkBlackSnap.checked = !newValue; // revert the visual toggle
-                    cleanup();
-                };
-
-                blackSnapConfirmOk.addEventListener('click', onOk);
-                blackSnapConfirmCancel.addEventListener('click', onCancel);
+                }
             });
         }
 
-        // ─── Black Snap suggestion (candidacy heuristic — suggest only) ──
-        // SessionState evaluates candidacy on every load where blackSnap is
-        // currently off. This never auto-enables anything — the banner just
-        // offers to run the exact same confirm+reread flow as checking the
-        // box by hand. Transient: never persisted, re-evaluated from scratch
-        // on every load (see SessionState._loadImageImpl, _clearUI above).
-        const blackSnapSuggestion = document.getElementById('blacksnap-suggestion');
-        const blackSnapSuggestionText = document.getElementById('blacksnap-suggestion-text');
-        const blackSnapSuggestionAccept = document.getElementById('blacksnap-suggestion-accept');
-        const blackSnapSuggestionDismiss = document.getElementById('blacksnap-suggestion-dismiss');
+        // Black Snap darkness threshold (L* ceiling) — same load-time-only
+        // nature as the checkbox above: a reread, not a reactive knob. 'input'
+        // only updates the live label (cheap); 'change' (fires once, on
+        // release) is what actually triggers the reread, so dragging the
+        // slider doesn't fire a reread per pixel of movement.
+        const knobBlackSnapLMax = document.getElementById('knob-blackSnapLMax');
+        const blackSnapLMaxVal = document.getElementById('blackSnapLMax-val');
 
-        if (blackSnapSuggestion && chkBlackSnap) {
-            sessionState.on('blackSnapSuggested', ({ reason }) => {
-                if (blackSnapSuggestionText) {
-                    blackSnapSuggestionText.textContent = `${reason} — enable Black Snap for this document?`;
-                }
-                blackSnapSuggestion.style.display = 'flex';
+        if (knobBlackSnapLMax) {
+            sessionState.on('proxyReady', () => {
+                const v = sessionState.state.blackSnapLMax;
+                knobBlackSnapLMax.value = v;
+                if (blackSnapLMaxVal) blackSnapLMaxVal.textContent = v;
             });
 
-            if (blackSnapSuggestionAccept) {
-                blackSnapSuggestionAccept.addEventListener('click', () => {
-                    blackSnapSuggestion.style.display = 'none';
-                    if (!chkBlackSnap.checked) {
-                        chkBlackSnap.checked = true;
-                        chkBlackSnap.dispatchEvent(new Event('change'));
-                    }
-                });
-            }
-            if (blackSnapSuggestionDismiss) {
-                blackSnapSuggestionDismiss.addEventListener('click', () => {
-                    blackSnapSuggestion.style.display = 'none';
-                });
-            }
+            knobBlackSnapLMax.addEventListener('input', () => {
+                if (blackSnapLMaxVal) blackSnapLMaxVal.textContent = knobBlackSnapLMax.value;
+            });
+
+            knobBlackSnapLMax.addEventListener('change', () => {
+                const newValue = parseFloat(knobBlackSnapLMax.value);
+                sessionState.state.blackSnapLMax = newValue;
+                if (blackSnapLMaxVal) blackSnapLMaxVal.textContent = newValue;
+                // Only matters (and only worth a reread) if Black Snap is
+                // actually on — otherwise just store it for next time.
+                if (sessionState.proxyEngine && sessionState.state.blackSnap) {
+                    ingestActiveDocument(true);
+                }
+            });
         }
 
         // Wire error overlay OK button
@@ -762,9 +731,31 @@ function showErrorDialog(title, message) {
 async function ingestActiveDocument(showDialog) {
     if (isIngesting) return;
     isIngesting = true;
+
+    // blackSnap/blackSnapLMax must reset to defaults on an actual document
+    // SWITCH, but not on a reread of the SAME document — the checkbox's and
+    // slider's own change-triggered reread (and the plain "Reread Document"
+    // button) all go through this same function, and all need whatever
+    // value was just set to survive reset(). Must be computed before
+    // currentDocId is overwritten below.
+    let sameDocument = false;
+    try {
+        sameDocument = !!(currentDocId && app.activeDocument && app.activeDocument.id === currentDocId);
+    } catch (_) {
+        sameDocument = false;
+    }
+    const preservedBlackSnap = (sameDocument && sessionState) ? sessionState.state.blackSnap : false;
+    const preservedBlackSnapLMax = (sameDocument && sessionState)
+        ? sessionState.state.blackSnapLMax
+        : Reveal.BlackSnap.DEFAULT_L_MAX;
+
     // Immediately clear stale content so old preview never flashes
     _clearUI();
-    if (sessionState) sessionState.reset();
+    if (sessionState) {
+        sessionState.reset();
+        sessionState.state.blackSnap = preservedBlackSnap;
+        sessionState.state.blackSnapLMax = preservedBlackSnapLMax;
+    }
 
 
     _showProgress('Preparing\u2026', 0);
@@ -1159,11 +1150,6 @@ function _clearUI() {
 
     // Clear status
     setStatus('');
-
-    // Hide any stale Black Snap suggestion from the previous document —
-    // the suggestion is transient and re-evaluated fresh on every load.
-    const blackSnapSuggestion = document.getElementById('blacksnap-suggestion');
-    if (blackSnapSuggestion) blackSnapSuggestion.style.display = 'none';
 }
 
 /**

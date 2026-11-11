@@ -44,6 +44,7 @@ class SessionState extends EventEmitter {
             trapSize: 2,
             meshSize: 355,
             blackSnap: false,
+            blackSnapLMax: Reveal.BlackSnap.DEFAULT_L_MAX,
             isProcessing: false,
             productionRenderPending: false,
             proxyBufferReady: false,
@@ -144,6 +145,7 @@ class SessionState extends EventEmitter {
         this.state.trapSize = 2;
         this.state.meshSize = 355;
         this.state.blackSnap = false;
+        this.state.blackSnapLMax = Reveal.BlackSnap.DEFAULT_L_MAX;
     }
 
     // ─── Lifecycle ───────────────────────────────────────────
@@ -168,25 +170,10 @@ class SessionState extends EventEmitter {
         // can't silently disagree the way the mesh-dpi mismatch once did.
         if (this.state.blackSnap) {
             const snapResult = Reveal.BlackSnap.applyBlackSnap(labPixels, width, height, {
-                dpi: this.imageResolution
+                dpi: this.imageResolution,
+                lMax: this.state.blackSnapLMax
             });
-            logger.log(`[SessionState] Black snap: ${snapResult.snappedPixels} px (${snapResult.snappedPercent.toFixed(2)}%), radius=${snapResult.radiusPx}px`);
-        } else {
-            // Candidacy check (suggest-only, never auto-enable — Architect-
-            // approved on the collab channel 2026-11-10). Runs on this same
-            // proxy-resolution buffer; the suggestion is transient and never
-            // persisted, so it's re-evaluated from scratch on every load.
-            const candidacy = Reveal.BlackSnap.evaluateBlackSnapCandidacy(labPixels, width, height, {
-                dpi: this.imageResolution
-            });
-            if (candidacy.snappedPercent >= Reveal.BlackSnap.DEFAULT_CANDIDACY_THRESHOLD_PERCENT) {
-                logger.log(`[SessionState] Black snap candidacy: ${candidacy.snappedPercent.toFixed(2)}% (meanLDelta=${candidacy.meanLDelta.toFixed(1)}) — suggesting`);
-                this.emit('blackSnapSuggested', {
-                    snappedPercent: candidacy.snappedPercent,
-                    meanLDelta: candidacy.meanLDelta,
-                    reason: 'High-contrast edges detected',
-                });
-            }
+            logger.log(`[SessionState] Black snap: ${snapResult.snappedPixels} px (${snapResult.snappedPercent.toFixed(2)}%), radius=${snapResult.radiusPx}px, lMax=${this.state.blackSnapLMax}`);
         }
 
         this._sourceLabPixels = labPixels;
@@ -216,10 +203,11 @@ class SessionState extends EventEmitter {
 
         this.currentConfig = Reveal.generateConfiguration(this.imageDNA, { manualArchetypeId: topMatch.id });
         // Not an archetype/reactive knob — set once here and left alone by
-        // _rebuildConfigFromState (blackSnap isn't in ALL_KNOBS), so it
-        // carries unchanged into exportProductionConfig() for the rest of
-        // the session regardless of archetype swaps.
+        // _rebuildConfigFromState (blackSnap/blackSnapLMax aren't in
+        // ALL_KNOBS), so they carry unchanged into exportProductionConfig()
+        // for the rest of the session regardless of archetype swaps.
         this.currentConfig.blackSnap = this.state.blackSnap;
+        this.currentConfig.blackSnapLMax = this.state.blackSnapLMax;
         this._applyConfigToState(this.currentConfig);
         this.state.activeArchetypeId = topMatch.id;
         this.state.initialArchetypeId = topMatch.id;

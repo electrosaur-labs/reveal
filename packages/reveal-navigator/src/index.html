@@ -963,61 +963,6 @@
             border-color: #f0a030;
         }
 
-        #blacksnap-confirm {
-            padding: 6px 8px;
-            background: #3a2a1a;
-            border: 1px solid #f0a030;
-            border-radius: 3px;
-            margin: 4px 0 8px 0;
-            font-size: 11px;
-            color: #f0d080;
-        }
-        #blacksnap-confirm button {
-            margin-left: 8px;
-            padding: 2px 10px;
-            border: 1px solid #888;
-            border-radius: 3px;
-            background: #444;
-            color: #e0e0e0;
-            cursor: pointer;
-            font-size: 11px;
-        }
-        #blacksnap-confirm button:hover {
-            background: #555;
-        }
-        #blacksnap-confirm-ok {
-            border-color: #f0a030;
-        }
-
-        #blacksnap-suggestion {
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            padding: 6px 8px;
-            background: #1a2a3a;
-            border: 1px solid #4a90d9;
-            border-radius: 3px;
-            margin: 4px 0 8px 0;
-            font-size: 11px;
-            color: #a0c8f0;
-        }
-        #blacksnap-suggestion button {
-            margin-left: 8px;
-            padding: 2px 10px;
-            border: 1px solid #888;
-            border-radius: 3px;
-            background: #444;
-            color: #e0e0e0;
-            cursor: pointer;
-            font-size: 11px;
-            flex-shrink: 0;
-        }
-        #blacksnap-suggestion button:hover {
-            background: #555;
-        }
-        #blacksnap-suggestion-accept {
-            border-color: #4a90d9;
-        }
 
         .surgeon-header {
             display: flex;
@@ -1611,6 +1556,25 @@
                 </div>
 
                 <div id="knobs-scroll">
+                    <div class="knob-group-label" style="border-top: none; padding-top: 0; margin-top: 4px;">Preprocessing</div>
+
+                    <div class="knob-row" style="justify-content: flex-start !important;">
+                        <span class="knob-label">Black Snap</span>
+                        <input type="checkbox" id="chk-blackSnap" class="adv-checkbox" style="margin-left: 4px;">
+                        <button class="knob-help-btn" title="Help" style="margin-left: auto;">?</button>
+                    </div>
+                    <span class="knob-help">For line art / engraving-style images: snaps near-black pixels on strong edges to pure black before quantization, so thin hatching and keylines consolidate into one solid ink instead of fragmenting under dithering and despeckle. Leaves smooth dark fills and gradients untouched. Changing this rereads the document from Photoshop and loses all palette edits and customizations.</span>
+
+                    <div class="knob-row">
+                        <span class="knob-label">Black Snap Darkness</span>
+                        <span class="knob-val" id="blackSnapLMax-val">32</span>
+                        <button class="knob-help-btn" title="Help">?</button>
+                    </div>
+                    <sp-slider id="knob-blackSnapLMax" min="5" max="45" step="1" value="32" variant="filled"></sp-slider>
+                    <span class="knob-help">L* ceiling for "near black" — only pixels darker than this (and on a strong edge) get snapped to pure black. Lower this if dark grays (shadows, fabric, cables) are getting swept into black along with true line work. Changing this rereads the document from Photoshop.</span>
+
+                    <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
+
                     <div class="knob-row" style="margin-bottom:4px; margin-top: 4px;">
                         <span style="color:#e0e0e0; font-size:14px; font-weight:600; letter-spacing:0.5px;">Basic</span>
                         <button id="btn-help-toggle" title="Toggle help descriptions">?</button>
@@ -1701,29 +1665,6 @@
                 </div>
                 <sp-slider id="knob-shadowClamp" min="0" max="40" step="0.5" value="8" variant="filled"></sp-slider>
                 <span class="knob-help">Minimum mask density for each color. Faint areas below this threshold get boosted so they remain visible in the output. 0% = no clamping.</span>
-
-                <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
-
-                <div class="knob-group-label" style="border-top: 3px solid #666;">Preprocessing</div>
-
-                <div class="knob-row" style="justify-content: flex-start !important;">
-                    <span class="knob-label">Black Snap</span>
-                    <input type="checkbox" id="chk-blackSnap" class="adv-checkbox" style="margin-left: 4px;">
-                    <button class="knob-help-btn" title="Help" style="margin-left: auto;">?</button>
-                </div>
-                <span class="knob-help">For line art / engraving-style images: snaps near-black pixels on strong edges to pure black before quantization, so thin hatching and keylines consolidate into one solid ink instead of fragmenting under dithering and despeckle. Leaves smooth dark fills and gradients untouched. Applies on next document read — changing this will prompt to Reread Document.</span>
-
-                <div id="blacksnap-confirm" style="display: none;">
-                    <span id="blacksnap-confirm-msg">This will reread the document from Photoshop. All palette edits and customizations will be lost. Continue?</span>
-                    <button id="blacksnap-confirm-ok">OK</button>
-                    <button id="blacksnap-confirm-cancel">Cancel</button>
-                </div>
-
-                <div id="blacksnap-suggestion" style="display: none;">
-                    <span id="blacksnap-suggestion-text">High-contrast edges detected — enable Black Snap for this document?</span>
-                    <button id="blacksnap-suggestion-accept">Enable</button>
-                    <button id="blacksnap-suggestion-dismiss">Dismiss</button>
-                </div>
 
                 <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
 
