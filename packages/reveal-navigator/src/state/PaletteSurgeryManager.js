@@ -117,19 +117,27 @@ class PaletteSurgeryManager {
 
     /**
      * Find the nearest live palette color to merge a deleted color into.
+     *
+     * Deliberately only searches real palette nodes — checked suggestions
+     * are excluded, even if one would be the nearest match. Suggestions
+     * aren't graph nodes, so there's no way to record a correct merge into
+     * one: a prior version faked it by overriding the deleted node's own
+     * color, which broke its displayed identity ("deleted swatches keep
+     * their own color") and left production with no merge-remap entry for
+     * it, producing a duplicate layer with the same ink as the suggestion's
+     * own layer (2026-11-11 investigation). Scope: suggestions still
+     * contribute to the live preview via the ghost mechanism; this only
+     * affects what deleting a *different* color can redirect into.
+     *
      * @param {number} displayIndex - Color to delete
      * @param {string} distanceMetric - 'cie76', 'cie94', or 'cie2000'
-     * @param {Array<{L,a,b}>} [extraColors] - Additional colors (checked suggestions)
-     * @returns {{targetIndex: number, isSuggestion: boolean}} Nearest live color
+     * @returns {number} Nearest live color's display index
      */
-    findMergeTarget(displayIndex, distanceMetric, extraColors) {
+    findMergeTarget(displayIndex, distanceMetric) {
         const basePalette = this.buildOverriddenPalette();
         if (!basePalette) throw new Error('Proxy not initialized');
 
-        const suggestions = extraColors || [];
-        const fullPalette = [...basePalette, ...suggestions];
-        
-        const src = fullPalette[displayIndex];
+        const src = basePalette[displayIndex];
         let bestDist = Infinity;
         let bestIdx = -1;
 
@@ -145,9 +153,9 @@ class PaletteSurgeryManager {
                      : metric === 'cie94'   ? Reveal.LabDistance.cie94SquaredInline
                      :                        Reveal.LabDistance.cie76SquaredInline;
 
-        for (let i = 0; i < fullPalette.length; i++) {
+        for (let i = 0; i < basePalette.length; i++) {
             if (deadIndices.has(i)) continue;
-            const d = distFn(src.L, src.a, src.b, fullPalette[i].L, fullPalette[i].a, fullPalette[i].b);
+            const d = distFn(src.L, src.a, src.b, basePalette[i].L, basePalette[i].a, basePalette[i].b);
             if (d < bestDist) {
                 bestDist = d;
                 bestIdx = i;
@@ -156,10 +164,7 @@ class PaletteSurgeryManager {
 
         if (bestIdx === -1) throw new Error('Cannot delete the last remaining color');
 
-        return {
-            targetIndex: bestIdx,
-            isSuggestion: bestIdx >= basePalette.length
-        };
+        return bestIdx;
     }
 
     /**

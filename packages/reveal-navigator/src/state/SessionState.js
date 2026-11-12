@@ -547,15 +547,10 @@ class SessionState extends EventEmitter {
     async deletePaletteColor(colorIndex) {
         this._scoring.cancelScoring();
         const metric = this.currentConfig?.distanceMetric || 'cie76';
-        const { targetIndex, isSuggestion } = this._paletteSurgery.findMergeTarget(colorIndex, metric, this._suggestions.checkedSuggestions);
+        const targetIndex = this._paletteSurgery.findMergeTarget(colorIndex, metric);
 
         this._paletteSurgery.markDeleted(colorIndex);
-        if (isSuggestion) {
-            const suggestion = this._suggestions.checkedSuggestions[targetIndex - this.baselineColorCount];
-            this._paletteSurgery.setOverride(colorIndex, suggestion);
-        } else {
-            this._paletteSurgery.recordMerge(colorIndex, targetIndex);
-        }
+        this._paletteSurgery.recordMerge(colorIndex, targetIndex);
 
         const result = await this.triggerProxyUpdate();
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });

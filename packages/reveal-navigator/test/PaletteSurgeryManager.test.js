@@ -132,7 +132,7 @@ describe('markDeleted', () => {
 describe('findMergeTarget', () => {
     it('finds nearest live color by CIE76', () => {
         const pm = createManager();
-        const { targetIndex } = pm.findMergeTarget(0, 'cie76');
+        const targetIndex = pm.findMergeTarget(0, 'cie76');
 
         expect(targetIndex).toBeGreaterThanOrEqual(0);
         expect(targetIndex).not.toBe(0);
@@ -141,7 +141,7 @@ describe('findMergeTarget', () => {
     it('skips already-deleted colors', () => {
         const pm = createManager();
         pm.markDeleted(1);
-        const { targetIndex } = pm.findMergeTarget(0, 'cie76');
+        const targetIndex = pm.findMergeTarget(0, 'cie76');
 
         expect(targetIndex).not.toBe(1);
     });
@@ -250,27 +250,34 @@ describe('snapshot / restore', () => {
 // ─── integration: Suggestion Targets ─────────────────────
 
 describe('Suggestion Targets', () => {
-    it('handles merging into a suggestion by converting to an override', () => {
+    it('ignores checked suggestions as merge targets, even when one would be the nearest match', () => {
         const pm = createManager();
-        
-        // Use a suggestion that is GUARANTEED to be the nearest neighbor.
-        // MOCK_PALETTE[0] is {50,0,0}.
-        // Nearest in MOCK is {30,-15,25} (idx 2) or {80,10,-20} (idx 1).
-        // Let's use a suggestion very close to {50,0,0}.
-        const suggestion = { L: 51, a: 0, b: 0 };
-        
-        // Find merge target including a suggestion (passed as extraColors)
-        const { targetIndex, isSuggestion } = pm.findMergeTarget(0, 'cie76', [suggestion]);
-        
-        expect(isSuggestion).toBe(true);
-        expect(targetIndex).toBe(4); // MOCK_PALETTE.length
-        
-        // deletePaletteColor logic in SessionState:
+
+        // findMergeTarget no longer accepts a suggestions argument at all
+        // (2026-11-11: the old isSuggestion path faked a merge via
+        // setOverride, which broke the deleted node's own displayed
+        // identity and left production with no merge-remap entry for it,
+        // producing a duplicate-ink layer). So even a suggestion that
+        // would have been the nearest match (e.g. {L:51,a:0,b:0}, very
+        // close to MOCK_PALETTE[0]'s {50,0,0}) simply isn't a candidate —
+        // a real palette entry must win.
+        const targetIndex = pm.findMergeTarget(0, 'cie76');
+
+        // Nearest REAL entry to {50,0,0} is MOCK_PALETTE[2] = {30,-15,25}.
+        expect(targetIndex).toBe(2);
+        expect(targetIndex).toBeLessThan(MOCK_PALETTE.length);
+
         pm.markDeleted(0);
-        pm.setOverride(0, suggestion);
-        
+        pm.recordMerge(0, targetIndex);
+
         expect(pm.deletedColors.has(0)).toBe(true);
-        expect(pm.paletteOverrides.get(0).L).toBe(51);
+        expect(pm.mergeHistory.get(2).has(0)).toBe(true);
+        // Merged nodes are always reported in paletteOverrides (resolved to
+        // the target's color, for backward-compat display) regardless of
+        // whether a real override was set — so check WHAT color it resolves
+        // to: the real merge target's (MOCK_PALETTE[2]), never a trace of
+        // the suggestion's Lab value (51,0,0).
+        expect(pm.paletteOverrides.get(0)).toEqual(MOCK_PALETTE[2]);
     });
 });
 
