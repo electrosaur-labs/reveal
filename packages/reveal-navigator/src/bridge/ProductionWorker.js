@@ -20,6 +20,7 @@ const { app, core, action } = require("photoshop");
 const { imaging } = require("photoshop");
 const Reveal = require("@electrosaur-labs/core");
 const PhotoshopBridge = require("./PhotoshopBridge");
+const { resolveMergeRemap } = require("../utils/resolveMergeRemap");
 
 const logger = Reveal.logger;
 const SeparationEngine = Reveal.engines.SeparationEngine;
@@ -196,11 +197,21 @@ class ProductionWorker {
             // Nearest-neighbor splits pixels arbitrarily between duplicates due
             // to spatial locality. Remap source indices → target indices so merged
             // colors collapse into a single layer.
+            //
+            // Resolved to final targets first (resolveMergeRemap) rather than
+            // applied as a single per-pixel lookup — the table can chain
+            // (2026-11-12 investigation: consolidateNearDuplicates can rewrite
+            // an already-correct direct target with an intermediate hop
+            // through a sibling merge source), and a single lookup only
+            // follows one hop, leaving the intermediate stop as its own
+            // separate layer with the exact same ink as the real target.
             if (prodConfig.mergeRemap) {
+                const resolvedRemap = resolveMergeRemap(prodConfig.mergeRemap);
+
                 let remapped = 0;
                 for (let i = 0; i < pixelCount; i++) {
-                    const target = prodConfig.mergeRemap[colorIndices[i]];
-                    if (target !== undefined) {
+                    const target = resolvedRemap[colorIndices[i]];
+                    if (target !== undefined && target !== colorIndices[i]) {
                         colorIndices[i] = target;
                         remapped++;
                     }
