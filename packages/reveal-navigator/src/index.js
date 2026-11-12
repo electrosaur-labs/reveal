@@ -745,6 +745,11 @@ async function ingestActiveDocument(showDialog) {
     const preservedBlackSnapLMax = (sameDocument && sessionState)
         ? sessionState.state.blackSnapLMax
         : Reveal.BlackSnap.DEFAULT_L_MAX;
+    // Same deal for the archetype selection — loadImage() below always
+    // re-runs DNA auto-matching from scratch, which is correct for an
+    // actual document switch but was silently discarding a manually-picked
+    // archetype on every same-document reread (e.g. checking Black Snap).
+    const preservedArchetypeId = (sameDocument && sessionState) ? sessionState.state.activeArchetypeId : null;
 
     // Immediately clear stale content so old preview never flashes
     _clearUI();
@@ -806,6 +811,21 @@ async function ingestActiveDocument(showDialog) {
         // ── Phases 2-3 are driven by SessionState.loadImage progress events ──
         // Progress screen stays visible until background scoring completes (scoringComplete event).
         await sessionState.loadImage(labPixels, width, height, originalWidth, originalHeight);
+
+        // Restore a manually-picked archetype that loadImage's own DNA
+        // auto-match just overwrote (same-document reread only \u2014 see
+        // preservedArchetypeId above). Goes through the normal swap path
+        // so pseudo-archetypes (Chameleon/Distilled/Salamander) and cached
+        // per-archetype state restore correctly, same as a user-driven swap.
+        if (preservedArchetypeId && preservedArchetypeId !== sessionState.state.activeArchetypeId) {
+            try {
+                logger.log(`[Navigator] Restoring archetype after reread: ${preservedArchetypeId}`);
+                await sessionState.swapArchetype(preservedArchetypeId);
+            } catch (err) {
+                logger.log(`[Navigator] Could not restore archetype ${preservedArchetypeId}: ${err.message}`);
+            }
+        }
+
         _showProgress('Scoring archetypes\u2026', 85);
 
     } catch (err) {
