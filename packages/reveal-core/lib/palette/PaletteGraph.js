@@ -291,6 +291,7 @@ class PaletteGraph {
         node.mergeTargetId = null;
 
         logger.log(`[PaletteGraph.revert] ${nodeId}`);
+        this._logState(`revert ${nodeId}`);
         return true;
     }
 
@@ -316,7 +317,8 @@ class PaletteGraph {
         source.mergeTargetId = targetId;
         target.mergedSourceIds.add(sourceId);
 
-        logger.log(`[PaletteGraph.merge] ${sourceId} → ${targetId}`);
+        logger.log(`[PaletteGraph.merge] ${sourceId} → ${targetId} (resolves to ${this.resolveMergeTarget(sourceId)})`);
+        this._logState(`merge ${sourceId}→${targetId}`);
     }
 
     /** Delete a node by merging it into the nearest live neighbor. */
@@ -327,10 +329,16 @@ class PaletteGraph {
         if (node.isLive()) {
             const targetId = this._findMergeTargetForDeletedNode(nodeId, metric);
             if (!targetId) throw new Error('Cannot delete the last remaining color');
-            
+
             node.status = 'deleted';
             this.mergeNode(nodeId, targetId);
             logger.log(`[PaletteGraph.delete] ${nodeId} → ${targetId}`);
+        } else {
+            // Was already dead (deleted or merged elsewhere) — this is a
+            // silent no-op by design, but if the UI dispatch layer sent a
+            // delete for a node that's already dead, that's worth knowing
+            // about rather than discovering it as "nothing happened".
+            logger.log(`[PaletteGraph.delete] SKIPPED ${nodeId} — already dead (status=${node.status}, mergeTargetId=${node.mergeTargetId})`);
         }
     }
 
@@ -432,6 +440,24 @@ class PaletteGraph {
     }
 
     // ─── Private Helpers ─────────────────────────────────────
+
+    /**
+     * Full-graph diagnostic dump — every display-order slot's id, status,
+     * and merge target, in one line. Called after every mutating operation
+     * (merge/delete/revert) so a real session's console log shows the exact
+     * state at each step, without needing to guess in advance what detail
+     * matters (added 2026-11-11 to investigate reports of chained
+     * delete-of-a-delete-target not redirecting correctly).
+     */
+    _logState(context) {
+        const summary = this._displayOrder.map((id, idx) => {
+            const n = this._nodes.get(id);
+            if (!n) return `${idx}:${id}=MISSING`;
+            const tgt = n.mergeTargetId ? `→${n.mergeTargetId}` : '';
+            return `${idx}:${id}[${n.status}]${tgt}`;
+        }).join(' ');
+        logger.log(`[PaletteGraph.state] after ${context}: ${summary}`);
+    }
 
     _findMergeTargetForDeletedNode(excludeId, metric = 'cie76') {
         const liveNodes = this.getLiveNodes().filter(n => n.id !== excludeId);

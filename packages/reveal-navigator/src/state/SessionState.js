@@ -674,9 +674,20 @@ class SessionState extends EventEmitter {
         for (const [target, sources] of this.mergeHistory) for (const src of sources) mergeRemap[src] = target;
 
         const baselinePalette = this.proxyEngine?._baselineState ? this.proxyEngine._baselineState.palette.map(c => ({ ...c })) : palette;
+
+        // Added colors (the "+" button) have no baseline counterpart, so
+        // unlike overrides, including them can't skew the NN search — they
+        // just need to BE a candidate at all, or full-res production can
+        // never assign a single pixel to them regardless of what the user
+        // expects to see. Append in the same position `palette` below uses
+        // (right after baseline, before checked suggestions) so colorIndices
+        // from mapPixelsToPaletteAsync line up with mergeRemap / labPalette.
+        const addedLabColors = [...this.addedColors].sort((a, b) => a - b).map(i => palette[i]);
+        const withAdded = addedLabColors.length > 0 ? [...baselinePalette, ...addedLabColors] : baselinePalette;
+
         const separationPalette = this._suggestions.checkedSuggestions.length > 0
-            ? [...baselinePalette, ...this._suggestions.checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
-            : baselinePalette;
+            ? [...withAdded, ...this._suggestions.checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+            : withAdded;
 
         let consolidationMerges = null;
         if (this.paletteOverrides.size > 0) {

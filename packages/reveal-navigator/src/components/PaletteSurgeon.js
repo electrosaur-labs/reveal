@@ -127,6 +127,12 @@ class PaletteSurgeon {
             counts[colorIndices[i]]++;
         }
 
+        if (this._session.mergeHistory.size > 0) {
+            const summary = [...this._session.mergeHistory.entries()]
+                .map(([t, srcs]) => `${t}←[${[...srcs].join(',')}]`).join(' ');
+            logger.log(`[Surgeon] _rebuild mergeHistory (resolved): ${summary}`);
+        }
+
         // If selected swatch was pruned away, deselect (but keep deleted swatches selected —
         // they always have zero counts because their pixels were merged into neighbors)
         if (this._state === 'SELECTED') {
@@ -154,17 +160,23 @@ class PaletteSurgeon {
         const identityPalette = this._session._paletteSurgery.getIdentityPalette();
         const colorMode = this._session.state.colorMode;
 
-        const baselineCount = this._session.baselineColorCount || 0;
-
         for (let i = 0; i < rgbPalette.length; i++) {
             const isDeleted = this._session.deletedColors.has(i);
             const isAdded = this._session.addedColors.has(i);
             const isMergeSource = this._isMergeSource(i);
-            const isBaseline = i < baselineCount;
 
-            // Skip slots with no pixels unless they carry surgery state (deleted/merged/added).
-            // Baseline slots at 0% are pruned by minVolume and show nothing in solo view — hide them.
-            if (counts[i] === 0 && !isDeleted && !isAdded && !isMergeSource) continue;
+            // NOTE (2026-11-11): previously hid any slot with 0 pixels in the
+            // current (proxy-resolution) separation unless it carried surgery
+            // state. That was wrong -- a slot can be 0% at proxy resolution and
+            // still get real pixels at full production resolution (the palette
+            // itself is fixed at proxy time; only pixel ASSIGNMENT is redone at
+            // full res, per "Preview = Production"). Hiding it meant a color
+            // could appear in the committed output that was never visible or
+            // editable in this grid, and swatches would visually reflow as
+            // counts flickered across zero between rebuilds (read as "the
+            // palette keeps reordering itself"). Always show every slot now;
+            // a real 0.0% just means "rare at this preview resolution," not
+            // "doesn't exist."
 
             const pct = (isDeleted || isMergeSource) ? '\u2014' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
             const isOverridden = this._session.paletteOverrides.has(i);
@@ -395,7 +407,7 @@ class PaletteSurgeon {
 
     // ─── Click ───────────────────────────────────────────────
 
-    _onSwatchClick(i, _shiftKey, altKey) {
+    _onSwatchClick(i, shiftKey, altKey) {
         if (this._pickerOpen) return;
 
         // Clear any suggested swatch selection
@@ -419,6 +431,30 @@ class PaletteSurgeon {
                 this._onRevert(i);
             } else {
                 this._onDeleteSwatch(i);
+            }
+            return;
+        }
+
+        // Shift+click → merge the currently selected swatch into this one
+        // (documented at the top of this file; was wired through from the
+        // pointerdown handler but never actually implemented here).
+        if (shiftKey) {
+            if (colorMode === 'bw') {
+                this._headerText.textContent = 'Merging disabled in B/W mode';
+                return;
+            }
+            const source = this._selectedIndex;
+            if (this._state === 'SELECTED' && source >= 0 && source !== i &&
+                !this._isDeadSwatch(source) && !isDeleted && !isMergeSource) {
+                logger.log(`[Surgeon] MERGE ${source}→${i} (shift+click)`);
+                this._state = 'IDLE';
+                this._selectedIndex = -1;
+                this._session.clearHighlight();
+                this._headerText.textContent = 'Click a color to isolate';
+                this._updateSelectionCSS();
+                this._session.mergePaletteColors(source, i).catch(err => {
+                    logger.log(`[PaletteSurgeon] Merge failed: ${err.message}`);
+                });
             }
             return;
         }
@@ -745,8 +781,26 @@ class PaletteSurgeon {
                 swatch._ctrlHandled = true;
                 if (isAdded) {
                     this._removeSuggestion(suggestion);
+                    // If this was the one being shown, clear the ghost — otherwise
+                    // the preview keeps showing a color that's no longer checked.
+                    if (this._selectedSuggestionIdx === idx) {
+                        this._selectedSuggestionIdx = -1;
+                        this._suggestionViewMode = null;
+                        this._session.clearHighlight();
+                        this._headerText.textContent = 'Click a color to isolate';
+                    }
                 } else {
                     this._session.addCheckedSuggestion(suggestion);
+                    // Checking a suggestion only takes effect at commit time
+                    // (it's picked up by the production separation palette) —
+                    // with no live feedback otherwise, it just looks like it
+                    // "didn't work". Show the existing ghost-preview mechanism
+                    // immediately so the checked color's impact is visible now,
+                    // without triggering a real (and disruptive) re-separation.
+                    this._selectedSuggestionIdx = idx;
+                    this._suggestionViewMode = 'integrated';
+                    this._session.setSuggestionGhost({ L: suggestion.L, a: suggestion.a, b: suggestion.b }, 'integrated');
+                    this._headerText.textContent = 'Showing "what if" \u2014 click to deselect';
                 }
                 this._renderSuggestedColors();
             });
