@@ -275,6 +275,53 @@ describe('isCustomized', () => {
     });
 });
 
+// ─── addPaletteColor / removeAddedColor preserve existing edits ──
+
+describe('addPaletteColor / removeAddedColor — preserve existing edits', () => {
+    // 2026-11-12 regression: both methods called _paletteSurgery.initialize()
+    // (= reset()) right after correctly appending/removing the node via
+    // trackAddedColor()/removeTrackedColor() -- which rebuilt the whole
+    // graph from scratch and silently discarded every prior merge, delete,
+    // and override. "Palette loses all edits when I add a color."
+
+    it('a prior override survives adding a new color', async () => {
+        const s = setupSession();
+        await s.overridePaletteColor(0, { L: 10, a: 1, b: 1 });
+        expect(s.paletteOverrides.get(0)).toEqual({ L: 10, a: 1, b: 1 });
+
+        await s.addPaletteColor({ L: 100, a: 0, b: 0 });
+
+        expect(s.paletteOverrides.get(0)).toEqual({ L: 10, a: 1, b: 1 });
+    });
+
+    it('a prior merge survives adding a new color', async () => {
+        const s = setupSession();
+        await s.mergePaletteColors(1, 0);
+        expect(s.mergeHistory.get(0).has(1)).toBe(true);
+
+        await s.addPaletteColor({ L: 100, a: 0, b: 0 });
+
+        expect(s.mergeHistory.get(0).has(1)).toBe(true);
+    });
+
+    it('a prior override survives removing an added color', async () => {
+        const s = setupSession();
+        await s.overridePaletteColor(0, { L: 10, a: 1, b: 1 });
+        await s.addPaletteColor({ L: 100, a: 0, b: 0 }); // lands at index 2
+
+        await s.removeAddedColor(2);
+
+        expect(s.paletteOverrides.get(0)).toEqual({ L: 10, a: 1, b: 1 });
+    });
+
+    it('the added color keeps its removable "added" identity (not reset to a plain baseline node)', async () => {
+        const s = setupSession();
+        await s.addPaletteColor({ L: 100, a: 0, b: 0 }); // lands at index 2
+
+        expect(s.addedColors.has(2)).toBe(true);
+    });
+});
+
 // ─── resetToDefaults ──────────────────────────────────────
 
 describe('resetToDefaults', () => {

@@ -572,8 +572,14 @@ class SessionState extends EventEmitter {
 
         await this.proxyEngine.addColorAndReseparate(labColor);
         this.baselineColorCount = this.proxyEngine._baselineState.palette.length;
+        // trackAddedColor() already surgically appends the new node to the
+        // EXISTING graph (PaletteGraph.addNode) -- do not follow it with
+        // initialize(), which calls reset() and rebuilds the whole graph
+        // from scratch, discarding every prior merge/delete/override (and,
+        // on top of that, re-creating the just-added color as a plain
+        // 'active' baseline node instead of an 'added' one, losing its own
+        // removability too).
         this._paletteSurgery.trackAddedColor(this.baselineColorCount - 1, labColor);
-        this._paletteSurgery.initialize(this.proxyEngine);
 
         const result = await this.triggerProxyUpdate();
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
@@ -583,10 +589,12 @@ class SessionState extends EventEmitter {
     async removeAddedColor(colorIndex) {
         if (!this.addedColors.has(colorIndex)) return null;
         this._scoring.cancelScoring();
+        // Same reasoning as addPaletteColor: removeTrackedColor() already
+        // surgically removes the node from the EXISTING graph
+        // (PaletteGraph.removeAddedNode) -- no initialize()/reset() needed.
         this._paletteSurgery.removeTrackedColor(colorIndex);
         const result = await this.proxyEngine.removeColorAndReseparate(colorIndex);
         this.baselineColorCount = this.proxyEngine._baselineState.palette.length;
-        this._paletteSurgery.initialize(this.proxyEngine);
         const finalResult = await this.triggerProxyUpdate();
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
         return finalResult;
