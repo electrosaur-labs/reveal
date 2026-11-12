@@ -1583,6 +1583,14 @@
                 </div>
 
                 <div id="knobs-scroll">
+                    <!-- Preprocessing (Black Snap) hidden from the UI 2026-11-12 — the
+                         motivating image (war room/apocalypse-13 etching) still doesn't
+                         separate well with it even after several fixes, and it's been a
+                         recurring source of real bugs (reread-preservation, dither
+                         coupling, delete-into-suggestion). Opt-in and off by default, so
+                         leaving the markup/wiring intact rather than deleting it — revisit
+                         by just removing this display:none. -->
+                    <div style="display:none;">
                     <div class="knob-group-label" style="border-top: none; padding-top: 0; margin-top: 4px;">Preprocessing</div>
 
                     <div class="knob-row" style="justify-content: flex-start !important;">
@@ -1601,6 +1609,7 @@
                     <span class="knob-help">L* ceiling for "near black" — only pixels darker than this (and on a strong edge) get snapped to pure black. Lower this if dark grays (shadows, fabric, cables) are getting swept into black along with true line work. Changing this rereads the document from Photoshop.</span>
 
                     <hr style="border: none; border-top: 3px solid #666; margin: 10px 0;" />
+                    </div>
 
                     <div class="knob-row" style="margin-bottom:4px; margin-top: 4px;">
                         <span style="color:#e0e0e0; font-size:14px; font-weight:600; letter-spacing:0.5px;">Basic</span>
