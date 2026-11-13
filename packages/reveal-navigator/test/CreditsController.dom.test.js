@@ -121,31 +121,41 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(controller.isManifestoOpen).toBe(true);
     });
 
-    it('closes credits and plugin dialog when Escape is pressed from manifesto or credits', () => {
-        const dialog = document.getElementById('navigatorDialog');
-        dialog.close = vi.fn();
-
+    it('dismisses manifesto and credits smoothly when clicking elsewhere (on the backdrop)', () => {
         controller.open();
+        const broadside = document.getElementById('manifesto-broadside');
         const emblem = document.getElementById('credits-emblem');
 
         // Open manifesto
         emblem.dispatchEvent(new window.Event('click'));
         expect(controller.isManifestoOpen).toBe(true);
 
-        // Escape on manifesto: closes overlay and closes plugin dialog
-        window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
-        expect(overlay.style.display).toBe('none');
-        expect(controller.isPlaying).toBe(false);
-        expect(dialog.close).toHaveBeenCalledWith('cancel');
-
-        // Reopen credits without manifesto
-        dialog.close.mockClear();
-        controller.open();
+        // Click outside (on overlay backdrop): dismisses manifesto, returns to credits roll
+        overlay.dispatchEvent(new window.Event('click'));
+        expect(controller.isManifestoOpen).toBe(false);
+        expect(broadside.style.display).toBe('none');
         expect(overlay.style.display).toBe('flex');
 
-        // Escape on credits: closes overlay and closes plugin dialog
-        window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+        // Click outside again: dismisses credits roll, returning to Navigator
+        overlay.dispatchEvent(new window.Event('click'));
         expect(overlay.style.display).toBe('none');
-        expect(dialog.close).toHaveBeenCalledWith('cancel');
+        expect(controller.isPlaying).toBe(false);
+    });
+
+    it('dismisses manifesto when clicking the manifesto header', () => {
+        controller.open();
+        const broadside = document.getElementById('manifesto-broadside');
+        const emblem = document.getElementById('credits-emblem');
+        const header = document.querySelector('.manifesto-header');
+
+        // Open manifesto
+        emblem.dispatchEvent(new window.Event('click'));
+        expect(controller.isManifestoOpen).toBe(true);
+
+        // Click header
+        header.dispatchEvent(new window.Event('click'));
+        expect(controller.isManifestoOpen).toBe(false);
+        expect(broadside.style.display).toBe('none');
+        expect(overlay.style.display).toBe('flex');
     });
 });

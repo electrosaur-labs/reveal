@@ -4,8 +4,8 @@
  *
  * Features:
  * - Native scrollbars active from the get-go for unhurried browsing
- * - Gentle auto-crawl that yields immediately to manual user scrolling or hover
- * - Closes on Esc key or clicking the backdrop
+ * - Gentle ambient crawl that yields immediately to manual user scrolling or hover
+ * - Zero button clutter / zero keyboard traps: clicking elsewhere (the backdrop) dismisses smoothly
  * - Easter Egg: Dedicated Silk-Screen Broadside Viewer for Doug Minkler's Manifesto
  * - UXP-safe layout (pure flexbox, zero floats)
  */
@@ -25,6 +25,7 @@ class CreditsController {
         this.emblem = this.overlay.querySelector('#credits-emblem');
         this.printTrigger = this.overlay.querySelector('#credits-print-trigger');
         this.broadside = this.overlay.querySelector('#manifesto-broadside');
+        this.manifestoHeader = this.overlay.querySelector('.manifesto-header');
 
         this.speed = 24; // pixels per second gentle ambient crawl
         this.isPlaying = false;
@@ -35,17 +36,28 @@ class CreditsController {
         this.rafId = null;
 
         this._tick = this._tick.bind(this);
-        this._handleKeyDown = this._handleKeyDown.bind(this);
         this._bindEvents();
     }
 
     _bindEvents() {
-        // Clicking backdrop outside the credits window dismisses the overlay
+        // Clicking "elsewhere" (the dark backdrop outside the window) dismisses the active view
         this.overlay.addEventListener('click', (e) => {
             if (e.target === this.overlay) {
-                this.close();
+                if (this.isManifestoOpen) {
+                    this.closeManifesto();
+                } else {
+                    this.close();
+                }
             }
         });
+
+        // Clicking the manifesto header also returns to the crawl
+        if (this.manifestoHeader) {
+            this.manifestoHeader.style.cursor = 'pointer';
+            this.manifestoHeader.addEventListener('click', () => {
+                this.closeManifesto();
+            });
+        }
 
         if (this.viewport) {
             const onEnter = () => { this.isHovered = true; };
@@ -88,33 +100,6 @@ class CreditsController {
             this.printTrigger.addEventListener('pointerdown', onTriggerDown);
             this.printTrigger.addEventListener('click', triggerManifesto);
         }
-
-        // Bind Escape key on broadside, window, and document so Esc on manifesto or credits always closes plugin
-        if (this.broadside) {
-            this.broadside.addEventListener('keydown', this._handleKeyDown);
-        }
-        if (typeof window !== 'undefined') {
-            window.addEventListener('keydown', this._handleKeyDown);
-        }
-        if (typeof document !== 'undefined') {
-            document.addEventListener('keydown', this._handleKeyDown);
-        }
-    }
-
-    _handleKeyDown(e) {
-        if (e.key === 'Escape' || e.key === 'Esc') {
-            if (this.overlay && this.overlay.style.display !== 'none') {
-                this.close();
-                if (typeof document !== 'undefined') {
-                    const dialog = document.getElementById('navigatorDialog');
-                    if (dialog && typeof dialog.close === 'function') {
-                        try {
-                            dialog.close('cancel');
-                        } catch (err) {}
-                    }
-                }
-            }
-        }
     }
 
     open() {
@@ -140,9 +125,6 @@ class CreditsController {
         this.isManifestoOpen = true;
         this.pause();
         this.broadside.style.display = 'flex';
-        try {
-            this.broadside.focus();
-        } catch (_) {}
     }
 
     closeManifesto() {
