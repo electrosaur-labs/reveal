@@ -8,11 +8,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Reveal reduces an image to a handful of spot colors and gives you screens your mesh can actually hold. It works alongside Photoshop's built-in tools: it suggests several candidate palettes, you pick one and edit it, and it never produces dots or lines finer than your mesh can print. That limit is a "rule of N": the smallest printable dot must span N mesh openings, with N adjustable from 4 to 10 (default 7).
+Reveal reduces an image to a handful of spot colors and gives you screens your mesh can actually hold. It works alongside Photoshop's built-in tools: it analyzes your image, generates candidate palettes from 26 built-in archetypes and 3 adaptive pseudo-archetypes, and lets you add, remove, or nudge colors to fit your press. The engine recommends; the artist decides. Crucially, it never produces dots or lines finer than your mesh can print: the smallest printable dot must span N mesh openings ("Rule of N", adjustable from 4 to 10, default 7).
 
 **Who it's for:** artists, printmakers and poster makers working in spot color who aren't after photorealism. Reveal doesn't try to reproduce the original; it aims for a set of colors that carries the image, on screens that will print. If you need photorealism, process or simulated process printing is the better route.
-
-Reveal analyzes your image and generates multiple possible separation palettes based on 26 built-in archetypes plus 3 adaptive pseudo-archetypes. You select from these and further refine — adding, removing, and altering colors from the suggested palette. The engine recommends; the artist decides.
 
 The Photoshop plugin gives you real-time preview, palette editing, and one-click export to separated Lab layers with masks. The core engine is **100% pure JavaScript with zero external dependencies**, so it also runs in Node.js, browsers, and batch pipelines.
 
@@ -36,7 +34,7 @@ The Photoshop plugin gives you real-time preview, palette editing, and one-click
 
 ## Key Features
 
-- **Lab median cut quantization** — Recursive partitioning in perceptual color space, not RGB
+- **Perceptual Lab quantization** — Wu's variance-minimizing quantizer by default, with classical Lab median-cut available; partitions in perceptual color space, not RGB
 - **26 archetypes + 3 adaptive pseudo-archetypes** — DNA analysis fingerprints each image and recommends separation parameters (Golden Hour, Commercial, Fine Art Scan, Dark Portrait, etc.)
 - **Three distance metrics** — CIE76 (fast), CIE94 (perceptual), CIE2000 (museum-grade)
 - **Dithering** — Floyd-Steinberg, Atkinson, Stucki, Bayer, with mesh-aware LPI scaling
@@ -55,7 +53,7 @@ Reveal is validated against three benchmark datasets spanning fine art, photogra
 | **[TESTIMAGES](https://testimages.org/color/)** | 40 | 11.03 | 100% | 40-image COLOR subset for image processing evaluation |
 | **SP100** | 147 | 6.99 | 100% | Fine art from [Met Museum](https://www.metmuseum.org/art/collection) (CC0), [Rijksmuseum](https://www.rijksmuseum.nl/en/rijksstudio) (CC0), [Art Institute of Chicago](https://www.artic.edu/collection) (CC0) |
 
-**ΔE** = CIE76 perceptual color distance (lower = more faithful). **Integrity** = physical printability (ink stack violations, density breaches). CQ100 citation: Celebi & Pérez-Delgado, [*J. Electronic Imaging* 32(3), 2023](https://doi.org/10.1117/1.JEI.32.3.033019). Full results in `packages/reveal-batch/data/`.
+**ΔE** = CIE76 perceptual color distance. In spot-color screen printing, a lower ΔE measures numerical closeness to the continuous-tone source, not artistic print quality. Effective posterization and screen printing often deliberately diverge from source continuous tones to achieve bold graphic impact. **Integrity** = physical printability (ink stack violations, density breaches). CQ100 citation: Celebi & Pérez-Delgado, [*J. Electronic Imaging* 32(3), 2023](https://doi.org/10.1117/1.JEI.32.3.033019). Full results in `packages/reveal-batch/data/`.
 
 ## Install
 
@@ -82,7 +80,7 @@ Open http://localhost:3700. See the [Web App README](packages/reveal-app/README.
 |---------|-------------|
 | **[@electrosaur-labs/core](packages/reveal-core/)** | Pure JS engines — posterization, separation, DNA analysis, archetypes. **Zero dependencies.** |
 | **[@electrosaur-labs/navigator](packages/reveal-navigator/)** | Photoshop UXP panel — real-time archetype exploration, palette surgery, production render |
-| **[@electrosaur-labs/adobe](packages/reveal-adobe/)** | Photoshop UXP command dialog (superseded by Navigator, kept for reference) |
+| **[@electrosaur-labs/reveal-cli](packages/reveal-cli/)** | Command-line interface for headless batch separation and pre-flight press inspection (`reveal verify`) |
 | **[@electrosaur-labs/reveal-app](packages/reveal-app/)** | Standalone web UI — no Photoshop required (`npm run server`) |
 | **[@electrosaur-labs/batch](packages/reveal-batch/)** | CLI batch processor for automated testing and benchmarking |
 | **[@electrosaur-labs/psd-reader](packages/reveal-psd-reader/)** | Minimal PSD reader for Lab documents |
@@ -94,8 +92,8 @@ Open http://localhost:3700. See the [Web App README](packages/reveal-app/README.
 @electrosaur-labs/core (Pure Math)          Zero dependencies, no I/O
      │
      ├── @electrosaur-labs/navigator        Photoshop UXP panel (real-time preview + production)
+     ├── @electrosaur-labs/reveal-cli       CLI & Pre-flight inspector (reveal verify)
      ├── @electrosaur-labs/reveal-app       Standalone web UI (Express, no Photoshop required)
-     ├── @electrosaur-labs/adobe            Photoshop UXP dialog (legacy)
      └── @electrosaur-labs/batch            Node.js CLI for benchmarking (ag-psd, sharp)
 ```
 

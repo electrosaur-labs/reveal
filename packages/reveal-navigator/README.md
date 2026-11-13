@@ -58,6 +58,9 @@ Advanced panels expose chroma, palette, weight, tone, substrate, and noise contr
 ### Separate
 Renders the full-resolution document with the locked palette. Creates Lab fill+mask layers — one per ink color. Uses nearest-neighbor mapping (no re-posterization).
 
+### Credits
+Click **★ Credits** in the status bar to open the dedicated crawling credits window celebrating the printmakers, algorithmic pioneers, and contributors behind Reveal. Pause anytime by hovering over the text, browse freely with native scrollbars, and dismiss smoothly by clicking elsewhere on the dark backdrop.
+
 ## Development
 
 ```bash
