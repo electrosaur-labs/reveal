@@ -49,9 +49,11 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(document.getElementById('credits-viewport')).not.toBeNull();
         expect(document.getElementById('credits-crawl')).not.toBeNull();
         expect(document.getElementById('btn-credits-playpause')).not.toBeNull();
-        expect(document.getElementById('btn-credits-replay')).not.toBeNull();
         expect(document.getElementById('btn-credits-close')).not.toBeNull();
         expect(document.getElementById('btn-show-credits')).not.toBeNull();
+        expect(document.getElementById('credits-emblem')).not.toBeNull();
+        expect(document.getElementById('manifesto-broadside')).not.toBeNull();
+        expect(document.getElementById('btn-manifesto-close')).not.toBeNull();
     });
 
     it('opens and closes the overlay with proper playback state', () => {
@@ -80,14 +82,25 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(controller.btnPlayPause.textContent).toContain('Pause');
     });
 
-    it('resets scroll position to 0 on replay()', () => {
+    it('grays out Play button when finishing 1 round and re-enables when scrolled back to top', () => {
         controller.open();
-        controller.viewport.scrollTop = 150;
-        expect(controller.viewport.scrollTop).toBe(150);
+        expect(controller.btnPlayPause.disabled).toBe(false);
 
-        controller.replay();
-        expect(controller.viewport.scrollTop).toBe(0);
-        expect(controller.isPlaying).toBe(true);
+        // Simulate reaching bottom of crawl
+        controller.finishCrawl();
+        expect(controller.hasFinishedFirstRound).toBe(true);
+        expect(controller.isPlaying).toBe(false);
+        expect(controller.btnPlayPause.disabled).toBe(true);
+        expect(controller.btnPlayPause.textContent).toContain('Completed');
+        expect(controller.btnPlayPause.style.opacity).toBe('0.35');
+
+        // Scroll back up to top (scrollTop < 50)
+        controller.viewport.scrollTop = 10;
+        controller.viewport.dispatchEvent(new window.Event('scroll'));
+        expect(controller.hasFinishedFirstRound).toBe(false);
+        expect(controller.btnPlayPause.disabled).toBe(false);
+        expect(controller.btnPlayPause.textContent).toContain('Play');
+        expect(controller.btnPlayPause.style.opacity).toBe('1');
     });
 
     it('toggles hover state on mouseenter/mouseleave for hover-to-pause', () => {

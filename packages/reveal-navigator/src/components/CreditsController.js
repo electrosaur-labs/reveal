@@ -5,9 +5,10 @@
  * Features:
  * - Smooth vertical crawl (~28 px/sec) using requestAnimationFrame
  * - Hover-to-pause so users can read cards without rushing
- * - Interactive playback bar: Play/Pause toggle, Replay (reset to top), and Close
- * - Easter Egg: Clicking the Doug Minkler dedication header or mascot reveals the
- *   full-bleed serigraph Manifesto Broadside ("Reduction is Revelation")
+ * - Auto-finishes and grays out Play after 1 full round so user can freely scroll
+ * - Re-enables Play button if user scrolls back to the top
+ * - Easter Egg: Dedicated Silk-Screen Broadside Viewer for Doug Minkler's Manifesto
+ * - UXP-safe layout (flexbox-based, zero floats)
  * - Keyboard navigation: Esc closes manifesto or credits overlay
  */
 
@@ -23,7 +24,6 @@ class CreditsController {
         this.crawl = this.overlay.querySelector('#credits-crawl');
         this.btnClose = this.overlay.querySelector('#btn-credits-close');
         this.btnPlayPause = this.overlay.querySelector('#btn-credits-playpause');
-        this.btnReplay = this.overlay.querySelector('#btn-credits-replay');
 
         // Easter Egg: Minkler Manifesto Broadside
         this.emblem = this.overlay.querySelector('#credits-emblem');
@@ -34,6 +34,7 @@ class CreditsController {
         this.isPlaying = false;
         this.isHovered = false;
         this.isManifestoOpen = false;
+        this.hasFinishedFirstRound = false;
         this.lastTimestamp = 0;
         this.rafId = null;
 
@@ -48,12 +49,9 @@ class CreditsController {
         }
         if (this.btnPlayPause) {
             this.btnPlayPause.addEventListener('click', () => {
-                this.togglePlayPause();
-            });
-        }
-        if (this.btnReplay) {
-            this.btnReplay.addEventListener('click', () => {
-                this.replay();
+                if (!this.hasFinishedFirstRound) {
+                    this.togglePlayPause();
+                }
             });
         }
         if (this.viewport) {
@@ -62,6 +60,18 @@ class CreditsController {
             });
             this.viewport.addEventListener('mouseleave', () => {
                 this.isHovered = false;
+            });
+            this.viewport.addEventListener('scroll', () => {
+                // If user scrolled back up near the top after finishing, re-enable Play
+                if (this.hasFinishedFirstRound && this.viewport.scrollTop < 50) {
+                    this.hasFinishedFirstRound = false;
+                    if (this.btnPlayPause) {
+                        this.btnPlayPause.disabled = false;
+                        this.btnPlayPause.textContent = '▶ Play';
+                        this.btnPlayPause.style.opacity = '1';
+                        this.btnPlayPause.style.cursor = 'pointer';
+                    }
+                }
             });
         }
 
@@ -107,7 +117,7 @@ class CreditsController {
         if (!this.overlay) return;
         this.closeManifesto();
         this.overlay.style.display = 'flex';
-        this.replay();
+        this.restartCrawl();
     }
 
     close() {
@@ -128,7 +138,7 @@ class CreditsController {
         if (!this.broadside) return;
         this.isManifestoOpen = false;
         this.broadside.style.display = 'none';
-        if (this.overlay && this.overlay.style.display !== 'none') {
+        if (this.overlay && this.overlay.style.display !== 'none' && !this.hasFinishedFirstRound) {
             this.play();
         }
     }
@@ -142,11 +152,14 @@ class CreditsController {
     }
 
     play() {
-        if (this.isManifestoOpen) return;
+        if (this.isManifestoOpen || this.hasFinishedFirstRound) return;
         this.isPlaying = true;
         this.lastTimestamp = typeof performance !== 'undefined' ? performance.now() : Date.now();
         if (this.btnPlayPause) {
+            this.btnPlayPause.disabled = false;
             this.btnPlayPause.textContent = '⏸ Pause';
+            this.btnPlayPause.style.opacity = '1';
+            this.btnPlayPause.style.cursor = 'pointer';
         }
         if (!this.rafId && typeof requestAnimationFrame !== 'undefined') {
             this.rafId = requestAnimationFrame(this._tick);
@@ -155,7 +168,7 @@ class CreditsController {
 
     pause() {
         this.isPlaying = false;
-        if (this.btnPlayPause) {
+        if (this.btnPlayPause && !this.hasFinishedFirstRound) {
             this.btnPlayPause.textContent = '▶ Play';
         }
         if (this.rafId && typeof cancelAnimationFrame !== 'undefined') {
@@ -164,7 +177,19 @@ class CreditsController {
         }
     }
 
-    replay() {
+    finishCrawl() {
+        this.pause();
+        this.hasFinishedFirstRound = true;
+        if (this.btnPlayPause) {
+            this.btnPlayPause.disabled = true;
+            this.btnPlayPause.textContent = '✓ Completed';
+            this.btnPlayPause.style.opacity = '0.35';
+            this.btnPlayPause.style.cursor = 'default';
+        }
+    }
+
+    restartCrawl() {
+        this.hasFinishedFirstRound = false;
         if (this.viewport) {
             this.viewport.scrollTop = 0;
         }
@@ -180,10 +205,11 @@ class CreditsController {
 
         if (!this.isHovered && this.viewport) {
             const maxScroll = this.viewport.scrollHeight - this.viewport.clientHeight;
-            if (this.viewport.scrollTop < maxScroll) {
+            if (this.viewport.scrollTop < maxScroll - 2) {
                 this.viewport.scrollTop += this.speed * delta;
             } else {
-                this.pause();
+                // Completed 1 full round: gray out Play button and leave scrollbar active
+                this.finishCrawl();
                 return;
             }
         }
