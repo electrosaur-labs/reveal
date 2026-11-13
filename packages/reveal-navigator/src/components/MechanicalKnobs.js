@@ -55,6 +55,7 @@ const KNOB_DEFS = [
     { key: 'substrateTolerance', sliderId: 'knob-substrateTolerance', valId: 'substrateTolerance-val', revertId: 'revert-substrateTolerance', decimals: 1, unit: ''  },
     { key: 'ignoreTransparent',  sliderId: 'chk-ignoreTransparent',  valId: null,                     revertId: 'revert-ignoreTransparent',  decimals: 0, unit: ''  },
     { key: 'meshSize',           sliderId: 'picker-meshSize',         valId: null,                     revertId: 'revert-meshSize',          decimals: 0, unit: ''  },
+    { key: 'ruleOfN',            sliderId: 'knob-ruleOfN',            valId: 'ruleOfN-val',            revertId: 'revert-ruleOfN',           decimals: 1, unit: ''  },
 
     // Advanced: Noise
     { key: 'preprocessingIntensity', sliderId: 'picker-preprocessingIntensity', valId: null,          revertId: 'revert-preprocessingIntensity', decimals: 0, unit: '' },
@@ -182,11 +183,15 @@ class MechanicalKnobs {
                 this._updateRevertIcon(key, entry);
             }
 
-            // Mesh TPI change affects the speckleRescue auto label
-            if (key === 'meshSize' || key === 'imageDpi') {
+            // Mesh TPI or ruleOfN change affects the speckleRescue auto label and ruleOfN readout
+            if (key === 'meshSize' || key === 'imageDpi' || key === 'ruleOfN') {
                 const speckleEntry = this._elements['speckleRescue'];
                 if (speckleEntry) {
                     this._updateDisplay(speckleEntry, parseFloat(speckleEntry.el.value));
+                }
+                const ruleOfNEntry = this._elements['ruleOfN'];
+                if (ruleOfNEntry) {
+                    this._updateDisplay(ruleOfNEntry, parseFloat(ruleOfNEntry.el.value));
                 }
             }
         });
@@ -207,6 +212,15 @@ class MechanicalKnobs {
                 }
             }
             entry.el.style.opacity = '';
+        }
+        if (entry.def.key === 'ruleOfN') {
+            const state = this._session.getState();
+            const meshTPI = state.meshSize || 355;
+            const dpi = this._session.imageResolution || 300;
+            const MeshPhysics = Reveal.MeshPhysics;
+            const dotPx = MeshPhysics ? MeshPhysics.minDotPx(meshTPI, dpi, value) : Math.ceil(value * dpi / (meshTPI || 355));
+            entry.valEl.textContent = `${value.toFixed(1)} (${dotPx} px)`;
+            return;
         }
         entry.valEl.textContent = value.toFixed(entry.def.decimals) + entry.def.unit;
     }

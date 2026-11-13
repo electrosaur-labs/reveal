@@ -1813,6 +1813,15 @@
                         <span class="knob-help">Minimum reproducible detail size, set by mesh density (threads per inch). Higher TPI = finer detail preserved. Affects dithering scale so the pattern matches the output resolution. Set to 0 to disable.</span>
 
                         <div class="knob-row" style="justify-content: flex-start !important;">
+                            <span class="knob-label">Rule of N</span>
+                            <span class="knob-val" id="ruleOfN-val" style="margin-left: 4px;">7.0</span>
+                            <button class="knob-revert" id="revert-ruleOfN" title="Revert to default" style="margin-left: auto;">&#x21BA;</button>
+                            <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
+                        </div>
+                        <sp-slider id="knob-ruleOfN" min="4.0" max="10.0" step="0.5" value="7.0" variant="filled"></sp-slider>
+                        <span class="knob-help">Minimum printable dot factor N (openings per dot). Governs halftone clustering scale and despeckle floor. Default 7.0 for standard press safety, 4.0-5.5 for high-tension fine detail, 8.0-10.0 for heavy ink or rough substrates.</span>
+
+                        <div class="knob-row" style="justify-content: flex-start !important;">
                             <span class="knob-label">Trap Width</span>
                             <span class="knob-val" id="trapSize-val" style="margin-left: 4px;">0pt</span>
                             <button class="knob-revert" id="revert-trapSize" title="Revert to default" style="margin-left: auto;">&#x21BA;</button>

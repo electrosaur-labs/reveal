@@ -186,6 +186,105 @@ describe('TrapEngine', () => {
         });
     });
 
+    describe('computeTrapZones', () => {
+        // Backs the Navigator's "Show Traps" overlay: it needs to know
+        // WHICH pixels are newly trapped (to paint just those in full ink
+        // color over a dimmed composite), not the whole post-trap mask
+        // the way applyTrapping's return value implies. Never directly
+        // tested before, despite applyTrapping (which it wraps) having
+        // extensive coverage.
+
+        it('returns null when maxTrapPixels is 0', () => {
+            const w = 10, h = 1;
+            const lightMask = new Uint8Array(w);
+            const darkMask = new Uint8Array(w);
+            for (let i = 0; i < 5; i++) lightMask[i] = 255;
+            for (let i = 5; i < 10; i++) darkMask[i] = 255;
+            const palette = [{ L: 80, a: 0, b: 0 }, { L: 20, a: 0, b: 0 }];
+
+            expect(TrapEngine.computeTrapZones([lightMask, darkMask], palette, w, h, 0)).toBeNull();
+        });
+
+        it('returns null when masks is empty or missing', () => {
+            expect(TrapEngine.computeTrapZones([], [], 10, 1, 2)).toBeNull();
+            expect(TrapEngine.computeTrapZones(null, [], 10, 1, 2)).toBeNull();
+        });
+
+        it('returns null when nothing actually traps (no adjacency, like the 1px-gap case above)', () => {
+            const w = 10, h = 1;
+            const lightMask = new Uint8Array(w);
+            const darkMask = new Uint8Array(w);
+            lightMask[0] = lightMask[1] = lightMask[2] = 255;
+            for (let i = 4; i < 10; i++) darkMask[i] = 255; // gap at pixel 3
+            const palette = [{ L: 80, a: 0, b: 0 }, { L: 20, a: 0, b: 0 }];
+
+            expect(TrapEngine.computeTrapZones([lightMask, darkMask], palette, w, h, 1)).toBeNull();
+        });
+
+        it('zone for the expanding color contains ONLY the newly-trapped pixels, not its original territory', () => {
+            const w = 10, h = 1;
+            const lightMask = new Uint8Array(w);
+            const darkMask = new Uint8Array(w);
+            for (let i = 0; i < 5; i++) lightMask[i] = 255; // light: 0-4
+            for (let i = 5; i < 10; i++) darkMask[i] = 255; // dark: 5-9
+            const palette = [{ L: 80, a: 0, b: 0 }, { L: 20, a: 0, b: 0 }];
+
+            const result = TrapEngine.computeTrapZones([lightMask, darkMask], palette, w, h, 2);
+
+            expect(result).not.toBeNull();
+            const lightZone = result.zones[0];
+            // Only pixels 5-6 are NEW (trapped); 0-4 were already light and
+            // must NOT appear in the zone even though they're still 255 in
+            // the trapped mask applyTrapping would have produced.
+            expect(lightZone[5]).toBe(255);
+            expect(lightZone[6]).toBe(255);
+            for (let i = 0; i < 5; i++) expect(lightZone[i]).toBe(0);
+            expect(lightZone[7]).toBe(0);
+        });
+
+        it('zone for the non-expanding (darker) color is entirely empty', () => {
+            const w = 10, h = 1;
+            const lightMask = new Uint8Array(w);
+            const darkMask = new Uint8Array(w);
+            for (let i = 0; i < 5; i++) lightMask[i] = 255;
+            for (let i = 5; i < 10; i++) darkMask[i] = 255;
+            const palette = [{ L: 80, a: 0, b: 0 }, { L: 20, a: 0, b: 0 }];
+
+            const result = TrapEngine.computeTrapZones([lightMask, darkMask], palette, w, h, 2);
+
+            expect(result).not.toBeNull();
+            expect(countPixels(result.zones[1])).toBe(0);
+        });
+
+        it('does not mutate the caller\'s original masks (clones before trapping)', () => {
+            const w = 10, h = 1;
+            const lightMask = new Uint8Array(w);
+            const darkMask = new Uint8Array(w);
+            for (let i = 0; i < 5; i++) lightMask[i] = 255;
+            for (let i = 5; i < 10; i++) darkMask[i] = 255;
+            const palette = [{ L: 80, a: 0, b: 0 }, { L: 20, a: 0, b: 0 }];
+
+            const lightBefore = new Uint8Array(lightMask);
+            TrapEngine.computeTrapZones([lightMask, darkMask], palette, w, h, 2);
+
+            expect(lightMask).toEqual(lightBefore);
+        });
+
+        it('trapSizes passed through from the underlying applyTrapping call', () => {
+            const w = 10, h = 1;
+            const lightMask = new Uint8Array(w);
+            const darkMask = new Uint8Array(w);
+            for (let i = 0; i < 5; i++) lightMask[i] = 255;
+            for (let i = 5; i < 10; i++) darkMask[i] = 255;
+            const palette = [{ L: 80, a: 0, b: 0 }, { L: 20, a: 0, b: 0 }];
+
+            const result = TrapEngine.computeTrapZones([lightMask, darkMask], palette, w, h, 2);
+
+            expect(result.trapSizes).toBeDefined();
+            expect(Array.isArray(result.trapSizes)).toBe(true);
+        });
+    });
+
     describe('applyTrapping - three colors, linear interpolation', () => {
 
         // Three colors: L=80 (light), L=50 (mid), L=20 (dark)

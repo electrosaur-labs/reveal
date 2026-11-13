@@ -184,10 +184,11 @@ class ProductionWorker {
             // mismatch and inflate Macro-Cell dithering.
             const meshCount = prodConfig.meshSize || null;
             const dpi = prodConfig.resolution;
-            logger.log(`[ProductionWorker] Separating: ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'} @ ${dpi} dpi`);
+            const ruleOfN = prodConfig.ruleOfN || 7.0;
+            logger.log(`[ProductionWorker] Separating: ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'} @ ${dpi} dpi (ruleOfN=${ruleOfN})`);
             const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
                 labPixels, separationPalette, null, actualWidth, actualHeight,
-                { ditherType, distanceMetric: metric, meshCount, dpi }
+                { ditherType, distanceMetric: metric, meshCount, dpi, ruleOfN }
             );
 
             logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms (metric=${metric})`);
@@ -241,6 +242,7 @@ class ProductionWorker {
                 shadowClamp: prodConfig.shadowClamp,
                 trapSize: trapPx,
                 meshSize: prodConfig.meshSize,
+                ruleOfN: prodConfig.ruleOfN || 7.0,
                 imageDpi: dpi,
                 activeArchetypeId: prodConfig.activeArchetypeId,
             };
@@ -409,7 +411,7 @@ class ProductionWorker {
 
         // Loupe tiles are native resolution — no originalWidth scaling needed
         if (knobs.speckleRescue > 0 || knobs.meshSize > 0) {
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, knobs.speckleRescue, 0, knobs.meshSize || 0, knobs.imageDpi || 0);
+            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, knobs.speckleRescue, 0, knobs.meshSize || 0, knobs.imageDpi || 0, knobs.ruleOfN || 7.0);
         }
 
         if (knobs.shadowClamp > 0) {
@@ -466,7 +468,7 @@ class ProductionWorker {
      * @returns {Array<{labColor, hex, mask, width, height, name}>} Layer objects
      */
     async _buildLayers(colorIndices, labPalette, hexColors, width, height, knobs) {
-        const { minVolume, speckleRescue, shadowClamp, trapSize, meshSize, imageDpi, activeArchetypeId } = knobs;
+        const { minVolume, speckleRescue, shadowClamp, trapSize, meshSize, imageDpi, activeArchetypeId, ruleOfN = 7.0 } = knobs;
         const layers = [];
         const pixelCount = width * height;
         // ── Apply minVolume (shared with ProxyEngine) ──
@@ -484,22 +486,20 @@ class ProductionWorker {
         // No originalWidth scaling — production runs at full document resolution.
         // sliderPx=0 with meshSize set triggers auto-compute from press physics.
         if (speckleRescue > 0 || meshSize > 0) {
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, speckleRescue, 0, meshSize || 0, imageDpi || 0);
+            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, speckleRescue, 0, meshSize || 0, imageDpi || 0, ruleOfN);
         }
 
-        // ── Rule of 7: hard physical floor on the committed output ──
-        // Always enforced here (production commit), independent of the
-        // speckleRescue slider/meshSize defaulting above — this is the actual
-        // deliverable, not interactive preview state.
-        const ruleOfSevenResult = await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
-            meshTPI: meshSize || 0, imageDpi: imageDpi || 0
-        });
-        // Architect-requested metric (2026-11-10): track how much of the
-        // committed ink the Filament Pruning Pass removed, per archetype —
-        // a consistently high ratio on a given archetype would flag the
-        // maxSpanPx estimate as too aggressive for that content style.
-        const prunedPct = pixelCount > 0 ? (ruleOfSevenResult.pixelsPruned / pixelCount) * 100 : 0;
-        logger.log(`[ProductionWorker] Rule-of-7: clusters=${ruleOfSevenResult.clustersRemoved} removed=${ruleOfSevenResult.pixelsRemoved}px pruned=${ruleOfSevenResult.pixelsPruned}px (${prunedPct.toFixed(3)}% of image, archetype=${activeArchetypeId})`);
+        // ── Rule of 7 (Rule of N): physical floor on committed output when mesh awareness is on ──
+        // Only enforced when a screen mesh is selected (meshSize > 0). When mesh awareness
+        // is disabled ("No Mesh (0)"), Rule of 7 is bypassed to preserve pure 1px details.
+        let ruleOfSevenResult = { clustersRemoved: 0, pixelsRemoved: 0, pixelsPruned: 0 };
+        if (meshSize > 0) {
+            ruleOfSevenResult = await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+                meshTPI: meshSize, imageDpi: imageDpi || 0, ruleOfN
+            });
+            const prunedPct = pixelCount > 0 ? (ruleOfSevenResult.pixelsPruned / pixelCount) * 100 : 0;
+            logger.log(`[ProductionWorker] Rule-of-7: clusters=${ruleOfSevenResult.clustersRemoved} removed=${ruleOfSevenResult.pixelsRemoved}px pruned=${ruleOfSevenResult.pixelsPruned}px (${prunedPct.toFixed(3)}% of image, archetype=${activeArchetypeId})`);
+        }
 
         // ── Apply shadowClamp (shared with ProxyEngine) ──
         // Uses tonal-aware edge erosion (same algorithm as proxy preview)

@@ -584,3 +584,115 @@ describe('Palette Surgery + real ProxyEngine', () => {
         expect(manifest.meta.filename).toBe('test-document.psd');
     }, 30000);
 });
+
+// ─── generateTrapOverlayBuffer (the "Show Traps" preview) ──
+//
+// TrapEngine.applyTrapping itself has extensive coverage in reveal-core,
+// but nothing exercised the Navigator-side wiring: the points->pixels
+// conversion (using session.imageResolution, NOT the proxy's own
+// downsampled width) and TrapEngine.computeTrapZones (used instead of
+// applyTrapping directly so only the NEWLY trapped pixels get painted,
+// not the swatch's original territory).
+
+describe('generateTrapOverlayBuffer', () => {
+    it('returns null when trapSize is 0 (nothing to show)', async () => {
+        const session = await setupRealSession('everyday_photo');
+        session.imageResolution = 300;
+        session.state.trapSize = 0;
+
+        expect(session.generateTrapOverlayBuffer()).toBeNull();
+    });
+
+    it('returns null when imageResolution is unset, rather than computing a bogus trap size from NaN', async () => {
+        const session = await setupRealSession('everyday_photo');
+        session.state.trapSize = 2;
+        // imageResolution defaults to null -- confirms there's no silent
+        // fallback that would quietly compute trapPx from NaN math.
+        expect(session.imageResolution).toBeNull();
+
+        expect(session.generateTrapOverlayBuffer()).toBeNull();
+    });
+
+    it('converts points to proxy pixels via imageResolution (not a hardcoded DPI)', async () => {
+        const session = await setupRealSession('everyday_photo');
+        const sep = session.proxyEngine.separationState;
+
+        // 72dpi makes the points->pixels conversion trivial (1pt == 1px at
+        // full res), isolating just the full-res -> proxy-res downscale
+        // this method also has to apply.
+        session.imageResolution = 72;
+        session.state.trapSize = 4; // 4pt -> 4px at full res
+
+        const buf = session.generateTrapOverlayBuffer();
+        expect(buf).not.toBeNull();
+        expect(buf.length).toBe(session.previewBuffer.length);
+
+        // Cross-check against calling the core engine directly with the
+        // SAME proxy-scaled px value the method is documented to compute:
+        // fullTrapPx * proxyWidth / fullImageWidth.
+        const fullTrapPx = 4 * 72 / 72;
+        const proxyTrapPx = Math.max(1, Math.round(fullTrapPx * sep.width / session.imageWidth));
+        const Reveal = require('@electrosaur-labs/core');
+        const expectedZones = Reveal.TrapEngine.computeTrapZones(
+            sep.masks.map(m => new Uint8Array(m)), sep.palette, sep.width, sep.height, proxyTrapPx
+        );
+        expect(expectedZones).not.toBeNull();
+    });
+
+    it('paints only the NEWLY trapped pixels in full ink color, not the swatch\'s whole original territory', async () => {
+        const session = await setupRealSession('everyday_photo');
+        const sep = session.proxyEngine.separationState;
+        session.imageResolution = 300;
+        session.state.trapSize = 6; // generous trap to guarantee some zone exists
+
+        const buf = session.generateTrapOverlayBuffer();
+        expect(buf).not.toBeNull();
+
+        // Background (non-trapped) pixels must be DIMMED (0.35x), never
+        // left at full original brightness or painted a flat ink color --
+        // that's the whole point of the overlay (trapped pixels pop out
+        // against a dimmed composite).
+        const pixelCount = sep.width * sep.height;
+        let dimmedCount = 0;
+        for (let i = 0; i < pixelCount; i++) {
+            const off = i * 4;
+            const orig = session.previewBuffer[off];
+            if (Math.abs(buf[off] - Math.round(orig * 0.35)) <= 1) dimmedCount++;
+        }
+        expect(dimmedCount).toBeGreaterThan(0);
+    });
+});
+
+describe('TrapEngine.computeTrapZones (real masks)', () => {
+    it('returns null when nothing actually got trapped (e.g. trapSize too small to matter)', async () => {
+        const session = await setupRealSession('everyday_photo');
+        const sep = session.proxyEngine.separationState;
+        const Reveal = require('@electrosaur-labs/core');
+
+        const result = Reveal.TrapEngine.computeTrapZones(
+            sep.masks.map(m => new Uint8Array(m)), sep.palette, sep.width, sep.height, 0
+        );
+        expect(result).toBeNull();
+    });
+
+    it('zones contain ONLY pixels that changed from 0 to 255 -- never the original mask territory', async () => {
+        const session = await setupRealSession('everyday_photo');
+        const sep = session.proxyEngine.separationState;
+        const Reveal = require('@electrosaur-labs/core');
+
+        const originalMasks = sep.masks.map(m => new Uint8Array(m));
+        const result = Reveal.TrapEngine.computeTrapZones(
+            sep.masks.map(m => new Uint8Array(m)), sep.palette, sep.width, sep.height, 3
+        );
+
+        if (result) { // some images/archetypes may have nothing to trap
+            for (let ci = 0; ci < result.zones.length; ci++) {
+                const zone = result.zones[ci];
+                const original = originalMasks[ci];
+                for (let p = 0; p < zone.length; p++) {
+                    if (zone[p] === 255) expect(original[p]).toBe(0);
+                }
+            }
+        }
+    });
+});

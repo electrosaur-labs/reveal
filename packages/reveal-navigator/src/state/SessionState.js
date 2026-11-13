@@ -44,6 +44,7 @@ class SessionState extends EventEmitter {
             isArchetypeDirty: false,
             trapSize: 2,
             meshSize: 355,
+            ruleOfN: 7.0,
             blackSnap: false,
             blackSnapLMax: Reveal.BlackSnap.DEFAULT_L_MAX,
             isProcessing: false,
@@ -967,9 +968,15 @@ class SessionState extends EventEmitter {
         const trapSizePts = this.state.trapSize;
         if (!(trapSizePts > 0)) return null;
 
-        // this.previewBuffer existing (checked above) implies a document is
-        // loaded, so imageResolution must already be the real value — no
-        // fallback. The trailing /72 is the points-per-inch unit constant
+        // this.previewBuffer existing (checked above) is SUPPOSED to imply
+        // imageResolution is already the real value -- but null coerces to
+        // 0 in arithmetic, not NaN, so without this explicit check a
+        // violated invariant here fails silently (computing a bogus ~1px
+        // trap overlay) instead of visibly, which is worse than refusing
+        // to render one at all.
+        if (!(this.imageResolution > 0)) return null;
+
+        // The trailing /72 is the points-per-inch unit constant
         // (1pt = 1/72in), not a DPI guess.
         const fullTrapPx = trapSizePts * this.imageResolution / 72;
         const proxyTrapPx = Math.max(1, Math.round(fullTrapPx * sep.width / this.imageWidth));

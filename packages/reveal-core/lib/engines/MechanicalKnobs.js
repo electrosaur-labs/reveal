@@ -193,13 +193,14 @@ class MechanicalKnobs {
      * @param {number}            [originalWidth] Full document width (for proxy scaling)
      * @param {number}            [meshTPI=0]  Screen mesh threads-per-inch (e.g. 230, 305, 355)
      * @param {number}            [imageDpi=0] Document DPI; 0 → assume 300
+     * @param {number}            [ruleOfN=0]  Rule of N mesh factor; 0 → default 7.0
      */
-    static applySpeckleRescue(masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI = 0, imageDpi = 0) {
+    static applySpeckleRescue(masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI = 0, imageDpi = 0, ruleOfN = 0) {
         let linearPx;
         if (sliderPx > 0) {
             linearPx = sliderPx;
         } else if (meshTPI > 0) {
-            linearPx = MeshPhysics.minDotPx(meshTPI, imageDpi);
+            linearPx = MeshPhysics.minDotPx(meshTPI, imageDpi, ruleOfN);
         } else {
             return;
         }
@@ -247,11 +248,12 @@ class MechanicalKnobs {
      * @param {number}            [options.meshTPI=0]     Screen mesh TPI; 0 → default (355)
      * @param {number}            [options.imageDpi=0]    Document DPI; 0 → default (300)
      * @param {number}            [options.originalWidth] Full document width (for proxy scaling)
+     * @param {number}            [options.ruleOfN=0]     Rule of N mesh factor; 0 → default 7.0
      * @returns {Promise<{clustersRemoved: number, pixelsRemoved: number, pixelsPruned: number}>} Aggregate across all colors
      */
     static async enforceMeshRuleOfSeven(masks, colorIndices, width, height, options = {}) {
-        const { meshTPI = 0, imageDpi = 0, originalWidth = 0 } = options;
-        const floorPx = MeshPhysics.minDotPx(meshTPI, imageDpi);
+        const { meshTPI = 0, imageDpi = 0, originalWidth = 0, ruleOfN = 0 } = options;
+        const floorPx = MeshPhysics.minDotPx(meshTPI, imageDpi, ruleOfN);
 
         let effectiveFloorPx = floorPx;
         if (originalWidth && originalWidth > width) {
@@ -317,6 +319,13 @@ class MechanicalKnobs {
         MechanicalKnobs.healOrphanedPixels(masks, colorIndices, width, height);
 
         return { clustersRemoved, pixelsRemoved, pixelsPruned };
+    }
+
+    /**
+     * Alias for enforceMeshRuleOfSeven supporting configurable Rule of N.
+     */
+    static enforceMeshRuleOfN(masks, colorIndices, width, height, options = {}) {
+        return MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, options);
     }
 
     /**

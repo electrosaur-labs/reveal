@@ -114,7 +114,7 @@ class ParameterGenerator {
         /** Post-separation knobs — mask/preview re-render only (fast path) */
         MECHANICAL: ['minVolume', 'speckleRescue', 'shadowClamp'],
         /** Affect production render only — meaningless at proxy resolution */
-        PRODUCTION: ['trapSize', 'meshSize', 'ditherType'],
+        PRODUCTION: ['trapSize', 'meshSize', 'ditherType', 'ruleOfN'],
     };
 
     /**
@@ -124,7 +124,7 @@ class ParameterGenerator {
      */
     static KNOB_DEFAULTS = {
         MECHANICAL: { minVolume: 0, speckleRescue: 0, shadowClamp: 0 },
-        PRODUCTION: { trapSize: 2, meshSize: 355 },
+        PRODUCTION: { trapSize: 2, meshSize: 355, ruleOfN: 7.0 },
     };
 
     /**
@@ -132,7 +132,7 @@ class ParameterGenerator {
      * Canonical helper — use instead of cherry-picking individual fields.
      *
      * @param {Object} source - Config object or reactive state
-     * @returns {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number, meshSize: number, imageDpi: number}}
+     * @returns {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number, meshSize: number, ruleOfN: number, imageDpi: number}}
      */
     static extractMechanicalKnobs(source) {
         return {
@@ -141,6 +141,7 @@ class ParameterGenerator {
             shadowClamp: source.shadowClamp || 0,
             trapSize: source.trapSize || 0,
             meshSize: source.meshSize || source.meshCount || 355,
+            ruleOfN: source.ruleOfN !== undefined ? source.ruleOfN : 7.0,
             imageDpi: source.imageDpi || source.resolution || 300,
         };
     }

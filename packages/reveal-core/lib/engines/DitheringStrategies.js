@@ -39,11 +39,28 @@ const BAYER_MATRIX = [
  * @param {number} a - Green-red axis (-128 to 127)
  * @param {number} b - Blue-yellow axis (-128 to 127)
  * @param {Array<{L,a,b}>} labPalette - Palette colors
+ * @param {number[]} [candidateIndices] - If given, restrict the search to
+ *   these palette indices only (Bimodal Variance Gating: a macro-cell
+ *   block straddling a hard edge is barred from matching a color that
+ *   isn't actually present near either side of that edge -- see
+ *   SeparationEngine._mapPixelsBlockDithered).
  * @returns {number} - Index of nearest color
  */
-function getNearest(L, a, b, labPalette) {
+function getNearest(L, a, b, labPalette, candidateIndices) {
     let minDistSq = Infinity;
     let bestIdx = 0;
+
+    if (candidateIndices) {
+        for (const j of candidateIndices) {
+            const p = labPalette[j];
+            const distSq = cie76SquaredInline(L, a, b, p.L, p.a, p.b);
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
+                bestIdx = j;
+            }
+        }
+        return bestIdx;
+    }
 
     for (let j = 0; j < labPalette.length; j++) {
         const p = labPalette[j];
@@ -219,7 +236,7 @@ function distributeStuckiError(buf, x, y, w, h, eL, eA, eB) {
  * @param {Function} onProgress - Progress callback
  * @returns {Promise<Uint8Array>} - Palette indices
  */
-async function floydSteinberg(rawBytes, labPalette, width, height, onProgress) {
+async function floydSteinberg(rawBytes, labPalette, width, height, onProgress, blockGating = null) {
     const pixelCount = rawBytes.length / 3;
     const colorIndices = new Uint8Array(pixelCount);
 
@@ -251,23 +268,11 @@ async function floydSteinberg(rawBytes, labPalette, width, height, onProgress) {
         a = Math.max(-128, Math.min(127, a));
         b = Math.max(-128, Math.min(127, b));
 
-        // 2. Find nearest palette color
-        let bestIdx = 0;
-        let minDistSq = Infinity;
-
-        for (let j = 0; j < labPalette.length; j++) {
-            const pal = labPalette[j];
-            const dL = L - pal.L;
-            const da = a - pal.a;
-            const db = b - pal.b;
-            const distSq = dL*dL + da*da + db*db;
-
-            if (distSq < minDistSq) {
-                minDistSq = distSq;
-                bestIdx = j;
-            }
-        }
-
+        // 2. Find nearest palette color (restricted to this block's local
+        // candidates if BVG flagged it as a hard edge -- see blockGating doc
+        // on the function signature)
+        const candidateIndices = blockGating?.candidates?.get(i);
+        const bestIdx = getNearest(L, a, b, labPalette, candidateIndices);
         colorIndices[i] = bestIdx;
 
         // 3. Calculate quantization error
@@ -276,7 +281,16 @@ async function floydSteinberg(rawBytes, labPalette, width, height, onProgress) {
         const errA = a - chosen.a;
         const errB = b - chosen.b;
 
-        // 4. Distribute error to neighbors (Floyd-Steinberg pattern)
+        // 4. Distribute error to neighbors (Floyd-Steinberg pattern).
+        // Always -- BVG-flagged blocks are NOT exempted from this (see
+        // collab/debate.md 2026-11-12, "Error Zeroing as Integrator
+        // Reset"): zeroing it here used to reset the error-diffusion
+        // chain's continuous phase at every flagged block, which in a
+        // text-dense row happens constantly and corrupted everything
+        // downstream, not just the flagged block. Candidate gating
+        // already keeps the error small and collinear with the block's
+        // real local colors, so it decays naturally within a few cells
+        // instead of needing to be suppressed.
         distributeFloydSteinbergError(errorBuf, x, y, width, height, errL, errA, errB);
 
         // UI Yielding (every CHUNK_SIZE pixels)
@@ -302,7 +316,7 @@ async function floydSteinberg(rawBytes, labPalette, width, height, onProgress) {
  * @param {Function} onProgress - Progress callback
  * @returns {Promise<Uint8Array>} - Palette indices
  */
-async function atkinson(rawBytes, labPalette, width, height, onProgress) {
+async function atkinson(rawBytes, labPalette, width, height, onProgress, blockGating = null) {
     const pixelCount = rawBytes.length / 3;
     const colorIndices = new Uint8Array(pixelCount);
 
@@ -333,8 +347,10 @@ async function atkinson(rawBytes, labPalette, width, height, onProgress) {
         a = Math.max(-128, Math.min(127, a));
         b = Math.max(-128, Math.min(127, b));
 
-        // 2. Find nearest palette color
-        const bestIdx = getNearest(L, a, b, labPalette);
+        // 2. Find nearest palette color (restricted to this block's local
+        // candidates if BVG flagged it as a hard edge)
+        const candidateIndices = blockGating?.candidates?.get(i);
+        const bestIdx = getNearest(L, a, b, labPalette, candidateIndices);
         colorIndices[i] = bestIdx;
 
         // 3. Calculate quantization error
@@ -343,8 +359,9 @@ async function atkinson(rawBytes, labPalette, width, height, onProgress) {
         const errA = a - chosen.a;
         const errB = b - chosen.b;
 
-        // 4. Distribute error to 6 neighbors (Atkinson pattern)
-        // Each neighbor gets 1/8 of the error
+        // 4. Distribute error to 6 neighbors (Atkinson pattern). Always
+        // -- see floydSteinberg's identical comment above for why BVG-
+        // flagged blocks are no longer exempted from this.
         const weight = 1 / 8;
         distributeAtkinsonError(errorBuf, x, y, width, height, errL, errA, errB, weight);
 
@@ -371,7 +388,7 @@ async function atkinson(rawBytes, labPalette, width, height, onProgress) {
  * @param {Function} onProgress - Progress callback
  * @returns {Promise<Uint8Array>} - Palette indices
  */
-async function stucki(rawBytes, labPalette, width, height, onProgress) {
+async function stucki(rawBytes, labPalette, width, height, onProgress, blockGating = null) {
     const pixelCount = rawBytes.length / 3;
     const colorIndices = new Uint8Array(pixelCount);
 
@@ -402,8 +419,10 @@ async function stucki(rawBytes, labPalette, width, height, onProgress) {
         a = Math.max(-128, Math.min(127, a));
         b = Math.max(-128, Math.min(127, b));
 
-        // 2. Find nearest palette color
-        const bestIdx = getNearest(L, a, b, labPalette);
+        // 2. Find nearest palette color (restricted to this block's local
+        // candidates if BVG flagged it as a hard edge)
+        const candidateIndices = blockGating?.candidates?.get(i);
+        const bestIdx = getNearest(L, a, b, labPalette, candidateIndices);
         colorIndices[i] = bestIdx;
 
         // 3. Calculate quantization error
@@ -412,7 +431,9 @@ async function stucki(rawBytes, labPalette, width, height, onProgress) {
         const errA = a - chosen.a;
         const errB = b - chosen.b;
 
-        // 4. Distribute error to 12 neighbors (Stucki pattern)
+        // 4. Distribute error to 12 neighbors (Stucki pattern). Always --
+        // see floydSteinberg's identical comment above for why BVG-
+        // flagged blocks are no longer exempted from this.
         // Stucki uses 42 as denominator (all error distributed)
         distributeStuckiError(errorBuf, x, y, width, height, errL, errA, errB);
 

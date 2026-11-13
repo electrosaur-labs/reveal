@@ -108,9 +108,10 @@ class SeparationEngine {
         const ditherType = options.ditherType || 'none';
         const meshCount = options.meshCount || options.mesh || null;  // Accept both names
         const dpi = options.dpi || 300;
+        const ruleOfN = options.ruleOfN || options.printFactor || null;
         const distanceConfig = normalizeDistanceConfig(options);
 
-        // Calculate LPI-aware scale factor (Rule of 7).
+        // Calculate LPI-aware scale factor (Rule of N, default N=7).
         // MUST use the exact same rounding as MechanicalKnobs' despeckle floor
         // (MeshPhysics.minDotPx, which rounds UP) — if this used a different
         // rounding (e.g. nearest), Macro-Cells could be built 1px smaller than
@@ -119,7 +120,7 @@ class SeparationEngine {
         // If no meshCount provided, scale = 1 (no clustering).
         let scale = 1;
         if (meshCount) {
-            scale = minDotPx(meshCount, dpi);
+            scale = minDotPx(meshCount, dpi, ruleOfN);
         }
 
         // If no width/height or ditherType is 'none', use fast nearest-neighbor
@@ -176,6 +177,18 @@ class SeparationEngine {
 
         const blockSums = new Float64Array(blockW * blockH * 3);
         const blockCounts = new Uint32Array(blockW * blockH);
+        // Bimodal Variance Gating (BVG): perceptual sum-of-squares per
+        // block, accumulated for free in this same pass, to detect blocks
+        // straddling a hard edge (bimodal L/a/b distribution) vs. a smooth
+        // tonal gradient (unimodal, tightly clustered). Averaging a
+        // bimodal block's raw pixels produces a "phantom centroid" that
+        // can sit closer in Lab space to a color present NOWHERE near
+        // either side of the edge than to either real neighbor (e.g. the
+        // midpoint of a light/dark boundary matching an unrelated hue at
+        // the same lightness) -- see collab/debate.md 2026-11-12 for the
+        // worked example and derivation. Flagging and correcting only
+        // these blocks leaves the other ~95% (gradients) untouched.
+        const blockSqSums = new Float64Array(blockW * blockH);
 
         for (let y = 0; y < height; y++) {
             const by = Math.floor(y / scale);
@@ -187,25 +200,170 @@ class SeparationEngine {
                 blockSums[bi * 3 + 1] += rawBytes[pi + 1];
                 blockSums[bi * 3 + 2] += rawBytes[pi + 2];
                 blockCounts[bi]++;
+
+                // Accumulate in PERCEPTUAL units (not raw 16-bit) so the
+                // variance threshold below is directly comparable to a
+                // ΔE figure -- raw L (0-32768) and a/b (0-32768, different
+                // scale factor) would otherwise mix units and make L
+                // dominate the variance disproportionately.
+                const p = engine16ToPerceptual(rawBytes[pi], rawBytes[pi + 1], rawBytes[pi + 2]);
+                blockSqSums[bi] += p.L * p.L + p.a * p.a + p.b * p.b;
             }
         }
 
+        // ΔE standard deviation above which a block is treated as a hard
+        // edge rather than a gradient. Per the collab derivation: a steep
+        // continuous gradient spans ~1.7 ΔE std-dev across a 6px cell;
+        // even a 90/10-split hard edge is ~21 ΔE. Wide margin either side
+        // of 10.0 -- not a knife-edge threshold.
+        const BVG_SIGMA_THRESHOLD = 10.0;
+
         const blockBytes = new Uint16Array(blockW * blockH * 3);
+        const bimodalCandidates = new Map(); // blockIndex -> palette index array
+
         for (let bi = 0; bi < blockW * blockH; bi++) {
-            const n = blockCounts[bi] || 1;
-            blockBytes[bi * 3] = Math.round(blockSums[bi * 3] / n);
-            blockBytes[bi * 3 + 1] = Math.round(blockSums[bi * 3 + 1] / n);
-            blockBytes[bi * 3 + 2] = Math.round(blockSums[bi * 3 + 2] / n);
+            const n = blockCounts[bi];
+            if (n === 0) continue;
+
+            const sumL = blockSums[bi * 3], sumA = blockSums[bi * 3 + 1], sumB = blockSums[bi * 3 + 2];
+            blockBytes[bi * 3] = Math.round(sumL / n);
+            blockBytes[bi * 3 + 1] = Math.round(sumA / n);
+            blockBytes[bi * 3 + 2] = Math.round(sumB / n);
+
+            const meanP = engine16ToPerceptual(sumL / n, sumA / n, sumB / n);
+            const meanSq = meanP.L * meanP.L + meanP.a * meanP.a + meanP.b * meanP.b;
+            // Population variance: E[X^2] - E[X]^2. Clamp at 0 -- floating
+            // point can push this fractionally negative for a near-zero-
+            // variance (perfectly flat) block.
+            const sigma = Math.sqrt(Math.max(0, blockSqSums[bi] / n - meanSq));
+
+            if (sigma < BVG_SIGMA_THRESHOLD) continue; // gradient/flat block: untouched
+
+            // Targeted re-read: ONLY for blocks just flagged bimodal (a
+            // small minority concentrated at edges). The block mean (the
+            // very "phantom centroid" this mechanism exists to correct)
+            // cannot be used as a proxy for which colors are actually
+            // present -- it's already proven to be a bad proxy by the
+            // bimodal split itself. Classify each of this block's own raw
+            // pixels individually instead.
+            const by = Math.floor(bi / blockW);
+            const bx = bi % blockW;
+            const x0 = bx * scale, x1 = Math.min(width, x0 + scale);
+            const y0 = by * scale, y1 = Math.min(height, y0 + scale);
+
+            const counts = new Map(); // paletteIndex -> pixel count
+            let samples = 0;
+            for (let yy = y0; yy < y1; yy++) {
+                for (let xx = x0; xx < x1; xx++) {
+                    const pi = (yy * width + xx) * 3;
+                    const pp = engine16ToPerceptual(rawBytes[pi], rawBytes[pi + 1], rawBytes[pi + 2]);
+                    let bestIdx = 0, minDist = Infinity;
+                    for (let j = 0; j < labPalette.length; j++) {
+                        const pal = labPalette[j];
+                        const dL = pp.L - pal.L, da = pp.a - pal.a, db = pp.b - pal.b;
+                        const d = dL * dL + da * da + db * db;
+                        if (d < minDist) { minDist = d; bestIdx = j; }
+                    }
+                    counts.set(bestIdx, (counts.get(bestIdx) || 0) + 1);
+                    samples++;
+                }
+            }
+
+            // Population floor (not a fixed top-2): any palette color
+            // representing >=15% of the block's own pixels is a
+            // legitimate local candidate. On a 6x6 block (36 samples),
+            // floor is 6 (at least 1 full row/col). This prevents thin
+            // sub-pixel anti-aliasing edge blur (which spans 1-4px and
+            // can numerically match an unrelated midpoint color like green)
+            // from qualifying as a local color, while preserving true
+            // 2-way and 3-way T-junctions (where 3 regions meet at ~33%
+            // representation each).
+            const floor = Math.max(2, Math.ceil(0.15 * samples));
+            const candidates = [];
+            for (const [idx, count] of counts) if (count >= floor) candidates.push(idx);
+
+            if (candidates.length === 0) {
+                // Degenerate safety net -- shouldn't trigger given the
+                // floor math above (at least the single most-represented
+                // color always clears a >=2px floor on a bimodal block),
+                // but a block must never end up with zero candidates.
+                let bestIdx = 0, bestCount = -1;
+                for (const [idx, count] of counts) if (count > bestCount) { bestCount = count; bestIdx = idx; }
+                candidates.push(bestIdx);
+            }
+
+            bimodalCandidates.set(bi, candidates);
         }
 
-        const blockIndices = await strategy(blockBytes, labPalette, blockW, blockH, null);
+        // Error is NOT suppressed for gated blocks (see collab/debate.md
+        // 2026-11-12, "Error Zeroing as Integrator Reset"): zeroing it was
+        // an earlier iteration of this fix, and it corrupted Atkinson's
+        // raster-order error-diffusion chain for every block downstream
+        // of a flagged one, not just the flagged block itself -- a text
+        // line's recurring edge blocks repeatedly reset that chain,
+        // producing dense speckle across the WHOLE row, not just near
+        // glyphs. Candidate gating alone already prevents a foreign-hue
+        // error (e.g. green) from ever being generated in the first
+        // place: once a block is constrained to its own real local
+        // colors, its quantization error is collinear with those colors'
+        // own axis, and Atkinson's partial (75%) propagation decays it to
+        // nothing within 2-3 cells -- too small to push a neighbor into
+        // an unrelated hue. Letting it diffuse normally is what keeps the
+        // integrator's continuous phase intact.
+        const blockGating = bimodalCandidates.size > 0
+            ? { candidates: bimodalCandidates }
+            : null;
+
+        const blockIndices = await strategy(blockBytes, labPalette, blockW, blockH, null, blockGating);
 
         const colorIndices = new Uint8Array(width * height);
-        for (let y = 0; y < height; y++) {
-            const by = Math.floor(y / scale);
-            for (let x = 0; x < width; x++) {
-                const bx = Math.floor(x / scale);
-                colorIndices[y * width + x] = blockIndices[by * blockW + bx];
+        for (let by = 0; by < blockH; by++) {
+            const y0 = by * scale;
+            const y1 = Math.min(height, y0 + scale);
+            for (let bx = 0; bx < blockW; bx++) {
+                const bi = by * blockW + bx;
+                const x0 = bx * scale;
+                const x1 = Math.min(width, x0 + scale);
+                const candidates = bimodalCandidates.get(bi);
+
+                if (!candidates) {
+                    // Continuous gradient or flat field: preserve Macro-Cell Rule-of-7 print physics.
+                    // Every pixel in this block takes the uniform macro-cell dither decision.
+                    const blockIdx = blockIndices[bi];
+                    for (let y = y0; y < y1; y++) {
+                        const rowOff = y * width;
+                        for (let x = x0; x < x1; x++) {
+                            colorIndices[rowOff + x] = blockIdx;
+                        }
+                    }
+                } else {
+                    // Hard structural edge (text glyphs, fine line art): evaluate at native 1-pixel
+                    // resolution snapped strictly to the block's local candidate set.
+                    // This eliminates 6px block stair-stepping on solid ink boundaries, producing
+                    // smooth vector contours while strictly barring foreign ink.
+                    for (let y = y0; y < y1; y++) {
+                        const rowOff = y * width;
+                        for (let x = x0; x < x1; x++) {
+                            const pi = (rowOff + x) * 3;
+                            const p = engine16ToPerceptual(rawBytes[pi], rawBytes[pi + 1], rawBytes[pi + 2]);
+                            let bestIdx = candidates[0];
+                            let minDist = Infinity;
+                            for (let ci = 0; ci < candidates.length; ci++) {
+                                const palIdx = candidates[ci];
+                                const pal = labPalette[palIdx];
+                                const dL = p.L - pal.L;
+                                const da = p.a - pal.a;
+                                const db = p.b - pal.b;
+                                const dist = dL * dL + da * da + db * db;
+                                if (dist < minDist) {
+                                    minDist = dist;
+                                    bestIdx = palIdx;
+                                }
+                            }
+                            colorIndices[rowOff + x] = bestIdx;
+                        }
+                    }
+                }
             }
         }
 

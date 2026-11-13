@@ -257,9 +257,9 @@ describe('every ParameterGenerator production field is categorized', () => {
             }
         }
 
-        // PRODUCTION fields (trapSize, meshSize) are set by SessionState, not ParameterGenerator.
+        // PRODUCTION fields (trapSize, meshSize, ruleOfN) are set by SessionState, not ParameterGenerator.
         // ditherType IS set by ParameterGenerator.
-        const expectedMissing = new Set(['trapSize', 'meshSize']);
+        const expectedMissing = new Set(['trapSize', 'meshSize', 'ruleOfN']);
         const reallyMissing = missing.filter(k => !expectedMissing.has(k));
 
         if (reallyMissing.length > 0) {

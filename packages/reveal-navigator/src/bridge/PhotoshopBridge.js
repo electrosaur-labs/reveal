@@ -441,6 +441,7 @@ class PhotoshopBridge {
             lines.push(`${I}<reveal:shadowClamp>${k.shadowClamp || 0}</reveal:shadowClamp>`);
             lines.push(`${I}<reveal:trapSize>${k.trapSize || 0}</reveal:trapSize>`);
             if (k.meshSize) lines.push(`${I}<reveal:meshSize>${k.meshSize}</reveal:meshSize>`);
+            if (k.ruleOfN != null) lines.push(`${I}<reveal:ruleOfN>${k.ruleOfN}</reveal:ruleOfN>`);
         }
 
         // ── Palette (ordered list) ──

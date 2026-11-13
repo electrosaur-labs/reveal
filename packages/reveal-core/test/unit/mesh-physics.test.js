@@ -32,4 +32,23 @@ describe('MeshPhysics.minDotPx', () => {
     it('never returns less than 1px even at absurdly fine mesh / low dpi', () => {
         expect(MeshPhysics.minDotPx(100000, 1)).toBe(1);
     });
+
+    it('exports DEFAULT_RULE_OF_N as 7.0', () => {
+        expect(MeshPhysics.DEFAULT_RULE_OF_N).toBe(7.0);
+    });
+
+    it('scales proportionally with ruleOfN', () => {
+        // At 300 DPI / 300 TPI: ceil(N * 300 / 300) = ceil(N)
+        expect(MeshPhysics.minDotPx(300, 300, 4.0)).toBe(4);
+        expect(MeshPhysics.minDotPx(300, 300, 5.5)).toBe(6);
+        expect(MeshPhysics.minDotPx(300, 300, 7.0)).toBe(7);
+        expect(MeshPhysics.minDotPx(300, 300, 10.0)).toBe(10);
+    });
+
+    it('falls back to 7.0 when ruleOfN is omitted, zero, or negative', () => {
+        const baseline = MeshPhysics.minDotPx(355, 300);
+        expect(MeshPhysics.minDotPx(355, 300, 0)).toBe(baseline);
+        expect(MeshPhysics.minDotPx(355, 300, -5)).toBe(baseline);
+        expect(MeshPhysics.minDotPx(355, 300, undefined)).toBe(baseline);
+    });
 });
