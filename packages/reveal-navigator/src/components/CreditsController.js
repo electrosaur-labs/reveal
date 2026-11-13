@@ -90,22 +90,24 @@ class CreditsController {
             });
         }
 
-        // Global keydown for Escape in capture phase to prevent UXP from closing outer host dialog
+        // Global keydown for Escape
         if (typeof window !== 'undefined') {
-            window.addEventListener('keydown', this._handleKeyDown, { capture: true });
+            window.addEventListener('keydown', this._handleKeyDown);
         }
     }
 
     _handleKeyDown(e) {
         if (e.key === 'Escape' || e.key === 'Esc') {
-            if (this.isManifestoOpen) {
-                if (e.preventDefault) e.preventDefault();
-                if (e.stopPropagation) e.stopPropagation();
-                this.closeManifesto();
-            } else if (this.overlay && this.overlay.style.display !== 'none') {
-                if (e.preventDefault) e.preventDefault();
-                if (e.stopPropagation) e.stopPropagation();
+            if (this.overlay && this.overlay.style.display !== 'none') {
                 this.close();
+                if (typeof document !== 'undefined') {
+                    const dialog = document.getElementById('navigatorDialog');
+                    if (dialog && typeof dialog.close === 'function') {
+                        try {
+                            dialog.close('cancel');
+                        } catch (err) {}
+                    }
+                }
             }
         }
     }
