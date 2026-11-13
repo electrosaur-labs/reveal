@@ -89,9 +89,15 @@ class CreditsController {
             this.printTrigger.addEventListener('click', triggerManifesto);
         }
 
-        // Global keydown for Escape
+        // Bind Escape key on broadside, window, and document so Esc on manifesto or credits always closes plugin
+        if (this.broadside) {
+            this.broadside.addEventListener('keydown', this._handleKeyDown);
+        }
         if (typeof window !== 'undefined') {
             window.addEventListener('keydown', this._handleKeyDown);
+        }
+        if (typeof document !== 'undefined') {
+            document.addEventListener('keydown', this._handleKeyDown);
         }
     }
 
@@ -134,6 +140,9 @@ class CreditsController {
         this.isManifestoOpen = true;
         this.pause();
         this.broadside.style.display = 'flex';
+        try {
+            this.broadside.focus();
+        } catch (_) {}
     }
 
     closeManifesto() {
