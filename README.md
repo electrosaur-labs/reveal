@@ -4,11 +4,13 @@
 
 # Reveal
 
-**Pure JavaScript color separation for screen printing**
+**Mesh-aware color reduction for screen printing: a Photoshop plugin and a pure JavaScript engine**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Reduction is revelation:** stripping an image down to a small number of spot colors forces you to find what matters in the image. The colors that survive are the ones that carry the meaning. The goal is not reproduction but *interpretation* — working within the constraints of screen printing and embracing those limitations instead of trying to hide them.
+Reveal reduces an image to a handful of spot colors and gives you screens your mesh can actually hold. It works alongside Photoshop's built-in tools: it suggests several candidate palettes, you pick one and edit it, and it never produces dots or lines finer than your mesh can print. That limit is a "rule of N": the smallest printable dot must span N mesh openings, with N adjustable from 4 to 10 (default 7).
+
+**Who it's for:** artists, printmakers and poster makers working in spot color who aren't after photorealism. Reveal doesn't try to reproduce the original; it aims for a set of colors that carries the image, on screens that will print. If you need photorealism, process or simulated process printing is the better route.
 
 Reveal analyzes your image and generates multiple possible separation palettes based on 26 built-in archetypes plus 3 adaptive pseudo-archetypes. You select from these and further refine — adding, removing, and altering colors from the suggested palette. The engine recommends; the artist decides.
 
@@ -137,7 +139,9 @@ New to Reveal? See the **[User Guide](docs/USER-GUIDE.md)** for a screen printer
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding conventions, and PR workflow.
 
-## Acknowledgments
+## Credits
+
+Conceived and directed by Shankar R., a screen printer. Architecture and design by Gemini; code by Claude and Gemini. Reveal itself uses no AI at runtime: it's conventional image-processing code that runs on your machine.
 
 Dedicated to **[Doug Minkler](http://www.dminkler.com)**, who taught me everything I know about screen printing.
 

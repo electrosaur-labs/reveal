@@ -9,11 +9,10 @@ gets its own separation, ready for film output.
 
 This is **not** 4-color process printing (CMYK halftones) or simulated process printing (spot-color halftones that approximate full
 color with 6-8 opaque inks). Reveal finds the actual colors in your image and commits to them. A sunset gets oranges and
-purples. A forest gets greens and browns. The engine decides what matters and throws away the rest.
+purples. A forest gets greens and browns. Reveal proposes candidate palettes; you decide what to keep.
 
 Reveal's aim is to reduce the input image to a small number of colors while still retaining what is important.
-*Reduction is revelation.* If you need photorealism, then 4-color process printing or simulated process printing may be
-the answer.
+If you need photorealism, 4-color process printing or simulated process printing may be the better route.
 
 ## How It Works
 
@@ -134,12 +133,15 @@ The controls in the right panel. These affect the final output without changing 
 
 | Knob                     | What it does                                          | When to use it                                          |
 |--------------------------|-------------------------------------------------------|---------------------------------------------------------|
-| **Colors**               | Target number of colors in the palette                | More colors = more fidelity but more complexity         |
+| **Target Colors**        | Target number of colors in the palette                | More colors = more fidelity but more screens            |
 | **Minimum Coverage**     | Merges colors covering less than X% of the image      | Turn up to eliminate weak colors not worth keeping       |
-| **Despeckle**            | Removes isolated pixel clusters smaller than X pixels | Turn up if you see stray dots that appear as noise      |
+| **Despeckle**            | Removes isolated pixel clusters smaller than X pixels | Leave at 0 to set it automatically from Mesh and Rule of N |
 | **Minimum Opacity**      | Sets minimum mask density for faint areas             | Turn up if faint tones are barely visible in output     |
-| **Detail Floor**         | Minimum reproducible detail size (mesh TPI)           | Set based on your output resolution                     |
+| **Mesh**                 | Your screen's mesh count (TPI), from 110 to 355, or none | Set it to the mesh you'll burn; Reveal won't produce detail finer than it can hold |
+| **Rule of N**            | How many mesh openings the smallest printable dot must span (4–10, default 7) | 7 is a safe default; 4–5.5 for tight, high-tension screens; 8–10 for heavy ink or rough paper |
+| **Dither**               | Pattern used to suggest in-between tones: none, Floyd-Steinberg, Atkinson, Bayer or Stucki | None for hard-edged graphic work; the dither is scaled to your mesh |
 | **Trap Width**           | Color trapping overlap width                          | Set based on registration tolerance                     |
+| **Black Snap**           | Snaps near-black pixels on strong edges to pure black before reduction | For line art and engraving-style images, so hatching and keylines print as one solid black |
 
 **Advanced panels** (click section headers to expand) expose deeper controls: chroma boost, palette reduction threshold,
 hue lock, lightness/chroma weights, highlight/shadow points, substrate tolerance, and noise. Most users won't need

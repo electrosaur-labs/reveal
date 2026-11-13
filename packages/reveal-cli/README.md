@@ -64,6 +64,28 @@ reveal another.png --recipe settings.json -o output/
 reveal photo.png -a cinematic -c 6 --format psd -o output/
 ```
 
+### Checking a file before you burn screens: `reveal verify`
+
+```bash
+reveal verify poster-7c.psd
+```
+
+`reveal verify` inspects a layered PSD that Reveal produced and tells you whether its screens will print. It reads the mesh, Rule of N and trap settings that Reveal embeds in the file, then checks every ink layer:
+
+- **Mesh check.** Flags isolated dots smaller than your mesh can hold ("sub-mesh debris"), and warns where a line pinches thinner than the mesh minimum for more than a few pixels.
+- **Trap check.** Confirms that trapping only spreads lighter inks under darker ones, by no more than the trap width you set, and never spreads the darkest ink.
+
+It ends with `[PASS] READY FOR PRESS` or `[FAIL] UNPRINTABLE ON PRESS`.
+
+| Flag | Description |
+|------|-------------|
+| `-v, --verbose` | Per-ink detail for both checks |
+| `-q, --quiet` | Errors only |
+| `--strict` | Treat warnings as failures |
+| `--json` | Machine-readable report |
+
+Exit code is 1 when the check fails (or, with `--strict`, when there are warnings), so you can use it in scripts. Files without Reveal's embedded settings are reported with the manifest as MISSING, and the mesh check is skipped.
+
 ## Flags
 
 | Flag | Description |
