@@ -1519,107 +1519,369 @@
             border-color: #e0a030;
         }
 
-        /* ─── Credits Overlay ─── */
+        /* ─── Cinematic Hollywood Credits Overlay ─── */
         #credits-overlay {
             display: none;
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(18, 18, 18, 0.85);
-            z-index: 100;
+            background: rgba(10, 10, 10, 0.90);
+            z-index: 1000;
             align-items: center;
             justify-content: center;
         }
 
-        #credits-box {
-            background: #2b2b2b;
-            border: 1px solid #555;
+        #credits-window {
+            background: #1e1e1e;
+            border: 1px solid #444;
             border-radius: 8px;
             color: #e0e0e0;
-            padding: 22px 26px;
-            max-width: 480px;
-            width: 90%;
-            max-height: 85vh;
+            width: 520px;
+            max-width: 92vw;
+            height: 620px;
+            max-height: 88vh;
             display: flex;
             flex-direction: column;
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.75);
+            box-shadow: 0 16px 50px rgba(0, 0, 0, 0.85);
+            overflow: hidden;
+            position: relative;
         }
 
-        #credits-header {
-            display: flex;
-            align-items: baseline;
-            gap: 10px;
-            border-bottom: 1px solid #444;
-            padding-bottom: 8px;
+        #credits-viewport {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+            padding: 20px 30px;
+            mask-image: linear-gradient(to bottom, transparent 0px, black 40px, black calc(100% - 40px), transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0px, black 40px, black calc(100% - 40px), transparent 100%);
+            scrollbar-width: thin;
+            scrollbar-color: #555 transparent;
+        }
+
+        #credits-viewport::-webkit-scrollbar {
+            width: 4px;
+        }
+        #credits-viewport::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 2px;
+        }
+
+        #credits-crawl {
+            text-align: center;
+            padding: 40px 0 120px 0;
+        }
+
+        .credits-scene {
+            margin-bottom: 50px;
+        }
+
+        .credits-stars {
+            color: #e0a030;
+            font-size: 14px;
+            letter-spacing: 4px;
             margin-bottom: 12px;
         }
 
-        #credits-title {
-            font-size: 16px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            color: #fff;
-            margin: 0;
+        .credits-tag {
+            font-size: 10px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 6px;
         }
 
-        #credits-tagline {
-            font-size: 11px;
+        .credits-hero-title {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: #ffffff;
+            margin: 6px 0 8px 0;
+            text-transform: uppercase;
+        }
+
+        .credits-hero-subtitle {
+            font-size: 13px;
+            color: #e0a030;
             font-style: italic;
+            margin-bottom: 12px;
+        }
+
+        .credits-mascot-img {
+            width: 68px;
+            height: auto;
+            margin: 0 auto 10px auto;
+            display: block;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.7));
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .credits-emblem-interactive:hover .credits-mascot-img {
+            transform: scale(1.08) rotate(-2deg);
+        }
+
+        .credits-print-frame {
+            width: 220px;
+            max-width: 80%;
+            height: auto;
+            margin: 18px auto 8px auto;
+            display: block;
+            border-radius: 4px;
+            border: 2px solid #383838;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85);
+            background: #111;
+        }
+
+        .credits-print-caption {
+            font-size: 10px;
+            color: #888;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+
+        .credits-quote {
+            font-size: 13px;
+            font-style: italic;
+            color: #dcdcdc;
+            max-width: 420px;
+            margin: 14px auto;
+            line-height: 1.65;
+            text-align: center;
+            padding: 4px 16px;
+        }
+
+        .credits-quote-divider {
+            width: 60px;
+            height: 1px;
+            background: #e0a030;
+            margin: 14px auto;
+            opacity: 0.6;
+        }
+
+        .credits-motto {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #4da6ff;
+            text-transform: uppercase;
+            margin: 18px 0;
+        }
+
+        .credits-role-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #888;
+            text-transform: uppercase;
+            margin-top: 18px;
+            margin-bottom: 4px;
+        }
+
+        .credits-role-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .credits-role-desc {
+            font-size: 11px;
+            color: #aaa;
+            max-width: 380px;
+            margin: 0 auto 14px auto;
+            line-height: 1.4;
+        }
+
+        .credits-legend-card {
+            background: #252525;
+            border: 1px solid #383838;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin: 10px auto;
+            max-width: 420px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .credits-legend-card:hover {
+            background: #2e2e2e;
+            border-color: #555;
+        }
+
+        .credits-badge {
+            width: 36px;
+            height: 36px;
+            border-radius: 4px;
+            background: #333;
+            border: 1px solid #4da6ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: bold;
+            color: #4da6ff;
+            flex-shrink: 0;
+        }
+
+        .credits-legend-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: #fff;
+        }
+        .credits-legend-year {
+            font-size: 11px;
+            color: #e0a030;
+            margin-left: 4px;
+        }
+        .credits-legend-role {
+            font-size: 11px;
+            color: #aaa;
+            font-style: italic;
+        }
+        .credits-legend-file {
+            font-size: 10px;
+            color: #777;
+            font-family: monospace;
+        }
+
+        .credits-playback-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 18px;
+            background: #181818;
+            border-top: 1px solid #333;
+            z-index: 10;
+        }
+
+        .credits-control-btn {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: #ddd;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .credits-control-btn:hover {
+            background: #3a3a3a;
+            color: #fff;
+        }
+        .credits-trigger-btn {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 11px;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 3px;
+            transition: color 0.15s;
+        }
+        .credits-trigger-btn:hover {
             color: #e0a030;
         }
 
-        #credits-body {
-            overflow-y: auto;
-            max-height: 55vh;
-            padding-right: 6px;
-            font-size: 11px;
-            line-height: 1.5;
-            color: #ccc;
-        }
-
-        .credits-section-title {
-            font-size: 11px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #4da6ff;
-            margin-top: 14px;
-            margin-bottom: 6px;
-        }
-
-        .credits-row {
-            margin-bottom: 6px;
-        }
-
-        .credits-name {
-            font-weight: 600;
-            color: #eee;
-        }
-
-        .credits-desc {
-            color: #aaa;
-            margin-left: 2px;
-        }
-
-        #credits-footer {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 16px;
-            padding-top: 10px;
-            border-top: 1px solid #444;
-        }
-
-        #btn-credits-close {
-            background: #444;
-            border: 1px solid #666;
-            color: #fff;
-            padding: 5px 20px;
-            border-radius: 3px;
-            font-size: 11px;
+        .credits-emblem-interactive {
             cursor: pointer;
+            display: inline-block;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            user-select: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+        }
+        .credits-emblem-interactive:hover {
+            transform: scale(1.05);
+            background: rgba(224, 160, 48, 0.12);
         }
 
-        #btn-credits-close:hover {
-            background: #555;
+        /* ─── Political Broadsheet / Minkler Manifesto View ─── */
+        #manifesto-broadside {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #18191b;
+            color: #EEDEC0;
+            border: 2px solid #BB5A29;
+            border-radius: 8px;
+            padding: 28px 32px;
+            z-index: 50;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
+            animation: manifestoFadeIn 0.25s ease-out;
+        }
+
+        @keyframes manifestoFadeIn {
+            from { opacity: 0; transform: scale(0.97); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .manifesto-header {
+            border-bottom: 2px solid #BB5A29;
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .manifesto-title {
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: 2.5px;
+            color: #EEDEC0;
+            text-transform: uppercase;
+            margin: 0 0 6px 0;
+        }
+        .manifesto-subtitle {
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            color: #BB5A29;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .manifesto-body {
+            font-size: 12px;
+            line-height: 1.65;
+            color: #d6c5a8;
+            overflow-y: auto;
+            padding-right: 8px;
+            text-align: justify;
+        }
+        .manifesto-body p {
+            margin: 0 0 12px 0;
+        }
+        .manifesto-quote {
+            border-left: 3px solid #BB5A29;
+            padding-left: 14px;
+            margin: 14px 0;
+            font-style: italic;
+            color: #fff;
+            font-size: 13px;
+        }
+        .manifesto-footer {
+            border-top: 1px solid #333;
+            padding-top: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #888;
+        }
+        .manifesto-close-btn {
+            background: #BB5A29;
+            border: none;
+            color: #fff;
+            font-weight: 700;
+            padding: 5px 14px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: background 0.15s;
+        }
+        .manifesto-close-btn:hover {
+            background: #d46b35;
         }
 
     </style>
@@ -2220,9 +2482,200 @@
                     <span id="status-text">Waiting for document...</span>
                 </div>
                 <div id="dominant-sector" style="display:none"></div>
+                <button id="btn-show-credits" title="Credits & Dedication" class="credits-trigger-btn">★ Credits</button>
             </div>
         </div>
     </div>
+
+    <!-- Cinematic Hollywood Credits Overlay -->
+    <div id="credits-overlay" style="display: none;">
+        <div id="credits-window">
+            <div id="credits-viewport">
+                <div id="credits-crawl">
+
+                    <!-- Scene 1: Dedication -->
+                    <div class="credits-scene">
+                        <div id="credits-emblem" class="credits-emblem-interactive" title="Click to reveal the Doug Minkler Manifesto">
+                            <img src="electrosaur.png" alt="Electrosaur Mascot" class="credits-mascot-img">
+                            <div class="credits-stars">★ ★ ★</div>
+                            <div class="credits-tag">Dedicated To</div>
+                            <div class="credits-hero-title">Doug Minkler</div>
+                            <div class="credits-hero-subtitle">Sensei, Friend, and Political Printmaker<br>“The Last Marxist Alive”</div>
+                        </div>
+
+                        <!-- Doug Minkler's Print: Art is a Hammer -->
+                        <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="credits-print-frame">
+                        <div class="credits-print-caption">“Art is a Hammer” • Silkscreen by Doug Minkler</div>
+
+                        <div class="credits-quote">
+                            “Who has taken on EVERYTHING with ink, paper, and uncompromising courage.
+                            The Electrosaur was born in his graphic style: raw, defiant, and intentional.”
+                        </div>
+
+                        <div class="credits-quote-divider"></div>
+
+                        <div class="credits-quote" style="color: #ffffff; font-weight: 500;">
+                            “Art is not a mirror to reflect the world, but a hammer with which to shape it.”
+                            <br><span style="color: #e0a030; font-size: 11px; font-style: normal; font-weight: 700; letter-spacing: 1px;">— VLADIMIR MAYAKOVSKY</span>
+                        </div>
+
+                        <div class="credits-quote-divider"></div>
+
+                        <div class="credits-motto">“Reduction is Revelation”</div>
+                        <div class="credits-stars">★ ★ ★</div>
+                    </div>
+
+                    <!-- Scene 2: Production Team -->
+                    <div class="credits-scene">
+                        <div class="credits-role-title">Produced & Directed By</div>
+                        <div class="credits-role-name">Shankar Ramamoorthy</div>
+                        <div class="credits-role-desc">Vision, Prepress Physics, Domain Truth, and the Minkler Doctrine</div>
+
+                        <div class="credits-role-title">Production Designer & Continuity Supervisor</div>
+                        <div class="credits-role-name">Gemini</div>
+                        <div class="credits-role-desc">16-bit CIELAB Mathematical Modeling, Invariant Specifications, and Zero-Stray-File Gatekeeping</div>
+
+                        <div class="credits-role-title">Master Builder & Special Effects Engineer</div>
+                        <div class="credits-role-name">Claude</div>
+                        <div class="credits-role-desc">Surgical Implementation, Real-Asset Benchmarks, Invariant Test Suites, and Webpack Builds</div>
+                    </div>
+
+                    <!-- Scene 3: Chief Stunt Coordinators -->
+                    <div class="credits-scene">
+                        <div class="credits-tag">Chief Stunt Coordinators</div>
+                        <div class="credits-hero-title" style="font-size: 14px;">The Algorithmic Legends</div>
+
+                        <div class="credits-legend-card">
+                            <div class="credits-badge">WU</div>
+                            <div>
+                                <div><span class="credits-legend-name">Xiaolin Wu</span><span class="credits-legend-year">(1991)</span></div>
+                                <div class="credits-legend-role">Extreme Box Partitioning & Variance Stunts</div>
+                                <div class="credits-legend-file">LabMedianCut._splitLoopWu</div>
+                            </div>
+                        </div>
+
+                        <div class="credits-legend-card">
+                            <div class="credits-badge">PH</div>
+                            <div>
+                                <div><span class="credits-legend-name">Paul Heckbert</span><span class="credits-legend-year">(1982)</span></div>
+                                <div class="credits-legend-role">Recursive Median Slicing Pioneers</div>
+                                <div class="credits-legend-file">LabMedianCut.medianCut</div>
+                            </div>
+                        </div>
+
+                        <div class="credits-legend-card">
+                            <div class="credits-badge">BA</div>
+                            <div>
+                                <div><span class="credits-legend-name">Bill Atkinson</span><span class="credits-legend-year">(1984)</span></div>
+                                <div class="credits-legend-role">High-Velocity 75% Error Diffusion Dynamics</div>
+                                <div class="credits-legend-file">DitheringStrategies.atkinson</div>
+                            </div>
+                        </div>
+
+                        <div class="credits-legend-card">
+                            <div class="credits-badge">FS</div>
+                            <div>
+                                <div><span class="credits-legend-name">Robert Floyd & Louis Steinberg</span><span class="credits-legend-year">(1976)</span></div>
+                                <div class="credits-legend-role">Four-Neighbor Error Dispersion Squad</div>
+                                <div class="credits-legend-file">DitheringStrategies.floydSteinberg</div>
+                            </div>
+                        </div>
+
+                        <div class="credits-legend-card">
+                            <div class="credits-badge">PS</div>
+                            <div>
+                                <div><span class="credits-legend-name">Peter Stucki</span><span class="credits-legend-year">(1981)</span></div>
+                                <div class="credits-legend-role">12-Cell Extended Range Glides</div>
+                                <div class="credits-legend-file">DitheringStrategies.stucki</div>
+                            </div>
+                        </div>
+
+                        <div class="credits-legend-card">
+                            <div class="credits-badge">BB</div>
+                            <div>
+                                <div><span class="credits-legend-name">Bryce Bayer</span><span class="credits-legend-year">(1973)</span></div>
+                                <div class="credits-legend-role">Recursive Threshold Matrix Choreography</div>
+                                <div class="credits-legend-file">DitheringStrategies.bayerDither</div>
+                            </div>
+                        </div>
+
+                        <div class="credits-legend-card">
+                            <div class="credits-badge">TM</div>
+                            <div>
+                                <div><span class="credits-legend-name">C. Tomasi & R. Manduchi</span><span class="credits-legend-year">(1998)</span></div>
+                                <div class="credits-legend-role">Bilateral Edge-Preserving Domain/Range Stunts</div>
+                                <div class="credits-legend-file">BilateralFilter.apply</div>
+                            </div>
+                        </div>
+
+                        <div class="credits-legend-card">
+                            <div class="credits-badge">GS</div>
+                            <div>
+                                <div><span class="credits-legend-name">Gaurav Sharma et al.</span><span class="credits-legend-year">(2005)</span></div>
+                                <div class="credits-legend-role">CIE2000 Non-Linear Optical Physics</div>
+                                <div class="credits-legend-file">LabDistance.deltaE2000</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scene 4: Cinematic Departments & Technical Notes -->
+                    <div class="credits-scene">
+                        <div class="credits-tag">Cinematic Departments & Technical Notes</div>
+
+                        <div class="credits-role-title">Filmed on Location In</div>
+                        <div class="credits-role-desc">Canonical 16-bit CIELAB Space<br>(L: 0–32,768, a/b: 0–32,768, 16,384 neutral)</div>
+
+                        <div class="credits-role-title">Soundtrack</div>
+                        <div class="credits-role-desc">Rhythmic Squeegee Shears & Flood Stroke Swishes (60 Hz)</div>
+
+                        <div class="credits-role-title">Catering</div>
+                        <div class="credits-role-desc">Double Espresso, Screen Degreaser, and 100lb French Paper Speckletone</div>
+
+                        <div style="font-size: 11px; color: #e0a030; font-weight: 700; margin: 24px 0 10px 0;">
+                            ★ NO SCREEN-PRINTING MESH WAS HARMED IN THE MAKING OF THIS SEPARATION ★
+                        </div>
+
+                        <div style="font-size: 10px; color: #666; margin-top: 18px;">
+                            ELECTROSAUR LABS • REVEAL FRAMEWORK v2.1
+                        </div>
+                    </div>
+
+                </div><!-- /credits-crawl -->
+            </div><!-- /credits-viewport -->
+
+            <!-- Easter Egg: Doug Minkler Silk-Screen Broadside / Manifesto -->
+            <div id="manifesto-broadside">
+                <div class="manifesto-header">
+                    <div class="manifesto-title">Reduction is Revelation</div>
+                    <div class="manifesto-subtitle">A Screen-Print Prepress Manifesto</div>
+                </div>
+                <div class="manifesto-body">
+                    <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" style="width: 100px; float: right; margin: 0 0 12px 16px; border: 1.5px solid #BB5A29; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.7);">
+                    <p>Screen printing is not an office photocopier. It is not an inkjet printer. It does not exist to fake continuous-tone photographs with muddy translucent rosettes.</p>
+                    <p>The digital world gives you 16 million colors and zero commitment. Screen printing forces you to choose six, or eight, and stand by them.</p>
+                    <p>Stripping an image down to its essential spot colors is an act of discovery. The colors that survive are the ones that carry the meaning. A forest gets real greens and rich earths; a sunset gets deep orange and purple. The goal is not reproduction, but interpretation and resistance.</p>
+                    <div class="manifesto-quote">
+                        “Art is not a mirror to reflect the world, but a hammer with which to shape it.”
+                        <br><span style="color: #BB5A29; font-size: 11px; font-style: normal; font-weight: 700;">— Vladimir Mayakovsky</span>
+                    </div>
+                    <p style="font-weight: 600; color: #fff;">To Doug Minkler, and every printmaker who has ever pulled a squeegee for something that matters: this engine is yours.</p>
+                </div>
+                <div class="manifesto-footer">
+                    <span>Press Esc or click Close to return</span>
+                    <button id="btn-manifesto-close" class="manifesto-close-btn">Close Manifesto ✕</button>
+                </div>
+            </div>
+
+            <!-- Bottom Playback Controls -->
+            <div class="credits-playback-bar">
+                <div style="display: flex; gap: 8px;">
+                    <button id="btn-credits-playpause" class="credits-control-btn">⏸ Pause</button>
+                    <button id="btn-credits-replay" class="credits-control-btn">↺ Replay</button>
+                </div>
+                <button id="btn-credits-close" class="credits-control-btn" style="background: #333; color: #fff;">✕ Close</button>
+            </div>
+        </div><!-- /credits-window -->
+    </div><!-- /credits-overlay -->
 
     <!-- Error Overlay (hidden by default) -->
     <div id="error-overlay">

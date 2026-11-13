@@ -29,6 +29,7 @@ const ArchetypeCarousel = require("./components/ArchetypeCarousel");
 const MechanicalKnobs = require("./components/MechanicalKnobs");
 const PaletteSurgeon = require("./components/PaletteSurgeon");
 const Loupe = require("./components/Loupe");
+const CreditsController = require("./components/CreditsController");
 
 const logger = Reveal.logger;
 
@@ -38,6 +39,7 @@ let carousel = null;
 let knobs = null;
 let surgeon = null;
 let loupe = null;
+let credits = null;
 // splashShownAt removed — splash screen eliminated
 let isIngesting = false;
 let isProductionRunning = false;
@@ -133,6 +135,22 @@ function initPlugin() {
             );
         } catch (err) {
             logger.log('[Navigator] Loupe init failed: ' + err.message);
+        }
+
+        // Wire Credits Controller (non-fatal)
+        try {
+            const creditsOverlay = document.getElementById('credits-overlay');
+            if (creditsOverlay) {
+                credits = new CreditsController(creditsOverlay);
+                const btnShowCredits = document.getElementById('btn-show-credits');
+                if (btnShowCredits) {
+                    btnShowCredits.addEventListener('click', () => {
+                        credits.open();
+                    });
+                }
+            }
+        } catch (err) {
+            logger.log('[Navigator] Credits init failed: ' + err.message);
         }
 
         // Wire proxy resolution dropdown
