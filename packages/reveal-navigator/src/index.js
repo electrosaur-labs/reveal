@@ -705,9 +705,14 @@ function initPlugin() {
                     });
                     return;
                 }
-                if (credits && typeof credits.isOpen === 'function' && credits.isOpen() && !credits.isManifestoOpen) {
-                    logger.log('[Navigator] Dialog closed while on Credits — closing credits and re-showing');
-                    credits.close();
+                if (credits && typeof credits.isOpen === 'function' && credits.isOpen()) {
+                    if (credits.isManifestoOpen) {
+                        logger.log('[Navigator] Dialog closed while on Manifesto — closing manifesto, keeping credits open');
+                        credits.closeManifesto();
+                    } else {
+                        logger.log('[Navigator] Dialog closed while on Credits — closing credits and re-showing');
+                        credits.close();
+                    }
                     dialogEl.showModal({
                         resize: "both",
                         size: { width: 1100, height: 850, minWidth: 500, minHeight: 400, maxWidth: 3000, maxHeight: 3000 }
