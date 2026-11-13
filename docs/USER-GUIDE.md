@@ -4,15 +4,13 @@ Reveal is an opinionated color separation tool for screen printing.
 
 ## What Reveal Does
 
-Reveal takes a full-color image and breaks it down into a small number of spot colors — typically 5 to 8. Each color
-gets its own separation, ready for film output.
+Reveal takes a full-color image and reduces it to a handful of spot colors — typically 5 to 8. Each color gets its own screen, ready for film positives and burning screens.
 
-This is **not** 4-color process printing (CMYK halftones) or simulated process printing (spot-color halftones that approximate full
-color with 6-8 opaque inks). Reveal finds the actual colors in your image and commits to them. A sunset gets oranges and
-purples. A forest gets greens and browns. Reveal proposes candidate palettes; you decide what to keep.
+In Photoshop, spot-color separations are traditionally built by hand using **Indexed Color mode plus palette edits**, or repeated rounds of **`Select → Color Range` and `Layer via Cut`**. Both approaches are tedious, labor-intensive, and fundamentally blind to the physical realities of screen printing: Photoshop is a general-purpose digital editor that knows nothing about mesh count (TPI), thread diameters, or what will physically hold on press. In non-halftone modes, Photoshop easily generates isolated 1-pixel specks and razor-thin lines that create very small open areas that are extremely difficult to hold in the washout booth.
 
-Reveal's aim is to reduce the input image to a small number of colors while still retaining what is important.
-If you need photorealism, 4-color process printing or simulated process printing may be the better route.
+Reveal bridges that physical gap. It makes opinionated spot-color reductions, entirely eschewing halftone dots of any sort to fake gradients. Instead of reproducing continuous tones with dots, it discovers the most important colors in your image — including vivid accents that cover only a few pixels of the canvas — and commits to them. Most importantly, it enforces a physical dot floor based on your screen mesh (the "Rule of N"), ensuring every open area on every screen will actually wash out, hold, and print cleanly on press.
+
+If you need photographic reproduction of a continuous-tone original, 4-color process (CMYK) or simulated process printing are established, demanding crafts that printmakers depend on to make a living. If you have the freedom to **interpret** the input image rather than reproduce it, Reveal gets you there faster and gives you screens your press can actually hold.
 
 ## How It Works
 
