@@ -27,6 +27,7 @@ class CreditsController {
 
         // Easter Egg: Minkler Manifesto Broadside
         this.emblem = this.overlay.querySelector('#credits-emblem');
+        this.printTrigger = this.overlay.querySelector('#credits-print-trigger');
         this.broadside = this.overlay.querySelector('#manifesto-broadside');
         this.btnManifestoClose = this.overlay.querySelector('#btn-manifesto-close');
 
@@ -55,12 +56,15 @@ class CreditsController {
             });
         }
         if (this.viewport) {
-            this.viewport.addEventListener('mouseenter', () => {
-                this.isHovered = true;
-            });
-            this.viewport.addEventListener('mouseleave', () => {
-                this.isHovered = false;
-            });
+            const onEnter = () => { this.isHovered = true; };
+            const onLeave = () => { this.isHovered = false; };
+            this.viewport.addEventListener('mouseenter', onEnter);
+            this.viewport.addEventListener('mouseleave', onLeave);
+            this.viewport.addEventListener('pointerenter', onEnter);
+            this.viewport.addEventListener('pointerleave', onLeave);
+            this.viewport.addEventListener('mouseover', onEnter);
+            this.viewport.addEventListener('mouseout', onLeave);
+
             this.viewport.addEventListener('scroll', () => {
                 // If user scrolled back up near the top after finishing, re-enable Play
                 if (this.hasFinishedFirstRound && this.viewport.scrollTop < 50) {
@@ -75,11 +79,22 @@ class CreditsController {
             });
         }
 
-        // Easter egg trigger & dismiss
+        // Easter egg triggers (bind click + pointerdown so scroll displacement in UXP doesn't eat the event)
+        const triggerManifesto = (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            this.openManifesto();
+        };
+
         if (this.emblem) {
-            this.emblem.addEventListener('click', () => {
-                this.openManifesto();
-            });
+            this.emblem.addEventListener('click', triggerManifesto);
+            this.emblem.addEventListener('pointerdown', triggerManifesto);
+        }
+        if (this.printTrigger) {
+            this.printTrigger.addEventListener('click', triggerManifesto);
+            this.printTrigger.addEventListener('pointerdown', triggerManifesto);
         }
         if (this.btnManifestoClose) {
             this.btnManifestoClose.addEventListener('click', (e) => {

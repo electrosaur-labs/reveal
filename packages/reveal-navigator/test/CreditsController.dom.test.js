@@ -122,16 +122,18 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(controller.isPlaying).toBe(false);
     });
 
-    it('triggers and dismisses the Doug Minkler Manifesto Easter Egg', () => {
+    it('triggers and dismisses the Doug Minkler Manifesto Easter Egg via mascot and print', () => {
         controller.open();
         const broadside = document.getElementById('manifesto-broadside');
         const emblem = document.getElementById('credits-emblem');
+        const printTrigger = document.getElementById('credits-print-trigger');
         const btnManifestoClose = document.getElementById('btn-manifesto-close');
 
         expect(broadside.style.display).toBe('none');
+        expect(printTrigger).not.toBeNull();
 
-        // Click emblem to reveal manifesto
-        emblem.dispatchEvent(new window.Event('click'));
+        // Click print trigger to reveal manifesto
+        printTrigger.dispatchEvent(new window.Event('pointerdown'));
         expect(broadside.style.display).toBe('flex');
         expect(controller.isManifestoOpen).toBe(true);
         expect(controller.isPlaying).toBe(false); // Crawl pauses
@@ -141,6 +143,11 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(broadside.style.display).toBe('none');
         expect(controller.isManifestoOpen).toBe(false);
         expect(controller.isPlaying).toBe(true); // Crawl resumes
+
+        // Click emblem to reveal manifesto again
+        emblem.dispatchEvent(new window.Event('pointerdown'));
+        expect(broadside.style.display).toBe('flex');
+        expect(controller.isManifestoOpen).toBe(true);
     });
 
     it('navigates backwards via Escape key: manifesto -> crawl -> closed', () => {

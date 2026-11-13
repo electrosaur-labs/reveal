@@ -1617,24 +1617,59 @@
             transform: scale(1.08) rotate(-2deg);
         }
 
+        .credits-print-interactive {
+            cursor: pointer;
+            display: inline-block;
+            margin: 18px auto 14px auto;
+            text-align: center;
+            user-select: none;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .credits-print-interactive:hover {
+            transform: scale(1.04);
+        }
+        .credits-print-interactive:hover .credits-print-frame {
+            border-color: #e0a030;
+            box-shadow: 0 12px 36px rgba(224, 160, 48, 0.35);
+        }
+
         .credits-print-frame {
             width: 220px;
             max-width: 80%;
             height: auto;
-            margin: 18px auto 8px auto;
+            margin: 0 auto 8px auto;
             display: block;
             border-radius: 4px;
             border: 2px solid #383838;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85);
             background: #111;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
         .credits-print-caption {
             font-size: 10px;
-            color: #888;
+            color: #aaa;
             letter-spacing: 1.5px;
             text-transform: uppercase;
-            margin-bottom: 16px;
+            margin-bottom: 6px;
+        }
+
+        .credits-print-badge {
+            display: inline-block;
+            background: #BB5A29;
+            color: #fff;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            padding: 3px 10px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transition: background 0.15s, color 0.15s;
+        }
+        .credits-print-interactive:hover .credits-print-badge {
+            background: #e0a030;
+            color: #111;
         }
 
         .credits-quote {
@@ -2556,8 +2591,11 @@
                         </div>
 
                         <!-- Doug Minkler's Print: Art is a Hammer -->
-                        <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="credits-print-frame">
-                        <div class="credits-print-caption">“Art is a Hammer” • Silkscreen by Doug Minkler</div>
+                        <div id="credits-print-trigger" class="credits-print-interactive" title="Click print to open the Doug Minkler Manifesto">
+                            <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="credits-print-frame">
+                            <div class="credits-print-caption">“Art is a Hammer” • Silkscreen by Doug Minkler</div>
+                            <div class="credits-print-badge">★ CLICK PRINT TO OPEN MANIFESTO ★</div>
+                        </div>
 
                         <div class="credits-quote">
                             “Who has taken on EVERYTHING with ink, paper, and uncompromising courage.
