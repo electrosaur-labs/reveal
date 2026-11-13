@@ -158,4 +158,39 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(broadside.style.display).toBe('none');
         expect(overlay.style.display).toBe('flex');
     });
+
+    it('Esc on Credits closes credits overlay and does NOT dismiss plugin dialog', () => {
+        const dialog = document.getElementById('navigatorDialog');
+        dialog.close = vi.fn();
+
+        controller.open();
+        expect(overlay.style.display).toBe('flex');
+
+        // Press Escape while on credits crawl
+        const escEvent = new window.KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+        window.dispatchEvent(escEvent);
+
+        expect(overlay.style.display).toBe('none');
+        expect(controller.isPlaying).toBe(false);
+        expect(dialog.close).not.toHaveBeenCalled();
+    });
+
+    it('Esc on Manifesto dismisses entire plugin dialog', () => {
+        const dialog = document.getElementById('navigatorDialog');
+        dialog.close = vi.fn();
+
+        controller.open();
+        const emblem = document.getElementById('credits-emblem');
+
+        // Open manifesto
+        emblem.dispatchEvent(new window.Event('click'));
+        expect(controller.isManifestoOpen).toBe(true);
+
+        // Press Escape while on manifesto
+        const escEvent = new window.KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+        window.dispatchEvent(escEvent);
+
+        expect(overlay.style.display).toBe('none');
+        expect(dialog.close).toHaveBeenCalledWith('cancel');
+    });
 });
