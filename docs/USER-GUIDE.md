@@ -210,7 +210,7 @@ A 20-megapixel image typically separates in 1-2 seconds.
 
 ## Command-Line Tool
 
-Reveal also ships as a command-line tool that accepts standard image formats (PNG, TIFF, JPEG) — no Photoshop required. It runs the same separation engine and can output flat posterized images, layered PSDs, OpenRaster files (for GIMP/Krita), individual plate masks, and JSON metadata.
+Reveal also ships as a command-line tool that accepts standard image formats (PNG, TIFF, JPEG) — no Photoshop required. It runs the same separation engine and can output flat posterized images, layered PSDs, OpenRaster files (for GIMP/Krita), individual screen masks, and JSON metadata.
 
 ```bash
 # Basic separation

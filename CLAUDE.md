@@ -98,7 +98,7 @@ Image (PNG/TIFF/JPEG/PSD)
   → SeparationEngine.mapPixelsToPaletteAsync() → colorIndices per pixel
   → MechanicalKnobs (minVolume → speckleRescue → shadowClamp)
   → generateMask() per color → binary masks
-  → Output (PSD / ORA / plates / flat PNG)
+  → Output (PSD / ORA / screens / flat PNG)
 ```
 
 ## Core Architecture (reveal-core)
@@ -201,7 +201,7 @@ Active Photoshop plugin. Built with Webpack 5 (externals: `photoshop`, `uxp`).
 ## CLI (reveal-cli)
 
 ```bash
-reveal input.png -a golden_hour -c 8 -f psd -f plates --min-volume 2
+reveal input.png -a golden_hour -c 8 -f psd -f screens --min-volume 2
 reveal input.tiff --recipe settings.json -o output/
 reveal --list-archetypes
 ```

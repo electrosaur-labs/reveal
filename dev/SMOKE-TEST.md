@@ -62,7 +62,7 @@ Only needed after dither-related changes.
 
 - [ ] speckleRescue=10 → Commit → no white spots
 - [ ] shadowClamp=15 → Commit → no white spots
-- [ ] minVolume=3 → Commit → plates merge correctly
+- [ ] minVolume=3 → Commit → screens merge correctly
 
 ## Known Issues
 

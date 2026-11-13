@@ -269,7 +269,7 @@ Apply mechanical knobs to the color index map. Can be called multiple times with
 
 ```javascript
 result.applyKnobs({
-    minVolume: 0.5,       // 0-5%  — ghost plate removal
+    minVolume: 0.5,       // 0-5%  — ghost screen removal
     speckleRescue: 2,     // 0-10px — despeckle radius
     shadowClamp: 3.2      // 0-20% — minimum ink density
 });
@@ -372,7 +372,7 @@ Recipes run in any context that can provide pixels and consume results:
 | Host | Source (Image) | Sink (Result) |
 |------|----------------|---------------|
 | **Navigator** | Photoshop active document | Fill+mask layers in PSD |
-| **reveal-cli** | PNG/TIFF/PSD file | PNG plates, PSD, ORA |
+| **reveal-cli** | PNG/TIFF/PSD file | PNG screens, PSD, ORA |
 | **reveal-batch** | Directory of images | Batch results + metrics |
 | **Future GUI** | File open dialog | Any output format |
 

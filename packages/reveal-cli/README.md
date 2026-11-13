@@ -4,7 +4,7 @@
 
 # reveal-cli
 
-Command-line color separation tool for screen printing. Accepts PNG, TIFF, JPEG, or Lab PSD files and outputs posterized images, layered PSDs, OpenRaster files, plate masks, and JSON metadata.
+Command-line color separation tool for screen printing. Accepts PNG, TIFF, JPEG, or Lab PSD files and outputs posterized images, layered PSDs, OpenRaster files, per-screen masks, and JSON metadata.
 
 ## Installation
 
@@ -35,9 +35,9 @@ reveal photo.png --format psd -o output/
 ### Multiple output formats
 
 ```bash
-reveal photo.png --format psd,ora,plates -o output/
+reveal photo.png --format psd,ora,screens -o output/
 # or
-reveal photo.png --format psd --format ora --format plates -o output/
+reveal photo.png --format psd --format ora --format screens -o output/
 ```
 
 ### Single archetype mode
@@ -93,9 +93,9 @@ Exit code is 1 when the check fails (or, with `--strict`, when there are warning
 | `-o, --output <path>` | Output directory |
 | `-a, --archetype <name>` | Archetype ID (default: auto-detect) |
 | `-c, --colors <n>` | Target color count (2-10) |
-| `-f, --format <types...>` | Output formats: `psd`, `ora`, `plates` (repeatable or comma-separated) |
+| `-f, --format <types...>` | Output formats: `psd`, `ora`, `screens` (repeatable or comma-separated) |
 | `--trap <pixels>` | Trap width in pixels |
-| `--min-volume <percent>` | Ghost plate threshold (0-5%) |
+| `--min-volume <percent>` | Minimum coverage (0-5%): inks covering less than this are merged into their nearest neighbor |
 | `--speckle-rescue <pixels>` | Despeckle threshold (0-10px) |
 | `--shadow-clamp <percent>` | Ink body clamp (0-20%) |
 | `--single` | Single archetype mode (requires `--archetype`) |
@@ -114,7 +114,7 @@ Exit code is 1 when the check fails (or, with `--strict`, when there are warning
 
 **OpenRaster** (`--format ora`) — ZIP archive of colorized RGBA layer PNGs with `stack.xml`. Opens in GIMP, Krita, and other ORA-compatible editors.
 
-**Plates** (`--format plates`) — Individual grayscale PNGs per ink color (255 = ink, 0 = no ink). Named with plate number and hex color.
+**Screens** (`--format screens`) — One grayscale PNG per ink (255 = ink, 0 = no ink), named `<image>_screen_NN_HEX.png` with the screen number and hex color.
 
 **JSON sidecar** (default, suppress with `--no-json`) — Metadata including palette (Lab, RGB, hex, coverage), archetype info, DNA analysis, and processing parameters.
 
@@ -128,7 +128,7 @@ Exit code is 1 when the check fails (or, with `--strict`, when there are warning
   "minVolume": 1.5,
   "speckleRescue": 3,
   "shadowClamp": 5,
-  "outputs": ["psd", "ora", "plates"],
+  "outputs": ["psd", "ora", "screens"],
   "outputDir": "./output"
 }
 ```
