@@ -1619,9 +1619,10 @@
         }
 
         .credits-print-interactive {
-            display: inline-block;
-            margin: 18px auto 14px auto;
+            display: block;
+            width: 100%;
             text-align: center;
+            margin: 18px auto 14px auto;
             user-select: none;
         }
 
@@ -1629,7 +1630,7 @@
             width: 220px;
             max-width: 80%;
             height: auto;
-            margin: 0 auto 8px auto;
+            margin: 0 auto 8px auto !important;
             display: block;
             border-radius: 4px;
             border: 2px solid #383838;
@@ -1642,7 +1643,10 @@
             color: #aaa;
             letter-spacing: 1.5px;
             text-transform: uppercase;
-            margin-bottom: 6px;
+            text-align: center;
+            display: block;
+            width: 100%;
+            margin: 0 auto;
         }
 
         .credits-quote {
@@ -1743,28 +1747,6 @@
             font-family: monospace;
         }
 
-        .credits-footer-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 9px 18px;
-            background: #141414;
-            border-top: 1px solid #2e2e2e;
-            font-size: 10px;
-            color: #777;
-            flex-shrink: 0;
-            z-index: 10;
-        }
-        .credits-footer-tag {
-            color: #e0a030;
-            font-weight: 700;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-        }
-        .credits-esc-hint {
-            color: #888;
-            font-style: italic;
-        }
         .credits-trigger-btn {
             background: none;
             border: none;
@@ -1803,6 +1785,7 @@
             overflow: hidden;
             box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.7);
             animation: manifestoFadeIn 0.22s ease-out;
+            cursor: pointer;
         }
 
         @keyframes manifestoFadeIn {
@@ -1833,10 +1816,13 @@
             font-weight: 700;
         }
         .manifesto-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             flex: 1 1 auto;
             min-height: 0;
             overflow-y: auto;
-            padding: 20px 28px;
+            padding: 24px 28px;
             font-size: 12.5px;
             line-height: 1.7;
             color: #dcd0ba;
@@ -1844,25 +1830,33 @@
             scrollbar-color: #555 transparent;
         }
         .manifesto-body p {
+            width: 100%;
             margin: 0 0 14px 0;
             display: block;
+            text-align: left;
         }
 
         .manifesto-art-card {
+            align-self: center;
             background: #202224;
             border: 1px solid #3d2f24;
             border-radius: 6px;
             padding: 12px;
-            margin: 0 auto 18px auto;
-            max-width: 260px;
+            margin: 0 0 20px 0;
+            max-width: 240px;
+            width: 240px;
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-sizing: border-box;
         }
         .manifesto-art-img {
             width: 160px;
             max-width: 100%;
             height: auto;
             display: block;
-            margin: 0 auto 8px auto;
+            margin: 0 auto 8px auto !important;
             border: 2px solid #BB5A29;
             border-radius: 4px;
             box-shadow: 0 6px 18px rgba(0, 0, 0, 0.7);
@@ -1873,9 +1867,13 @@
             letter-spacing: 1px;
             text-transform: uppercase;
             font-weight: 700;
+            text-align: center;
+            display: block;
+            width: 100%;
         }
 
         .manifesto-quote {
+            width: 100%;
             border-left: 3px solid #BB5A29;
             padding: 8px 16px;
             margin: 16px 0;
@@ -1885,31 +1883,7 @@
             line-height: 1.6;
             background: rgba(187, 90, 41, 0.08);
             border-radius: 0 4px 4px 0;
-        }
-        .manifesto-footer {
-            background: #1b1c1e;
-            border-top: 1px solid #333;
-            padding: 10px 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 11px;
-            color: #888;
-            flex-shrink: 0;
-        }
-        .manifesto-close-btn {
-            background: #BB5A29;
-            border: none;
-            color: #fff;
-            font-weight: 700;
-            padding: 6px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-            transition: background 0.15s;
-        }
-        .manifesto-close-btn:hover {
-            background: #d46b35;
+            box-sizing: border-box;
         }
 
     </style>
@@ -2679,11 +2653,9 @@
                     <div class="manifesto-subtitle">A Screen-Print Prepress Manifesto</div>
                 </div>
                 <div class="manifesto-body">
-                    <div style="display: flex; justify-content: center; width: 100%; margin-bottom: 18px;">
-                        <div class="manifesto-art-card" style="margin: 0;">
-                            <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="manifesto-art-img">
-                            <div class="manifesto-art-caption">“Art is a Hammer” • Doug Minkler</div>
-                        </div>
+                    <div class="manifesto-art-card">
+                        <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="manifesto-art-img">
+                        <div class="manifesto-art-caption">“Art is a Hammer” • Doug Minkler</div>
                     </div>
 
                     <p>Screen printing is not an office photocopier. It is not an inkjet printer. It does not exist to fake continuous-tone photographs with muddy translucent rosettes.</p>
@@ -2713,15 +2685,6 @@
                         </div>
                     </div>
                 </div>
-                <div class="manifesto-footer">
-                    <span>Press Esc or click Close to return</span>
-                    <button id="btn-manifesto-close" class="manifesto-close-btn">Close</button>
-                </div>
-            </div>
-
-            <!-- Bottom Dismiss Bar -->
-            <div class="credits-footer-bar">
-                <span class="credits-esc-hint">Press Esc or click outside to close</span>
             </div>
         </div><!-- /credits-window -->
     </div><!-- /credits-overlay -->

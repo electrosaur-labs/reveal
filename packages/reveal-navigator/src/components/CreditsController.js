@@ -25,7 +25,6 @@ class CreditsController {
         this.emblem = this.overlay.querySelector('#credits-emblem');
         this.printTrigger = this.overlay.querySelector('#credits-print-trigger');
         this.broadside = this.overlay.querySelector('#manifesto-broadside');
-        this.btnManifestoClose = this.overlay.querySelector('#btn-manifesto-close');
 
         this.speed = 24; // pixels per second gentle ambient crawl
         this.isPlaying = false;
@@ -85,17 +84,9 @@ class CreditsController {
             this.printTrigger.addEventListener('click', triggerManifesto);
             this.printTrigger.addEventListener('pointerdown', triggerManifesto);
         }
-        if (this.btnManifestoClose) {
-            this.btnManifestoClose.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.closeManifesto();
-            });
-        }
         if (this.broadside) {
-            this.broadside.addEventListener('click', (e) => {
-                if (e.target === this.broadside) {
-                    this.closeManifesto();
-                }
+            this.broadside.addEventListener('click', () => {
+                this.closeManifesto();
             });
         }
 

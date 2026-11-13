@@ -51,7 +51,6 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(document.getElementById('credits-emblem')).not.toBeNull();
         expect(document.getElementById('credits-print-trigger')).not.toBeNull();
         expect(document.getElementById('manifesto-broadside')).not.toBeNull();
-        expect(document.getElementById('btn-manifesto-close')).not.toBeNull();
     });
 
     it('opens and closes the overlay with proper playback state', () => {
@@ -101,7 +100,6 @@ describe('CreditsController Headless DOM Suite', () => {
         const broadside = document.getElementById('manifesto-broadside');
         const emblem = document.getElementById('credits-emblem');
         const printTrigger = document.getElementById('credits-print-trigger');
-        const btnManifestoClose = document.getElementById('btn-manifesto-close');
 
         expect(broadside.style.display).toBe('none');
         expect(printTrigger).not.toBeNull();
@@ -112,8 +110,8 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(controller.isManifestoOpen).toBe(true);
         expect(controller.isPlaying).toBe(false); // Crawl pauses
 
-        // Click close button to return to crawl
-        btnManifestoClose.dispatchEvent(new window.Event('click'));
+        // Click broadside to dismiss and return to crawl
+        broadside.dispatchEvent(new window.Event('click'));
         expect(broadside.style.display).toBe('none');
         expect(controller.isManifestoOpen).toBe(false);
 
