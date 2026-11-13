@@ -675,6 +675,7 @@ class PosterizationEngine {
         }
 
         // Step 2: Run median cut in Lab space
+        const effectiveTuning = options.tuning || this._buildTuningFromConfig(options);
         let initialPaletteLab = LabMedianCut.medianCutInLabSpace(
             nonPreservedLabPixels,
             medianCutTarget,
@@ -688,16 +689,16 @@ class PosterizationEngine {
             highlightThreshold,
             highlightBoost,
             options.strategy || null,
-            options.tuning || null
+            effectiveTuning
         );
 
         // Step 2.5: K-means refinement
         // Wu variance mode defaults to 3 passes (Wu seeds + K-Means polish is the classical combo)
-        const defaultPasses = (options.tuning?.split?.splitMode === 'variance') ? 3 : 1;
+        const defaultPasses = (effectiveTuning?.split?.splitMode === 'variance') ? 3 : 1;
         const refinementPasses = options.refinementPasses !== undefined ? options.refinementPasses : defaultPasses;
         if (!grayscaleOnly && initialPaletteLab.length > 1 && refinementPasses > 0) {
             for (let pass = 0; pass < refinementPasses; pass++) {
-                initialPaletteLab = PaletteOps._refineKMeans(nonPreservedLabPixels, initialPaletteLab, options.tuning || null);
+                initialPaletteLab = PaletteOps._refineKMeans(nonPreservedLabPixels, initialPaletteLab, effectiveTuning);
             }
         }
 

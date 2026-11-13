@@ -672,7 +672,7 @@ class LabMedianCut {
         const BINS = 33; // 0 = boundary, 1-32 = data bins
         const BIN_COUNT = 32;
 
-        const vibrancyBoost = tuning?.split?.vibrancyBoost ?? 0;
+        const vibrancyBoost = tuning?.split?.vibrancyBoost ?? (tuning?.vibrancyBoost ?? 0);
 
         // ── Step 1: Build 3D histogram ──
         // 5 moment arrays: count, sumL, sumA, sumB, sumSq
@@ -714,18 +714,21 @@ class LabMedianCut {
             colorBins[i * 3 + 2] = bb;
 
             const idx = bl * BINS * BINS + ba * BINS + bb;
-            const w = c.count || 1;
+            let w = c.count || 1;
+
+            if (vibrancyBoost > 0) {
+                const chroma = Math.sqrt(c.a * c.a + c.b * c.b);
+                const chromaWeight = 1.0 + vibrancyBoost * (chroma / 100);
+                w *= chromaWeight;
+            }
 
             wt[idx] += w;
             mL[idx] += c.L * w;
             mA[idx] += c.a * w;
             mB[idx] += c.b * w;
-            // Wu's variance formula requires m2 to be unweighted:
-            //   variance = m2 - (mL² + mA² + mB²) / wt
-            // Applying vibrancyBoost here but not to mL/mA/mB breaks
-            // this identity, producing bogus variance values.
-            // vibrancyBoost is harmless for median-cut (doesn't use m2)
-            // but catastrophic for Wu. Keep m2 pure.
+            // Uniform moment weighting: w_i = count_i * chromaWeight_i applied across
+            // all 0th, 1st, and 2nd order moments identically preserves the sum-of-squares
+            // identity: variance = m2 - (mL² + mA² + mB²) / wt
             m2[idx] += w * (c.L * c.L + c.a * c.a + c.b * c.b);
         }
 

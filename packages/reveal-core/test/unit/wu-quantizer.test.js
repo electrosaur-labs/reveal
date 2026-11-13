@@ -191,4 +191,32 @@ describe('Wu quantizer', () => {
         // Wu should not be significantly worse
         expect(wuDE).toBeLessThan(mcDE * 1.3);
     }, 30000);
+
+    test('vibrancyBoost prioritizes high-chroma colors in Wu quantizer', () => {
+        // Construct two large neutral populations (5000 + 5000), a mild-chroma cluster (500),
+        // and a small high-chroma cluster (60 pixels)
+        const colors = [
+            { L: 20, a: 0, b: 0, count: 5000 },
+            { L: 80, a: 0, b: 0, count: 5000 },
+            { L: 60, a: 15, b: 15, count: 500 },
+            { L: 50, a: 80, b: 60, count: 60 },
+        ];
+        const pixels = makePixels16(colors);
+
+        // Without vibrancyBoost: higher population mild-chroma cluster wins
+        const unboosted = PosterizationEngine.posterize(pixels, 96, 110, 2, {
+            ...BASE_OPTS, quantizer: 'wu', vibrancyBoost: 0, preserveWhite: false, preserveBlack: false
+        });
+
+        // With vibrancyBoost: high-chroma cluster variance is boosted and captured
+        const boosted = PosterizationEngine.posterize(pixels, 96, 110, 2, {
+            ...BASE_OPTS, quantizer: 'wu', vibrancyBoost: 8.0, preserveWhite: false, preserveBlack: false
+        });
+
+        const maxChromaUnboosted = Math.max(...unboosted.paletteLab.map(c => Math.hypot(c.a, c.b)));
+        const maxChromaBoosted = Math.max(...boosted.paletteLab.map(c => Math.hypot(c.a, c.b)));
+
+        expect(maxChromaBoosted).toBeGreaterThan(maxChromaUnboosted);
+        expect(maxChromaBoosted).toBeCloseTo(100.0, 1);
+    });
 });
