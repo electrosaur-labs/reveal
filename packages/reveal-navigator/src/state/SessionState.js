@@ -716,7 +716,7 @@ class SessionState extends EventEmitter {
         }
 
         return {
-            meta: { generator: 'Reveal Navigator v1.0.0', timestamp: new Date().toISOString(), filename: docInfo ? docInfo.name : 'unknown', width: docInfo ? docInfo.width : this.originalWidth, height: docInfo ? docInfo.height : this.originalHeight, bitDepth: 16 },
+            meta: { generator: 'Reveal Navigator v1.0.0', timestamp: new Date().toISOString(), filename: docInfo ? docInfo.name : 'unknown', width: docInfo ? docInfo.width : this.originalWidth, height: docInfo ? docInfo.height : this.originalHeight, resolution: docInfo ? docInfo.resolution : (this.imageResolution || 300), bitDepth: 16 },
             archetype: archetypeSection, config: configSection, knobs: (() => { const k = {}; for (const key of ALL_KNOBS) if (this.state[key] !== undefined) k[key] = this.state[key]; return k; })(),
             surgery, palette: paletteSection, dna: this.imageDNA || {},
             metrics: { avgDeltaE: this.calculateCurrentAccuracy(), layerCount: productionResult ? productionResult.layerCount : 0, elapsedMs: productionResult ? productionResult.elapsedMs : 0 }

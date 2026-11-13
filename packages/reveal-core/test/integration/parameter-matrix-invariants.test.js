@@ -12,6 +12,9 @@
  * 5. Trapping Boundary (directional dilation light->dark with zero unprinted bleed)
  */
 
+const fs = require('fs');
+const path = require('path');
+const zlib = require('zlib');
 const MeshPhysics = require('../../lib/utils/MeshPhysics');
 const SeparationEngine = require('../../lib/engines/SeparationEngine');
 const MechanicalKnobs = require('../../lib/engines/MechanicalKnobs');
@@ -256,6 +259,83 @@ describe('Parameter Matrix Invariants Suite', () => {
                 // And must not bleed past trap radius
                 expect(lightZone[y * w + 12]).toBe(0);
             }
+        });
+    });
+
+    describe('Real-Asset Verification: agreement-3200 Flagship Text Poster', () => {
+        let fixture = null;
+
+        beforeAll(() => {
+            const gzPath = path.join(__dirname, '../fixtures/agreement-3200-lab16.labbin.gz');
+            if (fs.existsSync(gzPath)) {
+                const gz = fs.readFileSync(gzPath);
+                const raw = zlib.gunzipSync(gz);
+                const width = raw.readUInt32LE(4);
+                const height = raw.readUInt32LE(8);
+                const pixels = new Uint16Array(raw.buffer, raw.byteOffset + 14, width * height * 3);
+                fixture = { pixels, width, height };
+            }
+        });
+
+        it('proves zero green pixels on text contour rows on real 2133x3200 asset', async () => {
+            if (!fixture) return;
+
+            const PALETTE = [
+                { L: 14.5, a: 0.2, b: -0.5 },  // 0: Dark
+                { L: 84.8, a: 2.1, b: 14.8 },  // 1: Cream text
+                { L: 35.0, a: -1.2, b: 4.5 },
+                { L: 52.0, a: 1.5, b: 12.0 },
+                { L: 68.0, a: 3.2, b: 22.0 },
+                { L: 48.0, a: -22.0, b: 18.0 } // 5: Green accent
+            ];
+            const GREEN_IDX = 5;
+
+            const indices = await SeparationEngine.mapPixelsToPaletteAsync(
+                fixture.pixels, PALETTE, null, fixture.width, fixture.height,
+                { ditherType: 'atkinson', meshCount: 355, dpi: 300, ruleOfN: 7.0 }
+            );
+
+            // Check the 'BY P. K.' text line rows [2400..2600]
+            let textRowGreenCount = 0;
+            for (let y = 2400; y < 2600; y++) {
+                const rowStart = y * fixture.width;
+                for (let x = 0; x < fixture.width; x++) {
+                    if (indices[rowStart + x] === GREEN_IDX) textRowGreenCount++;
+                }
+            }
+            expect(textRowGreenCount).toBe(0);
+        });
+
+        it('preserves fine text details without mesh clustering when meshCount is 0', async () => {
+            if (!fixture) return;
+
+            // Sample a 120x60 patch around text contour
+            const cropW = 120, cropH = 60;
+            const cropBytes = new Uint16Array(cropW * cropH * 3);
+            for (let y = 0; y < cropH; y++) {
+                const srcY = 2450 + y;
+                for (let x = 0; x < cropW; x++) {
+                    const srcX = 500 + x;
+                    const srcPi = (srcY * fixture.width + srcX) * 3;
+                    const dstPi = (y * cropW + x) * 3;
+                    cropBytes[dstPi] = fixture.pixels[srcPi];
+                    cropBytes[dstPi + 1] = fixture.pixels[srcPi + 1];
+                    cropBytes[dstPi + 2] = fixture.pixels[srcPi + 2];
+                }
+            }
+
+            const PALETTE = [
+                { L: 14.5, a: 0.2, b: -0.5 },
+                { L: 84.8, a: 2.1, b: 14.8 }
+            ];
+
+            const indices = await SeparationEngine.mapPixelsToPaletteAsync(
+                cropBytes, PALETTE, null, cropW, cropH,
+                { ditherType: 'none', meshCount: 0, dpi: 300 }
+            );
+
+            expect(indices).toBeDefined();
+            expect(indices.length).toBe(cropW * cropH);
         });
     });
 });

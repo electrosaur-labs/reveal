@@ -377,16 +377,19 @@ class PhotoshopBridge {
         // reveal:version = plugin version; reveal:dnaVersion = DNA schema version
         const pluginVersion = (manifest.meta && manifest.meta.generator)
             ? manifest.meta.generator.replace(/.*v/i, '') : '1.0.0';
+        lines.push(`${I}<reveal:manifestVersion>2.1</reveal:manifestVersion>`);
         lines.push(`${I}<reveal:version>${esc(pluginVersion)}</reveal:version>`);
         if (manifest.dna && manifest.dna.version) {
             lines.push(`${I}<reveal:dnaVersion>${esc(manifest.dna.version)}</reveal:dnaVersion>`);
         }
+        const dpi = (manifest.meta && (manifest.meta.resolution || manifest.meta.dpi)) || 300;
         if (manifest.meta) {
             lines.push(`${I}<reveal:generator>${esc(manifest.meta.generator)}</reveal:generator>`);
             lines.push(`${I}<reveal:timestamp>${esc(manifest.meta.timestamp)}</reveal:timestamp>`);
             lines.push(`${I}<reveal:filename>${esc(manifest.meta.filename)}</reveal:filename>`);
             lines.push(`${I}<reveal:width>${manifest.meta.width}</reveal:width>`);
             lines.push(`${I}<reveal:height>${manifest.meta.height}</reveal:height>`);
+            lines.push(`${I}<reveal:dpi>${dpi}</reveal:dpi>`);
             lines.push(`${I}<reveal:bitDepth>${manifest.meta.bitDepth}</reveal:bitDepth>`);
         }
 
@@ -440,9 +443,19 @@ class PhotoshopBridge {
             lines.push(`${I}<reveal:speckleRescue>${k.speckleRescue || 0}</reveal:speckleRescue>`);
             lines.push(`${I}<reveal:shadowClamp>${k.shadowClamp || 0}</reveal:shadowClamp>`);
             lines.push(`${I}<reveal:trapSize>${k.trapSize || 0}</reveal:trapSize>`);
-            if (k.meshSize) lines.push(`${I}<reveal:meshSize>${k.meshSize}</reveal:meshSize>`);
-            if (k.ruleOfN != null) lines.push(`${I}<reveal:ruleOfN>${k.ruleOfN}</reveal:ruleOfN>`);
+            const trapPx = k.trapSize > 0 ? Math.max(1, Math.round(k.trapSize * dpi / 72)) : 0;
+            lines.push(`${I}<reveal:trapPx>${trapPx}</reveal:trapPx>`);
+            const meshTPI = k.meshSize || 0;
+            lines.push(`${I}<reveal:meshSize>${meshTPI}</reveal:meshSize>`);
+            const ruleOfN = k.ruleOfN != null ? k.ruleOfN : 7.0;
+            lines.push(`${I}<reveal:ruleOfN>${ruleOfN}</reveal:ruleOfN>`);
+            const minDotPx = meshTPI > 0 ? Math.max(1, Math.ceil(ruleOfN * dpi / meshTPI)) : 0;
+            lines.push(`${I}<reveal:minDotPx>${minDotPx}</reveal:minDotPx>`);
+            lines.push(`${I}<reveal:dualScale>true</reveal:dualScale>`);
         }
+
+        const plateCount = (manifest.palette && manifest.palette.length) || (manifest.metrics && manifest.metrics.layerCount) || 0;
+        lines.push(`${I}<reveal:plateCount>${plateCount}</reveal:plateCount>`);
 
         // ── Palette (ordered list) ──
         if (manifest.palette && manifest.palette.length > 0) {

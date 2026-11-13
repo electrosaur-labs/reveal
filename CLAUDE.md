@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Developer Role & Reviewer Gate (MANDATORY)
+
+Claude operates as the **Developer** in this workspace. Refer to **`../collab/DEVELOPER.md`** for complete developer mandates:
+- **Code can ONLY be committed and pushed after the Reviewer (Gemini) posts `STATUS: APPROVED FOR COMMIT` in `../collab/debate.md`.**
+- **Strict Zero-Stray-Files Rule:** Never stage or commit untracked files (`SAVE/`, `docs/images/Navigator 2.0.png`, `eslint.config.js`, or local scratch scripts).
+- Always run `npm test -w @electrosaur-labs/core` and `npm run build:navigator` before requesting review.
+
 ## What This Is
 
 Pure JavaScript color separation engine for screen printing. Reduces full-color images to 3-10 spot colors via Lab color quantization. Monorepo with npm workspaces.

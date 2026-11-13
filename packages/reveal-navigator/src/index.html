@@ -1519,6 +1519,109 @@
             border-color: #e0a030;
         }
 
+        /* ─── Credits Overlay ─── */
+        #credits-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(18, 18, 18, 0.85);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #credits-box {
+            background: #2b2b2b;
+            border: 1px solid #555;
+            border-radius: 8px;
+            color: #e0e0e0;
+            padding: 22px 26px;
+            max-width: 480px;
+            width: 90%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.75);
+        }
+
+        #credits-header {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }
+
+        #credits-title {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #fff;
+            margin: 0;
+        }
+
+        #credits-tagline {
+            font-size: 11px;
+            font-style: italic;
+            color: #e0a030;
+        }
+
+        #credits-body {
+            overflow-y: auto;
+            max-height: 55vh;
+            padding-right: 6px;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #ccc;
+        }
+
+        .credits-section-title {
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #4da6ff;
+            margin-top: 14px;
+            margin-bottom: 6px;
+        }
+
+        .credits-row {
+            margin-bottom: 6px;
+        }
+
+        .credits-name {
+            font-weight: 600;
+            color: #eee;
+        }
+
+        .credits-desc {
+            color: #aaa;
+            margin-left: 2px;
+        }
+
+        #credits-footer {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 16px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+
+        #btn-credits-close {
+            background: #444;
+            border: 1px solid #666;
+            color: #fff;
+            padding: 5px 20px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        #btn-credits-close:hover {
+            background: #555;
+        }
+
     </style>
 </head>
 <body>
