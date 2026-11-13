@@ -108,7 +108,7 @@ function parseRevealManifest(xmpString) {
     const dualScale = getTag('dualScale') === 'true';
     const minVolume = getNum('minVolume', 0);
     const shadowClamp = getNum('shadowClamp', 0);
-    const plateCount = getNum('plateCount', 0);
+    const screenCount = getNum('screenCount', null) ?? getNum('plateCount', 0);
     const archetype = getTag('archetype');
     const generator = getTag('generator');
 
@@ -145,7 +145,8 @@ function parseRevealManifest(xmpString) {
         dualScale,
         minVolume,
         shadowClamp,
-        plateCount: plateCount || palette.length,
+        screenCount: screenCount || palette.length,
+        plateCount: screenCount || palette.length, // Deprecated alias
         archetype,
         generator,
         palette
@@ -296,8 +297,9 @@ function inspectPsd(buffer) {
         }
     }
 
-    // Convert raw layers into plate definitions
-    const plates = [];
+    // Convert raw layers into screen definitions
+    const screens = [];
+    const plates = screens; // Alias for backwards compatibility
     const totalPixels = width * height;
 
     for (let li = 0; li < layers.length; li++) {
@@ -344,7 +346,7 @@ function inspectPsd(buffer) {
             }
         }
 
-        plates.push({
+        screens.push({
             name: lyr.name,
             color: { L: L != null ? L : 50, a, b },
             mask: binaryMask
@@ -359,7 +361,8 @@ function inspectPsd(buffer) {
         dpi: dpi || (manifest ? manifest.dpi : 300),
         xmpString,
         manifest,
-        plates
+        screens,
+        plates: screens // Deprecated alias
     };
 }
 

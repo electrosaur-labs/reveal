@@ -14,7 +14,7 @@ const VALID_FIELDS = new Set([
     'speckleRescue', 'shadowClamp', 'meshTpi', 'dpi', 'outputs', 'outputDir'
 ]);
 
-const VALID_OUTPUTS = new Set(['flat', 'psd', 'ora', 'plates']);
+const VALID_OUTPUTS = new Set(['flat', 'psd', 'ora', 'screens', 'plates']);
 
 /**
  * Load and validate a recipe from a JSON file.

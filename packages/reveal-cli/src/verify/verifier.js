@@ -20,7 +20,9 @@ const { labelConnectedComponents } = require('./connected-components');
  * @returns {Object} Comprehensive verification report
  */
 function verifySeparation(parsed, options = {}) {
-    const { width, height, dpi, manifest, plates } = parsed;
+    const { width, height, dpi, manifest } = parsed;
+    const screens = parsed.screens || parsed.plates || [];
+    const plates = screens; // Alias for backwards compatibility
     const totalPixels = width * height;
 
     const report = {
@@ -31,7 +33,8 @@ function verifySeparation(parsed, options = {}) {
             height,
             dpi,
             pixelCount: totalPixels,
-            plateCount: plates.length
+            screenCount: screens.length,
+            plateCount: screens.length // Alias for backwards compatibility
         },
         manifestAudit: null,
         trappingAudit: null,
@@ -45,7 +48,7 @@ function verifySeparation(parsed, options = {}) {
     // ─────────────────────────────────────────────────────────────
     // Step 1: Manifest v2.1 Audit
     // ─────────────────────────────────────────────────────────────
-    report.manifestAudit = auditManifest(manifest, plates, dpi);
+    report.manifestAudit = auditManifest(manifest, screens, dpi);
     for (const err of report.manifestAudit.errors) {
         report.summary.errors.push(`[Manifest] ${err}`);
     }
@@ -53,21 +56,22 @@ function verifySeparation(parsed, options = {}) {
         report.summary.warnings.push(`[Manifest] ${warn}`);
     }
 
-    if (plates.length === 0) {
-        report.summary.errors.push('No separation plates found in document layers');
+    if (screens.length === 0) {
+        report.summary.errors.push('No separation screens found in document layers');
         report.valid = false;
         report.status = 'FAIL';
         return report;
     }
 
-    // Sort plates by Lightness descending (L0 > L1 > ... > L_darkest)
-    const sortedPlates = plates.map((p, idx) => ({
+    // Sort screens by Lightness descending (L0 > L1 > ... > L_darkest)
+    const sortedScreens = screens.map((s, idx) => ({
         index: idx,
-        name: p.name,
-        color: p.color,
-        L: p.color.L,
-        mask: p.mask
+        name: s.name,
+        color: s.color,
+        L: s.color.L,
+        mask: s.mask
     })).sort((a, b) => b.L - a.L);
+    const sortedPlates = sortedScreens; // Alias for backwards compatibility
 
     // ─────────────────────────────────────────────────────────────
     // Step 2: Trapping Physics Audit (Invariant 1)
@@ -122,7 +126,8 @@ function verifySeparation(parsed, options = {}) {
 /**
  * Audit Manifest v2.1 Schema Compliance
  */
-function auditManifest(manifest, plates, docDpi) {
+function auditManifest(manifest, screens, docDpi) {
+    const screenList = screens || [];
     const res = {
         present: !!manifest,
         version: manifest ? manifest.manifestVersion : null,
@@ -141,8 +146,9 @@ function auditManifest(manifest, plates, docDpi) {
         res.warnings.push(`Manifest version is ${manifest.manifestVersion} (expected 2.1)`);
     }
 
-    if (manifest.plateCount > 0 && manifest.plateCount !== plates.length) {
-        res.errors.push(`Plate count mismatch: manifest declares ${manifest.plateCount}, but file has ${plates.length} layers`);
+    const declaredCount = manifest.screenCount ?? manifest.plateCount ?? 0;
+    if (declaredCount > 0 && declaredCount !== screenList.length) {
+        res.errors.push(`Screen count mismatch: manifest declares ${declaredCount}, but file has ${screenList.length} layers`);
     }
 
     if (manifest.dpi && docDpi && Math.abs(manifest.dpi - docDpi) > 1) {
@@ -265,17 +271,17 @@ function auditTrapping(sortedPlates, width, height, maxTrapPx, options = {}) {
 
         // Invariant 1.3: Zero reverse trapping on darkest ink
         if (isDarkest && trappedCount > 0) {
-            res.errors.push(`Plate [${plate.name}] is the darkest ink but contains ${trappedCount} reverse-trapped pixels`);
+            res.errors.push(`Screen [${plate.name}] is the darkest ink but contains ${trappedCount} reverse-trapped pixels`);
             res.compliant = false;
         }
 
         if (leakOntoSubstrate > 0) {
-            res.errors.push(`Plate [${plate.name}] has ${leakOntoSubstrate} trapped pixels leaking onto unprinted substrate`);
+            res.errors.push(`Screen [${plate.name}] has ${leakOntoSubstrate} trapped pixels leaking onto unprinted substrate`);
             res.compliant = false;
         }
 
         if (leakOntoLighter > 0) {
-            res.errors.push(`Plate [${plate.name}] has ${leakOntoLighter} trapped pixels leaking under lighter ink`);
+            res.errors.push(`Screen [${plate.name}] has ${leakOntoLighter} trapped pixels leaking under lighter ink`);
             res.compliant = false;
         }
 
@@ -298,12 +304,12 @@ function auditTrapping(sortedPlates, width, height, maxTrapPx, options = {}) {
             }
 
             if (overDilationCount > 0) {
-                res.errors.push(`Plate [${plate.name}] exceeds trap dilation limit: max dilation is ${maxDilationFound.toFixed(2)}px (limit: ${tolerance.toFixed(2)}px, ${overDilationCount} over-dilated pixels)`);
+                res.errors.push(`Screen [${plate.name}] exceeds trap dilation limit: max dilation is ${maxDilationFound.toFixed(2)}px (limit: ${tolerance.toFixed(2)}px, ${overDilationCount} over-dilated pixels)`);
                 res.compliant = false;
             }
         }
 
-        res.plateAudits.push({
+        const screenAudit = {
             name: plate.name,
             L: plate.L,
             finalPixels: finalCount,
@@ -313,7 +319,12 @@ function auditTrapping(sortedPlates, width, height, maxTrapPx, options = {}) {
             leakOntoLighter,
             leakOntoSubstrate,
             overDilationCount
-        });
+        };
+        if (!res.screenAudits) {
+            res.screenAudits = [];
+            res.plateAudits = res.screenAudits; // Deprecated alias
+        }
+        res.screenAudits.push(screenAudit);
     }
 
     return res;
@@ -373,22 +384,27 @@ function auditMeshPhysics(sortedPlates, width, height, minDotPx, meshTPI, ruleOf
         }
 
         if (subMeshDebrisCount > 0) {
-            res.errors.push(`Plate [${plate.name}] contains ${subMeshDebrisCount} sub-mesh debris dots smaller than physical floor (${floorPx}px / R<${minInscribedRadius.toFixed(1)}px)`);
+            res.errors.push(`Screen [${plate.name}] contains ${subMeshDebrisCount} sub-mesh debris dots smaller than physical floor (${floorPx}px / R<${minInscribedRadius.toFixed(1)}px)`);
             res.compliant = false;
         }
 
         if (pinchWarningsCount > 0) {
-            res.warnings.push(`Plate [${plate.name}] contains ${pinchWarningsCount} continuous strokes with pinch points (<1.0px run >3px) prone to press starvation`);
+            res.warnings.push(`Screen [${plate.name}] contains ${pinchWarningsCount} continuous strokes with pinch points (<1.0px run >3px) prone to press starvation`);
         }
 
-        res.plateAudits.push({
+        const screenAudit = {
             name: plate.name,
             totalComponents: components.length,
             isolatedDotsCount,
             subMeshDebrisCount,
             continuousStrokesCount,
             pinchWarningsCount
-        });
+        };
+        if (!res.screenAudits) {
+            res.screenAudits = [];
+            res.plateAudits = res.screenAudits; // Deprecated alias
+        }
+        res.screenAudits.push(screenAudit);
     }
 
     return res;

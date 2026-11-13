@@ -454,8 +454,9 @@ class PhotoshopBridge {
             lines.push(`${I}<reveal:dualScale>true</reveal:dualScale>`);
         }
 
-        const plateCount = (manifest.palette && manifest.palette.length) || (manifest.metrics && manifest.metrics.layerCount) || 0;
-        lines.push(`${I}<reveal:plateCount>${plateCount}</reveal:plateCount>`);
+        const screenCount = (manifest.palette && manifest.palette.length) || (manifest.metrics && manifest.metrics.layerCount) || 0;
+        lines.push(`${I}<reveal:screenCount>${screenCount}</reveal:screenCount>`);
+        lines.push(`${I}<reveal:plateCount>${screenCount}</reveal:plateCount>`);
 
         // ── Palette (ordered list) ──
         if (manifest.palette && manifest.palette.length > 0) {

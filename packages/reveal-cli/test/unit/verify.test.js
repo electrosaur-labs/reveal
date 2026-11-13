@@ -345,7 +345,9 @@ describe('Full Separation Verification Pipeline', () => {
         const cmd = `node "${cliPath}" verify "${fixturePath}" --json`;
         const stdout = execSync(cmd, { encoding: 'utf8' });
         const report = JSON.parse(stdout);
-        expect(report.document.plateCount).toBe(3);
+        expect(report.document.screenCount).toBe(3);
+        expect(report.document.plateCount).toBe(3); // Deprecated alias
+        expect(report.trappingAudit.screenAudits).toBeDefined();
         expect(report.trappingAudit.compliant).toBe(true);
     });
 });

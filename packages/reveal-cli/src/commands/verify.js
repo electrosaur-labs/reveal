@@ -72,7 +72,7 @@ function printReport(filename, report, verbose = false) {
     console.log('\n[1] DOCUMENT SPECIFICATIONS');
     console.log(`  Dimensions:      ${doc.width} × ${doc.height} px`);
     console.log(`  Resolution:      ${doc.dpi} DPI`);
-    console.log(`  Plate Count:     ${doc.plateCount} spot colors`);
+    console.log(`  Screen Count:    ${doc.screenCount ?? doc.plateCount} spot colors`);
     console.log(`  Manifest:        ${report.manifestAudit.present ? `v${report.manifestAudit.version || '2.1'} (embedded)` : 'MISSING'}`);
 
     console.log('\n[2] PRESS PHYSICS CONTRACT');
@@ -89,10 +89,11 @@ function printReport(filename, report, verbose = false) {
     console.log(`  Dual-Scale:      ${man.dualScale ? 'Enabled' : 'Disabled'}`);
 
     console.log('\n[3] TRAPPING AUDIT (INVARIANTS 1.1, 1.2, 1.3)');
-    if (trap && trap.plateAudits.length > 0) {
+    const trapAudits = (trap && (trap.screenAudits || trap.plateAudits)) || [];
+    if (trapAudits.length > 0) {
         let totalTrapped = 0;
         let maxDilation = 0;
-        for (const p of trap.plateAudits) {
+        for (const p of trapAudits) {
             totalTrapped += p.trappedPixels;
             if (p.maxDilation > maxDilation) maxDilation = p.maxDilation;
         }
@@ -101,24 +102,25 @@ function printReport(filename, report, verbose = false) {
         console.log(`  Max Dilation:    ${maxDilation.toFixed(2)} px (limit: ${(trap.trapPx + 0.5).toFixed(2)} px)`);
         console.log(`  Leak Count:      ${trap.errors.filter(e => e.includes('leaking')).length}`);
     } else {
-        console.log('  Status:          SKIPPED (no separation layers)');
+        console.log('  Status:          SKIPPED (no separation screens)');
     }
 
-    if (verbose && trap && trap.plateAudits.length > 0) {
-        console.log('\n  Plate Trapping Detail:');
-        for (const p of trap.plateAudits) {
+    if (verbose && trapAudits.length > 0) {
+        console.log('\n  Screen Trapping Detail:');
+        for (const p of trapAudits) {
             console.log(`    • ${p.name.padEnd(32)} L=${String(Math.round(p.L)).padStart(3)} | Orig: ${String(p.originalPixels).padStart(8)} | Trap: ${String(p.trappedPixels).padStart(6)} | MaxDil: ${p.maxDilation.toFixed(1)}px`);
         }
     }
 
     console.log('\n[4] MESH PHYSICS AUDIT (INVARIANT 2)');
-    if (!mesh || mesh.skipped) {
-        console.log('  Status:          SKIPPED (0px / 1px pure mode or no layers)');
+    const meshAudits = (mesh && (mesh.screenAudits || mesh.plateAudits)) || [];
+    if (!mesh || mesh.skipped || meshAudits.length === 0) {
+        console.log('  Status:          SKIPPED (0px / 1px pure mode or no screens)');
     } else {
         let totalDebris = 0;
         let totalPinch = 0;
         let totalComponents = 0;
-        for (const p of mesh.plateAudits) {
+        for (const p of meshAudits) {
             totalDebris += p.subMeshDebrisCount;
             totalPinch += p.pinchWarningsCount;
             totalComponents += p.totalComponents;
@@ -129,9 +131,9 @@ function printReport(filename, report, verbose = false) {
         console.log(`  Sub-Mesh Debris: ${totalDebris} isolated dots < floor`);
         console.log(`  Pinch Warnings:  ${totalPinch} stroke pinch points`);
 
-        if (verbose && mesh.plateAudits.length > 0) {
-            console.log('\n  Plate Mesh Detail:');
-            for (const p of mesh.plateAudits) {
+        if (verbose && meshAudits.length > 0) {
+            console.log('\n  Screen Mesh Detail:');
+            for (const p of meshAudits) {
                 console.log(`    • ${p.name.padEnd(32)} Dots: ${p.isolatedDotsCount} (Debris: ${p.subMeshDebrisCount}) | Strokes: ${p.continuousStrokesCount} (Pinch: ${p.pinchWarningsCount})`);
             }
         }

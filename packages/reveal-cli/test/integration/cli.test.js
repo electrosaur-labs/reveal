@@ -160,18 +160,26 @@ describe('single mode', () => {
         expect(name).toBe('mimetype');
     });
 
-    it('produces plates with --format plates', () => {
-        const outDir = path.join(tmpDir, 'single-plates');
-        runCli([testImage, '-o', outDir, '-q', '--format', 'plates', '--no-json']);
+    it('produces screens with --format screens', () => {
+        const outDir = path.join(tmpDir, 'single-screens');
+        runCli([testImage, '-o', outDir, '-q', '--format', 'screens', '--no-json']);
 
-        const plates = fs.readdirSync(outDir).filter(f => f.includes('_plate_'));
-        expect(plates.length).toBeGreaterThan(0);
+        const screens = fs.readdirSync(outDir).filter(f => f.includes('_screen_'));
+        expect(screens.length).toBeGreaterThan(0);
 
-        for (const plate of plates) {
-            const magic = fs.readFileSync(path.join(outDir, plate)).subarray(0, 4);
+        for (const screen of screens) {
+            const magic = fs.readFileSync(path.join(outDir, screen)).subarray(0, 4);
             expect(magic[0]).toBe(0x89);
             expect(magic[1]).toBe(0x50);
         }
+    });
+
+    it('supports deprecated --format plates alias', () => {
+        const outDir = path.join(tmpDir, 'single-plates-alias');
+        runCli([testImage, '-o', outDir, '-q', '--format', 'plates', '--no-json']);
+
+        const screens = fs.readdirSync(outDir).filter(f => f.includes('_screen_'));
+        expect(screens.length).toBeGreaterThan(0);
     });
 
     it('respects --colors override', () => {
@@ -202,11 +210,11 @@ describe('single mode', () => {
 
     it('accepts repeated --format flags', () => {
         const outDir = path.join(tmpDir, 'single-repeat');
-        runCli([testImage, '-o', outDir, '-q', '--format', 'psd', '--format', 'plates', '--no-json']);
+        runCli([testImage, '-o', outDir, '-q', '--format', 'psd', '--format', 'screens', '--no-json']);
 
         expect(fs.existsSync(path.join(outDir, 'test_reveal.psd'))).toBe(true);
-        const plates = fs.readdirSync(outDir).filter(f => f.includes('_plate_'));
-        expect(plates.length).toBeGreaterThan(0);
+        const screens = fs.readdirSync(outDir).filter(f => f.includes('_screen_'));
+        expect(screens.length).toBeGreaterThan(0);
     });
 
     it('rejects unknown format', () => {

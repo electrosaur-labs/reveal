@@ -13,7 +13,7 @@ const { loadRecipe, saveRecipe, mergeRecipeWithCli } = require('./recipe');
 const { writeFlat } = require('./output/flat');
 const { writePsd } = require('./output/psd');
 const { writeOra } = require('./output/ora');
-const { writePlates } = require('./output/plates');
+const { writeScreens, writePlates } = require('./output/screens');
 const { writeSidecar } = require('./output/sidecar');
 const { runVerify } = require('./commands/verify');
 
@@ -38,7 +38,7 @@ program
     .option('-o, --output <path>', 'Output path or directory')
     .option('-a, --archetype <name>', 'Archetype ID (default: auto-detect)')
     .option('-c, --colors <n>', 'Target color count (2-12)', parseInt)
-    .option('-f, --format <types...>', 'Output formats: psd, ora, plates (repeatable or comma-separated)')
+    .option('-f, --format <types...>', 'Output formats: psd, ora, screens (repeatable or comma-separated)')
     .option('--trap <pixels>', 'Trap width in pixels', parseInt)
     .option('--min-volume <percent>', 'Minimum coverage threshold (0-5%)', parseFloat)
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
@@ -73,7 +73,7 @@ if (process.argv.includes('--list-archetypes')) {
     process.exit(0);
 }
 
-const VALID_FORMATS = new Set(['psd', 'ora', 'plates']);
+const VALID_FORMATS = new Set(['psd', 'ora', 'screens', 'plates']);
 
 /**
  * Normalize --format values: accept repeatable flags and comma-separated lists.
@@ -250,12 +250,12 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
         outputFiles.push(oraPath);
     }
 
-    // Plates
-    if (options.formats.has('plates')) {
-        const plateDir = options.output ? path.resolve(options.output) : inputDir;
-        const platePaths = await writePlates(result.masks, result.hexColors, width, height, plateDir, basename);
-        for (const p of platePaths) log(`Wrote: ${p}`);
-        outputFiles.push(...platePaths);
+    // Screens (individual mask PNGs)
+    if (options.formats.has('screens') || options.formats.has('plates')) {
+        const screenDir = options.output ? path.resolve(options.output) : inputDir;
+        const screenPaths = await writeScreens(result.masks, result.hexColors, width, height, screenDir, basename);
+        for (const p of screenPaths) log(`Wrote: ${p}`);
+        outputFiles.push(...screenPaths);
     }
 
     // JSON sidecar
@@ -350,9 +350,9 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
                 rootOutputFiles.push(path.basename(rootOraPath));
             }
 
-            if (options.formats.has('plates')) {
-                const rootPlatePaths = await writePlates(result.masks, result.hexColors, width, height, rootOutputDir, basename);
-                rootOutputFiles.push(...rootPlatePaths.map(p => path.basename(p)));
+            if (options.formats.has('screens') || options.formats.has('plates')) {
+                const rootScreenPaths = await writeScreens(result.masks, result.hexColors, width, height, rootOutputDir, basename);
+                rootOutputFiles.push(...rootScreenPaths.map(p => path.basename(p)));
             }
 
             if (options.json !== false) {
@@ -389,8 +389,8 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
                 path.join(subDir, `${basename}.ora`), result.hexColors);
         }
 
-        if (options.formats.has('plates')) {
-            await writePlates(result.masks, result.hexColors, width, height, subDir, basename);
+        if (options.formats.has('screens') || options.formats.has('plates')) {
+            await writeScreens(result.masks, result.hexColors, width, height, subDir, basename);
         }
 
         if (options.json !== false) {
