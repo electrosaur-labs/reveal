@@ -86,6 +86,7 @@ class MechanicalKnobs {
         this._resolveElements();
         this._bindEvents();
         this._bindStateEvents();
+        this._updateAllRevertIcons();
     }
 
     // ─── Setup ────────────────────────────────────────────────
@@ -296,5 +297,7 @@ class MechanicalKnobs {
         this._updateAllRevertIcons();
     }
 }
+
+MechanicalKnobs.KNOB_DEFS = KNOB_DEFS;
 
 module.exports = MechanicalKnobs;

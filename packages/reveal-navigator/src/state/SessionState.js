@@ -268,8 +268,9 @@ class SessionState extends EventEmitter {
     // ─── Knob Reset ─────────────────────────────────────────
 
     resetKnob(key) {
-        if (!this._archetypeDefaults || this._archetypeDefaults[key] === undefined) return;
-        this.updateParameter(key, this._archetypeDefaults[key]);
+        const dflt = this.getKnobDefault(key);
+        if (dflt === null || dflt === undefined) return;
+        this.updateParameter(key, dflt);
     }
 
     resetToDefaults() {
@@ -287,15 +288,18 @@ class SessionState extends EventEmitter {
         this.emit('highlightChanged', { colorIndex: -1 });
         this.emit('knobsCustomizedChanged', { customized: false });
         this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
-        this.emit('configChanged', this.currentConfig); 
+        this.emit('configChanged', this.currentConfig);
         this.state.isArchetypeDirty = true;
         this._scheduleProxyUpdate();
     }
 
     getKnobDefault(key) {
-        if (!this._archetypeDefaults) return null;
-        const v = this._archetypeDefaults[key];
-        return v !== undefined ? v : null;
+        if (this._archetypeDefaults && this._archetypeDefaults[key] !== undefined) {
+            return this._archetypeDefaults[key];
+        }
+        if (MECHANICAL_KNOB_DEFAULTS[key] !== undefined) return MECHANICAL_KNOB_DEFAULTS[key];
+        if (PRODUCTION_KNOB_DEFAULTS[key] !== undefined) return PRODUCTION_KNOB_DEFAULTS[key];
+        return null;
     }
 
     // ─── Parameter Updates (Reactive Loop) ───────────────────
