@@ -2,7 +2,7 @@
  * MechanicalKnobs - Shared post-separation mask processing
  *
  * Pure functions for the three screen-printing knobs:
- *   - minVolume:     Ghost plate removal (merge weak colors)
+ *   - minVolume:     Ghost screen removal (merge weak colors)
  *   - speckleRescue: Halftone solidity (despeckle + heal)
  *   - shadowClamp:   Ink body / edge erosion (tonal-aware)
  *
