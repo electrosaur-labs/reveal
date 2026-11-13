@@ -49,4 +49,12 @@ if (fs.existsSync(hammerSrc)) {
     console.log('✓ Copied hammer.jpg');
 }
 
+// Copy src/clown-seal.png → dist/
+const sealSrc = path.join(srcDir, 'clown-seal.png');
+const sealDst = path.join(distDir, 'clown-seal.png');
+if (fs.existsSync(sealSrc)) {
+    fs.copyFileSync(sealSrc, sealDst);
+    console.log('✓ Copied clown-seal.png');
+}
+
 console.log('Asset copying complete!');

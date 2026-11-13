@@ -1,6 +1,6 @@
 /**
  * CreditsController.dom.test.js
- * Headless DOM test suite for the Hollywood-style crawling credits window.
+ * Headless DOM test suite for the theatrical credits window and Minkler Manifesto.
  */
 
 const fs = require('fs');
@@ -14,7 +14,6 @@ describe('CreditsController Headless DOM Suite', () => {
     let document;
     let controller;
     let overlay;
-
     const origPerformance = global.performance;
 
     beforeEach(() => {
@@ -48,10 +47,9 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(document.getElementById('credits-window')).not.toBeNull();
         expect(document.getElementById('credits-viewport')).not.toBeNull();
         expect(document.getElementById('credits-crawl')).not.toBeNull();
-        expect(document.getElementById('btn-credits-playpause')).not.toBeNull();
-        expect(document.getElementById('btn-credits-close')).not.toBeNull();
         expect(document.getElementById('btn-show-credits')).not.toBeNull();
         expect(document.getElementById('credits-emblem')).not.toBeNull();
+        expect(document.getElementById('credits-print-trigger')).not.toBeNull();
         expect(document.getElementById('manifesto-broadside')).not.toBeNull();
         expect(document.getElementById('btn-manifesto-close')).not.toBeNull();
     });
@@ -68,39 +66,14 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(controller.isPlaying).toBe(false);
     });
 
-    it('toggles play/pause state and updates button label', () => {
+    it('dismisses credits window when clicking the dark backdrop outside the window', () => {
         controller.open();
-        expect(controller.isPlaying).toBe(true);
-        expect(controller.btnPlayPause.textContent).toContain('Pause');
+        expect(overlay.style.display).toBe('flex');
 
-        controller.togglePlayPause();
+        // Click directly on overlay backdrop
+        overlay.dispatchEvent(new window.Event('click'));
+        expect(overlay.style.display).toBe('none');
         expect(controller.isPlaying).toBe(false);
-        expect(controller.btnPlayPause.textContent).toContain('Play');
-
-        controller.togglePlayPause();
-        expect(controller.isPlaying).toBe(true);
-        expect(controller.btnPlayPause.textContent).toContain('Pause');
-    });
-
-    it('grays out Play button when finishing 1 round and re-enables when scrolled back to top', () => {
-        controller.open();
-        expect(controller.btnPlayPause.disabled).toBe(false);
-
-        // Simulate reaching bottom of crawl
-        controller.finishCrawl();
-        expect(controller.hasFinishedFirstRound).toBe(true);
-        expect(controller.isPlaying).toBe(false);
-        expect(controller.btnPlayPause.disabled).toBe(true);
-        expect(controller.btnPlayPause.textContent).toContain('Completed');
-        expect(controller.btnPlayPause.style.opacity).toBe('0.35');
-
-        // Scroll back up to top (scrollTop < 50)
-        controller.viewport.scrollTop = 10;
-        controller.viewport.dispatchEvent(new window.Event('scroll'));
-        expect(controller.hasFinishedFirstRound).toBe(false);
-        expect(controller.btnPlayPause.disabled).toBe(false);
-        expect(controller.btnPlayPause.textContent).toContain('Play');
-        expect(controller.btnPlayPause.style.opacity).toBe('1');
     });
 
     it('toggles hover state on mouseenter/mouseleave for hover-to-pause', () => {
@@ -113,13 +86,14 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(controller.isHovered).toBe(false);
     });
 
-    it('wires the close button click to dismiss the credits window', () => {
+    it('pauses ambient crawl when user manually interacts with wheel or pointer', () => {
         controller.open();
-        expect(overlay.style.display).toBe('flex');
+        expect(controller.isPlaying).toBe(true);
 
-        controller.btnClose.dispatchEvent(new window.Event('click'));
-        expect(overlay.style.display).toBe('none');
+        // User interacts with mousewheel
+        controller.viewport.dispatchEvent(new window.Event('wheel'));
         expect(controller.isPlaying).toBe(false);
+        expect(controller.userHasScrolled).toBe(true);
     });
 
     it('triggers and dismisses the Doug Minkler Manifesto Easter Egg via mascot and print', () => {
@@ -142,7 +116,6 @@ describe('CreditsController Headless DOM Suite', () => {
         btnManifestoClose.dispatchEvent(new window.Event('click'));
         expect(broadside.style.display).toBe('none');
         expect(controller.isManifestoOpen).toBe(false);
-        expect(controller.isPlaying).toBe(true); // Crawl resumes
 
         // Click emblem to reveal manifesto again
         emblem.dispatchEvent(new window.Event('pointerdown'));

@@ -1548,21 +1548,26 @@
 
         #credits-viewport {
             flex: 1;
-            overflow-y: auto;
+            overflow-y: scroll; /* Native scrollbars active from the get-go */
             position: relative;
-            padding: 20px 30px;
-            mask-image: linear-gradient(to bottom, transparent 0px, black 40px, black calc(100% - 40px), transparent 100%);
-            -webkit-mask-image: linear-gradient(to bottom, transparent 0px, black 40px, black calc(100% - 40px), transparent 100%);
+            padding: 24px 32px;
             scrollbar-width: thin;
-            scrollbar-color: #555 transparent;
+            scrollbar-color: #666 #181818;
         }
 
         #credits-viewport::-webkit-scrollbar {
-            width: 4px;
+            width: 8px;
+        }
+        #credits-viewport::-webkit-scrollbar-track {
+            background: #181818;
         }
         #credits-viewport::-webkit-scrollbar-thumb {
-            background: #444;
-            border-radius: 2px;
+            background: #555;
+            border-radius: 4px;
+            border: 1px solid #333;
+        }
+        #credits-viewport::-webkit-scrollbar-thumb:hover {
+            background: #777;
         }
 
         #credits-crawl {
@@ -1779,32 +1784,27 @@
             font-family: monospace;
         }
 
-        .credits-playback-bar {
+        .credits-footer-bar {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px 18px;
-            background: #181818;
-            border-top: 1px solid #333;
+            padding: 9px 18px;
+            background: #141414;
+            border-top: 1px solid #2e2e2e;
+            font-size: 10px;
+            color: #777;
+            flex-shrink: 0;
             z-index: 10;
         }
-
-        .credits-control-btn {
-            background: #2a2a2a;
-            border: 1px solid #444;
-            color: #ddd;
-            padding: 5px 12px;
-            border-radius: 4px;
-            font-size: 11px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            transition: background 0.15s, color 0.15s;
+        .credits-footer-tag {
+            color: #e0a030;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
         }
-        .credits-control-btn:hover {
-            background: #3a3a3a;
-            color: #fff;
+        .credits-esc-hint {
+            color: #888;
+            font-style: italic;
         }
         .credits-trigger-btn {
             background: none;
@@ -2757,6 +2757,23 @@
                     </div>
 
                     <p style="font-weight: 600; color: #fff; margin-top: 16px;">To Doug Minkler, and every printmaker who has ever pulled a squeegee for something that matters: this engine is yours.</p>
+
+                    <!-- The Printer's Guild Bug / Counter-Stamp -->
+                    <div class="manifesto-seal-section" style="margin-top: 26px; padding-top: 20px; border-top: 1px dashed rgba(187, 90, 41, 0.4); text-align: center; display: flex; flex-direction: column; align-items: center;">
+                        <div style="font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: #e0a030; margin-bottom: 12px;">
+                            ★ PROUD SUPPORTER OF ★
+                        </div>
+                        <img src="clown-seal.png" alt="Non Serviam • Bring In The Clowns" style="width: 120px; height: 120px; filter: drop-shadow(0 4px 14px rgba(0,0,0,0.85)); border-radius: 50%;">
+                        <div style="font-size: 12px; font-weight: 700; color: #EEDEC0; letter-spacing: 1.5px; margin-top: 10px;">
+                            BRING IN THE CLOWNS
+                        </div>
+                        <div style="font-size: 11px; font-weight: 600; color: #e0a030; letter-spacing: 1px; margin-top: 6px;">
+                            “The First Thing They Kill Is Humor.”
+                        </div>
+                        <div style="font-size: 9px; font-style: italic; color: #888; margin-top: 3px;">
+                            “Non Serviam” • The Jester’s Resistance
+                        </div>
+                    </div>
                 </div>
                 <div class="manifesto-footer">
                     <span>Press Esc or click Close to return</span>
@@ -2764,10 +2781,10 @@
                 </div>
             </div>
 
-            <!-- Bottom Playback Controls -->
-            <div class="credits-playback-bar">
-                <button id="btn-credits-playpause" class="credits-control-btn">⏸ Pause</button>
-                <button id="btn-credits-close" class="credits-control-btn" style="background: #333; color: #fff;">✕ Close</button>
+            <!-- Bottom Dismiss Bar -->
+            <div class="credits-footer-bar">
+                <span class="credits-footer-tag">★ REDUCTION IS REVELATION ★</span>
+                <span class="credits-esc-hint">Press Esc or click outside to close</span>
             </div>
         </div><!-- /credits-window -->
     </div><!-- /credits-overlay -->
