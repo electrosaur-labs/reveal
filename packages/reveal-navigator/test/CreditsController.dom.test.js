@@ -105,18 +105,18 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(printTrigger).not.toBeNull();
 
         // Click print trigger to reveal manifesto
-        printTrigger.dispatchEvent(new window.Event('pointerdown'));
+        printTrigger.dispatchEvent(new window.Event('click'));
         expect(broadside.style.display).toBe('flex');
         expect(controller.isManifestoOpen).toBe(true);
         expect(controller.isPlaying).toBe(false); // Crawl pauses
 
-        // Click broadside to dismiss and return to crawl
-        broadside.dispatchEvent(new window.Event('click'));
+        // Close manifesto programmatically
+        controller.closeManifesto();
         expect(broadside.style.display).toBe('none');
         expect(controller.isManifestoOpen).toBe(false);
 
         // Click emblem to reveal manifesto again
-        emblem.dispatchEvent(new window.Event('pointerdown'));
+        emblem.dispatchEvent(new window.Event('click'));
         expect(broadside.style.display).toBe('flex');
         expect(controller.isManifestoOpen).toBe(true);
     });

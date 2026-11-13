@@ -67,7 +67,11 @@ class CreditsController {
             });
         }
 
-        // Easter egg triggers (bind click + pointerdown so scroll displacement in UXP doesn't eat the event)
+        // Easter egg triggers: pause crawl immediately on pointerdown, and open manifesto on genuine click
+        const onTriggerDown = () => {
+            this.pause();
+        };
+
         const triggerManifesto = (e) => {
             if (e) {
                 e.preventDefault();
@@ -77,17 +81,12 @@ class CreditsController {
         };
 
         if (this.emblem) {
+            this.emblem.addEventListener('pointerdown', onTriggerDown);
             this.emblem.addEventListener('click', triggerManifesto);
-            this.emblem.addEventListener('pointerdown', triggerManifesto);
         }
         if (this.printTrigger) {
+            this.printTrigger.addEventListener('pointerdown', onTriggerDown);
             this.printTrigger.addEventListener('click', triggerManifesto);
-            this.printTrigger.addEventListener('pointerdown', triggerManifesto);
-        }
-        if (this.broadside) {
-            this.broadside.addEventListener('click', () => {
-                this.closeManifesto();
-            });
         }
 
         // Global keydown for Escape
