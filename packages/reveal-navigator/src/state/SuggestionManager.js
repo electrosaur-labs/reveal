@@ -46,6 +46,20 @@ class SuggestionManager extends EventEmitter {
         this._ghostMode = null;
     }
 
+    /**
+     * Clear the stale suggestion pool + ghost after a re-posterize, but
+     * KEEP checked suggestions. Unlike palette overrides/merges (tied to
+     * specific indices that a requantization can invalidate) or added
+     * colors (which grow the engine's own baseline), a checked suggestion
+     * is just a Lab value the user wants included -- nothing about
+     * changing a structural knob makes that choice stale.
+     */
+    clearForReposterize() {
+        this._cachedSuggestions = null;
+        this._ghostLabColor = null;
+        this._ghostMode = null;
+    }
+
     // ─── State Access ────────────────────────────────────────
 
     get cachedSuggestions() { return this._cachedSuggestions; }

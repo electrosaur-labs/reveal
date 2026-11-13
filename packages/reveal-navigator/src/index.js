@@ -18,7 +18,7 @@
  * against that was removed as dead code.
  */
 
-const { entrypoints } = require("uxp");
+const { entrypoints, storage } = require("uxp");
 const { app } = require("photoshop");
 const Reveal = require("@electrosaur-labs/core");
 const SessionState = require("./state/SessionState");
@@ -202,6 +202,16 @@ function initPlugin() {
             };
             sessionState.on('knobsCustomizedChanged', updateResetState);
             sessionState.on('paletteChanged', updateResetState);
+        }
+
+        // Wire Save / Load Config buttons
+        const btnSaveConfig = document.getElementById('btn-save-config');
+        if (btnSaveConfig) {
+            btnSaveConfig.addEventListener('click', () => { handleSaveConfig(); });
+        }
+        const btnLoadConfig = document.getElementById('btn-load-config');
+        if (btnLoadConfig) {
+            btnLoadConfig.addEventListener('click', () => { handleLoadConfig(); });
         }
 
         // ─── Advanced Panel: Dropdowns & Checkboxes ───────────────
@@ -550,6 +560,16 @@ function initPlugin() {
             });
         }
 
+        // Wire confirm overlay OK/Cancel buttons
+        const btnConfirmOk = document.getElementById('btn-confirm-ok');
+        if (btnConfirmOk) {
+            btnConfirmOk.addEventListener('click', () => _resolveConfirmDialog(true));
+        }
+        const btnConfirmCancel = document.getElementById('btn-confirm-cancel');
+        if (btnConfirmCancel) {
+            btnConfirmCancel.addEventListener('click', () => _resolveConfirmDialog(false));
+        }
+
         // Wire help toggle button
         const btnHelp = document.getElementById('btn-help-toggle');
         if (btnHelp) {
@@ -719,6 +739,39 @@ function showErrorDialog(title, message) {
     if (titleEl) titleEl.textContent = title;
     if (msgEl) msgEl.textContent = message;
     overlay.setAttribute('style', 'display: flex');
+}
+
+let _confirmDialogResolve = null;
+
+function _resolveConfirmDialog(result) {
+    const overlay = document.getElementById('confirm-overlay');
+    if (overlay) overlay.setAttribute('style', 'display: none');
+    const resolve = _confirmDialogResolve;
+    _confirmDialogResolve = null;
+    if (resolve) resolve(result);
+}
+
+/**
+ * @returns {Promise<boolean>} true if the user confirmed, false if cancelled.
+ */
+function showConfirmDialog(title, message, confirmLabel = 'OK') {
+    const overlay = document.getElementById('confirm-overlay');
+    const titleEl = document.getElementById('confirm-title');
+    const msgEl = document.getElementById('confirm-message');
+    const okBtn = document.getElementById('btn-confirm-ok');
+
+    if (!overlay) return Promise.resolve(true); // no UI to confirm with — don't block the caller
+
+    // A second confirm while one is already pending shouldn't orphan the
+    // first caller's promise.
+    if (_confirmDialogResolve) _resolveConfirmDialog(false);
+
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message;
+    if (okBtn) okBtn.textContent = confirmLabel;
+    overlay.setAttribute('style', 'display: flex');
+
+    return new Promise(resolve => { _confirmDialogResolve = resolve; });
 }
 
 /**
@@ -1039,6 +1092,110 @@ function _hideProgress() {
     }, 300);
     _completedPhases = [];
     setStatus('');
+}
+
+// ─── Save / Load Config ─────────────────────────────────
+// Explicit, user-triggered persistence of the archetype/knobs/surgery
+// config to a standalone JSON file — distinct from the XMP manifest
+// baked into the PSD, which is passive provenance only. Blind replay by
+// design (SessionState.applySavedConfig docstring): no attempt here to
+// verify the loaded file matches the current document.
+
+function _suggestedConfigFilename() {
+    const info = PhotoshopBridge.getDocumentInfo();
+    const base = info && info.name ? info.name.replace(/\.[^.]+$/, '') : 'reveal';
+    return `${base}-config.json`;
+}
+
+async function handleSaveConfig() {
+    if (!sessionState || !sessionState.proxyEngine) return;
+
+    let config;
+    try {
+        config = sessionState.exportSavedConfig();
+    } catch (err) {
+        showErrorDialog('Save Config Failed', err.message || String(err));
+        return;
+    }
+
+    try {
+        const file = await storage.localFileSystem.getFileForSaving(_suggestedConfigFilename(), { types: ['json'] });
+        if (!file) return; // user cancelled the dialog
+
+        // getFileForSaving() returns the chosen entry whether or not it
+        // already existed on disk -- a non-empty read means the user
+        // picked an existing file's name, so confirm before clobbering it.
+        let alreadyExists = false;
+        try {
+            const existing = await file.read();
+            alreadyExists = !!existing && existing.length > 0;
+        } catch (_) { alreadyExists = false; }
+
+        if (alreadyExists) {
+            const proceed = await showConfirmDialog(
+                'Overwrite File?',
+                `"${file.name}" already exists and will be overwritten. Continue?`,
+                'Overwrite'
+            );
+            if (!proceed) return;
+        }
+
+        await file.write(JSON.stringify(config, null, 2));
+        showToast('Config saved');
+    } catch (err) {
+        logger.log('[Navigator] Save config failed: ' + (err && err.message));
+        showErrorDialog('Save Config Failed', err.message || String(err));
+    }
+}
+
+async function handleLoadConfig() {
+    if (!sessionState || !sessionState.proxyEngine) return;
+    if (isProductionRunning || isIngesting) return;
+
+    let file;
+    try {
+        file = await storage.localFileSystem.getFileForOpening({ types: ['json'] });
+        if (!file) return; // user cancelled the dialog
+    } catch (err) {
+        showErrorDialog('Load Config Failed', err.message || String(err));
+        return;
+    }
+
+    let config;
+    try {
+        const text = await file.read();
+        config = JSON.parse(text);
+    } catch (err) {
+        showErrorDialog('Load Config Failed', 'Could not parse config file: ' + (err.message || String(err)));
+        return;
+    }
+
+    // Lock out other actions that could race with the replay (archetype
+    // swap + knob updates + palette surgery, each separately awaited).
+    const btnSave = document.getElementById('btn-save-config');
+    const btnLoad = document.getElementById('btn-load-config');
+    const btnReread = document.getElementById('btn-reread');
+    const btnReset = document.getElementById('btn-reset-top');
+    const btnFinalize = document.getElementById('btn-finalize');
+    const carouselEl = document.getElementById('carousel');
+    const toDisable = [btnSave, btnLoad, btnReread, btnReset, btnFinalize].filter(Boolean);
+    toDisable.forEach(b => { b.disabled = true; });
+    if (carouselEl) carouselEl.style.pointerEvents = 'none';
+
+    try {
+        await sessionState.applySavedConfig(config);
+        showToast('Config applied');
+    } catch (err) {
+        logger.log('[Navigator] Apply config failed: ' + (err && err.message));
+        showErrorDialog('Load Config Failed', err.message || String(err));
+    } finally {
+        toDisable.forEach(b => { b.disabled = false; });
+        if (carouselEl) carouselEl.style.pointerEvents = '';
+        // btnReset's disabled state is driven by isCustomized(), not a
+        // plain re-enable — a replayed config is almost always "dirty"
+        // relative to the archetype defaults.
+        if (btnReset) btnReset.disabled = !sessionState.isCustomized();
+    }
 }
 
 // ─── Finalize ────────────────────────────────────────────

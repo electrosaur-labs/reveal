@@ -273,6 +273,41 @@ describe('isCustomized', () => {
         await s.deletePaletteColor(1);
         expect(s.isCustomized()).toBe(true);
     });
+
+    it('returns true when a Suggested color is checked, even with no other edits', () => {
+        // Checking a suggestion doesn't touch _paletteSurgery at all (it's
+        // a separate commit-time-only mechanism, see SuggestionManager) --
+        // isCustomized() used to only look at knobs + _paletteSurgery, so
+        // this returned false and the Reset-to-Defaults button stayed
+        // disabled even with a real, undiscardable customization pending.
+        const s = setupSession();
+        s.addCheckedSuggestion({ L: 42, a: 10, b: -10 });
+        expect(s.isCustomized()).toBe(true);
+    });
+});
+
+describe('addCheckedSuggestion / removeCheckedSuggestion emit paletteChanged', () => {
+    it('addCheckedSuggestion emits paletteChanged', () => {
+        const s = setupSession();
+        const seen = [];
+        s.on('paletteChanged', (data) => seen.push(data));
+
+        s.addCheckedSuggestion({ L: 42, a: 10, b: -10 });
+
+        expect(seen).toHaveLength(1);
+    });
+
+    it('removeCheckedSuggestion emits paletteChanged', () => {
+        const s = setupSession();
+        s.addCheckedSuggestion({ L: 42, a: 10, b: -10 });
+        const seen = [];
+        s.on('paletteChanged', (data) => seen.push(data));
+
+        s.removeCheckedSuggestion({ L: 42, a: 10, b: -10 });
+
+        expect(seen).toHaveLength(1);
+        expect(s.checkedSuggestions).toEqual([]);
+    });
 });
 
 // ─── addPaletteColor / removeAddedColor preserve existing edits ──
@@ -319,6 +354,140 @@ describe('addPaletteColor / removeAddedColor — preserve existing edits', () =>
         await s.addPaletteColor({ L: 100, a: 0, b: 0 }); // lands at index 2
 
         expect(s.addedColors.has(2)).toBe(true);
+    });
+});
+
+// ─── generateHighlightPreview (solo view) ────────────────
+
+describe('setHighlight / clearHighlight', () => {
+    it('sets highlightColorIndex and emits highlightChanged', () => {
+        const s = setupSession();
+        const seen = [];
+        s.on('highlightChanged', (data) => seen.push(data));
+
+        s.setHighlight(3);
+
+        expect(s.state.highlightColorIndex).toBe(3);
+        expect(seen).toEqual([{ colorIndex: 3 }]);
+    });
+
+    it('clearHighlight resets to -1', () => {
+        const s = setupSession();
+        s.setHighlight(3);
+
+        s.clearHighlight();
+
+        expect(s.state.highlightColorIndex).toBe(-1);
+    });
+});
+
+describe('generateHighlightPreview', () => {
+    const DIM = 0x28;
+    const isDimmed = (buf, pixelIdx) => {
+        const off = pixelIdx * 4;
+        return buf[off] === DIM && buf[off + 1] === DIM && buf[off + 2] === DIM;
+    };
+
+    it('includes pixels from a color that has been merged into the highlighted one', async () => {
+        const s = setupSession();
+        // mock colorIndices = [0, 1, 0, 1] -- pixels 1 and 3 are raw index 1.
+        await s.mergePaletteColors(1, 0);
+
+        const buf = s.generateHighlightPreview(0);
+        expect(buf).not.toBeNull();
+
+        // Previously only pixels 0/2 (raw index 0) lit up; pixels 1/3 (raw
+        // index 1, now merged into 0) stayed dimmed because the check was
+        // a raw equality against the unresolved colorIndices value, which
+        // merges never touch. All four must be lit now.
+        for (let i = 0; i < 4; i++) {
+            expect(isDimmed(buf, i)).toBe(false);
+        }
+    });
+});
+
+// ─── exportSavedConfig / applySavedConfig ─────────────────
+
+describe('exportSavedConfig', () => {
+    it('captures archetype id, knobs, and overrides at full (unrounded) precision', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        s.state.minVolume = 2.3456;
+        await s.overridePaletteColor(0, { L: 51.2345, a: 1.8765, b: -2.1111 });
+
+        const config = s.exportSavedConfig();
+
+        expect(config.formatVersion).toBe(1);
+        expect(config.archetypeId).toBe(ARCHETYPE_A);
+        expect(config.knobs.minVolume).toBe(2.3456);
+        expect(config.surgery.overrides['0']).toEqual({ L: 51.2345, a: 1.8765, b: -2.1111 });
+        expect(typeof config.savedAt).toBe('string');
+    });
+
+    it('records merges and added colors', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        await s.addPaletteColor({ L: 60, a: 5, b: -5 }); // lands at index 2
+        await s.mergePaletteColors(1, 0);
+
+        const config = s.exportSavedConfig();
+
+        expect(config.surgery.merges['0']).toEqual([1]);
+        expect(config.surgery.added['2']).toEqual({ L: 60, a: 5, b: -5 });
+    });
+
+    it('records a deletion as both a merge and a listed deletion', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        await s.deletePaletteColor(1);
+
+        const config = s.exportSavedConfig();
+
+        expect(config.surgery.deletions).toContain(1);
+    });
+});
+
+describe('applySavedConfig', () => {
+    it('throws if no document is loaded', async () => {
+        const s = new SessionState();
+        await expect(s.applySavedConfig({ archetypeId: ARCHETYPE_A })).rejects.toThrow('No document loaded');
+    });
+
+    it('throws on an invalid config', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        await expect(s.applySavedConfig(null)).rejects.toThrow('Invalid config');
+    });
+
+    it('round-trips archetype, knobs, overrides, merges, and added colors onto a fresh session', async () => {
+        const source = setupSession(ARCHETYPE_A);
+        source.state.minVolume = 3.5;
+        await source.addPaletteColor({ L: 60, a: 5, b: -5 }); // lands at index 2
+        await source.overridePaletteColor(0, { L: 70, a: 10, b: -10 });
+        await source.mergePaletteColors(1, 0);
+
+        const config = source.exportSavedConfig();
+
+        // Target starts on a different archetype — applySavedConfig must swap to A.
+        const target = setupSession(ARCHETYPE_B);
+        await target.applySavedConfig(config);
+
+        expect(target.state.activeArchetypeId).toBe(ARCHETYPE_A);
+        expect(target.state.minVolume).toBe(3.5);
+        expect(target.paletteOverrides.get(0)).toMatchObject({ L: 70, a: 10, b: -10 });
+        expect(target.mergeHistory.get(0)).toEqual(new Set([1]));
+        expect(target.addedColors.has(2)).toBe(true);
+    });
+
+    it('applies the saved archetype even when it is already active, discarding unrelated current edits', async () => {
+        const source = setupSession(ARCHETYPE_A);
+        await source.overridePaletteColor(0, { L: 70, a: 10, b: -10 });
+        const config = source.exportSavedConfig();
+
+        // Same session, same archetype, but with DIFFERENT current edits than the saved config.
+        const target = setupSession(ARCHETYPE_A);
+        await target.overridePaletteColor(1, { L: 20, a: -5, b: 5 });
+
+        await target.applySavedConfig(config);
+
+        expect(target.paletteOverrides.get(0)).toMatchObject({ L: 70, a: 10, b: -10 });
+        expect(target.paletteOverrides.has(1)).toBe(false);
     });
 });
 
@@ -491,6 +660,72 @@ describe('swapArchetype auto-restore', () => {
         expect(s.state.shadowClamp).toBe(15);
         expect(s.paletteOverrides.get(1).L).toBe(30);
         expect(s.paletteOverrides.has(0)).toBe(false);
+    });
+
+    // Every edit type the user can make on a palette, run through the same
+    // swap-away-and-back cycle as the override tests above. Prior to this,
+    // only override had this coverage -- which is exactly how the
+    // checkedSuggestions regression below (archetype browsing silently and
+    // permanently discarding checked "Suggested" colors, with no restore
+    // on returning to the same archetype) went unnoticed.
+
+    it('merge survives swap-away-and-back', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        await s.mergePaletteColors(1, 0);
+        expect(s.mergeHistory.get(0)).toEqual(new Set([1]));
+
+        await s.swapArchetype(ARCHETYPE_B);
+        expect(s.mergeHistory.size).toBe(0);
+
+        await s.swapArchetype(ARCHETYPE_A);
+        expect(s.mergeHistory.get(0)).toEqual(new Set([1]));
+    });
+
+    it('delete survives swap-away-and-back', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        await s.deletePaletteColor(1);
+        expect(s.deletedColors.has(1)).toBe(true);
+
+        await s.swapArchetype(ARCHETYPE_B);
+        expect(s.deletedColors.size).toBe(0);
+
+        await s.swapArchetype(ARCHETYPE_A);
+        expect(s.deletedColors.has(1)).toBe(true);
+    });
+
+    it('checked ("Suggested") colors survive swap-away-and-back', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        s.addCheckedSuggestion({ L: 42, a: 10, b: -10 });
+        expect(s.checkedSuggestions).toEqual([{ L: 42, a: 10, b: -10 }]);
+
+        await s.swapArchetype(ARCHETYPE_B);
+        // Cleared for the archetype actually being viewed now -- a
+        // suggestion is specific to the archetype whose hue-gap analysis
+        // produced it, same as palette overrides/merges aren't carried
+        // over to a different archetype either.
+        expect(s.checkedSuggestions).toEqual([]);
+
+        await s.swapArchetype(ARCHETYPE_A);
+        expect(s.checkedSuggestions).toEqual([{ L: 42, a: 10, b: -10 }]);
+    });
+
+    it('checked ("Suggested") colors survive a structural knob change (re-posterize WITHOUT a swap)', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        s.addCheckedSuggestion({ L: 42, a: 10, b: -10 });
+
+        // triggerProxyUpdate()'s isArchetypeDirty branch is a SEPARATE code
+        // path from swapArchetype -- it runs on any structural knob change
+        // (targetColors, quantizer, etc.) on the SAME archetype, and used
+        // to call the same clearForSwap() that empties checkedSuggestions
+        // with no restore anywhere in this path (unlike swapArchetype,
+        // which at least caches-and-restores via _archetypeStateCache).
+        s._structuralChangeConfirmed = true;
+        s.updateParameter('targetColors', (s.state.targetColors || 6) + 1);
+        expect(s.state.isArchetypeDirty).toBe(true);
+
+        await s.triggerProxyUpdate();
+
+        expect(s.checkedSuggestions).toEqual([{ L: 42, a: 10, b: -10 }]);
     });
 });
 

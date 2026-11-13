@@ -545,6 +545,16 @@
             color: #fff;
         }
 
+        #btn-save-config, #btn-load-config {
+            background: #241a3a;
+            border-color: #5a3a9a;
+            color: #b090f0;
+        }
+        #btn-save-config:hover:not(:disabled), #btn-load-config:hover:not(:disabled) {
+            background: #2e2248;
+            border-color: #7050b0;
+        }
+
         .top-action-btn:disabled {
             opacity: 0.3;
             cursor: default;
@@ -1453,6 +1463,62 @@
 
         #error-box button:hover { background: #606060; }
 
+        #confirm-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #1e1e1e;
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #confirm-box {
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #e0e0e0;
+            padding: 24px;
+            max-width: 340px;
+            width: 90%;
+        }
+
+        #confirm-box h3 {
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #e0a030;
+        }
+
+        #confirm-box p {
+            font-size: 12px;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            color: #ccc;
+        }
+
+        #confirm-box .confirm-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        #confirm-box button {
+            background: #505050;
+            border: 1px solid #666;
+            color: #e0e0e0;
+            padding: 5px 16px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        #confirm-box button:hover { background: #606060; }
+
+        #btn-confirm-ok {
+            border-color: #e0a030;
+        }
+
     </style>
 </head>
 <body>
@@ -1575,6 +1641,8 @@
                 <div id="knobs-header">
                     <button id="btn-reread" class="top-action-btn" title="Reread the document from Photoshop">Reread Document</button>
                     <button id="btn-reset-top" class="top-action-btn" title="Reset all knobs and palette edits to archetype defaults">Reset to Defaults</button>
+                    <button id="btn-save-config" class="top-action-btn" title="Save the current archetype, knobs, and palette edits to a file">Save Config</button>
+                    <button id="btn-load-config" class="top-action-btn" title="Load a saved config and reapply it to this document">Load Config</button>
 
                     <!-- Finalize Flight Plan -->
                     <div id="finalize-row" style="display:none;">
@@ -2050,6 +2118,18 @@
             <h3 id="error-title">Error</h3>
             <p id="error-message"></p>
             <button id="btn-error-ok">OK</button>
+        </div>
+    </div>
+
+    <!-- Confirm Overlay (hidden by default) -->
+    <div id="confirm-overlay">
+        <div id="confirm-box">
+            <h3 id="confirm-title">Confirm</h3>
+            <p id="confirm-message"></p>
+            <div class="confirm-buttons">
+                <button id="btn-confirm-cancel">Cancel</button>
+                <button id="btn-confirm-ok">OK</button>
+            </div>
         </div>
     </div>
     </dialog>

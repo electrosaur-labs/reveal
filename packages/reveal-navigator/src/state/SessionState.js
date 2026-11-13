@@ -11,6 +11,7 @@ const PaletteSurgeryManager = require('./PaletteSurgeryManager');
 const ScoringManager = require('./ScoringManager');
 const SuggestionManager = require('./SuggestionManager');
 const { DIM_COLOR } = require('../utils/pixelProcessing');
+const { consolidatePaletteCoverage } = require('../utils/paletteCoverage');
 
 const logger = Reveal.logger;
 
@@ -101,9 +102,18 @@ class SessionState extends EventEmitter {
 
     // ─── Palette Surgery Delegation ─────────────────────────
     get paletteOverrides() { return this._paletteSurgery.paletteOverrides; }
+    /** Genuine overrides only -- excludes paletteOverrides' merge-compat entries. */
+    get rawOverrides() { return this._paletteSurgery.rawOverrides; }
     get mergeHistory() { return this._paletteSurgery.mergeHistory; }
     get deletedColors() { return this._paletteSurgery.deletedColors; }
     get addedColors() { return this._paletteSurgery.addedColors; }
+
+    /** Set of displayIndices that are the SOURCE of some merge (dead, absorbed into their target). */
+    _mergeSourceIndices() {
+        const sources = new Set();
+        for (const srcs of this.mergeHistory.values()) for (const s of srcs) sources.add(s);
+        return sources;
+    }
 
     get ghostLabColor() { return this._suggestions.ghostLabColor; }
     get ghostMode() { return this._suggestions.ghostMode; }
@@ -356,7 +366,7 @@ class SessionState extends EventEmitter {
             if (this.state.isArchetypeDirty) {
                 this._rebuildConfigFromState();
                 this._paletteSurgery.reset();
-                this._suggestions.clearForSwap();
+                this._suggestions.clearForReposterize();
                 this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
                 result = await this.proxyEngine.rePosterize(this.currentConfig);
                 this.state.isArchetypeDirty = false;
@@ -393,7 +403,7 @@ class SessionState extends EventEmitter {
 
     // ─── Archetype Navigation ────────────────────────────────
 
-    async swapArchetype(archetypeId) {
+    async swapArchetype(archetypeId, { skipSurgeryRestore = false, forceFreshBaseline = false } = {}) {
         if (!this.imageDNA || !this.proxyEngine) throw new Error('Not initialized');
         if (this._swapInFlight) { this._swapQueued = archetypeId; return null; }
         this._swapInFlight = true;
@@ -420,7 +430,7 @@ class SessionState extends EventEmitter {
             this.emit('archetypeChanged', { archetypeId, config: this.currentConfig });
 
             let result;
-            if (cached && cached.baseline) {
+            if (cached && cached.baseline && !forceFreshBaseline) {
                 result = this.proxyEngine.restoreBaselineSnapshot(cached.baseline, this.currentConfig);
                 this.baselineColorCount = result.palette.length;
                 this._paletteSurgery.initialize(this.proxyEngine);
@@ -436,7 +446,7 @@ class SessionState extends EventEmitter {
                 this._paletteSurgery.initialize(this.proxyEngine);
             }
 
-            this._restoreArchetypeState(archetypeId);
+            this._restoreArchetypeState(archetypeId, { skipSurgeryRestore });
             this.emit('configChanged', this.currentConfig);
             this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
             this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
@@ -507,13 +517,28 @@ class SessionState extends EventEmitter {
         const { colorIndices, rgbPalette, width, height } = this.proxyEngine.separationState;
         if (!colorIndices || !rgbPalette) return null;
 
+        // Resolve through the merge graph before comparing. Merges never
+        // touch the proxy's own colorIndices/masks -- updateProxy deliberately
+        // skips re-separation ("plate assignments stay fixed, only the
+        // palette updates") -- so a pixel belonging to a color that's since
+        // been merged into colorIndex still carries its OLD raw index.
+        // Without resolving, solo view for a color that has absorbed
+        // another only ever showed its own original area, never the area
+        // it absorbed.
+        const sourceToTarget = new Map();
+        for (const [target, sources] of this.mergeHistory) {
+            for (const src of sources) sourceToTarget.set(src, target);
+        }
+        const resolve = (idx) => sourceToTarget.has(idx) ? sourceToTarget.get(idx) : idx;
+        const resolvedTarget = resolve(colorIndex);
+
         const pixelCount = width * height;
         const rgba = new Uint8ClampedArray(pixelCount * 4);
 
         for (let i = 0; i < pixelCount; i++) {
             const ci = colorIndices[i];
             const off = i * 4;
-            if (ci === colorIndex) {
+            if (resolve(ci) === resolvedTarget) {
                 const c = rgbPalette[ci];
                 rgba[off] = c.r; rgba[off + 1] = c.g; rgba[off + 2] = c.b;
             } else {
@@ -631,13 +656,22 @@ class SessionState extends EventEmitter {
             ? [...basePalette, ...this._suggestions.checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
             : basePalette;
         const sep = this.proxyEngine?.separationState;
+
+        // Resolve merged/deleted slots to their final target BEFORE counting
+        // -- without this, a color that absorbed another (or was itself
+        // absorbed) shows up twice in the manifest, with its pixel count
+        // split between the two entries instead of combined into the
+        // surviving one ("why is black appearing twice").
         let pixelCounts = null;
+        let survivingIndices = palette ? palette.map((_, i) => i) : [];
         if (sep?.colorIndices && palette) {
-            pixelCounts = new Uint32Array(palette.length);
-            for (let i = 0, len = sep.colorIndices.length; i < len; i++) pixelCounts[sep.colorIndices[i]]++;
+            const consolidated = consolidatePaletteCoverage(sep.colorIndices, palette.length, this.mergeHistory);
+            pixelCounts = consolidated.pixelCounts;
+            survivingIndices = consolidated.survivingIndices;
         }
         const totalPixels = sep ? sep.width * sep.height : 1;
-        const paletteSection = (palette || []).map((c, i) => {
+        const paletteSection = survivingIndices.map(i => {
+            const c = palette[i];
             const rgb = Reveal.labToRgbD50({ L: c.L, a: c.a, b: c.b });
             const toHex = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
             return {
@@ -654,12 +688,27 @@ class SessionState extends EventEmitter {
             if (meta) { configSection.archetypeId = meta.archetypeId; configSection.matchScore = meta.matchScore; }
         }
 
-        const surgery = { overrides: {}, merges: {}, deletions: [] };
-        for (const [idx, color] of this.paletteOverrides) {
-            if (this.deletedColors.has(idx)) surgery.deletions.push(idx);
-            else surgery.overrides[String(idx)] = { L: Math.round(color.L * 10) / 10, a: Math.round(color.a * 10) / 10, b: Math.round(color.b * 10) / 10 };
+        const surgery = { overrides: {}, merges: {}, deletions: [...this.deletedColors], added: {} };
+        // Merge sources are excluded here, not just because `merges` below
+        // already records the relationship: paletteOverrides synthesizes a
+        // "compat" entry for them equal to the TARGET's color (for callers
+        // that want a flat per-index color list), which is a frozen
+        // snapshot, not a real override of the source's own identity.
+        const mergeSources = this._mergeSourceIndices();
+        for (const [idx, color] of this.rawOverrides) {
+            if (this.deletedColors.has(idx) || mergeSources.has(idx)) continue;
+            surgery.overrides[String(idx)] = { L: Math.round(color.L * 10) / 10, a: Math.round(color.a * 10) / 10, b: Math.round(color.b * 10) / 10 };
         }
         for (const [target, sources] of this.mergeHistory) surgery.merges[String(target)] = [...sources];
+        // Added colors (the "+" button) are user-picked values the archetype
+        // can't regenerate on its own -- their Lab already appears in the
+        // palette list, but nothing flagged WHICH slots were manual adds
+        // vs. natural quantization output, which matters for hand-
+        // reproducing a separation (2026-11-12).
+        for (const idx of this.addedColors) {
+            const c = palette[idx];
+            if (c) surgery.added[String(idx)] = { L: Math.round(c.L * 10) / 10, a: Math.round(c.a * 10) / 10, b: Math.round(c.b * 10) / 10 };
+        }
 
         return {
             meta: { generator: 'Reveal Navigator v1.0.0', timestamp: new Date().toISOString(), filename: docInfo ? docInfo.name : 'unknown', width: docInfo ? docInfo.width : this.originalWidth, height: docInfo ? docInfo.height : this.originalHeight, bitDepth: 16 },
@@ -709,6 +758,184 @@ class SessionState extends EventEmitter {
             separationPalette, paletteOverrides: Object.fromEntries(this.paletteOverrides),
             mergeRemap: Object.keys(mergeRemap).length > 0 ? mergeRemap : null, consolidationMerges, generatedConfig: this.currentConfig
         };
+    }
+
+    // ─── Save / Load Config ───────────────────────────────────
+    //
+    // Explicit, user-triggered save/reapply of a separation's settings —
+    // distinct from the XMP manifest embedded in the exported PSD (that's
+    // passive provenance; this is an active "do the same thing again").
+    // Blind replay by design (2026-11-12): no attempt to detect whether
+    // the current document is "the same" source — the use case is
+    // re-running the same config after fixing something in the source
+    // that doesn't change the palette, and it's the user's call whether
+    // that's true, not something worth guessing at here.
+
+    /**
+     * Serialize the current archetype, knobs, and palette surgery to a
+     * plain object suitable for JSON.stringify and later replay via
+     * applySavedConfig(). Full (unrounded) precision -- unlike the XMP
+     * manifest's palette list, this is for machine replay, not display.
+     *
+     * @returns {Object}
+     */
+    exportSavedConfig() {
+        const knobs = {};
+        for (const key of ALL_KNOBS) if (this.state[key] !== undefined) knobs[key] = this.state[key];
+
+        const basePalette = this._paletteSurgery.buildOverriddenPalette();
+        const surgery = { overrides: {}, merges: {}, deletions: [...this.deletedColors], added: {} };
+        // Merge sources excluded: paletteOverrides' compat entry for them is
+        // a frozen snapshot of the TARGET's color at save time, not a real
+        // override of the source's own identity -- replaying it as one
+        // corrupts the merged-away swatch's own color (effectiveLab) the
+        // next time it's displayed. The merge relationship itself is
+        // captured below and is all a replay needs.
+        const mergeSources = this._mergeSourceIndices();
+        for (const [idx, color] of this.rawOverrides) {
+            if (this.deletedColors.has(idx) || mergeSources.has(idx)) continue;
+            surgery.overrides[String(idx)] = { L: color.L, a: color.a, b: color.b };
+        }
+        for (const [target, sources] of this.mergeHistory) surgery.merges[String(target)] = [...sources];
+        for (const idx of this.addedColors) {
+            const c = basePalette && basePalette[idx];
+            if (c) surgery.added[String(idx)] = { L: c.L, a: c.a, b: c.b };
+        }
+
+        return {
+            formatVersion: 1,
+            savedAt: new Date().toISOString(),
+            archetypeId: this.state.activeArchetypeId,
+            knobs,
+            // "Suggested" colors (the hue-gap-rescue ghost picks) are a
+            // SEPARATE mechanism from the "+" button -- SuggestionManager
+            // tracks them independently and only folds them into the
+            // palette at manifest/production export time, never into the
+            // live surgery graph, so they'd otherwise be silently dropped
+            // by a save/load round trip.
+            checkedSuggestions: this._suggestions.checkedSuggestions.map(c => ({ L: c.L, a: c.a, b: c.b })),
+            surgery
+        };
+    }
+
+    /**
+     * Replay a config previously produced by exportSavedConfig() onto
+     * whatever document is currently loaded. Always swaps to the saved
+     * archetype first (even if it's already active) so palette surgery
+     * replays onto a guaranteed-clean baseline, same as a fresh archetype
+     * pick -- never layered on top of whatever surgery the current
+     * session already had.
+     *
+     * @param {Object} config
+     * @returns {Promise<void>}
+     */
+    async applySavedConfig(config) {
+        if (!this.proxyEngine) throw new Error('No document loaded');
+        if (!config || typeof config !== 'object') throw new Error('Invalid config');
+
+        if (config.archetypeId) {
+            // swapArchetype() normally auto-restores whatever palette surgery
+            // is cached for the incoming archetype (interactive back-and-
+            // forth) -- including, when the saved archetype is already
+            // active, a snapshot-then-restore round trip of the session's
+            // OWN current surgery. A replay must land on a clean baseline
+            // for the surgery below to apply onto, not whatever the session
+            // already had, so suppress that one restore step. Knobs don't
+            // need the same treatment: config.knobs (below) always covers
+            // every ALL_KNOBS key, so it overwrites anything restored here.
+            //
+            // forceFreshBaseline matters specifically for added colors: an
+            // earlier addPaletteColor() call permanently grows the PROXY
+            // ENGINE's own baseline palette (not just graph metadata), so a
+            // cached "restore baseline snapshot" for this archetype -- taken
+            // while those added colors were still live -- would silently
+            // include them already. The surgery replay below then adds them
+            // AGAIN on top, producing duplicate colors. Forcing a real
+            // rePosterize instead guarantees the baseline reflects only the
+            // archetype's own natural output, with nothing added yet.
+            await this.swapArchetype(config.archetypeId, { skipSurgeryRestore: true, forceFreshBaseline: true });
+        }
+
+        if (config.knobs) {
+            for (const [key, value] of Object.entries(config.knobs)) {
+                this.updateParameter(key, value);
+            }
+        }
+        // Force the knob changes through now rather than relying on the
+        // debounce timer firing on its own after this method returns --
+        // callers need an awaitable "fully applied" signal, and any
+        // surgery replay below would otherwise race the pending timer.
+        if (this._debounceTimer) { clearTimeout(this._debounceTimer); this._debounceTimer = null; }
+        await this.triggerProxyUpdate();
+
+        const surgery = config.surgery || {};
+
+        // Each add/override/merge below triggers its own reseparation+
+        // preview update -- suppress the intermediate ones so the preview
+        // doesn't visibly flicker through every step, and emit once at
+        // the end with the final result instead.
+        let lastResult = null;
+        this._suppressPreviewEmit = true;
+        try {
+            // Added colors first, in ascending original-index order, so they
+            // land at the same positions they originally did before overrides/
+            // merges (which reference those positions) get replayed.
+            const addedEntries = Object.entries(surgery.added || {})
+                .sort((a, b) => parseInt(a[0], 10) - parseInt(b[0], 10));
+            for (const [, lab] of addedEntries) {
+                lastResult = await this.addPaletteColor(lab);
+            }
+
+            for (const [idxStr, lab] of Object.entries(surgery.overrides || {})) {
+                lastResult = await this.overridePaletteColor(parseInt(idxStr, 10), lab);
+            }
+
+            // Merges and deletions share the same underlying graph operation
+            // (a merge into an exact, recorded target -- no nearest-neighbor
+            // search, unlike deletePaletteColor's normal interactive path).
+            // A formal delete additionally needs its 'deleted' status flag set
+            // for correct dead-swatch styling; a plain drag/shift-click merge
+            // does not.
+            const deletions = new Set(surgery.deletions || []);
+            for (const [targetStr, sources] of Object.entries(surgery.merges || {})) {
+                const target = parseInt(targetStr, 10);
+                for (const src of sources) {
+                    if (deletions.has(src)) this._paletteSurgery.markDeleted(src);
+                    lastResult = await this.mergePaletteColors(src, target);
+                }
+            }
+        } finally {
+            this._suppressPreviewEmit = false;
+        }
+        // Checked suggestions: swapArchetype() and the structural-knob
+        // replay above both call _suggestions.clearForSwap(), which would
+        // wipe these if they were restored any earlier. They don't affect
+        // the live proxy/preview (SuggestionManager only folds them into
+        // the palette at manifest/production export time), so there's
+        // nothing here to await or suppress.
+        //
+        // Must happen BEFORE _emitPreviewUpdated below, not after: the
+        // Navigator UI's suggestions tray only re-renders in response to
+        // 'previewUpdated' (PaletteSurgeon has no listener on
+        // 'paletteChanged' for it) -- emitting it first meant the UI
+        // redrew against an still-empty checkedSuggestions list, then
+        // never got told to redraw again once they were actually restored.
+        // The underlying data (session.checkedSuggestions) was always
+        // correct; nothing ever told the UI to look at it again.
+        for (const lab of config.checkedSuggestions || []) {
+            this.addCheckedSuggestion(lab);
+        }
+        this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+
+        // Unconditional, not "if (lastResult)": a saved config with ONLY
+        // checked suggestions and no other surgery leaves lastResult null
+        // (none of the added/override/merge loops above ever ran), which
+        // used to mean 'previewUpdated' never fired at all after this
+        // point -- the UI's redraw trigger simply never came, regardless
+        // of the reordering above. Falls back to the knobs-flush result
+        // already sitting in this.previewBuffer/getPalette() when there
+        // was no surgery to produce a fresher one.
+        this._emitPreviewUpdated(lastResult || { previewBuffer: this.previewBuffer, palette: this.getPalette(), elapsedMs: 0 });
     }
 
     // ─── Getters & Helpers ────────────────────────────────────
@@ -783,8 +1010,18 @@ class SessionState extends EventEmitter {
     getOriginalPreviewBuffer() { return this.proxyEngine?.getOriginalPreviewRGBA(); }
     getSuggestedColors() { return this._suggestions.getSuggestedColors(); }
     get checkedSuggestions() { return this._suggestions.checkedSuggestions; }
-    addCheckedSuggestion(labColor) { this._suggestions.addCheckedSuggestion(labColor); }
-    removeCheckedSuggestion(labColor) { this._suggestions.removeCheckedSuggestion(labColor); }
+    addCheckedSuggestion(labColor) {
+        this._suggestions.addCheckedSuggestion(labColor);
+        // 'paletteChanged' is what index.js's Reset-to-Defaults button
+        // listens on to un-gray itself -- without this, checking a
+        // suggestion left it checked (per isCustomized() below) but the
+        // button stayed disabled, with nothing left to ever re-evaluate it.
+        this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+    }
+    removeCheckedSuggestion(labColor) {
+        this._suggestions.removeCheckedSuggestion(labColor);
+        this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
+    }
     isSuggestionChecked(labColor) { return this._suggestions.isSuggestionChecked(labColor); }
     setSuggestionGhost(labColor, mode) { this._suggestions.setSuggestionGhost(labColor, mode); }
     generateSuggestionGhostPreview(labColor, mode) { return this._suggestions.generateSuggestionGhostPreview(labColor, mode); }
@@ -823,24 +1060,50 @@ class SessionState extends EventEmitter {
         if (!id) return;
         const knobs = {};
         for (const k of ALL_KNOBS) if (!SESSION_KNOBS.has(k)) knobs[k] = this.state[k];
-        this._archetypeStateCache.set(id, { knobs, baseline: this.proxyEngine?.getBaselineSnapshot(), ...this._paletteSurgery.snapshot() });
+        // Checked ("Suggested") colors are archetype-specific -- they come
+        // from THIS archetype's own hue-gap analysis -- so they belong in
+        // the same per-archetype cache as knobs/surgery, not as session-
+        // wide state. Without this, merely browsing to a different
+        // archetype card and back (swapArchetype away then back to the
+        // SAME id) permanently lost every checked suggestion, since
+        // clearForSwap() empties the live list on every swap and nothing
+        // ever restored it.
+        this._archetypeStateCache.set(id, {
+            knobs,
+            baseline: this.proxyEngine?.getBaselineSnapshot(),
+            checkedSuggestions: this._suggestions.checkedSuggestions.map(c => ({ ...c })),
+            ...this._paletteSurgery.snapshot()
+        });
     }
 
-    _restoreArchetypeState(id) {
+    _restoreArchetypeState(id, { skipSurgeryRestore = false } = {}) {
         const cached = this._archetypeStateCache.get(id);
         if (!cached) return false;
         for (const k of ALL_KNOBS) if (cached.knobs?.[k] !== undefined) {
             this.state[k] = cached.knobs[k];
             if (this.currentConfig) this.currentConfig[k] = cached.knobs[k];
         }
-        this._paletteSurgery.restore(cached);
+        if (!skipSurgeryRestore) {
+            this._paletteSurgery.restore(cached);
+            // Same reasoning as palette surgery: a replay (applySavedConfig)
+            // wants a clean slate here too, since it replays its own saved
+            // checkedSuggestions separately once the archetype swap settles.
+            this._suggestions.checkedSuggestions = (cached.checkedSuggestions || []).map(c => ({ ...c }));
+        }
         this.state.isKnobsCustomized = !!this._archetypeDefaults && [...ALL_KNOBS].some(k => this.state[k] !== this._archetypeDefaults[k]);
         return true;
     }
 
-    isCustomized() { return this.state.isKnobsCustomized || this._paletteSurgery.hasEdits(); }
+    isCustomized() {
+        return this.state.isKnobsCustomized || this._paletteSurgery.hasEdits() || this._suggestions.checkedSuggestions.length > 0;
+    }
 
     _emitPreviewUpdated(result) {
+        // Swallowed during applySavedConfig's surgery replay -- each
+        // added/overridden/merged color would otherwise repaint the
+        // preview image on its own, visibly flickering through every
+        // intermediate step before landing on the final result.
+        if (this._suppressPreviewEmit) return;
         this.emit('previewUpdated', { previewBuffer: result.previewBuffer, palette: result.palette, activeColorCount: this._countActiveColors(), elapsedMs: result.elapsedMs, accuracyDeltaE: this.calculateCurrentAccuracy(), dnaFidelity: this.calculateDNAFidelity() });
     }
 

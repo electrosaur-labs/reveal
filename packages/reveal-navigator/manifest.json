@@ -21,7 +21,7 @@
     }
   ],
   "requiredPermissions": {
-    "localFileSystem": "plugin",
+    "localFileSystem": "fullAccess",
     "network": {
       "domains": "all"
     },

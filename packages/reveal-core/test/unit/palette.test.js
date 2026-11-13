@@ -67,6 +67,29 @@ describe('Palette & PaletteGraph', () => {
         expect(p.getSuggestions()).toHaveLength(0);
     });
 
+    it('hasEdits is false on a fresh, unedited palette', () => {
+        const p = new Palette(baseline);
+        expect(p.hasEdits()).toBe(false);
+    });
+
+    it('snapshot/restore round-trips un-promoted suggested colors', () => {
+        const suggested = [{ L: 100, a: 0, b: 0, source: 'test', reason: 'highlight' }];
+        const p1 = new Palette(baseline, suggested);
+
+        const snapshot = p1.snapshot();
+
+        const p2 = new Palette(baseline);
+        p2.restore(snapshot);
+
+        const suggestions = p2.getSuggestions();
+        expect(suggestions).toHaveLength(1);
+        expect(suggestions[0].baseLab.L).toBe(100);
+
+        // The restored suggestion is still promotable, not just inert data.
+        const newNodeId = p2.promote('suggested-0');
+        expect(newNodeId).toBe('added-0');
+    });
+
     it('supports snapshot and restore', () => {
         const p1 = new Palette(baseline);
         p1.override('palette-0', { L: 15, a: 5, b: 5 });
@@ -160,15 +183,221 @@ describe('Palette & PaletteGraph', () => {
         it('selects nearest neighbor based on specific metric during deletion', () => {
             // palette-0: {10,0,0}, palette-1: {50,0,0}, palette-2: {90,0,0}
             const p = new Palette(baseline);
-            
+
             // Override palette-1 to be slightly closer to palette-2 than palette-0
             p.override('palette-1', { L: 70, a: 0, b: 0 });
-            
+
             // Delete palette-1 (should merge into palette-2)
             p.delete('palette-1', 'cie76');
-            
+
             const node1 = p.graph.getNodeById('palette-1');
             expect(node1.mergeTargetId).toBe('palette-2');
+        });
+    });
+
+    // ─── Index-based accessor getters ──────────────────────────
+    //
+    // These are the ONLY surface reveal-navigator's PaletteSurgeryManager
+    // reads through (paletteOverrides, rawOverrides, mergeHistory,
+    // deletedColors, addedColors, getDisplayOrder) -- until now they were
+    // never called directly in this package's own suite, only
+    // incidentally via the navigator package's tests. A real bug lived
+    // here undetected for a while: paletteOverrides synthesizes a
+    // "compat" entry for merge sources equal to the TARGET's color, and
+    // a caller that doesn't know to exclude merge sources (or that reads
+    // overrideLab for identity, like getIdentityPalette-style code) can
+    // mistake that frozen snapshot for a real override of the source's
+    // own color.
+
+    describe('paletteOverrides / rawOverrides', () => {
+        it('paletteOverrides reports a genuine override at its display index', () => {
+            const p = new Palette(baseline);
+            p.override('palette-1', { L: 55, a: 10, b: 10 });
+
+            const overrides = p.graph.paletteOverrides;
+            expect(overrides.get(1)).toMatchObject({ L: 55, a: 10, b: 10 });
+            expect(overrides.size).toBe(1);
+        });
+
+        it('paletteOverrides ALSO synthesizes a compat entry for a merge source, equal to the target color', () => {
+            const p = new Palette(baseline);
+            p.merge('palette-0', 'palette-2'); // 0 -> 2 (L=90)
+
+            const overrides = p.graph.paletteOverrides;
+            expect(overrides.get(0)).toMatchObject({ L: 90, a: 0, b: 0 });
+        });
+
+        it('rawOverrides excludes the merge-source compat entry entirely', () => {
+            const p = new Palette(baseline);
+            p.merge('palette-0', 'palette-2');
+
+            expect(p.graph.rawOverrides.has(0)).toBe(false);
+            expect(p.graph.rawOverrides.size).toBe(0);
+        });
+
+        it('rawOverrides reports a genuine override on a node that is ALSO a merge source', () => {
+            // The node's own override survives independently of the merge
+            // relationship -- rawOverrides is "does this node have its own
+            // overrideLab", not "is it alive".
+            const p = new Palette(baseline);
+            p.override('palette-0', { L: 20, a: 1, b: 1 });
+            p.merge('palette-0', 'palette-2');
+
+            expect(p.graph.rawOverrides.get(0)).toMatchObject({ L: 20, a: 1, b: 1 });
+            // But the COMPAT entry in paletteOverrides for the same index
+            // reports the node's own override too (overrideLab branch runs
+            // before the merge-compat branch) -- not the target's color.
+            expect(p.graph.paletteOverrides.get(0)).toMatchObject({ L: 20, a: 1, b: 1 });
+        });
+    });
+
+    describe('mergeHistory / deletedColors / addedColors / getDisplayOrder', () => {
+        it('mergeHistory maps target displayIndex -> Set of source displayIndices', () => {
+            const p = new Palette(baseline);
+            p.merge('palette-0', 'palette-2');
+
+            const history = p.graph.mergeHistory;
+            expect(history.get(2)).toEqual(new Set([0]));
+            expect(history.size).toBe(1);
+        });
+
+        it('mergeHistory flattens a chain to the FINAL target, not the intermediate hop', () => {
+            const p = new Palette(baseline);
+            p.merge('palette-0', 'palette-1');
+            p.merge('palette-1', 'palette-2');
+
+            const history = p.graph.mergeHistory;
+            // Both 0 and 1 resolve to 2 -- no entry keyed by 1 as a target.
+            expect(history.get(2)).toEqual(new Set([0, 1]));
+            expect(history.has(1)).toBe(false);
+        });
+
+        it('deletedColors reports the displayIndex of a soft-deleted node', () => {
+            const p = new Palette(baseline);
+            p.delete('palette-0');
+
+            expect(p.graph.deletedColors).toEqual(new Set([0]));
+        });
+
+        it('addedColors reports the displayIndex of a manually added node', () => {
+            const p = new Palette(baseline);
+            p.graph.addNode({ L: 60, a: 5, b: -5 });
+
+            expect(p.graph.addedColors).toEqual(new Set([3]));
+        });
+
+        it('getDisplayOrder returns stable node IDs in UI order, independent of merges/deletes', () => {
+            const p = new Palette(baseline);
+            p.merge('palette-0', 'palette-2');
+
+            expect(p.graph.getDisplayOrder()).toEqual(['palette-0', 'palette-1', 'palette-2']);
+        });
+    });
+
+    describe('Re-merging a node that is already merged elsewhere', () => {
+        it('cleans up the OLD target\'s mergedSourceIds when re-merged into a NEW target', () => {
+            const p = new Palette(baseline);
+            p.merge('palette-0', 'palette-1'); // 0 -> 1
+
+            const oldTarget = p.graph.getNodeById('palette-1');
+            expect(oldTarget.mergedSourceIds.has('palette-0')).toBe(true);
+
+            p.merge('palette-0', 'palette-2'); // re-merge 0 -> 2
+
+            // Stale reference on the OLD target must be gone, or it would
+            // keep reporting "absorbed palette-0" (merge badge count, XMP
+            // manifest coverage) even though 0 now resolves elsewhere.
+            expect(oldTarget.mergedSourceIds.has('palette-0')).toBe(false);
+            const newTarget = p.graph.getNodeById('palette-2');
+            expect(newTarget.mergedSourceIds.has('palette-0')).toBe(true);
+            expect(p.graph.resolveMergeTarget('palette-0')).toBe('palette-2');
+
+            // And mergeHistory (the index-based view SessionState/Navigator
+            // actually reads) must reflect only the new relationship.
+            const history = p.graph.mergeHistory;
+            expect(history.get(1)).toBeUndefined();
+            expect(history.get(2)).toEqual(new Set([0]));
+        });
+    });
+
+    describe('Deleting an already-dead node', () => {
+        it('is a silent no-op for a node already merged elsewhere', () => {
+            const p = new Palette(baseline);
+            p.merge('palette-0', 'palette-1');
+
+            expect(() => p.delete('palette-0')).not.toThrow();
+
+            // Still resolves to its original target -- the no-op must not
+            // have reassigned it anywhere.
+            expect(p.graph.resolveMergeTarget('palette-0')).toBe('palette-1');
+        });
+
+        it('is a silent no-op for a node already deleted', () => {
+            const p = new Palette(baseline);
+            p.delete('palette-0');
+            const targetAfterFirstDelete = p.graph.resolveMergeTarget('palette-0');
+
+            expect(() => p.delete('palette-0')).not.toThrow();
+            expect(p.graph.resolveMergeTarget('palette-0')).toBe(targetAfterFirstDelete);
+        });
+    });
+
+    describe('removeAddedNode: reparenting dependents', () => {
+        it('reparents dependents to the added node\'s OWN merge target, when it had one (3-level case)', () => {
+            const p = new Palette(baseline);
+            const addedId = p.graph.addNode({ L: 60, a: 0, b: 0 }); // added-0
+
+            // palette-0, palette-1 both merge into added-0 ...
+            p.merge('palette-0', addedId);
+            p.merge('palette-1', addedId);
+            // ... and added-0 itself merges into palette-2.
+            p.merge(addedId, 'palette-2');
+
+            expect(p.graph.resolveMergeTarget('palette-0')).toBe('palette-2');
+            expect(p.graph.resolveMergeTarget('palette-1')).toBe('palette-2');
+
+            p.graph.removeAddedNode(addedId);
+
+            // palette-0 and palette-1 must now point DIRECTLY at palette-2
+            // (reparented), not be left dangling on the removed added-0,
+            // and not incorrectly revert to live either.
+            expect(p.graph.getNodeById('palette-0').mergeTargetId).toBe('palette-2');
+            expect(p.graph.getNodeById('palette-1').mergeTargetId).toBe('palette-2');
+            expect(p.graph.resolveMergeTarget('palette-0')).toBe('palette-2');
+            const target = p.graph.getNodeById('palette-2');
+            expect(target.mergedSourceIds.has('palette-0')).toBe(true);
+            expect(target.mergedSourceIds.has('palette-1')).toBe(true);
+        });
+    });
+
+    describe('restore(null)', () => {
+        it('clears the graph to empty rather than throwing', () => {
+            const p = new Palette(baseline);
+            p.graph.restore(null);
+
+            expect(p.graph.getNodes()).toHaveLength(0);
+            expect(p.graph.getDisplayOrder()).toHaveLength(0);
+        });
+    });
+
+    describe('Adding a second color after one already exists', () => {
+        it('continues the added- index from the highest existing one, not reusing it', () => {
+            const p = new Palette(baseline);
+            const first = p.graph.addNode({ L: 60, a: 0, b: 0 });
+            const second = p.graph.addNode({ L: 40, a: 0, b: 0 });
+
+            expect(first).toBe('added-0');
+            expect(second).toBe('added-1');
+        });
+
+        it('does not reuse a removed added- id -- continues from the highest surviving one', () => {
+            const p = new Palette(baseline);
+            const first = p.graph.addNode({ L: 60, a: 0, b: 0 });  // added-0
+            const second = p.graph.addNode({ L: 40, a: 0, b: 0 }); // added-1
+            p.graph.removeAddedNode(first); // added-0 gone, added-1 survives
+
+            const third = p.graph.addNode({ L: 20, a: 0, b: 0 });
+            expect(third).toBe('added-2'); // continues from added-1, not added-0
         });
     });
 });

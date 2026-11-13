@@ -133,6 +133,23 @@ class PaletteGraph {
         return false;
     }
 
+    /**
+     * Returns a Map of displayIndex -> overrideLab for nodes that carry a
+     * GENUINE override, excluding the merge-compatibility entries that
+     * `paletteOverrides` synthesizes for merged-away sources (those report
+     * the target's color, not an override of their own -- conflating the
+     * two would freeze a snapshot of the target's color onto the source
+     * as a real override, corrupting its effectiveLab/identity).
+     */
+    get rawOverrides() {
+        const overrides = new Map();
+        this._displayOrder.forEach((id, idx) => {
+            const node = this._nodes.get(id);
+            if (node && node.overrideLab) overrides.set(idx, { ...node.overrideLab });
+        });
+        return overrides;
+    }
+
     /** Returns a Map of displayIndex -> overrideLab. */
     get paletteOverrides() {
         const overrides = new Map();

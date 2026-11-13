@@ -30,6 +30,8 @@ class PaletteSurgeryManager {
 
     /** Compatibility getters: return index-based structures for SessionState/UI. */
     get paletteOverrides() { return this._palette.graph.paletteOverrides; }
+    /** Genuine overrides only -- excludes paletteOverrides' merge-compat entries. */
+    get rawOverrides() { return this._palette.graph.rawOverrides; }
     get mergeHistory() { return this._palette.graph.mergeHistory; }
     get deletedColors() { return this._palette.graph.deletedColors; }
     get addedColors() { return this._palette.graph.addedColors; }
