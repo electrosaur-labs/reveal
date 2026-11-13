@@ -15,8 +15,20 @@ const { writePsd } = require('./output/psd');
 const { writeOra } = require('./output/ora');
 const { writePlates } = require('./output/plates');
 const { writeSidecar } = require('./output/sidecar');
+const { runVerify } = require('./commands/verify');
 
 const program = new Command();
+
+// Pre-Flight Separation Inspector subcommand
+program
+    .command('verify')
+    .description('Audit a separation PSD against physical screen-printing press physics')
+    .argument('<file>', 'Separation PSD file to audit')
+    .option('--json', 'Output machine-readable JSON report')
+    .option('--strict', 'Treat warnings as fatal errors (exit code 1)')
+    .option('-q, --quiet', 'Errors only')
+    .option('-v, --verbose', 'Detailed per-plate diagnostics')
+    .action(runVerify);
 
 program
     .name('reveal')
