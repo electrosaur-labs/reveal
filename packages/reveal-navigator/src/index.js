@@ -696,22 +696,6 @@ function initPlugin() {
         // on this dialog before the picker interaction has finished).
         const dialogEl = document.getElementById('navigatorDialog');
         if (dialogEl) {
-            // Intercept native dialog cancel event (fired by UXP on Escape key)
-            dialogEl.addEventListener('cancel', (e) => {
-                if (credits && typeof credits.isOpen === 'function' && credits.isOpen()) {
-                    if (!credits.isManifestoOpen) {
-                        // On Credits: cancel the native dialog close! Close only the credits overlay!
-                        e.preventDefault();
-                        credits.close();
-                        logger.log('[Navigator] Esc intercepted on Credits: overlay closed, dialog preserved');
-                    } else {
-                        // On Manifesto: allow native dialog close
-                        credits.close();
-                        logger.log('[Navigator] Esc on Manifesto: dialog closing');
-                    }
-                }
-            });
-
             dialogEl.addEventListener('close', () => {
                 if (surgeon && surgeon.isPickerOpen()) {
                     logger.log('[Navigator] Dialog closed while picker open — re-showing');

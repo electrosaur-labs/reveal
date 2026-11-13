@@ -36,7 +36,6 @@ class CreditsController {
         this.rafId = null;
 
         this._tick = this._tick.bind(this);
-        this._handleKeyDown = this._handleKeyDown.bind(this);
         this._bindEvents();
     }
 
@@ -101,45 +100,10 @@ class CreditsController {
             this.printTrigger.addEventListener('pointerdown', onTriggerDown);
             this.printTrigger.addEventListener('click', triggerManifesto);
         }
-
-        // Intercept Escape: on Credits, close only credits overlay; on Manifesto, dismiss plugin dialog
-        if (typeof window !== 'undefined') {
-            window.addEventListener('keydown', this._handleKeyDown, { capture: true });
-        }
-        if (typeof document !== 'undefined') {
-            document.addEventListener('keydown', this._handleKeyDown, { capture: true });
-        }
-        if (this.broadside) {
-            this.broadside.addEventListener('keydown', this._handleKeyDown);
-        }
     }
 
     isOpen() {
         return !!(this.overlay && this.overlay.style.display !== 'none');
-    }
-
-    _handleKeyDown(e) {
-        if (e.key === 'Escape' || e.key === 'Esc') {
-            if (this.isOpen()) {
-                if (this.isManifestoOpen) {
-                    // Esc on Manifesto dismisses dialog
-                    this.close();
-                    if (typeof document !== 'undefined') {
-                        const dialog = document.getElementById('navigatorDialog');
-                        if (dialog && typeof dialog.close === 'function') {
-                            try {
-                                dialog.close('cancel');
-                            } catch (err) {}
-                        }
-                    }
-                } else {
-                    // Esc on Credits: closes credits overlay, should NOT dismiss plugin dialog!
-                    if (e.preventDefault) e.preventDefault();
-                    if (e.stopPropagation) e.stopPropagation();
-                    this.close();
-                }
-            }
-        }
     }
 
     open() {
