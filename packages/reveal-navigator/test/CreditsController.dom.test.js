@@ -121,31 +121,29 @@ describe('CreditsController Headless DOM Suite', () => {
         expect(controller.isManifestoOpen).toBe(true);
     });
 
-    it('closes credits and plugin dialog when Escape is pressed from manifesto or crawl', () => {
+    it('navigates backwards via Escape key (manifesto -> credits -> closed overlay) while keeping plugin dialog alive', () => {
         const dialog = document.getElementById('navigatorDialog');
         dialog.close = vi.fn();
 
         controller.open();
+        const broadside = document.getElementById('manifesto-broadside');
         const emblem = document.getElementById('credits-emblem');
 
         // Open manifesto
         emblem.dispatchEvent(new window.Event('click'));
         expect(controller.isManifestoOpen).toBe(true);
 
-        // Escape on manifesto: closes overlay and calls dialog.close()
+        // First Escape: closes manifesto, keeps credits open, does NOT close plugin dialog
+        window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+        expect(controller.isManifestoOpen).toBe(false);
+        expect(broadside.style.display).toBe('none');
+        expect(overlay.style.display).toBe('flex');
+        expect(dialog.close).not.toHaveBeenCalled();
+
+        // Second Escape: closes credits overlay completely, returns to Navigator, does NOT close plugin dialog
         window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
         expect(overlay.style.display).toBe('none');
         expect(controller.isPlaying).toBe(false);
-        expect(dialog.close).toHaveBeenCalledWith('cancel');
-
-        // Reopen credits without manifesto
-        dialog.close.mockClear();
-        controller.open();
-        expect(overlay.style.display).toBe('flex');
-
-        // Escape on credits: closes overlay and calls dialog.close()
-        window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
-        expect(overlay.style.display).toBe('none');
-        expect(dialog.close).toHaveBeenCalledWith('cancel');
+        expect(dialog.close).not.toHaveBeenCalled();
     });
 });
