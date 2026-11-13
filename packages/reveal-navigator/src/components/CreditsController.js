@@ -114,9 +114,13 @@ class CreditsController {
         }
     }
 
+    isOpen() {
+        return !!(this.overlay && this.overlay.style.display !== 'none');
+    }
+
     _handleKeyDown(e) {
         if (e.key === 'Escape' || e.key === 'Esc') {
-            if (this.overlay && this.overlay.style.display !== 'none') {
+            if (this.isOpen()) {
                 if (this.isManifestoOpen) {
                     // Esc on Manifesto dismisses dialog
                     this.close();
