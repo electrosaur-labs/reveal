@@ -99,20 +99,22 @@ class CreditsController {
             });
         }
 
-        // Global keydown for Escape
+        // Global keydown for Escape in capture phase to prevent UXP from closing outer host dialog
         if (typeof window !== 'undefined') {
-            window.addEventListener('keydown', this._handleKeyDown);
+            window.addEventListener('keydown', this._handleKeyDown, { capture: true });
         }
     }
 
     _handleKeyDown(e) {
         if (e.key === 'Escape' || e.key === 'Esc') {
             if (this.isManifestoOpen) {
+                if (e.preventDefault) e.preventDefault();
+                if (e.stopPropagation) e.stopPropagation();
                 this.closeManifesto();
-                e.stopPropagation();
             } else if (this.overlay && this.overlay.style.display !== 'none') {
+                if (e.preventDefault) e.preventDefault();
+                if (e.stopPropagation) e.stopPropagation();
                 this.close();
-                e.stopPropagation();
             }
         }
     }

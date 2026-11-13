@@ -1616,26 +1616,13 @@
             margin: 0 auto 10px auto;
             display: block;
             filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.7));
-            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        .credits-emblem-interactive:hover .credits-mascot-img {
-            transform: scale(1.08) rotate(-2deg);
         }
 
         .credits-print-interactive {
-            cursor: pointer;
             display: inline-block;
             margin: 18px auto 14px auto;
             text-align: center;
             user-select: none;
-            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        .credits-print-interactive:hover {
-            transform: scale(1.04);
-        }
-        .credits-print-interactive:hover .credits-print-frame {
-            border-color: #e0a030;
-            box-shadow: 0 12px 36px rgba(224, 160, 48, 0.35);
         }
 
         .credits-print-frame {
@@ -1648,7 +1635,6 @@
             border: 2px solid #383838;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85);
             background: #111;
-            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
         .credits-print-caption {
@@ -1657,24 +1643,6 @@
             letter-spacing: 1.5px;
             text-transform: uppercase;
             margin-bottom: 6px;
-        }
-
-        .credits-print-badge {
-            display: inline-block;
-            background: #BB5A29;
-            color: #fff;
-            font-size: 9px;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            padding: 3px 10px;
-            border-radius: 3px;
-            text-transform: uppercase;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-            transition: background 0.15s, color 0.15s;
-        }
-        .credits-print-interactive:hover .credits-print-badge {
-            background: #e0a030;
-            color: #111;
         }
 
         .credits-quote {
@@ -1694,15 +1662,6 @@
             background: #e0a030;
             margin: 14px auto;
             opacity: 0.6;
-        }
-
-        .credits-motto {
-            font-size: 14px;
-            font-weight: 700;
-            letter-spacing: 1.5px;
-            color: #4da6ff;
-            text-transform: uppercase;
-            margin: 18px 0;
         }
 
         .credits-role-title {
@@ -1821,7 +1780,6 @@
         }
 
         .credits-emblem-interactive {
-            cursor: pointer;
             display: block;
             width: 100%;
             max-width: 440px;
@@ -1829,22 +1787,6 @@
             text-align: center;
             user-select: none;
             padding: 8px 12px;
-            border-radius: 6px;
-            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        .credits-emblem-interactive:hover {
-            transform: scale(1.04);
-            background: rgba(224, 160, 48, 0.08);
-        }
-
-        .credits-emblem-prompt {
-            font-size: 9px;
-            font-weight: 700;
-            color: #e0a030;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            margin-top: 6px;
-            opacity: 0.85;
         }
 
         /* ─── Political Broadsheet / Minkler Manifesto View ─── */
@@ -2581,20 +2523,18 @@
 
                     <!-- Scene 1: Dedication -->
                     <div class="credits-scene">
-                        <div id="credits-emblem" class="credits-emblem-interactive" title="Click to reveal the Doug Minkler Manifesto">
+                        <div id="credits-emblem" class="credits-emblem-interactive">
                             <img src="electrosaur.png" alt="Electrosaur Mascot" class="credits-mascot-img">
                             <div class="credits-stars">★ ★ ★</div>
                             <div class="credits-tag">Dedicated To</div>
                             <div class="credits-hero-title">Doug Minkler</div>
                             <div class="credits-hero-subtitle">Sensei, Friend, and Political Printmaker<br>“The Last Marxist Alive”</div>
-                            <div class="credits-emblem-prompt">★ Click Mascot to View the Manifesto ★</div>
                         </div>
 
                         <!-- Doug Minkler's Print: Art is a Hammer -->
-                        <div id="credits-print-trigger" class="credits-print-interactive" title="Click print to open the Doug Minkler Manifesto">
+                        <div id="credits-print-trigger" class="credits-print-interactive">
                             <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="credits-print-frame">
                             <div class="credits-print-caption">“Art is a Hammer” • Silkscreen by Doug Minkler</div>
-                            <div class="credits-print-badge">★ CLICK PRINT TO OPEN MANIFESTO ★</div>
                         </div>
 
                         <div class="credits-quote">
@@ -2611,7 +2551,6 @@
 
                         <div class="credits-quote-divider"></div>
 
-                        <div class="credits-motto">“Reduction is Revelation”</div>
                         <div class="credits-stars">★ ★ ★</div>
                     </div>
 
@@ -2740,9 +2679,11 @@
                     <div class="manifesto-subtitle">A Screen-Print Prepress Manifesto</div>
                 </div>
                 <div class="manifesto-body">
-                    <div class="manifesto-art-card">
-                        <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="manifesto-art-img">
-                        <div class="manifesto-art-caption">“Art is a Hammer” • Doug Minkler</div>
+                    <div style="display: flex; justify-content: center; width: 100%; margin-bottom: 18px;">
+                        <div class="manifesto-art-card" style="margin: 0;">
+                            <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="manifesto-art-img">
+                            <div class="manifesto-art-caption">“Art is a Hammer” • Doug Minkler</div>
+                        </div>
                     </div>
 
                     <p>Screen printing is not an office photocopier. It is not an inkjet printer. It does not exist to fake continuous-tone photographs with muddy translucent rosettes.</p>
@@ -2774,13 +2715,12 @@
                 </div>
                 <div class="manifesto-footer">
                     <span>Press Esc or click Close to return</span>
-                    <button id="btn-manifesto-close" class="manifesto-close-btn">Close Manifesto ✕</button>
+                    <button id="btn-manifesto-close" class="manifesto-close-btn">Close</button>
                 </div>
             </div>
 
             <!-- Bottom Dismiss Bar -->
             <div class="credits-footer-bar">
-                <span class="credits-footer-tag">★ REDUCTION IS REVELATION ★</span>
                 <span class="credits-esc-hint">Press Esc or click outside to close</span>
             </div>
         </div><!-- /credits-window -->
