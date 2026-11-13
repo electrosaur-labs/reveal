@@ -8,9 +8,11 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Reveal reduces an image to a handful of spot colors and gives you screens your mesh can actually hold. It works alongside Photoshop's built-in tools: it analyzes your image, generates candidate palettes from 26 built-in archetypes and 3 adaptive pseudo-archetypes, and lets you add, remove, or nudge colors to fit your press. The engine recommends; the artist decides. Crucially, it never produces dots or lines finer than your mesh can print: the smallest printable dot must span N mesh openings ("Rule of N", adjustable from 4 to 10, default 7).
+Reveal is a Photoshop plugin that enhances Photoshop for screen printing. It does not compete with Photoshop's built-in tools: Photoshop is a general-purpose digital editor that knows nothing about screens, meshes, TPI, or what will physically hold on press. Because of that, Photoshop can end up creating pixel-sized dots that wash out in the washout booth and never print. Reveal bridges that physical gap.
 
-**Who it's for:** artists, printmakers and poster makers working in spot color who aren't after photorealism. Reveal doesn't try to reproduce the original; it aims for a set of colors that carries the image, on screens that will print. If you need photorealism, process or simulated process printing is the better route.
+It makes opinionated spot-color reductions, entirely eschewing halftone dots of any sort to fake continuous tone. It analyzes your image, discovers the most important colors — even vivid accents that cover only a few pixels of the source — and generates candidate palettes from 26 built-in archetypes and 3 adaptive pseudo-archetypes. You pick one and refine it: the engine recommends, the artist decides. Crucially, for every color it generates a layer ensuring every dot spans at least N mesh openings ("Rule of N", adjustable from 4 to 10; default 7), ensuring every screen is actually printable on press.
+
+**Who it's for:** artists, printmakers, and poster makers working in spot color who have the freedom to **interpret** the input image rather than reproduce it. Reveal does not try to reproduce continuous-tone photographs. If you need photorealistic fidelity to a source image, Process (CMYK) and Simulated Process are demanding, respected crafts that many printmakers depend on to make their living. Reveal simply offers a different menu: the deliberate, graphic power of spot color.
 
 The Photoshop plugin gives you real-time preview, palette editing, and one-click export to separated Lab layers with masks. The core engine is **100% pure JavaScript with zero external dependencies**, so it also runs in Node.js, browsers, and batch pipelines.
 
