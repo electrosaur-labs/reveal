@@ -36,14 +36,17 @@ The Photoshop plugin gives you real-time preview, palette editing, and one-click
 
 ## Key Features
 
-- **Perceptual Lab quantization** — Wu's variance-minimizing quantizer by default, with classical Lab median-cut available; partitions in perceptual color space, not RGB
-- **26 archetypes + 3 adaptive pseudo-archetypes** — DNA analysis fingerprints each image and recommends separation parameters (Golden Hour, Commercial, Fine Art Scan, Dark Portrait, etc.)
-- **Three distance metrics** — CIE76 (fast), CIE94 (perceptual), CIE2000 (museum-grade)
-- **Dithering** — Floyd-Steinberg, Atkinson, Stucki, Bayer, with mesh-aware LPI scaling
-- **Mechanical knobs** — Minimum coverage (minVolume), despeckle (speckleRescue), minimum opacity (shadowClamp), color trapping
-- **Neutral sovereignty** — Automatically isolates white/gray backgrounds to preserve the chromatic color budget
-- **8-bit and 16-bit Lab** — Full archival quality support
-- **Photoshop plugin** — Real-time archetype exploration at 1000px proxy, blink comparator (click to toggle original/separated), trap zone overlay, production render to Lab fill+mask layers
+- **Perceptual Lab quantization** — Xiaolin Wu's variance-minimizing quantizer by default, with classical Lab median-cut available; partitions in perceptual 16-bit CIELAB color space, not RGB.
+- **Dual-Scale Edge-Adaptive Separation** — Preserves razor-sharp 1-pixel vector contours on text, linework, and high-contrast edges, while locking photographic halftones to press-safe macro-cell clusters.
+- **Physical "Rule of N" Mesh Floors** — Guarantees that every printed dot and open area spans at least N mesh openings ($N \in [4.0, 10.0]$, default 7.0) so no screen starves or washes out.
+- **Pre-Flight Press Inspection (`reveal verify`)** — Built-in offline auditor that validates delivered PSDs against press physics (Euclidean trapping containment, EDT inscribed-disk dot geometry, and embedded Manifest v2.1).
+- **26 archetypes + 3 adaptive pseudo-archetypes** — DNA analysis fingerprints each image and recommends separation parameters (Golden Hour, Commercial, Fine Art Scan, Dark Portrait, etc.).
+- **Three distance metrics** — CIE76 (fast), CIE94 (perceptual), CIE2000 (museum-grade).
+- **Dithering** — Floyd-Steinberg, Atkinson, Stucki, Bayer, with mesh-aware LPI scaling.
+- **Mechanical knobs** — Minimum coverage (minVolume), despeckle (speckleRescue), minimum opacity (shadowClamp), color trapping, and black edge snapping.
+- **Neutral sovereignty** — Automatically isolates white/gray backgrounds to preserve the chromatic color budget.
+- **8-bit and 16-bit Lab** — Full archival quality support.
+- **Photoshop plugin** — Real-time archetype exploration at 1000px proxy, blink comparator (click to toggle original/separated), trap zone overlay, and production render to Lab fill+mask layers stacked in press print sequence.
 
 ## Validation
 
@@ -105,8 +108,8 @@ The core engines are pure computation — no file system, no network, no Photosh
 
 ```
 Lab pixels → DNA Analysis → Parameter Generation → Bilateral Filter
-    → Median Cut Quantization → Pixel Separation → Mask Generation
-    → Photoshop Lab fill+mask layers
+    → Wu Variance / Median Cut Quantization → Dual-Scale Edge-Adaptive Separation
+    → Mask Generation & Trapping → Photoshop Lab fill+mask layers
 ```
 
 ## Development
@@ -115,20 +118,20 @@ Lab pixels → DNA Analysis → Parameter Generation → Bilateral Filter
 # Build all packages
 npm run build
 
-# Test core engines (Vitest)
+# Test all packages (Vitest)
+npm test
+
+# Test core engines
 npm run test:core
 
-# Watch mode
-cd packages/reveal-core && npm run test:watch
+# Test Photoshop Navigator headless DOM suite
+npm test -w @electrosaur-labs/navigator
 
-# Build Photoshop plugins
+# Test CLI and Pre-Flight Inspector
+npm test -w @electrosaur-labs/reveal-cli
+
+# Build Photoshop Navigator plugin
 npm run build:navigator
-npm run build:adobe
-
-# Batch processing
-cd packages/reveal-batch
-npm run reveal              # Single image
-npm run process-cq100       # Benchmark dataset
 ```
 
 ## User Guide
@@ -143,7 +146,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding conventions
 
 Conceived and directed by Shankar R., a screen printer. Architecture and design by Gemini; code by Claude and Gemini. Reveal itself uses no AI at runtime: it's conventional image-processing code that runs on your machine.
 
-Dedicated to **[Doug Minkler](http://www.dminkler.com)**, who taught me everything I know about screen printing.
+Dedicated to **[Doug Minkler](http://www.dminkler.com)** — sensei, friend, political printmaker, and the last Marxist in Berkeley.
 
 ## License
 

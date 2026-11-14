@@ -41,11 +41,19 @@ to the nearest palette color, and creates one Photoshop layer per ink.
   routing logic to your image automatically.
 - **DNA** — The image's structural fingerprint. It captures lightness, chroma, contrast, entropy, temperature, and hue
   distribution. You don't interact with it directly — it drives the automatic archetype ranking.
+- **Dual-Scale Resolution** — Edge-adaptive separation. Bimodal high-contrast boundaries (text, keylines, engravings)
+  snap at native 1-pixel resolution, while smooth gradients and halftones remain bound to physical macro-cell dot clusters.
+  This ensures razor-sharp letterforms without sacrificing press ink coverage.
+- **Rule of N** — The physical relationship between your screen mesh and printable detail: the smallest printable dot
+  must span at least N mesh openings ($N \in [4.0, 10.0]$, default 7.0). This prevents ink starvation, pinholes, and
+  blowouts in the washout booth.
 - **Palette** — The set of spot colors extracted from your image, typically 5-8 colors. You can edit, merge, delete, or
   add colors using the Palette Surgeon before committing.
-- **Mechanical knobs** — Post-processing controls used for deep separation tuning. These include Minimum Coverage
-  (eliminate weak colors), Despeckle (clean up isolated pixels), Minimum Opacity (ensure faint tones remain visible),
-  and Trapping (overlap colors to prevent gaps).
+- **Mechanical Knobs** — Post-processing controls for deep press tuning: Minimum Coverage (eliminate weak colors),
+  Despeckle (coupled to your mesh and Rule of N floor), Minimum Opacity (prevent faint density dropouts), Trapping
+  (directional light-under-dark overlap), and Black Snap (keyline edge stabilization).
+- **Pre-Flight Verification** — Automated offline audit tool (`reveal verify <file.psd>`) that mathematically proves your
+  delivered PSD meets all physical press invariants before burning screens.
 
 ## Requirements
 
@@ -206,44 +214,69 @@ A 20-megapixel image typically separates in 1-2 seconds.
 - **Shadow Floor and mud.** On press, dark tones can collapse into a single indistinct "mud" color. Use Shadow Floor to
   set a minimum ink density so faint areas maintain enough opacity to print as distinct tones.
 
-## Command-Line Tool
+## Pre-Flight Verification (`reveal verify`)
 
-Reveal also ships as a command-line tool that accepts standard image formats (PNG, TIFF, JPEG) — no Photoshop required. It runs the same separation engine and can output flat posterized images, layered PSDs, OpenRaster files (for GIMP/Krita), individual screen masks, and JSON metadata.
+Before outputting film positives or burning expensive screens, you can mathematically prove that your delivered separation file is press-safe using Reveal's built-in CLI auditor:
 
 ```bash
-# Basic separation
-npm run reveal -- photo.png -o output/
+# Verify a separated PSD before burning screens
+reveal verify output.psd
 
-# With PSD and OpenRaster output
-npm run reveal -- photo.png --format psd,ora -o output/
+# Strict production audit with detailed layer-by-layer breakdown
+reveal verify output.psd --verbose --strict
+```
 
-# Compare multiple archetypes side by side
-npm run reveal -- photo.png --compare -o output/
+### What It Audits
+
+1. **Embedded Manifest Verification:** Reads the embedded XMP Manifest v2.1 metadata from the PSD, verifying document dimensions, DPI, mesh count, Rule of N setting, dot floors, and trapping parameters.
+2. **Sub-Mesh Dot Geometry:** Uses an exact **Euclidean Distance Transform (EDT)** to measure the maximum inscribed disk of every connected shape on every screen mask. Any isolated ink specks or pinholes smaller than your physical mesh floor ($\frac{\text{floorPx}}{2}$) are flagged as press hazards, while continuous linework and filaments are disambiguated and protected.
+3. **Trapping Containment & Dilation:** Proves that all trap expansion zones are strictly directional (lighter inks dilated under darker inks, never the reverse), bounded within the specified Euclidean radius ($d \le r + 0.5\text{px}$), and contain zero substrate bleed or over-trapping on your darkest keyline ink.
+4. **Canvas Coverage:** Guarantees total opaque canvas coverage with zero unprinted holes or unassigned pixel dropout.
+
+### Exit Codes & Automation
+* **`0 (PASS)`** — Clean bill of health; all screens are guaranteed to physically hold on press.
+* **`1 (FAIL)`** — Press invariant violations found (sub-mesh debris, reverse trapping, or missing layers).
+
+## Command-Line Tool
+
+Reveal also ships as a standalone command-line tool that accepts standard image formats (PNG, TIFF, JPEG) — no Photoshop required. It runs the same separation engine and can output flat posterized images, layered PSDs, individual screen masks, and JSON metadata.
+
+```bash
+# Basic separation with screens output
+reveal photo.png --format screens -o output/
+
+# Export layered PSD and individual screen masks
+reveal photo.png --format psd,screens -o output/
+
+# Pre-flight audit of an existing separation
+reveal verify output/photo.psd
 ```
 
 See the full [CLI documentation](../packages/reveal-cli/README.md) for all flags, recipe files, and output format details.
 
 ## Known Limitations
 
-- Input must be **Lab mode**. Convert RGB or other modes first (Image → Mode → Lab Color).
+- Input must be **Lab mode**. Convert RGB or other modes first in Photoshop (Image → Mode → Lab Color).
 - Input must be **flattened** to a single layer.
-- On Mac, double-clicking `.ccx` may fail — drag it onto Photoshop instead, or use the install script from the release.
+- On Mac, double-clicking `.ccx` may fail — drag it onto Photoshop instead, or use the Creative Cloud Desktop app.
 - After separation, Photoshop may show only 1 layer until you switch documents and back. This is a Photoshop UI refresh
   bug — your layers are all there.
 
 ## Glossary
 
-| Term             | Meaning                                                                                                                                       |
-|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| **Archetype**    | A separation strategy — defines how many colors, which distance metric, and how to weight the color science parameters                        |
-| **DNA**          | The image's structural fingerprint — captures lightness, chroma, contrast, entropy, temperature, and hue distribution                         |
-| **Lab**          | CIELAB color space — perceptually uniform, used for all internal calculations because it matches how humans see color                         |
-| **Median cut**   | The quantization algorithm — recursively splits the color volume to find representative colors                                                |
-| **ΔE (Delta-E)** | Perceptual color distance — how far a separated pixel drifts from its original color. Lower is better.                                        |
-| **Separation**   | The final output — a set of fill layers with masks, one per ink color                                                                         |
-| **Palette**      | The set of spot colors extracted from your image                                                                                              |
-| **Minimum coverage** | A color covering very little of the image — may not be worth keeping in the palette                                                   |
-| **Speckle**      | Isolated pixel clusters that appear as noise in the output                                                                                    |
-| **Trap**         | Slight overlap between adjacent colors that prevents gaps from misregistration                                                                |
-| **Posterization**| Reducing a continuous-tone image to a small number of flat colors — the core of what Reveal does                                             |
-| **Minimum opacity** | Minimum mask density for faint tones — prevents areas from being so faint they're effectively invisible                                   |
+| Term                     | Meaning                                                                                                                                       |
+|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| **Archetype**            | A separation strategy — defines how many colors, which distance metric, and how to weight the color science parameters                        |
+| **DNA**                  | The image's structural fingerprint — captures lightness, chroma, contrast, entropy, temperature, and hue distribution                         |
+| **Dual-Scale**           | Edge-adaptive resolution snapping 1px vector boundaries on linework while locking gradients to press-safe macro-cells                         |
+| **Rule of N**            | The physical mesh floor: the smallest printable dot must span at least N mesh openings ($N \in [4, 10]$, default 7)                          |
+| **Lab**                  | CIELAB color space — perceptually uniform, used for all internal calculations because it matches how humans see color                         |
+| **Median cut**           | Classical color quantization algorithm — recursively splits the color volume along the axis of greatest variance                             |
+| **Wu Quantizer**         | Xiaolin Wu's variance-minimizing partitioner with vibrancy weighting — minimizes sum-of-squares perceptual error in CIELAB space              |
+| **ΔE (Delta-E)**         | Perceptual color distance — how far a separated pixel drifts from its original color. Lower is better.                                        |
+| **Screen**               | The final output layer / positive — a solid color fill layer with mask, representing one screen on press                                      |
+| **Palette**              | The set of spot colors extracted from your image                                                                                              |
+| **Minimum coverage**     | A color covering very little of the image — may not be worth keeping in the palette                                                           |
+| **Despeckle**            | Removes isolated pixel clusters smaller than your physical mesh floor                                                                         |
+| **Trap**                 | Bounded, directional overlap between adjacent colors that prevents white gaps from paper misregistration on press                           |
+| **Pre-Flight Inspector** | The `reveal verify` tool that audits PSDs for sub-mesh debris, directional trapping dilation bounds, and press invariants                     |
