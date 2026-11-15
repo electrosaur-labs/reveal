@@ -3,6 +3,7 @@
  */
 
 const fs = require('fs');
+const Reveal = require('@electrosaur-labs/core');
 
 /**
  * Write JSON sidecar with separation metadata.
@@ -46,7 +47,11 @@ function writeSidecar(outputPath, result, extra = {}) {
             minVolume: config.minVolume,
             speckleRescue: config.speckleRescue,
             shadowClamp: config.shadowClamp,
-            meshTpi: config.meshSize || 355,
+            meshTpi: config.meshSize !== undefined ? config.meshSize : 355,
+            threadDiaUm: config.threadDiaUm !== undefined
+                ? config.threadDiaUm
+                : (config.meshSize === 0 ? 0 : Reveal.MeshPhysics.getDefaultThreadDiaUm(config.meshSize || 355)),
+            ruleOfN: config.ruleOfN || 7.0,
             dpi: config.imageDpi || 300,
             trap: extra.trap || 0,
         },

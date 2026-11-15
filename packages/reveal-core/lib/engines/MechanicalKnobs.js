@@ -112,13 +112,14 @@ class MechanicalKnobs {
         }
 
         // Screen cap — if active colors exceed maxColors, demote lowest-coverage
-        // strong colors to weak so they get merged into nearest neighbor.
+        // non-user-added strong colors to weak so they get merged into nearest neighbor.
         if (maxColors > 0 && strongIndices.length > maxColors) {
             const ranked = strongIndices
+                .filter(idx => !(palette[idx] && palette[idx]._userAdded))
                 .map(idx => ({ idx, count: colorCounts[idx] }))
                 .sort((a, b) => a.count - b.count);
 
-            const demoteCount = strongIndices.length - maxColors;
+            const demoteCount = Math.min(strongIndices.length - maxColors, ranked.length);
             for (let i = 0; i < demoteCount; i++) {
                 const demotedIdx = ranked[i].idx;
                 weakIndices.push(demotedIdx);
@@ -194,13 +195,14 @@ class MechanicalKnobs {
      * @param {number}            [meshTPI=0]  Screen mesh threads-per-inch (e.g. 230, 305, 355)
      * @param {number}            [imageDpi=0] Document DPI; 0 → assume 300
      * @param {number}            [ruleOfN=0]  Rule of N mesh factor; 0 → default 7.0
+     * @param {number}            [threadDiaUm=0] Thread diameter in µm; 0 → unscaled TPI formula
      */
-    static applySpeckleRescue(masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI = 0, imageDpi = 0, ruleOfN = 0) {
+    static applySpeckleRescue(masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI = 0, imageDpi = 0, ruleOfN = 0, threadDiaUm = 0) {
         let linearPx;
         if (sliderPx > 0) {
             linearPx = sliderPx;
         } else if (meshTPI > 0) {
-            linearPx = MeshPhysics.minDotPx(meshTPI, imageDpi, ruleOfN);
+            linearPx = MeshPhysics.minDotPx(meshTPI, imageDpi, ruleOfN, threadDiaUm);
         } else {
             return;
         }
@@ -246,14 +248,15 @@ class MechanicalKnobs {
      * @param {number}            height
      * @param {Object}            [options]
      * @param {number}            [options.meshTPI=0]     Screen mesh TPI; 0 → default (355)
+     * @param {number}            [options.threadDiaUm=0] Thread diameter in µm; 0 → unscaled TPI formula
      * @param {number}            [options.imageDpi=0]    Document DPI; 0 → default (300)
      * @param {number}            [options.originalWidth] Full document width (for proxy scaling)
      * @param {number}            [options.ruleOfN=0]     Rule of N mesh factor; 0 → default 7.0
      * @returns {Promise<{clustersRemoved: number, pixelsRemoved: number, pixelsPruned: number}>} Aggregate across all colors
      */
     static async enforceMeshRuleOfSeven(masks, colorIndices, width, height, options = {}) {
-        const { meshTPI = 0, imageDpi = 0, originalWidth = 0, ruleOfN = 0 } = options;
-        const floorPx = MeshPhysics.minDotPx(meshTPI, imageDpi, ruleOfN);
+        const { meshTPI = 0, threadDiaUm = 0, imageDpi = 0, originalWidth = 0, ruleOfN = 0 } = options;
+        const floorPx = MeshPhysics.minDotPx(meshTPI, imageDpi, ruleOfN, threadDiaUm);
 
         let effectiveFloorPx = floorPx;
         if (originalWidth && originalWidth > width) {

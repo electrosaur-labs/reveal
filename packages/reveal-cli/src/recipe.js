@@ -11,7 +11,7 @@ const fs = require('fs');
 
 const VALID_FIELDS = new Set([
     'archetype', 'colors', 'trap', 'minVolume',
-    'speckleRescue', 'shadowClamp', 'meshTpi', 'dpi', 'outputs', 'outputDir'
+    'speckleRescue', 'shadowClamp', 'meshTpi', 'threadUm', 'ruleOfN', 'dpi', 'outputs', 'outputDir'
 ]);
 
 const VALID_OUTPUTS = new Set(['flat', 'psd', 'ora', 'screens', 'plates']);
@@ -88,6 +88,18 @@ function loadRecipe(filePath) {
         recipe.meshTpi = m;
     }
 
+    if (raw.threadUm !== undefined) {
+        const tu = Number(raw.threadUm);
+        if (!Number.isFinite(tu) || tu <= 0) throw new Error('Recipe "threadUm" must be > 0');
+        recipe.threadUm = tu;
+    }
+
+    if (raw.ruleOfN !== undefined) {
+        const rn = Number(raw.ruleOfN);
+        if (!Number.isFinite(rn) || rn < 1 || rn > 20) throw new Error('Recipe "ruleOfN" must be 1-20');
+        recipe.ruleOfN = rn;
+    }
+
     if (raw.dpi !== undefined) {
         const d = Number(raw.dpi);
         if (!Number.isFinite(d) || d <= 0) throw new Error('Recipe "dpi" must be > 0');
@@ -124,7 +136,9 @@ function saveRecipe(filePath, params) {
     if (params.minVolume !== undefined) recipe.minVolume = params.minVolume;
     if (params.speckleRescue !== undefined) recipe.speckleRescue = params.speckleRescue;
     if (params.shadowClamp !== undefined) recipe.shadowClamp = params.shadowClamp;
-    if (params.meshTpi !== undefined) recipe.meshTpi = params.meshTpi;
+    if (params.meshTpi !== undefined && params.meshTpi > 0) recipe.meshTpi = params.meshTpi;
+    if (params.threadUm !== undefined && params.threadUm > 0) recipe.threadUm = params.threadUm;
+    if (params.ruleOfN !== undefined) recipe.ruleOfN = params.ruleOfN;
     if (params.dpi !== undefined) recipe.dpi = params.dpi;
     if (params.outputs) recipe.outputs = params.outputs;
     if (params.outputDir) recipe.outputDir = params.outputDir;

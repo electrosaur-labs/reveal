@@ -338,4 +338,32 @@ describe('recipe', () => {
         const sidecar = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
         expect(sidecar.archetype.id).toBe('chameleon');
     });
+
+    it('forwards --mesh-tpi, --thread-um, and --rule-of-n through CLI, sidecar, and recipe round-trip', () => {
+        const outDir = path.join(tmpDir, 'mesh-cli-flags');
+        const recipePath = path.join(tmpDir, 'mesh-saved.json');
+        runCli([
+            testImage, '-o', outDir, '-q',
+            '--single', '-a', 'chameleon',
+            '--mesh-tpi', '305', '--thread-um', '40', '--rule-of-n', '5',
+            '--save-recipe', recipePath,
+        ]);
+
+        const sidecar = JSON.parse(fs.readFileSync(path.join(outDir, 'test_reveal.json'), 'utf8'));
+        expect(sidecar.parameters.meshTpi).toBe(305);
+        expect(sidecar.parameters.threadDiaUm).toBe(40);
+        expect(sidecar.parameters.ruleOfN).toBe(5);
+
+        const savedRecipe = JSON.parse(fs.readFileSync(recipePath, 'utf8'));
+        expect(savedRecipe.meshTpi).toBe(305);
+        expect(savedRecipe.threadUm).toBe(40);
+        expect(savedRecipe.ruleOfN).toBe(5);
+
+        const outDir2 = path.join(tmpDir, 'mesh-recipe-replay');
+        runCli([testImage, '-o', outDir2, '-q', '--recipe', recipePath]);
+        const sidecar2 = JSON.parse(fs.readFileSync(path.join(outDir2, 'test_reveal.json'), 'utf8'));
+        expect(sidecar2.parameters.meshTpi).toBe(305);
+        expect(sidecar2.parameters.threadDiaUm).toBe(40);
+        expect(sidecar2.parameters.ruleOfN).toBe(5);
+    });
 });

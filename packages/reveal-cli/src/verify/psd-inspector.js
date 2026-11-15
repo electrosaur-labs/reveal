@@ -101,6 +101,7 @@ function parseRevealManifest(xmpString) {
     const manifestVersion = getTag('manifestVersion') || '1.0';
     const dpi = getNum('dpi', 300);
     const meshSize = getNum('meshSize', 0);
+    const threadDiaUm = getNum('threadDiaUm', 0);
     const ruleOfN = getNum('ruleOfN', 7.0);
     const minDotPx = getNum('minDotPx', 0);
     const trapSize = getNum('trapSize', 0);
@@ -138,6 +139,7 @@ function parseRevealManifest(xmpString) {
         manifestVersion,
         dpi,
         meshSize,
+        threadDiaUm,
         ruleOfN,
         minDotPx,
         trapSize,

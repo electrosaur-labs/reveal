@@ -89,6 +89,8 @@ describe('exportProductionConfig() includes every field ProductionWorker reads',
         'preprocessingIntensity',
         'ditherType',
         'meshSize',
+        'threadDiaUm',
+        'ruleOfN',
         'minVolume',
         'speckleRescue',
         'shadowClamp',
@@ -172,9 +174,11 @@ describe('config round-trip preserves production-relevant fields', () => {
         const session = setupSession();
         const prodConfig = session.exportProductionConfig();
 
-        // trapSize and meshSize come from SessionState defaults, not ParameterGenerator
+        // trapSize, meshSize, threadDiaUm, and ruleOfN come from SessionState defaults
         expect(prodConfig.trapSize).toBe(2);
         expect(prodConfig.meshSize).toBe(355);
+        expect(prodConfig.threadDiaUm).toBe(31);
+        expect(prodConfig.ruleOfN).toBe(7.0);
     });
 });
 
@@ -257,9 +261,9 @@ describe('every ParameterGenerator production field is categorized', () => {
             }
         }
 
-        // PRODUCTION fields (trapSize, meshSize, ruleOfN) are set by SessionState, not ParameterGenerator.
+        // PRODUCTION fields (trapSize, meshSize, threadDiaUm, ruleOfN) are set by SessionState, not ParameterGenerator.
         // ditherType IS set by ParameterGenerator.
-        const expectedMissing = new Set(['trapSize', 'meshSize', 'ruleOfN']);
+        const expectedMissing = new Set(['trapSize', 'meshSize', 'threadDiaUm', 'ruleOfN']);
         const reallyMissing = missing.filter(k => !expectedMissing.has(k));
 
         if (reallyMissing.length > 0) {

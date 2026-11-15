@@ -183,12 +183,13 @@ class ProductionWorker {
             // defaults to 300 internally if omitted, which would silently
             // mismatch and inflate Macro-Cell dithering.
             const meshCount = prodConfig.meshSize || null;
+            const threadDiaUm = prodConfig.threadDiaUm || 0;
             const dpi = prodConfig.resolution;
             const ruleOfN = prodConfig.ruleOfN || 7.0;
-            logger.log(`[ProductionWorker] Separating: ${metric}, dither=${ditherType}, mesh=${meshCount || 'none'} @ ${dpi} dpi (ruleOfN=${ruleOfN})`);
+            logger.log(`[ProductionWorker] Separating: ${metric}, dither=${ditherType}, mesh=${meshCount ? `${meshCount}-${threadDiaUm}` : 'none'} @ ${dpi} dpi (ruleOfN=${ruleOfN})`);
             const colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
                 labPixels, separationPalette, null, actualWidth, actualHeight,
-                { ditherType, distanceMetric: metric, meshCount, dpi, ruleOfN }
+                { ditherType, distanceMetric: metric, meshCount, threadDiaUm, dpi, ruleOfN }
             );
 
             logger.log(`[ProductionWorker] Mapped ${pixelCount} pixels in ${Date.now() - tSep}ms (metric=${metric})`);
@@ -242,8 +243,10 @@ class ProductionWorker {
                 shadowClamp: prodConfig.shadowClamp,
                 trapSize: trapPx,
                 meshSize: prodConfig.meshSize,
+                threadDiaUm,
                 ruleOfN: prodConfig.ruleOfN || 7.0,
                 imageDpi: dpi,
+                targetColors: prodConfig.targetColors || 0,
                 activeArchetypeId: prodConfig.activeArchetypeId,
             };
             const layers = await self._buildLayers(
@@ -348,10 +351,19 @@ class ProductionWorker {
      * @returns {Promise<{buffer: Uint8ClampedArray, width: number, height: number}>}
      */
     async renderLoupeTile(rect, downsampleFactor) {
-        const labPalette = this._sessionState.getPalette();
-        if (!labPalette || labPalette.length === 0) {
+        const rawPalette = this._sessionState.getPalette();
+        if (!rawPalette || rawPalette.length === 0) {
             throw new Error('No palette available for loupe');
         }
+        const rawBaseline = this._sessionState.proxyEngine?._baselineState?.palette || null;
+        const addedSet = this._sessionState.addedColors || new Set();
+        const labPalette = rawPalette.map((c, i) => {
+            const entry = { ...c };
+            const base = rawBaseline && rawBaseline[i];
+            if (addedSet.has(i) || (base && base._userAdded)) entry._userAdded = true;
+            if (base && base._minVolumeExempt) entry._minVolumeExempt = true;
+            return entry;
+        });
 
         const tile = await PhotoshopBridge.getTileLab(rect);
 
@@ -401,9 +413,12 @@ class ProductionWorker {
 
         // Apply knobs using shared MechanicalKnobs (same as _buildLayers and ProxyEngine)
         const knobs = this._sessionState.getMechanicalKnobs();
+        const targetColors = this._sessionState.getState().targetColors || 0;
+        const userAddedCount = labPalette.filter(c => c && c._userAdded).length;
+        const maxColors = targetColors > 0 ? targetColors + 2 + userAddedCount : 0;
 
-        if (knobs.minVolume > 0) {
-            MechanicalKnobs.applyMinVolume(colorIndices, labPalette, pixelCount, knobs.minVolume);
+        if (knobs.minVolume > 0 || maxColors > 0) {
+            MechanicalKnobs.applyMinVolume(colorIndices, labPalette, pixelCount, knobs.minVolume || 0, { maxColors });
         }
 
         // Build masks from (possibly remapped) color indices
@@ -411,7 +426,21 @@ class ProductionWorker {
 
         // Loupe tiles are native resolution — no originalWidth scaling needed
         if (knobs.speckleRescue > 0 || knobs.meshSize > 0) {
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, knobs.speckleRescue, 0, knobs.meshSize || 0, knobs.imageDpi || 0, knobs.ruleOfN || 7.0);
+            MechanicalKnobs.applySpeckleRescue(
+                masks, colorIndices, width, height,
+                knobs.speckleRescue, 0,
+                knobs.meshSize || 0, knobs.imageDpi || 0,
+                knobs.ruleOfN || 7.0, knobs.threadDiaUm || 0
+            );
+        }
+
+        if (knobs.meshSize > 0) {
+            await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+                meshTPI: knobs.meshSize,
+                threadDiaUm: knobs.threadDiaUm || 0,
+                imageDpi: knobs.imageDpi || 0,
+                ruleOfN: knobs.ruleOfN || 7.0
+            });
         }
 
         if (knobs.shadowClamp > 0) {
@@ -468,12 +497,18 @@ class ProductionWorker {
      * @returns {Array<{labColor, hex, mask, width, height, name}>} Layer objects
      */
     async _buildLayers(colorIndices, labPalette, hexColors, width, height, knobs) {
-        const { minVolume, speckleRescue, shadowClamp, trapSize, meshSize, imageDpi, activeArchetypeId, ruleOfN = 7.0 } = knobs;
+        const {
+            minVolume, speckleRescue, shadowClamp, trapSize,
+            meshSize, threadDiaUm = 0, imageDpi, activeArchetypeId,
+            ruleOfN = 7.0, targetColors = 0
+        } = knobs;
         const layers = [];
         const pixelCount = width * height;
-        // ── Apply minVolume (shared with ProxyEngine) ──
-        if (minVolume > 0) {
-            const result = MechanicalKnobs.applyMinVolume(colorIndices, labPalette, pixelCount, minVolume);
+        // ── Apply minVolume + targetColors ceiling (shared with ProxyEngine) ──
+        const userAddedCount = labPalette.filter(c => c && c._userAdded).length;
+        const maxColors = targetColors > 0 ? targetColors + 2 + userAddedCount : 0;
+        if (minVolume > 0 || maxColors > 0) {
+            const result = MechanicalKnobs.applyMinVolume(colorIndices, labPalette, pixelCount, minVolume || 0, { maxColors });
             if (result.remappedCount > 0) {
                 logger.log(`[ProductionWorker] minVolume: remapped ${result.remappedCount} weak colors`);
             }
@@ -486,7 +521,7 @@ class ProductionWorker {
         // No originalWidth scaling — production runs at full document resolution.
         // sliderPx=0 with meshSize set triggers auto-compute from press physics.
         if (speckleRescue > 0 || meshSize > 0) {
-            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, speckleRescue, 0, meshSize || 0, imageDpi || 0, ruleOfN);
+            MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, speckleRescue, 0, meshSize || 0, imageDpi || 0, ruleOfN, threadDiaUm);
         }
 
         // ── Rule of 7 (Rule of N): physical floor on committed output when mesh awareness is on ──
@@ -495,7 +530,7 @@ class ProductionWorker {
         let ruleOfSevenResult = { clustersRemoved: 0, pixelsRemoved: 0, pixelsPruned: 0 };
         if (meshSize > 0) {
             ruleOfSevenResult = await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
-                meshTPI: meshSize, imageDpi: imageDpi || 0, ruleOfN
+                meshTPI: meshSize, threadDiaUm, imageDpi: imageDpi || 0, ruleOfN
             });
             const prunedPct = pixelCount > 0 ? (ruleOfSevenResult.pixelsPruned / pixelCount) * 100 : 0;
             logger.log(`[ProductionWorker] Rule-of-7: clusters=${ruleOfSevenResult.clustersRemoved} removed=${ruleOfSevenResult.pixelsRemoved}px pruned=${ruleOfSevenResult.pixelsPruned}px (${prunedPct.toFixed(3)}% of image, archetype=${activeArchetypeId})`);

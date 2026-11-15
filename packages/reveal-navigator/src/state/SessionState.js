@@ -44,6 +44,7 @@ class SessionState extends EventEmitter {
             isArchetypeDirty: false,
             trapSize: 2,
             meshSize: 355,
+            threadDiaUm: 31,
             ruleOfN: 7.0,
             blackSnap: false,
             blackSnapLMax: Reveal.BlackSnap.DEFAULT_L_MAX,
@@ -155,6 +156,8 @@ class SessionState extends EventEmitter {
         this.state.highlightColorIndex = -1;
         this.state.trapSize = 2;
         this.state.meshSize = 355;
+        this.state.threadDiaUm = 31;
+        this.state.ruleOfN = 7.0;
         this.state.blackSnap = false;
         this.state.blackSnapLMax = Reveal.BlackSnap.DEFAULT_L_MAX;
     }
@@ -328,7 +331,7 @@ class SessionState extends EventEmitter {
     updateParameter(key, value) {
         if (this.state[key] === value) return;
 
-        if ((STRUCTURAL_PARAMS.has(key) || key === 'meshSize') && this._paletteSurgery.hasEdits()) {
+        if (STRUCTURAL_PARAMS.has(key) && this._paletteSurgery.hasEdits()) {
             if (!this._structuralChangeConfirmed) {
                 this._pendingStructuralChange = { key, value };
                 this.emit('confirmStructuralChange', { key, value });
@@ -346,7 +349,7 @@ class SessionState extends EventEmitter {
         }
 
         this.emit('parameterChanged', { key, value });
-        if (PRODUCTION_KNOBS.has(key) && !STRUCTURAL_PARAMS.has(key)) return;
+        if (key === 'trapSize' || key === 'ditherType') return;
         this._scheduleProxyUpdate();
     }
 
@@ -417,12 +420,27 @@ class SessionState extends EventEmitter {
         try {
             this._snapshotArchetypeState(this.state.activeArchetypeId);
 
+            // Preserve physical press screen mesh settings across archetype swaps while keeping
+            // _archetypeDefaults anchored to factory defaults (355, 31, 7.0) and leaving trapSize
+            // session-reset behavior untouched.
+            const prevMesh = this.state.meshSize;
+            const prevThread = this.state.threadDiaUm;
+            const prevRuleOfN = this.state.ruleOfN;
+
             if (archetypeId === 'dynamic_interpolator') this.currentConfig = Reveal.generateConfigurationMk2(this.imageDNA);
             else if (archetypeId === 'distilled') this.currentConfig = Reveal.generateConfigurationDistilled(this.imageDNA);
             else if (archetypeId === 'salamander') this.currentConfig = Reveal.generateConfigurationSalamander(this.imageDNA);
             else this.currentConfig = Reveal.generateConfiguration(this.imageDNA, { manualArchetypeId: archetypeId });
 
             this._applyConfigToState(this.currentConfig);
+            this.state.meshSize = prevMesh;
+            this.state.threadDiaUm = prevThread;
+            this.state.ruleOfN = prevRuleOfN;
+            this.currentConfig.meshSize = prevMesh;
+            this.currentConfig.threadDiaUm = prevThread;
+            this.currentConfig.ruleOfN = prevRuleOfN;
+            this.state.isKnobsCustomized = !!this._archetypeDefaults && [...ALL_KNOBS].some(k => this.state[k] !== this._archetypeDefaults[k]);
+
             this.state.activeArchetypeId = archetypeId;
             this.state.isArchetypeDirty = false;
 
@@ -452,6 +470,14 @@ class SessionState extends EventEmitter {
             }
 
             this._restoreArchetypeState(archetypeId, { skipSurgeryRestore });
+            this.state.meshSize = prevMesh;
+            this.state.threadDiaUm = prevThread;
+            this.state.ruleOfN = prevRuleOfN;
+            this.currentConfig.meshSize = prevMesh;
+            this.currentConfig.threadDiaUm = prevThread;
+            this.currentConfig.ruleOfN = prevRuleOfN;
+            this.state.isKnobsCustomized = !!this._archetypeDefaults && [...ALL_KNOBS].some(k => this.state[k] !== this._archetypeDefaults[k]);
+
             this.emit('configChanged', this.currentConfig);
             this.emit('knobsCustomizedChanged', { customized: this.state.isKnobsCustomized });
             this.emit('paletteChanged', { paletteOverrides: this.paletteOverrides });
@@ -672,7 +698,16 @@ class SessionState extends EventEmitter {
         if (sep?.colorIndices && palette) {
             const consolidated = consolidatePaletteCoverage(sep.colorIndices, palette.length, this.mergeHistory);
             pixelCounts = consolidated.pixelCounts;
-            survivingIndices = consolidated.survivingIndices;
+            const baseLen = basePalette ? basePalette.length : 0;
+            // Exclude deleted or 0-pixel pruned base-palette slots so manifest.palette
+            // matches PaletteSurgeon's visible swatches and ProductionWorker's committed
+            // screen count (while keeping checkedSuggestions at i >= baseLen).
+            survivingIndices = consolidated.survivingIndices.filter(i => {
+                if (i >= baseLen) return true;
+                if (this.deletedColors.has(i)) return false;
+                if (pixelCounts && pixelCounts[i] === 0) return false;
+                return true;
+            });
         }
         const totalPixels = sep ? sep.width * sep.height : 1;
         const paletteSection = survivingIndices.map(i => {
@@ -724,13 +759,29 @@ class SessionState extends EventEmitter {
     }
 
     exportProductionConfig() {
-        const palette = this._paletteSurgery.buildOverriddenPalette();
+        const rawPalette = this._paletteSurgery.buildOverriddenPalette();
         this._rebuildConfigFromState();
         const config = { ...this.currentConfig };
         const mergeRemap = {};
         for (const [target, sources] of this.mergeHistory) for (const src of sources) mergeRemap[src] = target;
 
-        const baselinePalette = this.proxyEngine?._baselineState ? this.proxyEngine._baselineState.palette.map(c => ({ ...c })) : palette;
+        const rawBaseline = this.proxyEngine?._baselineState ? this.proxyEngine._baselineState.palette : null;
+        const palette = (rawPalette || []).map((c, i) => {
+            const entry = { ...c };
+            const base = rawBaseline && rawBaseline[i];
+            if (this.addedColors.has(i) || (base && base._userAdded)) entry._userAdded = true;
+            if (base && base._minVolumeExempt) entry._minVolumeExempt = true;
+            return entry;
+        });
+
+        const baselinePalette = rawBaseline
+            ? rawBaseline.map((c, i) => {
+                const entry = { ...c };
+                if (this.addedColors.has(i) || c._userAdded) entry._userAdded = true;
+                if (c._minVolumeExempt) entry._minVolumeExempt = true;
+                return entry;
+            })
+            : palette;
 
         // Added colors (the "+" button) have no baseline counterpart, so
         // unlike overrides, including them can't skew the NN search — they
@@ -739,11 +790,20 @@ class SessionState extends EventEmitter {
         // expects to see. Append in the same position `palette` below uses
         // (right after baseline, before checked suggestions) so colorIndices
         // from mapPixelsToPaletteAsync line up with mergeRemap / labPalette.
-        const addedLabColors = [...this.addedColors].sort((a, b) => a - b).map(i => palette[i]);
+        // Note: addPaletteColor() already appends to _baselineState.palette, so
+        // only append addedColors indices beyond baselinePalette.length.
+        const addedLabColors = [...this.addedColors]
+            .sort((a, b) => a - b)
+            .filter(i => i >= baselinePalette.length && palette[i])
+            .map(i => ({ ...palette[i], _userAdded: true }));
         const withAdded = addedLabColors.length > 0 ? [...baselinePalette, ...addedLabColors] : baselinePalette;
 
-        const separationPalette = this._suggestions.checkedSuggestions.length > 0
-            ? [...withAdded, ...this._suggestions.checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))]
+        const suggestionEntries = this._suggestions.checkedSuggestions.map(s => ({
+            L: s.L, a: s.a, b: s.b, _userAdded: true
+        }));
+
+        const separationPalette = suggestionEntries.length > 0
+            ? [...withAdded, ...suggestionEntries]
             : withAdded;
 
         let consolidationMerges = null;
@@ -756,10 +816,56 @@ class SessionState extends EventEmitter {
             }
         }
 
+        // Remap any non-surgery baseline slot that was pruned to 0 pixels in the approved
+        // proxy separation (e.g. by Min Coverage or Screen Mesh Rule-of-N floor) into its
+        // nearest active palette neighbor so a hidden 0% swatch NEVER resurrects on Separate.
+        const sep = this.proxyEngine?.separationState;
+        if (sep?.colorIndices && palette.length > 0) {
+            const proxyCounts = new Uint32Array(palette.length);
+            for (let p = 0; p < sep.colorIndices.length; p++) {
+                const idx = sep.colorIndices[p];
+                if (idx < palette.length) proxyCounts[idx]++;
+            }
+            const activeTargets = [];
+            for (let t = 0; t < palette.length; t++) {
+                if (proxyCounts[t] > 0 && mergeRemap[t] === undefined && !this.deletedColors.has(t)) {
+                    activeTargets.push(t);
+                }
+            }
+            if (activeTargets.length > 0) {
+                for (let i = 0; i < palette.length; i++) {
+                    if (
+                        proxyCounts[i] === 0 &&
+                        mergeRemap[i] === undefined &&
+                        !this.deletedColors.has(i) &&
+                        !this.addedColors.has(i) &&
+                        !this.rawOverrides.has(i)
+                    ) {
+                        const c = palette[i];
+                        let bestTarget = activeTargets[0];
+                        let bestDistSq = Infinity;
+                        for (let k = 0; k < activeTargets.length; k++) {
+                            const t = activeTargets[k];
+                            const tc = palette[t];
+                            const dL = (c.L || 0) - (tc.L || 0);
+                            const da = (c.a || 0) - (tc.a || 0);
+                            const db = (c.b || 0) - (tc.b || 0);
+                            const distSq = dL * dL + da * da + db * db;
+                            if (distSq < bestDistSq) {
+                                bestDistSq = distSq;
+                                bestTarget = t;
+                            }
+                        }
+                        mergeRemap[i] = bestTarget;
+                    }
+                }
+            }
+        }
+
         return {
             width: this.imageWidth, height: this.imageHeight, resolution: this.imageResolution, dna: this.imageDNA,
             ...config, activeArchetypeId: this.state.activeArchetypeId,
-            palette: this._suggestions.checkedSuggestions.length > 0 ? [...palette, ...this._suggestions.checkedSuggestions.map(s => ({ L: s.L, a: s.a, b: s.b }))] : palette,
+            palette: suggestionEntries.length > 0 ? [...palette, ...suggestionEntries] : palette,
             separationPalette, paletteOverrides: Object.fromEntries(this.paletteOverrides),
             mergeRemap: Object.keys(mergeRemap).length > 0 ? mergeRemap : null, consolidationMerges, generatedConfig: this.currentConfig
         };
@@ -838,6 +944,12 @@ class SessionState extends EventEmitter {
         if (!this.proxyEngine) throw new Error('No document loaded');
         if (!config || typeof config !== 'object') throw new Error('Invalid config');
 
+        // Reset press mesh knobs to clean factory defaults before swapping so saved configs
+        // that omit any press knob do not inherit edits from the prior session.
+        this.state.meshSize = PRODUCTION_KNOB_DEFAULTS.meshSize;
+        this.state.threadDiaUm = PRODUCTION_KNOB_DEFAULTS.threadDiaUm;
+        this.state.ruleOfN = PRODUCTION_KNOB_DEFAULTS.ruleOfN;
+
         if (config.archetypeId) {
             // swapArchetype() normally auto-restores whatever palette surgery
             // is cached for the incoming archetype (interactive back-and-
@@ -865,6 +977,14 @@ class SessionState extends EventEmitter {
             for (const [key, value] of Object.entries(config.knobs)) {
                 this.updateParameter(key, value);
             }
+            if (config.knobs.meshSize !== undefined && config.knobs.threadDiaUm === undefined) {
+                const derivedThread = config.knobs.meshSize > 0
+                    ? Reveal.MeshPhysics.getDefaultThreadDiaUm(config.knobs.meshSize)
+                    : 0;
+                this.updateParameter('threadDiaUm', derivedThread);
+            }
+            this._rebuildConfigFromState();
+            this.emit('configChanged', this.currentConfig);
         }
         // Force the knob changes through now rather than relying on the
         // debounce timer firing on its own after this method returns --

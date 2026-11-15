@@ -43,7 +43,9 @@ program
     .option('--min-volume <percent>', 'Minimum coverage threshold (0-5%)', parseFloat)
     .option('--speckle-rescue <pixels>', 'Despeckle threshold (0-10px)', parseFloat)
     .option('--shadow-clamp <percent>', 'Ink body clamp (0-20%)', parseFloat)
-    .option('--mesh-tpi <n>', 'Screen mesh threads-per-inch, e.g. 230, 305, 355 (default: 355)', parseFloat)
+    .option('--mesh-tpi <n>', 'Screen mesh threads-per-inch, e.g. 230, 305, 355, or 0 to disable (default: 355)', parseFloat)
+    .option('--thread-um <n>', 'Screen mesh thread diameter in microns (default: SAATI preset for --mesh-tpi)', parseFloat)
+    .option('--rule-of-n <n>', 'Minimum printable dot factor N (default: 7.0)', parseFloat)
     .option('--dpi <n>', 'Override document DPI (default: read from the file; falls back to 300 with a warning if the file has none)', parseFloat)
     .option('--black-snap', 'Snap near-black edge pixels to pure black before quantization (line art/engraving — opt-in, off by default)')
     .option('--black-snap-dpi <n>', 'Document DPI for black-snap edge radius (default: 300)', parseFloat)
@@ -128,6 +130,8 @@ async function run(inputFile, options) {
                 speckleRescue: options.speckleRescue,
                 shadowClamp: options.shadowClamp,
                 meshTpi: options.meshTpi,
+                threadUm: options.threadUm,
+                ruleOfN: options.ruleOfN,
                 dpi: options.dpi,
             });
             // Merge recipe outputs with CLI formats
@@ -215,6 +219,8 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
         speckleRescue: options.speckleRescue,
         shadowClamp: options.shadowClamp,
         meshTpi: options.meshTpi,
+        threadUm: options.threadUm,
+        ruleOfN: options.ruleOfN,
         dpi: options.dpi,
         trap: options.trap,
         onProgress,
@@ -280,6 +286,8 @@ async function runSingle(lab16bit, width, height, basename, inputDir, inputForma
             speckleRescue: result.config.speckleRescue,
             shadowClamp: result.config.shadowClamp,
             meshTpi: result.config.meshSize,
+            threadUm: result.config.threadDiaUm,
+            ruleOfN: result.config.ruleOfN,
             dpi: result.config.imageDpi,
         });
         log(`Saved recipe: ${options.saveRecipe}`);
@@ -317,6 +325,8 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
             speckleRescue: options.speckleRescue,
             shadowClamp: options.shadowClamp,
             meshTpi: options.meshTpi,
+            threadUm: options.threadUm,
+            ruleOfN: options.ruleOfN,
             dpi: options.dpi,
             trap: options.trap,
             dna, // Shared DNA
@@ -374,6 +384,8 @@ async function runCompare(lab16bit, width, height, basename, inputDir, inputForm
                     speckleRescue: result.config.speckleRescue,
                     shadowClamp: result.config.shadowClamp,
                     meshTpi: result.config.meshSize,
+                    threadUm: result.config.threadDiaUm,
+                    ruleOfN: result.config.ruleOfN,
                     dpi: result.config.imageDpi,
                 });
             }

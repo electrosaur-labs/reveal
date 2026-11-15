@@ -51,6 +51,8 @@ class PaletteSurgeon {
         this._suggestionViewMode = null;
 
         this._swatchElements = new Map();
+        this._activeScreenCount = 0;
+        this._nonDeletedScreenCount = 0;
 
         // Build DOM
         this._header = document.createElement('div');
@@ -96,9 +98,18 @@ class PaletteSurgeon {
             this._editingIndex = -1;
             this._selectedSuggestionIdx = -1;
             this._suggestionViewMode = null;
+            this._activeScreenCount = 0;
+            this._nonDeletedScreenCount = 0;
             this._session.clearHighlight();
             this._headerText.textContent = 'Click a color to isolate';
         });
+    }
+
+    _getIdleHeaderText() {
+        if (this._nonDeletedScreenCount > 0 && this._activeScreenCount < this._nonDeletedScreenCount) {
+            return `${this._activeScreenCount} active screens \u2014 click to isolate`;
+        }
+        return 'Click a color to isolate';
     }
 
     /** Public: deselect (called by Escape key handler) */
@@ -106,7 +117,7 @@ class PaletteSurgeon {
         this._state = 'IDLE';
         this._selectedIndex = -1;
         this._session.clearHighlight();
-        this._headerText.textContent = 'Click a color to isolate';
+        this._headerText.textContent = this._getIdleHeaderText();
         this._updateSelectionCSS();
     }
 
@@ -139,13 +150,13 @@ class PaletteSurgeon {
             const isDeleted = this._session.deletedColors.has(this._selectedIndex);
             const isAdded = this._session.addedColors.has(this._selectedIndex);
             const isMergeSource = this._isMergeSource(this._selectedIndex);
-            
-            // Baseline slots (0 to baselineColorCount-1) always exist, 
-            // but added slots can be removed.
-            const isBaseline = this._selectedIndex < (this._session.baselineColorCount || 0);
+            const isOverridden = this._session.paletteOverrides.has(this._selectedIndex);
+            const isRawOverridden = this._session.rawOverrides
+                ? this._session.rawOverrides.has(this._selectedIndex)
+                : isOverridden;
 
             if (this._selectedIndex >= rgbPalette.length ||
-                (counts[this._selectedIndex] === 0 && !isDeleted && !isAdded && !isMergeSource && !isBaseline)) {
+                (counts[this._selectedIndex] === 0 && !isDeleted && !isAdded && !isMergeSource && !isRawOverridden)) {
                 this._state = 'IDLE';
                 this._selectedIndex = -1;
                 this._session.clearHighlight();
@@ -155,6 +166,8 @@ class PaletteSurgeon {
 
         this._grid.innerHTML = '';
         this._swatchElements.clear();
+        this._activeScreenCount = 0;
+        this._nonDeletedScreenCount = 0;
 
         // Lab palette for D50 swatch rendering and gamut badges
         const identityPalette = this._session._paletteSurgery.getIdentityPalette();
@@ -164,22 +177,26 @@ class PaletteSurgeon {
             const isDeleted = this._session.deletedColors.has(i);
             const isAdded = this._session.addedColors.has(i);
             const isMergeSource = this._isMergeSource(i);
+            const isOverridden = this._session.paletteOverrides.has(i);
+            const isRawOverridden = this._session.rawOverrides
+                ? this._session.rawOverrides.has(i)
+                : isOverridden;
 
-            // NOTE (2026-11-11): previously hid any slot with 0 pixels in the
-            // current (proxy-resolution) separation unless it carried surgery
-            // state. That was wrong -- a slot can be 0% at proxy resolution and
-            // still get real pixels at full production resolution (the palette
-            // itself is fixed at proxy time; only pixel ASSIGNMENT is redone at
-            // full res, per "Preview = Production"). Hiding it meant a color
-            // could appear in the committed output that was never visible or
-            // editable in this grid, and swatches would visually reflow as
-            // counts flickered across zero between rebuilds (read as "the
-            // palette keeps reordering itself"). Always show every slot now;
-            // a real 0.0% just means "rare at this preview resolution," not
-            // "doesn't exist."
+            // Hide baseline slots pruned to 0 pixels by Min Coverage or Screen Mesh floor
+            // unless they carry explicit user surgery (deleted, added, merged, or overridden).
+            // SessionState.exportProductionConfig() remaps pruned 0-pixel slots into their
+            // nearest active palette neighbor so a hidden 0% slot can NEVER resurrect on
+            // full-res Separate ("Preview = Production").
+            if (counts[i] === 0 && !isDeleted && !isAdded && !isMergeSource && !isRawOverridden) {
+                continue;
+            }
+
+            if (!isDeleted && !isMergeSource) {
+                this._nonDeletedScreenCount++;
+                if (counts[i] > 0) this._activeScreenCount++;
+            }
 
             const pct = (isDeleted || isMergeSource) ? '\u2014' : ((counts[i] / pixelCount) * 100).toFixed(1) + '%';
-            const isOverridden = this._session.paletteOverrides.has(i);
 
             // ── Compute swatch color using D50 (matches Photoshop rendering) ──
             // Use Identity Palette so deleted/merged swatches keep their own color
@@ -403,6 +420,10 @@ class PaletteSurgeon {
         } else {
             this._renderSuggestedColors();
         }
+
+        if (this._state === 'IDLE' && this._selectedSuggestionIdx < 0) {
+            this._headerText.textContent = this._getIdleHeaderText();
+        }
     }
 
     // ─── Click ───────────────────────────────────────────────
@@ -479,7 +500,7 @@ class PaletteSurgeon {
             this._state = 'IDLE';
             this._selectedIndex = -1;
             this._session.clearHighlight();
-            this._headerText.textContent = 'Click a color to isolate';
+            this._headerText.textContent = this._getIdleHeaderText();
         } else {
         // Different swatch or IDLE → select this one
         this._selectedIndex = i;

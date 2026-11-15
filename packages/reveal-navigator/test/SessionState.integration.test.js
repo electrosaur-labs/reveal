@@ -361,11 +361,18 @@ describe('SessionState + real ProxyEngine integration', () => {
             }
         );
 
-        // Compare against baseline palette (pre-knob application).
-        // updateProxy() applies maxColors cap even with minVolume=0,
-        // which can reduce the palette; baseline is the clean posterize output.
+        // Compare against baseline palette (pre-knob application, compacted to
+        // <= targetColors + 2 with zero dead-on-arrival 0-pixel slots).
+        const expectedCompacted = proxy._compactPosterizeToMaxColors(
+            directResult.paletteLab.map(c => ({ ...c })),
+            new Uint8Array(directResult.assignments),
+            sep.width,
+            sep.height,
+            session.currentConfig.targetColors
+        );
         const baselinePaletteCount = proxy._baselineState.palette.length;
-        expect(baselinePaletteCount).toBe(directResult.paletteLab.length);
+        expect(baselinePaletteCount).toBe(expectedCompacted.length);
+        expect(baselinePaletteCount).toBeLessThanOrEqual(session.currentConfig.targetColors + 2);
     }, 30000);
 });
 
@@ -558,7 +565,7 @@ describe('Palette Surgery + real ProxyEngine', () => {
         const manifest = session.buildManifest({ layerCount: 1, elapsedMs: 10 });
         const combinedEntry = manifest.palette.find(c => c.coverage === expectedPct);
 
-        expect(manifest.palette.length).toBe(8); // one fewer than the 9-color baseline -- merge source doesn't get its own entry
+        expect(manifest.palette.length).toBe(paletteLength - 1); // one fewer than the compacted baseline -- merge source doesn't get its own entry
         expect(pixelCounts[7]).toBeGreaterThan(0);
         expect(combinedEntry).toBeDefined();
     }, 30000);

@@ -493,6 +493,33 @@
             outline: none;
         }
 
+        #custom-mesh-row {
+            display: none;
+            flex-direction: row;
+            align-items: center;
+            margin: 4px 0 8px 0;
+        }
+
+        .custom-mesh-lbl {
+            font-size: 11px;
+            color: #aaa;
+            margin-right: 4px;
+            flex-shrink: 0;
+        }
+
+        #custom-mesh-row input[type="number"] {
+            height: 26px;
+            min-height: 26px;
+            border: none;
+            background: #383838;
+            color: #ccc;
+            border-radius: 3px;
+            padding: 0 5px;
+            font-size: 11px;
+            width: 58px;
+            flex-shrink: 0;
+        }
+
         #advanced-panel .adv-checkbox {
             accent-color: #4da6ff;
         }
@@ -1178,6 +1205,17 @@
             /* Keep original color visible */
         }
 
+        .surgeon-swatch.surgeon-pruned {
+            opacity: 0.4;
+            border-style: dashed;
+            border-color: #777;
+        }
+
+        .surgeon-swatch.surgeon-pruned .surgeon-color {
+            border-style: dashed;
+            border-color: #777;
+        }
+
         .surgeon-delete-badge {
             position: absolute;
             top: 50%;
@@ -1617,10 +1655,14 @@
         }
 
         .credits-mascot-img {
-            width: 78px;
+            width: 100%;
+            max-width: 100%;
             height: auto;
-            margin: 0 auto 12px auto;
+            margin: 0 auto 16px auto;
             display: block;
+            border-radius: 4px;
+            cursor: default;
+            -webkit-user-drag: none;
             filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.7));
         }
 
@@ -1630,6 +1672,8 @@
             text-align: center;
             margin: 20px auto 16px auto;
             user-select: none;
+            cursor: default;
+            -webkit-user-drag: none;
         }
 
         .credits-print-frame {
@@ -1642,6 +1686,8 @@
             border: 2px solid #383838;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85);
             background: #111;
+            cursor: default;
+            -webkit-user-drag: none;
         }
 
         .credits-print-caption {
@@ -1772,11 +1818,12 @@
         .credits-emblem-interactive {
             display: block;
             width: 100%;
-            max-width: 460px;
+            max-width: 100%;
             margin: 0 auto;
             text-align: center;
             user-select: none;
-            padding: 8px 12px;
+            padding: 0 0 8px 0;
+            cursor: default;
         }
 
         /* ─── Political Broadsheet / Minkler Manifesto View ─── */
@@ -2170,21 +2217,41 @@
                     <div id="screen-printing-panel-content">
 
                         <div class="knob-row" style="justify-content: flex-start !important;">
-                            <span class="knob-label">Mesh</span>
-                            <select id="picker-meshSize" style="margin-left: 4px;">
-                                <option value="0">No Mesh (0)</option>
-                                <option value="110">110 TPI</option>
-                                <option value="156">156 TPI</option>
-                                <option value="200">200 TPI</option>
-                                <option value="230" selected>230 TPI</option>
-                                <option value="280">280 TPI</option>
-                                <option value="305">305 TPI</option>
-                                <option value="355">355 TPI</option>
-                            </select>
+                            <span class="knob-label">Screen Mesh (TPI &ndash; &micro;m)</span>
                             <button class="knob-revert" id="revert-meshSize" title="Revert to default" style="margin-left: auto;">&#x21BA;</button>
                             <button class="knob-help-btn" title="Help" style="margin-left: 0 !important;">?</button>
                         </div>
-                        <span class="knob-help">Minimum reproducible detail size, set by mesh density (threads per inch). Higher TPI = finer detail preserved. Affects dithering scale so the pattern matches the output resolution. Set to 0 to disable.</span>
+                        <select id="picker-meshSize" style="display: block; width: 100%; margin: 2px 0 6px 0;">
+                            <option value="0-0">No Mesh (1 px pure)</option>
+                            <option value="110-80">110-80 (43% open)</option>
+                            <option value="110-70">110-70 (49% open &middot; Hi-R)</option>
+                            <option value="156-64">156-64 (37% open)</option>
+                            <option value="156-48">156-48 (50% open &middot; Hi-R)</option>
+                            <option value="196-55">196-55 (33% open)</option>
+                            <option value="196-48">196-48 (40% open &middot; Hi-R)</option>
+                            <option value="230-48">230-48 (32% open)</option>
+                            <option value="230-40">230-40 (41% open &middot; Hi-R)</option>
+                            <option value="280-40">280-40 (31% open)</option>
+                            <option value="280-34">280-34 (39% open &middot; Hi-R)</option>
+                            <option value="280-31">280-31 (43% open &middot; Hi-R)</option>
+                            <option value="305-40">305-40 (27% open)</option>
+                            <option value="305-34">305-34 (35% open)</option>
+                            <option value="305-31">305-31 (39% open &middot; Hi-R)</option>
+                            <option value="355-34">355-34 (28% open)</option>
+                            <option value="355-31" selected>355-31 (32% open &middot; Hi-R)</option>
+                            <option value="380-34">380-34 (24% open)</option>
+                            <option value="380-31">380-31 (29% open &middot; Hi-R)</option>
+                            <option value="420-31">420-31 (24% open)</option>
+                            <option value="420-27">420-27 (31% open &middot; Hi-R)</option>
+                            <option value="custom">Custom (TPI / &mu;m)&hellip;</option>
+                        </select>
+                        <div id="custom-mesh-row" style="display: none; margin: 4px 0 8px 0;">
+                            <span class="custom-mesh-lbl">TPI</span>
+                            <input id="input-mesh-tpi" type="number" min="40" max="600" step="1" value="355" style="margin-right: 10px;" />
+                            <span class="custom-mesh-lbl">Thread &micro;m</span>
+                            <input id="input-thread-um" type="number" min="20" max="120" step="1" value="31" />
+                        </div>
+                        <span class="knob-help">Minimum reproducible detail size, set by SAATI mesh roll (threads per inch &ndash; thread diameter in &micro;m). Higher TPI and Hi-R open area preserve finer detail. Affects dithering scale and Rule-of-N stencil floor. Choose No Mesh for pure 1 px separation.</span>
 
                         <div class="knob-row" style="justify-content: flex-start !important;">
                             <span class="knob-label">Rule of N</span>
@@ -2505,7 +2572,7 @@
                     <!-- Scene 1: Dedication to Doug Minkler -->
                     <div class="credits-scene">
                         <div id="credits-emblem" class="credits-emblem-interactive">
-                            <img src="electrosaur.png" alt="Electrosaur Mascot" class="credits-mascot-img">
+                            <img src="electrosaur-credits.png" alt="Electrosaur" class="credits-mascot-img" draggable="false">
                             <div class="credits-stars">★ ★ ★</div>
                             <div class="credits-tag">Dedicated To</div>
                             <div class="credits-hero-title">Doug Minkler</div>
@@ -2514,7 +2581,7 @@
 
                         <!-- Doug Minkler's Print: Art is a Hammer -->
                         <div id="credits-print-trigger" class="credits-print-interactive">
-                            <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="credits-print-frame">
+                            <img src="hammer.jpg" alt="Art is a Hammer by Doug Minkler" class="credits-print-frame" draggable="false">
                             <div class="credits-print-caption">“Art is a Hammer” • Silkscreen by Doug Minkler</div>
                         </div>
 

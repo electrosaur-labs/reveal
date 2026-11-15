@@ -90,6 +90,8 @@ const SEPARATION_ENGINE_READS = new Set([
     'meshCount',            // Canonical name
     'mesh',                 // Legacy alias (reveal-adobe)
     'dpi',
+    'ruleOfN',
+    'threadDiaUm',
     'distanceMetric',       // Via normalizeDistanceConfig()
 ]);
 
@@ -206,10 +208,12 @@ describe('Parameter Flow Contracts', () => {
             expect(opts.targetColors).toBe(opts.targetColorsSlider);
         });
 
-        it('maps meshSize to meshCount (not meshSize)', () => {
-            const configWithMesh = { ...config, meshSize: 230 };
+        it('maps meshSize to meshCount (not meshSize) and forwards threadDiaUm & ruleOfN', () => {
+            const configWithMesh = { ...config, meshSize: 230, threadDiaUm: 48, ruleOfN: 7.5 };
             const optsWithMesh = ParameterGenerator.toEngineOptions(configWithMesh);
             expect(optsWithMesh.meshCount).toBe(230);
+            expect(optsWithMesh.threadDiaUm).toBe(48);
+            expect(optsWithMesh.ruleOfN).toBe(7.5);
             expect(optsWithMesh.meshSize).toBeUndefined();
         });
 
@@ -319,7 +323,7 @@ describe('Parameter Flow Contracts', () => {
     describe('category exclusivity', () => {
         // These are the SessionState category sets (mirrored here for testing)
         const MECHANICAL = new Set(['minVolume', 'speckleRescue', 'shadowClamp']);
-        const PRODUCTION = new Set(['trapSize', 'meshSize']);
+        const PRODUCTION = new Set(['trapSize', 'meshSize', 'threadDiaUm', 'ruleOfN']);
         const STRUCTURAL = new Set([
             'targetColors', 'engineType', 'centroidStrategy', 'distanceMetric',
             'lWeight', 'cWeight', 'blackBias',

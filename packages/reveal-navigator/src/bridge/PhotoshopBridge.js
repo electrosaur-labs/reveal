@@ -16,7 +16,8 @@
 
 const { app, core, action } = require("photoshop");
 const { imaging } = require("photoshop");
-const logger = require('@electrosaur-labs/core').logger;
+const Reveal = require('@electrosaur-labs/core');
+const logger = Reveal.logger;
 
 class PhotoshopBridge {
 
@@ -35,6 +36,20 @@ class PhotoshopBridge {
             }
         } catch (_) { /* layer access can fail on locked backgrounds */ }
 
+        let hasSelection = false;
+        try {
+            const b = doc.selection && doc.selection.bounds;
+            if (b != null) {
+                const left = typeof b.left === 'number' ? b.left : Number(b.left && b.left._value);
+                const top = typeof b.top === 'number' ? b.top : Number(b.top && b.top._value);
+                const right = typeof b.right === 'number' ? b.right : Number(b.right && b.right._value);
+                const bottom = typeof b.bottom === 'number' ? b.bottom : Number(b.bottom && b.bottom._value);
+                hasSelection =
+                    (Number.isFinite(left) && Number.isFinite(right) && right > left && bottom > top) ||
+                    (!Number.isFinite(left) && typeof b === 'object');
+            }
+        } catch (_) { /* no active selection */ }
+
         return {
             name: doc.name || 'Untitled',
             layerName: layerName,
@@ -42,8 +57,30 @@ class PhotoshopBridge {
             width: doc.width,
             height: doc.height,
             resolution: doc.resolution,  // PPI (pixels per inch) — always set for an open document
-            layerCount: doc.layers ? doc.layers.length : 1
+            layerCount: doc.layers ? doc.layers.length : 1,
+            hasSelection
         };
+    }
+
+    /**
+     * Query ActionManager directly for whether the active document has an active selection.
+     * Fallback for Photoshop UXP builds where `doc.selection.bounds` is lazy or unpopulated.
+     */
+    static async hasActiveSelectionAsync() {
+        if (!action || typeof action.batchPlay !== 'function') return false;
+        try {
+            const res = await action.batchPlay([{
+                _obj: 'get',
+                _target: [
+                    { _ref: 'property', _property: 'selection' },
+                    { _ref: 'document', _enum: 'ordinal', _value: 'targetEnum' }
+                ]
+            }], {});
+            const sel = res && res[0] && res[0].selection;
+            return Boolean(sel && typeof sel === 'object');
+        } catch (_) {
+            return false;
+        }
     }
 
     /**
@@ -64,12 +101,13 @@ class PhotoshopBridge {
         const docWidth = doc.width;
         const docHeight = doc.height;
 
-        // Build getPixels args — native 16-bit Lab read
+        // Build getPixels args — native 16-bit Lab read across full document bounds
         const getPixelsArgs = {
             documentID: doc.id,
             componentSize: 16,
             targetComponentCount: 3,
-            colorSpace: "Lab"
+            colorSpace: "Lab",
+            sourceBounds: { left: 0, top: 0, right: docWidth, bottom: docHeight }
         };
 
         // Use targetSize for proxy-size reads (let Photoshop handle downsampling)
@@ -447,14 +485,20 @@ class PhotoshopBridge {
             lines.push(`${I}<reveal:trapPx>${trapPx}</reveal:trapPx>`);
             const meshTPI = k.meshSize || 0;
             lines.push(`${I}<reveal:meshSize>${meshTPI}</reveal:meshSize>`);
+            const threadDiaUm = k.threadDiaUm != null
+                ? k.threadDiaUm
+                : (meshTPI > 0 ? Reveal.MeshPhysics.getDefaultThreadDiaUm(meshTPI) : 0);
+            lines.push(`${I}<reveal:threadDiaUm>${threadDiaUm}</reveal:threadDiaUm>`);
             const ruleOfN = k.ruleOfN != null ? k.ruleOfN : 7.0;
             lines.push(`${I}<reveal:ruleOfN>${ruleOfN}</reveal:ruleOfN>`);
-            const minDotPx = meshTPI > 0 ? Math.max(1, Math.ceil(ruleOfN * dpi / meshTPI)) : 0;
+            const minDotPx = meshTPI > 0 ? Reveal.MeshPhysics.minDotPx(meshTPI, dpi, ruleOfN, threadDiaUm) : 0;
             lines.push(`${I}<reveal:minDotPx>${minDotPx}</reveal:minDotPx>`);
             lines.push(`${I}<reveal:dualScale>true</reveal:dualScale>`);
         }
 
-        const screenCount = (manifest.palette && manifest.palette.length) || (manifest.metrics && manifest.metrics.layerCount) || 0;
+        const screenCount = (manifest.metrics && manifest.metrics.layerCount > 0)
+            ? manifest.metrics.layerCount
+            : ((manifest.palette && manifest.palette.length) || 0);
         lines.push(`${I}<reveal:screenCount>${screenCount}</reveal:screenCount>`);
         lines.push(`${I}<reveal:plateCount>${screenCount}</reveal:plateCount>`);
 

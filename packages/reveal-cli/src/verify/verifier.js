@@ -9,6 +9,7 @@
 
 'use strict';
 
+const Reveal = require('@electrosaur-labs/core');
 const { euclideanDistanceTransform } = require('./edt');
 const { labelConnectedComponents } = require('./connected-components');
 
@@ -91,6 +92,7 @@ function verifySeparation(parsed, options = {}) {
     // ─────────────────────────────────────────────────────────────
     const effectiveMinDotPx = manifest ? (manifest.minDotPx || 0) : 0;
     const effectiveMeshTPI = manifest ? (manifest.meshSize || 0) : 0;
+    const effectiveThreadDiaUm = manifest ? (manifest.threadDiaUm || 0) : 0;
     const effectiveRuleOfN = manifest ? (manifest.ruleOfN || 7.0) : 7.0;
 
     report.meshAudit = auditMeshPhysics(
@@ -100,7 +102,8 @@ function verifySeparation(parsed, options = {}) {
         effectiveMinDotPx,
         effectiveMeshTPI,
         effectiveRuleOfN,
-        dpi
+        dpi,
+        effectiveThreadDiaUm
     );
 
     for (const err of report.meshAudit.errors) {
@@ -333,13 +336,14 @@ function auditTrapping(sortedPlates, width, height, maxTrapPx, options = {}) {
 /**
  * Audit Physical Mesh Dot Retention & Line Art Continuity (Invariant 2)
  */
-function auditMeshPhysics(sortedPlates, width, height, minDotPx, meshTPI, ruleOfN, dpi) {
+function auditMeshPhysics(sortedPlates, width, height, minDotPx, meshTPI, ruleOfN, dpi, threadDiaUm = 0) {
     const floorPx = minDotPx > 0
         ? minDotPx
-        : (meshTPI > 0 ? Math.ceil(ruleOfN * dpi / meshTPI) : 0);
+        : (meshTPI > 0 ? Reveal.MeshPhysics.minDotPx(meshTPI, dpi, ruleOfN, threadDiaUm) : 0);
 
     const res = {
         meshTPI,
+        threadDiaUm,
         ruleOfN,
         minDotPx: floorPx,
         skipped: floorPx <= 0,

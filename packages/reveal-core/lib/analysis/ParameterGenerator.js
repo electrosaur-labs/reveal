@@ -22,6 +22,7 @@
 
 const ArchetypeLoader = require('./ArchetypeLoader');
 const BilateralFilter = require('../preprocessing/BilateralFilter');
+const MeshPhysics = require('../utils/MeshPhysics');
 
 /**
  * @typedef {Object} RevealConfig
@@ -113,8 +114,8 @@ class ParameterGenerator {
         ],
         /** Post-separation knobs — mask/preview re-render only (fast path) */
         MECHANICAL: ['minVolume', 'speckleRescue', 'shadowClamp'],
-        /** Affect production render only — meaningless at proxy resolution */
-        PRODUCTION: ['trapSize', 'meshSize', 'ditherType', 'ruleOfN'],
+        /** Session-level press/equipment knobs */
+        PRODUCTION: ['trapSize', 'meshSize', 'threadDiaUm', 'ditherType', 'ruleOfN'],
     };
 
     /**
@@ -124,7 +125,7 @@ class ParameterGenerator {
      */
     static KNOB_DEFAULTS = {
         MECHANICAL: { minVolume: 0, speckleRescue: 0, shadowClamp: 0 },
-        PRODUCTION: { trapSize: 2, meshSize: 355, ruleOfN: 7.0 },
+        PRODUCTION: { trapSize: 2, meshSize: 355, threadDiaUm: 31, ruleOfN: 7.0 },
     };
 
     /**
@@ -132,15 +133,22 @@ class ParameterGenerator {
      * Canonical helper — use instead of cherry-picking individual fields.
      *
      * @param {Object} source - Config object or reactive state
-     * @returns {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number, meshSize: number, ruleOfN: number, imageDpi: number}}
+     * @returns {{minVolume: number, speckleRescue: number, shadowClamp: number, trapSize: number, meshSize: number, threadDiaUm: number, ruleOfN: number, imageDpi: number}}
      */
     static extractMechanicalKnobs(source) {
+        const meshSize = source.meshSize != null
+            ? source.meshSize
+            : (source.meshCount != null ? source.meshCount : 355);
+        const threadDiaUm = source.threadDiaUm !== undefined
+            ? source.threadDiaUm
+            : (meshSize === 0 ? 0 : MeshPhysics.getDefaultThreadDiaUm(meshSize || 355));
         return {
             minVolume: source.minVolume || 0,
             speckleRescue: source.speckleRescue || 0,
             shadowClamp: source.shadowClamp || 0,
             trapSize: source.trapSize || 0,
-            meshSize: source.meshSize || source.meshCount || 355,
+            meshSize,
+            threadDiaUm,
             ruleOfN: source.ruleOfN !== undefined ? source.ruleOfN : 7.0,
             imageDpi: source.imageDpi || source.resolution || 300,
         };
@@ -751,6 +759,8 @@ class ParameterGenerator {
             // Screen mesh — passed through if caller provides it (session-level, not archetype).
             // Maps meshSize (config/UI name) → meshCount (SeparationEngine name).
             ...(config.meshSize !== undefined ? { meshCount: config.meshSize } : {}),
+            ...(config.threadDiaUm !== undefined ? { threadDiaUm: config.threadDiaUm } : {}),
+            ...(config.ruleOfN !== undefined ? { ruleOfN: config.ruleOfN } : {}),
 
             // Caller-specific overrides (bitDepth, format, etc.)
             ...overrides

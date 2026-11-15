@@ -221,4 +221,183 @@ describe('MechanicalKnobs.enforceMeshRuleOfSeven — filament pruning integratio
         expect(result.pixelsPruned).toBe(0);
         expect(masks[1][10 * width + 30]).toBe(255);
     });
+
+    it('preserves a 3px-thick stroke attached to a 20x16 anchor blob 100% intact while still pruning a 1px filament', async () => {
+        const width = 60, height = 20;
+
+        // Case A: 3px-thick stroke (y = 9..11, x = 22..55) attached to 20x16 solid anchor blob (x = 2..21, y = 2..17)
+        const strokeIndices = new Uint8Array(width * height);
+        for (let y = 2; y < 18; y++) {
+            for (let x = 2; x < 22; x++) strokeIndices[y * width + x] = 1;
+        }
+        for (let y = 9; y <= 11; y++) {
+            for (let x = 22; x <= 55; x++) strokeIndices[y * width + x] = 1;
+        }
+        const strokeMasks = MechanicalKnobs.rebuildMasks(strokeIndices, 2, width * height);
+        const strokeBefore = Uint8Array.from(strokeMasks[1]);
+
+        const strokeRes = await MechanicalKnobs.enforceMeshRuleOfSeven(strokeMasks, strokeIndices, width, height, {
+            meshTPI: 355, imageDpi: 300
+        });
+
+        expect(strokeRes.pixelsPruned).toBe(0);
+        expect(strokeRes.clustersRemoved).toBe(0);
+        expect(strokeMasks[1]).toEqual(strokeBefore);
+        expect(strokeMasks[1][10 * width + 55]).toBe(255);
+
+        // Case B: 1px filament (y = 10, x = 22..55) attached to the exact same 20x16 anchor blob IS pruned
+        const filIndices = new Uint8Array(width * height);
+        for (let y = 2; y < 18; y++) {
+            for (let x = 2; x < 22; x++) filIndices[y * width + x] = 1;
+        }
+        for (let x = 22; x <= 55; x++) filIndices[10 * width + x] = 1;
+        const filMasks = MechanicalKnobs.rebuildMasks(filIndices, 2, width * height);
+
+        const filRes = await MechanicalKnobs.enforceMeshRuleOfSeven(filMasks, filIndices, width, height, {
+            meshTPI: 355, imageDpi: 300
+        });
+
+        expect(filRes.pixelsPruned).toBeGreaterThan(0);
+        expect(filMasks[1][10 * width + 50]).toBe(0);
+        expect(filMasks[1][10 * width + 55]).toBe(0);
+    });
+});
+
+describe('Paired SAATI Mesh Separation & ProxyEngine Baseline Compaction', () => {
+    it('produces measurably distinct Macro-Cell dithering and Rule-of-7 floors for 230-40 (9 px) vs 355-31 (6 px) at 300 DPI', async () => {
+        expect(MeshPhysics.minDotPx(230, 300, 7, 40)).toBe(9);
+        expect(MeshPhysics.minDotPx(355, 300, 7, 31)).toBe(6);
+
+        // 1. Rule-of-7 dot floor: an isolated 7x7 square dot (area 49 px) survives 355-31 (minArea = 6*6 = 36 px)
+        //    but is eliminated as sub-mesh debris on 230-40 (minArea = 9*9 = 81 px)!
+        const W = 40, H = 40;
+        const make7x7Indices = () => {
+            const idx = new Uint8Array(W * H);
+            for (let y = 16; y < 23; y++) {
+                for (let x = 16; x < 23; x++) idx[y * W + x] = 1;
+            }
+            return idx;
+        };
+
+        const idx355 = make7x7Indices();
+        const masks355 = MechanicalKnobs.rebuildMasks(idx355, 2, W * H);
+        await MechanicalKnobs.enforceMeshRuleOfSeven(masks355, idx355, W, H, {
+            meshTPI: 355, threadDiaUm: 31, ruleOfN: 7, imageDpi: 300
+        });
+        expect(masks355[1][19 * W + 19]).toBe(255);
+
+        const idx230 = make7x7Indices();
+        const masks230 = MechanicalKnobs.rebuildMasks(idx230, 2, W * H);
+        await MechanicalKnobs.enforceMeshRuleOfSeven(masks230, idx230, W, H, {
+            meshTPI: 230, threadDiaUm: 40, ruleOfN: 7, imageDpi: 300
+        });
+        expect(masks230[1][19 * W + 19]).toBe(0);
+
+        // 2. Macro-Cell Floyd-Steinberg separation: 230-40 (9x9 macro-cells) vs 355-31 (6x6 macro-cells)
+        //    produce distinct dithered colorIndices on a smooth Lab midtone gradient.
+        const gw = 72, gh = 72;
+        const labBuf = new Uint16Array(gw * gh * 3);
+        for (let y = 0; y < gh; y++) {
+            for (let x = 0; x < gw; x++) {
+                const p = (y * gw + x) * 3;
+                labBuf[p] = Math.round(((x + y) / (gw + gh - 2)) * 32768);
+                labBuf[p + 1] = 16384;
+                labBuf[p + 2] = 16384;
+            }
+        }
+        const palette = [{ L: 0, a: 0, b: 0 }, { L: 100, a: 0, b: 0 }];
+
+        const sep230Indices = await SeparationEngine.mapPixelsToPaletteAsync(labBuf, palette, null, gw, gh, {
+            ditherType: 'floyd-steinberg', meshCount: 230, threadDiaUm: 40, ruleOfN: 7, dpi: 300
+        });
+        const sep355Indices = await SeparationEngine.mapPixelsToPaletteAsync(labBuf, palette, null, gw, gh, {
+            ditherType: 'floyd-steinberg', meshCount: 355, threadDiaUm: 31, ruleOfN: 7, dpi: 300
+        });
+
+        let diffPixels = 0;
+        for (let i = 0; i < gw * gh; i++) {
+            if (sep230Indices[i] !== sep355Indices[i]) diffPixels++;
+        }
+        expect(diffPixels).toBeGreaterThan(100);
+    });
+
+    it('ProxyEngine.initializeProxy and rePosterize compact over-budget posterize output so _baselineState.palette has zero 0-pixel zombie slots and <= targetColors + 2 entries', async () => {
+        const ProxyEngine = require('../../lib/engines/ProxyEngine');
+        const PosterizationEngine = require('../../lib/engines/PosterizationEngine');
+
+        const W = 20, H = 20;
+        const pixelCount = W * H;
+        const labPixels = new Uint16Array(pixelCount * 3);
+        for (let i = 0; i < pixelCount; i++) {
+            labPixels[i * 3] = 16384;
+            labPixels[i * 3 + 1] = 16384;
+            labPixels[i * 3 + 2] = 16384;
+        }
+
+        // Mock PosterizationEngine.posterize returning 9 slots for targetColors=5 (maxColors = 7):
+        //   - Slot 3 is already dead-on-arrival (0 pixels)
+        //   - 8 active slots exceed maxColors=7 -> weakest non-exempt slot must merge & compact out!
+        const makeMockPosterizeResult = () => {
+            const paletteLab = [
+                { L: 10, a: 0, b: 0 },                      // 0: 100 px
+                { L: 25, a: 0, b: 0 },                      // 1: 80 px
+                { L: 40, a: 0, b: 0 },                      // 2: 60 px
+                { L: 42, a: 1, b: 1 },                      // 3: 0 px (zombie on arrival!)
+                { L: 55, a: 0, b: 0 },                      // 4: 50 px
+                { L: 70, a: 0, b: 0 },                      // 5: 45 px
+                { L: 85, a: 0, b: 0 },                      // 6: 40 px
+                { L: 95, a: 0, b: 0 },                      // 7: 20 px
+                { L: 96, a: 1, b: 0 },                      // 8: 5 px (weakest duplicate -> demoted by maxColors=7)
+            ];
+            const assignments = new Uint8Array(pixelCount);
+            let cursor = 0;
+            const counts = [100, 80, 60, 0, 50, 45, 40, 20, 5];
+            for (let slot = 0; slot < counts.length; slot++) {
+                for (let k = 0; k < counts[slot]; k++) {
+                    assignments[cursor++] = slot;
+                }
+            }
+            return {
+                paletteLab,
+                palette: paletteLab.map(() => ({ r: 128, g: 128, b: 128 })),
+                assignments,
+                dna: {},
+                metadata: {}
+            };
+        };
+
+        const spy = vi.spyOn(PosterizationEngine, 'posterize').mockImplementation(() => makeMockPosterizeResult());
+        try {
+            const engine = new ProxyEngine();
+            const initRes = await engine.initializeProxy(labPixels, W, H, {
+                targetColors: 5,
+                targetColorsSlider: 5,
+                preprocessingIntensity: 'off'
+            });
+
+            expect(initRes.palette.length).toBeLessThanOrEqual(7);
+            expect(engine._baselineState.palette.length).toBe(initRes.palette.length);
+            const initCounts = new Uint32Array(engine._baselineState.palette.length);
+            for (const idx of engine._baselineState.colorIndices) initCounts[idx]++;
+            for (let c = 0; c < initCounts.length; c++) {
+                expect(initCounts[c]).toBeGreaterThan(0);
+            }
+
+            const reRes = await engine.rePosterize({
+                targetColors: 5,
+                targetColorsSlider: 5,
+                preprocessingIntensity: 'off'
+            });
+            expect(reRes.palette.length).toBeLessThanOrEqual(7);
+            expect(engine._baselineState.palette.length).toBe(reRes.palette.length);
+            expect(engine.separationState.masks.length).toBe(reRes.palette.length);
+            const reCounts = new Uint32Array(engine._baselineState.palette.length);
+            for (const idx of engine._baselineState.colorIndices) reCounts[idx]++;
+            for (let c = 0; c < reCounts.length; c++) {
+                expect(reCounts[c]).toBeGreaterThan(0);
+            }
+        } finally {
+            spy.mockRestore();
+        }
+    });
 });

@@ -786,3 +786,82 @@ describe('reset()', () => {
         expect(s._archetypeStateCache.size).toBe(0);
     });
 });
+
+// ─── Press Mesh Persistence & Config Round-Trip ──────────
+
+describe('Press mesh persistence across swapArchetype & applySavedConfig', () => {
+    it('preserves meshSize, threadDiaUm, and ruleOfN across uncached and cached swapArchetype while resetToDefaults restores 355, 31, 7.0', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        expect(s.state.meshSize).toBe(355);
+        expect(s.state.threadDiaUm).toBe(31);
+        expect(s.state.ruleOfN).toBe(7.0);
+
+        // Customize press mesh on ARCHETYPE_A
+        s.updateParameter('meshSize', 230);
+        s.updateParameter('threadDiaUm', 40);
+        s.updateParameter('ruleOfN', 6.0);
+        expect(s.state.isKnobsCustomized).toBe(true);
+
+        // Swap to fresh ARCHETYPE_B -> press mesh settings persist!
+        await s.swapArchetype(ARCHETYPE_B);
+        expect(s.state.meshSize).toBe(230);
+        expect(s.state.threadDiaUm).toBe(40);
+        expect(s.state.ruleOfN).toBe(6.0);
+        expect(s.currentConfig.meshSize).toBe(230);
+        expect(s.currentConfig.threadDiaUm).toBe(40);
+        expect(s.currentConfig.ruleOfN).toBe(6.0);
+        expect(s.state.isKnobsCustomized).toBe(true);
+
+        // Change mesh again on ARCHETYPE_B (e.g. 280-34), then swap back to cached ARCHETYPE_A -> 280-34 persists!
+        s.updateParameter('meshSize', 280);
+        s.updateParameter('threadDiaUm', 34);
+        await s.swapArchetype(ARCHETYPE_A);
+        expect(s.state.meshSize).toBe(280);
+        expect(s.state.threadDiaUm).toBe(34);
+        expect(s.state.ruleOfN).toBe(6.0);
+
+        // resetToDefaults() restores factory 355-31 / 7.0
+        await s.resetToDefaults();
+        expect(s.state.meshSize).toBe(355);
+        expect(s.state.threadDiaUm).toBe(31);
+        expect(s.state.ruleOfN).toBe(7.0);
+        expect(s.state.isKnobsCustomized).toBe(false);
+    });
+
+    it('round-trips meshSize, threadDiaUm, and ruleOfN via exportSavedConfig / applySavedConfig and derives threadDiaUm on legacy configs', async () => {
+        const s = setupSession(ARCHETYPE_A);
+        s.updateParameter('meshSize', 230);
+        s.updateParameter('threadDiaUm', 40);
+        s.updateParameter('ruleOfN', 5.5);
+
+        const saved = JSON.parse(JSON.stringify(s.exportSavedConfig()));
+        expect(saved.knobs.meshSize).toBe(230);
+        expect(saved.knobs.threadDiaUm).toBe(40);
+        expect(saved.knobs.ruleOfN).toBe(5.5);
+
+        // Mutate session to different values, then replay saved config
+        s.updateParameter('meshSize', 420);
+        s.updateParameter('threadDiaUm', 27);
+        s.updateParameter('ruleOfN', 8.0);
+
+        const emittedConfigs = [];
+        s.on('configChanged', (cfg) => emittedConfigs.push({ ...cfg }));
+
+        await s.applySavedConfig(saved);
+        expect(s.state.meshSize).toBe(230);
+        expect(s.state.threadDiaUm).toBe(40);
+        expect(s.state.ruleOfN).toBe(5.5);
+        expect(emittedConfigs[emittedConfigs.length - 1].meshSize).toBe(230);
+        expect(emittedConfigs[emittedConfigs.length - 1].threadDiaUm).toBe(40);
+        expect(emittedConfigs[emittedConfigs.length - 1].ruleOfN).toBe(5.5);
+
+        // Legacy config with { meshSize: 230 } and no threadDiaUm / ruleOfN derives threadDiaUm = 48 and ruleOfN = 7.0
+        await s.applySavedConfig({
+            archetypeId: ARCHETYPE_B,
+            knobs: { meshSize: 230 }
+        });
+        expect(s.state.meshSize).toBe(230);
+        expect(s.state.threadDiaUm).toBe(48);
+        expect(s.state.ruleOfN).toBe(7.0);
+    });
+});

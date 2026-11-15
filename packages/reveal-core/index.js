@@ -581,6 +581,7 @@ module.exports = {
 
 const CropEngine = require('./lib/engines/CropEngine');
 const LabConverter = require('./lib/utils/LabConverter');
+const MeshPhysics = require('./lib/utils/MeshPhysics');
 const MedianFilter = require('./lib/preprocessing/MedianFilter');
 const PaletteOps = require('./lib/engines/PaletteOps');
 
@@ -634,6 +635,7 @@ module.exports.engines = {
 
     // Utilities
     LabConverter,
+    MeshPhysics,
     Palette,
     PaletteGraph,
 };
@@ -655,6 +657,7 @@ Object.assign(module.exports, {
     ProxyEngine,
     CropEngine,
     LabConverter,
+    MeshPhysics,
     MedianFilter,
     MechanicalKnobs,
     TrapEngine,

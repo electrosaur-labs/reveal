@@ -16,7 +16,8 @@
  * Vanilla+ pattern: subscribes to SessionState events.
  */
 
-const logger = require('@electrosaur-labs/core').logger;
+const Reveal = require('@electrosaur-labs/core');
+const logger = Reveal.logger;
 
 const KNOB_DEFS = [
     // Primary knobs
@@ -82,10 +83,18 @@ class MechanicalKnobs {
         this._container = container;
         this._session = sessionState;
         this._elements = {};  // key → { el, valEl, revertEl, def }
+        this._customMeshRow = null;
+        this._inputMeshTpi = null;
+        this._inputThreadUm = null;
+        this._meshOptionValues = new Set();
+        this._customMeshExpanded = false;
+        this._inMeshSelectChange = false;
+        this._inCustomInputEdit = false;
 
         this._resolveElements();
         this._bindEvents();
         this._bindStateEvents();
+        this._syncMeshControl(this._session.state.meshSize, this._session.state.threadDiaUm);
         this._updateAllRevertIcons();
     }
 
@@ -101,10 +110,113 @@ class MechanicalKnobs {
 
             this._elements[def.key] = { el, valEl, revertEl, def };
         }
+
+        this._customMeshRow = document.getElementById('custom-mesh-row');
+        this._inputMeshTpi = document.getElementById('input-mesh-tpi');
+        this._inputThreadUm = document.getElementById('input-thread-um');
+
+        // Populate valid option values directly from SAATI_MESH_PRESETS (never `el.options`,
+        // which is undefined on HTMLSelectElement in UXP Torq DOM).
+        this._meshOptionValues = new Set([
+            '0-0',
+            'custom',
+            ...Reveal.MeshPhysics.SAATI_MESH_PRESETS.map(p => p.id)
+        ]);
+    }
+
+    _syncMeshControl(meshSize, threadDiaUm) {
+        const meshEntry = this._elements['meshSize'];
+        if (!meshEntry) return;
+
+        if (meshSize === 0) {
+            this._customMeshExpanded = false;
+            meshEntry.el.value = this._meshOptionValues.has('0-0') ? '0-0' : '0';
+            if (this._customMeshRow) this._customMeshRow.style.display = 'none';
+            return;
+        }
+
+        const tpi = Number(meshSize) || 355;
+        const tdia = (threadDiaUm !== undefined && threadDiaUm > 0)
+            ? Number(threadDiaUm)
+            : Reveal.MeshPhysics.getDefaultThreadDiaUm(tpi);
+
+        if (this._inputMeshTpi) this._inputMeshTpi.value = String(tpi);
+        if (this._inputThreadUm) this._inputThreadUm.value = String(tdia);
+
+        if (this._customMeshExpanded && meshSize > 0) {
+            meshEntry.el.value = 'custom';
+            if (this._customMeshRow) this._customMeshRow.style.display = 'flex';
+            return;
+        }
+
+        const pairKey = `${tpi}-${tdia}`;
+        if (this._meshOptionValues.has(pairKey)) {
+            meshEntry.el.value = pairKey;
+            if (this._customMeshRow) this._customMeshRow.style.display = 'none';
+        } else if (this._meshOptionValues.has('custom')) {
+            meshEntry.el.value = 'custom';
+            if (this._customMeshRow) this._customMeshRow.style.display = 'flex';
+        } else {
+            meshEntry.el.value = String(tpi);
+        }
     }
 
     _bindEvents() {
         for (const [key, entry] of Object.entries(this._elements)) {
+            if (key === 'meshSize') {
+                entry.el.addEventListener('change', () => {
+                    const raw = entry.el.value;
+                    this._customMeshExpanded = (raw === 'custom');
+                    this._inMeshSelectChange = true;
+                    try {
+                        if (raw === '0-0' || raw === '0') {
+                            if (this._customMeshRow) this._customMeshRow.style.display = 'none';
+                            this._session.updateParameter('meshSize', 0);
+                            this._session.updateParameter('threadDiaUm', 0);
+                        } else if (raw === 'custom') {
+                            if (this._customMeshRow) this._customMeshRow.style.display = 'flex';
+                            const tpi = Math.max(40, Math.min(600, Math.round(parseFloat(this._inputMeshTpi && this._inputMeshTpi.value) || 355)));
+                            const tdia = Math.max(20, Math.min(120, Math.round(parseFloat(this._inputThreadUm && this._inputThreadUm.value) || 31)));
+                            this._session.updateParameter('meshSize', tpi);
+                            this._session.updateParameter('threadDiaUm', tdia);
+                        } else if (raw.includes('-')) {
+                            if (this._customMeshRow) this._customMeshRow.style.display = 'none';
+                            const [tpiStr, tdiaStr] = raw.split('-');
+                            const tpi = parseInt(tpiStr, 10) || 0;
+                            const tdia = parseInt(tdiaStr, 10) || 0;
+                            if (this._inputMeshTpi && tpi > 0) this._inputMeshTpi.value = String(tpi);
+                            if (this._inputThreadUm && tdia > 0) this._inputThreadUm.value = String(tdia);
+                            this._session.updateParameter('meshSize', tpi);
+                            this._session.updateParameter('threadDiaUm', tdia);
+                        } else {
+                            const tpi = parseInt(raw, 10) || 0;
+                            const tdia = tpi > 0 ? Reveal.MeshPhysics.getDefaultThreadDiaUm(tpi) : 0;
+                            this._session.updateParameter('meshSize', tpi);
+                            this._session.updateParameter('threadDiaUm', tdia);
+                        }
+                    } finally {
+                        this._inMeshSelectChange = false;
+                    }
+                    this._updateRevertIcon('meshSize', entry);
+                });
+
+                if (entry.revertEl) {
+                    entry.revertEl.addEventListener('click', () => {
+                        this._customMeshExpanded = false;
+                        this._session.resetKnob('meshSize');
+                        this._session.resetKnob('threadDiaUm');
+                        const dfltMesh = this._session.getKnobDefault('meshSize');
+                        const dfltThread = this._session.getKnobDefault('threadDiaUm');
+                        this._syncMeshControl(
+                            dfltMesh !== null ? dfltMesh : 355,
+                            dfltThread !== null ? dfltThread : 31
+                        );
+                        this._updateRevertIcon('meshSize', entry);
+                    });
+                }
+                continue;
+            }
+
             const eventType = entry.el.tagName === 'SP-SLIDER' ? 'input' : 'change';
 
             entry.el.addEventListener(eventType, () => {
@@ -122,6 +234,22 @@ class MechanicalKnobs {
                 this._updateRevertIcon(key, entry);
             });
 
+            // Make clicking the adjacent .knob-label toggle checkboxes cleanly in UXP Torq
+            if (entry.el.type === 'checkbox' && entry.el.parentElement) {
+                const labelEl = entry.el.parentElement.querySelector('.knob-label');
+                if (labelEl) {
+                    labelEl.style.cursor = 'pointer';
+                    labelEl.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        entry.el.checked = !entry.el.checked;
+                        const value = entry.el.checked;
+                        this._updateDisplay(entry, value);
+                        this._session.updateParameter(key, value);
+                        this._updateRevertIcon(key, entry);
+                    });
+                }
+            }
+
             // Revert arrow click — snap this knob to archetype default
             if (entry.revertEl) {
                 entry.revertEl.addEventListener('click', () => {
@@ -134,6 +262,37 @@ class MechanicalKnobs {
                     this._updateRevertIcon(key, entry);
                 });
             }
+        }
+
+        const onCustomMeshInput = () => {
+            this._inCustomInputEdit = true;
+            try {
+                if (this._inputMeshTpi) {
+                    const rawTpi = parseFloat(this._inputMeshTpi.value);
+                    if (Number.isFinite(rawTpi) && rawTpi >= 40 && rawTpi <= 600) {
+                        this._session.updateParameter('meshSize', Math.round(rawTpi));
+                    }
+                }
+                if (this._inputThreadUm) {
+                    const rawUm = parseFloat(this._inputThreadUm.value);
+                    if (Number.isFinite(rawUm) && rawUm >= 20 && rawUm <= 120) {
+                        this._session.updateParameter('threadDiaUm', Math.round(rawUm));
+                    }
+                }
+                const meshEntry = this._elements['meshSize'];
+                if (meshEntry) this._updateRevertIcon('meshSize', meshEntry);
+            } finally {
+                this._inCustomInputEdit = false;
+            }
+        };
+
+        if (this._inputMeshTpi) {
+            this._inputMeshTpi.addEventListener('input', onCustomMeshInput);
+            this._inputMeshTpi.addEventListener('change', onCustomMeshInput);
+        }
+        if (this._inputThreadUm) {
+            this._inputThreadUm.addEventListener('input', onCustomMeshInput);
+            this._inputThreadUm.addEventListener('change', onCustomMeshInput);
         }
     }
 
@@ -166,26 +325,35 @@ class MechanicalKnobs {
 
         // External parameter change — keep sliders in sync
         this._session.on('parameterChanged', ({ key, value }) => {
-            const entry = this._elements[key];
-            if (!entry) return;
-
-            let current;
-            if (entry.el.type === 'checkbox') {
-                current = entry.el.checked;
-            } else if (entry.el.tagName === 'SELECT') {
-                current = isNaN(entry.el.value) ? entry.el.value : parseFloat(entry.el.value);
+            if (key === 'meshSize' || key === 'threadDiaUm') {
+                const st = this._session.getState();
+                if (!this._inCustomInputEdit && !this._inMeshSelectChange) {
+                    this._syncMeshControl(st.meshSize, st.threadDiaUm);
+                }
+                const meshEntry = this._elements['meshSize'];
+                if (meshEntry) this._updateRevertIcon('meshSize', meshEntry);
             } else {
-                current = parseFloat(entry.el.value);
+                const entry = this._elements[key];
+                if (entry) {
+                    let current;
+                    if (entry.el.type === 'checkbox') {
+                        current = entry.el.checked;
+                    } else if (entry.el.tagName === 'SELECT') {
+                        current = isNaN(entry.el.value) ? entry.el.value : parseFloat(entry.el.value);
+                    } else {
+                        current = parseFloat(entry.el.value);
+                    }
+
+                    if (current !== value) {
+                        this._setValue(entry, value);
+                        this._updateDisplay(entry, value);
+                        this._updateRevertIcon(key, entry);
+                    }
+                }
             }
 
-            if (current !== value) {
-                this._setValue(entry, value);
-                this._updateDisplay(entry, value);
-                this._updateRevertIcon(key, entry);
-            }
-
-            // Mesh TPI or ruleOfN change affects the speckleRescue auto label and ruleOfN readout
-            if (key === 'meshSize' || key === 'imageDpi' || key === 'ruleOfN') {
+            // Mesh TPI / thread µm / ruleOfN change affects the speckleRescue auto label and ruleOfN readout
+            if (key === 'meshSize' || key === 'threadDiaUm' || key === 'imageDpi' || key === 'ruleOfN') {
                 const speckleEntry = this._elements['speckleRescue'];
                 if (speckleEntry) {
                     this._updateDisplay(speckleEntry, parseFloat(speckleEntry.el.value));
@@ -216,10 +384,14 @@ class MechanicalKnobs {
         }
         if (entry.def.key === 'ruleOfN') {
             const state = this._session.getState();
-            const meshTPI = state.meshSize || 355;
+            const meshTPI = state.meshSize !== undefined ? state.meshSize : 355;
+            if (meshTPI === 0) {
+                entry.valEl.textContent = `${value.toFixed(1)} (1 px)`;
+                return;
+            }
+            const threadDiaUm = state.threadDiaUm || 0;
             const dpi = this._session.imageResolution || 300;
-            const MeshPhysics = Reveal.MeshPhysics;
-            const dotPx = MeshPhysics ? MeshPhysics.minDotPx(meshTPI, dpi, value) : Math.ceil(value * dpi / (meshTPI || 355));
+            const dotPx = Reveal.MeshPhysics.minDotPx(meshTPI, dpi, value, threadDiaUm);
             entry.valEl.textContent = `${value.toFixed(1)} (${dotPx} px)`;
             return;
         }
@@ -230,6 +402,26 @@ class MechanicalKnobs {
 
     _updateRevertIcon(key, entry) {
         if (!entry.revertEl) return;
+        if (key === 'meshSize') {
+            const dfltMesh = this._session.getKnobDefault('meshSize');
+            const dfltThread = this._session.getKnobDefault('threadDiaUm');
+            if (dfltMesh === null || dfltMesh === undefined) {
+                entry.revertEl.style.display = 'none';
+                return;
+            }
+            const state = this._session.getState();
+            const curMesh = state.meshSize !== undefined ? state.meshSize : dfltMesh;
+            const expectedThread = (dfltThread !== null && dfltThread !== undefined)
+                ? dfltThread
+                : (dfltMesh > 0 ? Reveal.MeshPhysics.getDefaultThreadDiaUm(dfltMesh) : 0);
+            const curThread = state.threadDiaUm !== undefined
+                ? state.threadDiaUm
+                : (curMesh > 0 ? Reveal.MeshPhysics.getDefaultThreadDiaUm(curMesh) : 0);
+            const isDirty = (curMesh !== dfltMesh) || (curThread !== expectedThread);
+            entry.revertEl.style.display = isDirty ? 'inline-block' : 'none';
+            return;
+        }
+
         const dflt = this._session.getKnobDefault(key);
         if (dflt === null || dflt === undefined) {
             entry.revertEl.style.display = 'none';
@@ -272,6 +464,13 @@ class MechanicalKnobs {
 
     _syncFromConfig(config) {
         for (const [key, entry] of Object.entries(this._elements)) {
+            if (key === 'meshSize') {
+                if (config.meshSize !== undefined) {
+                    this._customMeshExpanded = false;
+                    this._syncMeshControl(config.meshSize, config.threadDiaUm);
+                }
+                continue;
+            }
             if (config[key] !== undefined) {
                 const value = config[key];
                 this._setValue(entry, value);
@@ -283,6 +482,13 @@ class MechanicalKnobs {
     _syncFromState() {
         const state = this._session.getState();
         for (const [key, entry] of Object.entries(this._elements)) {
+            if (key === 'meshSize') {
+                if (state.meshSize !== undefined) {
+                    this._customMeshExpanded = false;
+                    this._syncMeshControl(state.meshSize, state.threadDiaUm);
+                }
+                continue;
+            }
             if (state[key] !== undefined) {
                 const value = state[key];
                 this._setValue(entry, value);

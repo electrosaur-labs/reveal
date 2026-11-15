@@ -152,12 +152,20 @@ class ProxyEngine {
         // Use posterize's built-in assignments (box membership) directly.
         // Skips the expensive mapPixelsToPaletteAsync nearest-neighbor pass.
         const colorIndices = posterizeResult.assignments;
+        const targetColors = initialConfig.targetColors || initialConfig.targetColorsSlider || 0;
+        const compactedPalette = this._compactPosterizeToMaxColors(
+            posterizeResult.paletteLab,
+            colorIndices,
+            proxyW,
+            proxyH,
+            targetColors
+        );
 
         // 4. Cache separation state
         // OPTIMIZATION: Skip mask generation. updateProxy will lazily compute them if needed.
         this.separationState = {
-            palette: posterizeResult.paletteLab,
-            rgbPalette: posterizeResult.paletteLab.map(c => LabEncoding.labToRgbD50(c)),
+            palette: compactedPalette,
+            rgbPalette: compactedPalette.map(c => LabEncoding.labToRgbD50(c)),
             colorIndices: colorIndices,
             masks: null,
             width: proxyW,
@@ -245,17 +253,25 @@ class ProxyEngine {
             this.proxyBuffer, proxyW, proxyH, proxyConfig.targetColors, proxyConfig
         );
         const colorIndices = posterizeResult.assignments;
+        const targetColors = config.targetColors || config.targetColorsSlider || 0;
+        const compactedPalette = this._compactPosterizeToMaxColors(
+            posterizeResult.paletteLab,
+            colorIndices,
+            proxyW,
+            proxyH,
+            targetColors
+        );
 
         // 3. Masks
         const masks = [];
-        for (let i = 0; i < posterizeResult.paletteLab.length; i++) {
+        for (let i = 0; i < compactedPalette.length; i++) {
             masks.push(SeparationEngine.generateLayerMask(colorIndices, i, proxyW, proxyH));
         }
 
         // 4. Update cached state (proxyBuffer unchanged)
         this.separationState = {
-            palette: posterizeResult.paletteLab,
-            rgbPalette: posterizeResult.paletteLab.map(c => LabEncoding.labToRgbD50(c)),
+            palette: compactedPalette,
+            rgbPalette: compactedPalette.map(c => LabEncoding.labToRgbD50(c)),
             colorIndices,
             masks,
             width: proxyW,
@@ -266,7 +282,7 @@ class ProxyEngine {
 
         // Update sourceMetadata.targetColors for the new archetype
         // (different archetypes may request different screen counts)
-        this.sourceMetadata.targetColors = config.targetColors || config.targetColorsSlider || 0;
+        this.sourceMetadata.targetColors = targetColors;
 
         // Track substrate mode for getSuggestedColors
         this._substrateMode = config.substrateMode || 'auto';
@@ -278,7 +294,7 @@ class ProxyEngine {
         // Caller (SessionState) follows up with updateProxy() to apply knobs.
         const previewBuffer = this._generatePreviewFromIndices(
             colorIndices,
-            posterizeResult.palette,
+            this.separationState.rgbPalette,
             proxyW,
             proxyH
         );
@@ -292,6 +308,51 @@ class ProxyEngine {
             metadata: this.separationState.metadata,
             elapsedMs: elapsed
         };
+    }
+
+    /**
+     * Compact over-budget posterization slots down to `targetColors + 2` (respecting
+     * `_minVolumeExempt` and sector rescue) and strip dead-on-arrival 0-pixel slots so
+     * `_baselineState.palette` never starts with zombie `0.0%` swatches.
+     */
+    _compactPosterizeToMaxColors(paletteLab, colorIndices, width, height, targetColors) {
+        const maxColors = targetColors > 0 ? targetColors + 2 : 0;
+        const pixelCount = width * height;
+        if (maxColors > 0 && paletteLab.length > maxColors) {
+            MechanicalKnobs.applyMinVolume(colorIndices, paletteLab, pixelCount, 0, { maxColors });
+        }
+
+        const counts = new Uint32Array(paletteLab.length);
+        for (let i = 0; i < pixelCount; i++) {
+            counts[colorIndices[i]]++;
+        }
+
+        let hasEmpty = false;
+        for (let c = 0; c < paletteLab.length; c++) {
+            if (counts[c] === 0) {
+                hasEmpty = true;
+                break;
+            }
+        }
+        if (!hasEmpty) {
+            return paletteLab;
+        }
+
+        const compacted = [];
+        const remap = new Uint8Array(paletteLab.length);
+        for (let c = 0; c < paletteLab.length; c++) {
+            if (counts[c] > 0) {
+                remap[c] = compacted.length;
+                compacted.push({ ...paletteLab[c] });
+            }
+        }
+        if (compacted.length === 0 && paletteLab.length > 0) {
+            return paletteLab;
+        }
+        for (let i = 0; i < pixelCount; i++) {
+            colorIndices[i] = remap[colorIndices[i]];
+        }
+        return compacted;
     }
 
     /**
@@ -336,7 +397,15 @@ class ProxyEngine {
         // every pixel to nearest color, causing cascade: swatches rearrange,
         // paper reassigns, coverage shifts, revert lands on wrong swatch.
         if ('paletteOverride' in paramChanges) {
-            this.separationState.palette = paramChanges.paletteOverride;
+            const basePal = this._baselineState && this._baselineState.palette;
+            this.separationState.palette = paramChanges.paletteOverride.map((lab, idx) => {
+                const base = basePal && basePal[idx];
+                return {
+                    ...lab,
+                    ...(base && base._userAdded ? { _userAdded: true } : {}),
+                    ...(base && base._minVolumeExempt ? { _minVolumeExempt: true } : {}),
+                };
+            });
             this.separationState.rgbPalette = paramChanges.paletteOverride.map(
                 lab => LabEncoding.labToRgbD50(lab)
             );
@@ -832,9 +901,7 @@ class ProxyEngine {
             if (onProgress) { onProgress(label, percent); await new Promise(r => setTimeout(r, 0)); }
         };
 
-        if (params.minVolume !== undefined) {
-            await this._applyMinVolume(params.minVolume);
-        }
+        await this._applyMinVolume(params.minVolume || 0);
 
         // ALWAYS rebuild masks before applying Speckle Rescue or Shadow Clamp.
         // We defer mask generation until now to avoid double-allocating arrays
@@ -845,7 +912,28 @@ class ProxyEngine {
         // Always run speckle rescue — when sliderPx=0 and meshSize is known,
         // MechanicalKnobs auto-computes the minimum printable dot from press physics.
         await _progress('Despeckling…', 91);
-        await this._applySpeckleRescue(params.speckleRescue || 0, params.meshSize || 0, params.imageDpi || 0, params.ruleOfN || 0);
+        await this._applySpeckleRescue(
+            params.speckleRescue || 0,
+            params.meshSize || 0,
+            params.imageDpi || 0,
+            params.ruleOfN || 0,
+            params.threadDiaUm || 0
+        );
+
+        // Enforce identical Rule of N + filament pruning floor as ProductionWorker._buildLayers
+        // when mesh physics is active (meshSize > 0), right after speckleRescue and before shadowClamp.
+        if (params.meshSize > 0) {
+            const { masks, colorIndices, width, height } = this.separationState;
+            const originalWidth = this.sourceMetadata && this.sourceMetadata.originalWidth;
+            await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+                meshTPI: params.meshSize,
+                threadDiaUm: params.threadDiaUm || 0,
+                imageDpi: params.imageDpi || 0,
+                originalWidth,
+                ruleOfN: params.ruleOfN || 0,
+            });
+        }
+
         if (params.shadowClamp !== undefined) {
             await _progress('Clamping shadows…', 95);
             await this._applyShadowClamp(params.shadowClamp);
@@ -860,9 +948,12 @@ class ProxyEngine {
         const { palette, colorIndices, width, height } = this.separationState;
         const pixelCount = width * height;
         const target = this.sourceMetadata?.targetColors || 0;
-        const maxColors = target > 0 ? target + 2 : 0;
+        const userAddedCount = palette.filter(c => c && c._userAdded).length;
+        const maxColors = target > 0 ? target + 2 + userAddedCount : 0;
 
-        MechanicalKnobs.applyMinVolume(colorIndices, palette, pixelCount, minVolumePercent, { maxColors });
+        if (minVolumePercent > 0 || maxColors > 0) {
+            MechanicalKnobs.applyMinVolume(colorIndices, palette, pixelCount, minVolumePercent || 0, { maxColors });
+        }
     }
 
     /**
@@ -870,12 +961,12 @@ class ProxyEngine {
      * Passes originalWidth for proxy-scale correction and mesh params for auto-compute.
      * @private
      */
-    async _applySpeckleRescue(sliderPx, meshTPI, imageDpi, ruleOfN = 0) {
+    async _applySpeckleRescue(sliderPx, meshTPI, imageDpi, ruleOfN = 0, threadDiaUm = 0) {
         const { masks, colorIndices, width, height } = this.separationState;
         const originalWidth = this.sourceMetadata && this.sourceMetadata.originalWidth;
 
         MechanicalKnobs.applySpeckleRescue(
-            masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI, imageDpi, ruleOfN
+            masks, colorIndices, width, height, sliderPx, originalWidth, meshTPI, imageDpi, ruleOfN, threadDiaUm
         );
     }
 

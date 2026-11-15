@@ -109,6 +109,7 @@ class SeparationEngine {
         const meshCount = options.meshCount || options.mesh || null;  // Accept both names
         const dpi = options.dpi || 300;
         const ruleOfN = options.ruleOfN || options.printFactor || null;
+        const threadDiaUm = options.threadDiaUm || 0;
         const distanceConfig = normalizeDistanceConfig(options);
 
         // Calculate LPI-aware scale factor (Rule of N, default N=7).
@@ -120,7 +121,7 @@ class SeparationEngine {
         // If no meshCount provided, scale = 1 (no clustering).
         let scale = 1;
         if (meshCount) {
-            scale = minDotPx(meshCount, dpi, ruleOfN);
+            scale = minDotPx(meshCount, dpi, ruleOfN, threadDiaUm);
         }
 
         // If no width/height or ditherType is 'none', use fast nearest-neighbor
@@ -1035,26 +1036,77 @@ class SeparationEngine {
 
         const dotRadius = minSpanPx / 2;
         const dotSqRadius = dotRadius * dotRadius;
+        const lineRadius = Math.max(0.5, minSpanPx / 4);
+        const lineSqRadius = lineRadius * lineRadius;
+        const minLineLength = minSpanPx * 2;
 
         // Max unsupported span: half of minLineLength (2x minSpanPx), i.e.
         // the same reach a line's own length test already implies — a point
-        // at most minSpanPx away (geodesically) from a supported anchor
-        // holds; beyond that it's pruned. Initial estimate, same as every
-        // other Rule-of-7 constant — needs empirical/print-test tuning.
+        // at most minSpanPx away (geodesically) from a supported anchor or
+        // self-supporting line-spine holds; beyond that it's pruned.
         const maxSpanPx = minSpanPx;
 
-        // Multi-source BFS seeded from every anchor pixel (sqDist >=
-        // dotSqRadius), propagating only through mask pixels. A pixel never
-        // reached (geoDist stays -1) belongs to a component with no anchor
-        // anywhere — left untouched, per the LINE-rule carve-out above.
+        // Multi-source BFS seeded from every pixel belonging to a valid
+        // self-supporting spine component in { mask[p] > 0 && sqDist[p] >= lineSqRadius },
+        // where a spine component is self-supporting iff it contains a dot-span
+        // pixel (sqDist >= dotSqRadius) OR its bounding-box diagonal >= minLineLength.
+        // This preserves continuous lineRadius-wide contours/outlines even when
+        // they attach to a dotSqRadius corner/serif/blob, while pruning 1px
+        // filaments (and tiny disconnected pimples at filament tips) beyond maxSpanPx.
+        // A pixel never reached (geoDist stays -1) belongs to an anchor-less hairline
+        // component — left untouched per the standalone contract.
         const geoDist = new Int32Array(pixelCount).fill(-1);
         const queue = new Uint32Array(pixelCount);
         let qHead = 0, qTail = 0;
 
+        const spineVisited = new Uint8Array(pixelCount);
+        const compStack = new Uint32Array(pixelCount);
+        const compMembers = new Uint32Array(pixelCount);
+
         for (let i = 0; i < pixelCount; i++) {
-            if (mask[i] > 0 && sqDist[i] >= dotSqRadius) {
-                geoDist[i] = 0;
-                queue[qTail++] = i;
+            if (mask[i] === 0 || spineVisited[i] === 1 || sqDist[i] < lineSqRadius) continue;
+
+            let stackPtr = 0;
+            let memberCount = 0;
+            let hasDot = false;
+            let minX = width, maxX = -1, minY = height, maxY = -1;
+
+            spineVisited[i] = 1;
+            compStack[stackPtr++] = i;
+
+            while (stackPtr > 0) {
+                const p = compStack[--stackPtr];
+                compMembers[memberCount++] = p;
+                if (sqDist[p] >= dotSqRadius) hasDot = true;
+
+                const x = p % width;
+                const y = (p - x) / width;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                        const np = ny * width + nx;
+                        if (mask[np] > 0 && spineVisited[np] === 0 && sqDist[np] >= lineSqRadius) {
+                            spineVisited[np] = 1;
+                            compStack[stackPtr++] = np;
+                        }
+                    }
+                }
+            }
+
+            if (hasDot || Math.hypot(maxX - minX, maxY - minY) >= minLineLength) {
+                for (let m = 0; m < memberCount; m++) {
+                    const p = compMembers[m];
+                    geoDist[p] = 0;
+                    queue[qTail++] = p;
+                }
             }
         }
 

@@ -41,6 +41,14 @@ if (fs.existsSync(logoSrc)) {
     console.log('✓ Copied electrosaur.png');
 }
 
+// Copy src/electrosaur-credits.png → dist/
+const creditsLogoSrc = path.join(srcDir, 'electrosaur-credits.png');
+const creditsLogoDst = path.join(distDir, 'electrosaur-credits.png');
+if (fs.existsSync(creditsLogoSrc)) {
+    fs.copyFileSync(creditsLogoSrc, creditsLogoDst);
+    console.log('✓ Copied electrosaur-credits.png');
+}
+
 // Copy src/hammer.jpg → dist/
 const hammerSrc = path.join(srcDir, 'hammer.jpg');
 const hammerDst = path.join(distDir, 'hammer.jpg');

@@ -169,6 +169,9 @@ async function processSingle(lab16bit, width, height, options = {}) {
     if (options.speckleRescue !== undefined) config.speckleRescue = options.speckleRescue;
     if (options.shadowClamp !== undefined) config.shadowClamp = options.shadowClamp;
     if (options.meshTpi !== undefined) config.meshSize = options.meshTpi;
+    if (options.threadDiaUm !== undefined) config.threadDiaUm = options.threadDiaUm;
+    else if (options.threadUm !== undefined) config.threadDiaUm = options.threadUm;
+    if (options.ruleOfN !== undefined) config.ruleOfN = options.ruleOfN;
     // Real document DPI, already resolved by the caller (--dpi flag > file
     // metadata > fallback+warning — see cli.js). extractMechanicalKnobs
     // below reads config.imageDpi; without this it always fell through to
@@ -207,13 +210,14 @@ async function processSingle(lab16bit, width, height, options = {}) {
     // (same canonical helper the Navigator uses) so dithering is always
     // mesh-aware, even when the caller never specified a mesh count.
     const meshKnobs = Reveal.ParameterGenerator.extractMechanicalKnobs(config);
-    progress('map', `Mapping ${width}x${height} full-res pixels to palette (mesh=${meshKnobs.meshSize} TPI @ ${meshKnobs.imageDpi} DPI)...`);
+    progress('map', `Mapping ${width}x${height} full-res pixels to palette (mesh=${meshKnobs.meshSize}-${meshKnobs.threadDiaUm} @ ${meshKnobs.imageDpi} DPI)...`);
     const SeparationEngine = Reveal.engines.SeparationEngine;
     let colorIndices = await SeparationEngine.mapPixelsToPaletteAsync(
         lab16bit, posterizeResult.paletteLab, null, width, height,
         {
             ditherType: config.ditherType, distanceMetric: config.distanceMetric,
-            meshCount: meshKnobs.meshSize, dpi: meshKnobs.imageDpi
+            meshCount: meshKnobs.meshSize, threadDiaUm: meshKnobs.threadDiaUm,
+            dpi: meshKnobs.imageDpi, ruleOfN: meshKnobs.ruleOfN
         }
     );
 
@@ -240,15 +244,24 @@ async function processSingle(lab16bit, width, height, options = {}) {
 
     if (config.speckleRescue !== undefined && config.speckleRescue > 0) {
         progress('knobs', `speckleRescue=${config.speckleRescue}px`);
-        MechanicalKnobs.applySpeckleRescue(masks, colorIndices, width, height, config.speckleRescue);
+        MechanicalKnobs.applySpeckleRescue(
+            masks, colorIndices, width, height,
+            config.speckleRescue, 0,
+            meshKnobs.meshSize, meshKnobs.imageDpi,
+            meshKnobs.ruleOfN, meshKnobs.threadDiaUm
+        );
     }
 
-    // Rule of 7 is a hard physical floor on the final output — always
-    // enforced, independent of the speckleRescue slider above.
-    progress('knobs', `mesh floor: ${meshKnobs.meshSize} TPI @ ${meshKnobs.imageDpi} DPI`);
-    await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
-        meshTPI: meshKnobs.meshSize, imageDpi: meshKnobs.imageDpi
-    });
+    // Rule of 7 is a hard physical floor on the final output when mesh > 0.
+    if (meshKnobs.meshSize > 0) {
+        progress('knobs', `mesh floor: ${meshKnobs.meshSize}-${meshKnobs.threadDiaUm} @ ${meshKnobs.imageDpi} DPI (N=${meshKnobs.ruleOfN})`);
+        await MechanicalKnobs.enforceMeshRuleOfSeven(masks, colorIndices, width, height, {
+            meshTPI: meshKnobs.meshSize,
+            threadDiaUm: meshKnobs.threadDiaUm,
+            imageDpi: meshKnobs.imageDpi,
+            ruleOfN: meshKnobs.ruleOfN
+        });
+    }
 
     // 9. Trapping
     const trapPx = options.trap || 0;

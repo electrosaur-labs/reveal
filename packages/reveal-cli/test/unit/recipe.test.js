@@ -187,13 +187,20 @@ describe('recipe', () => {
             expect(Object.keys(saved)).toEqual(['archetype']);
         });
 
-        it('saves meshTpi and dpi (pins the resolved values for repeatable runs)', () => {
+        it('saves meshTpi, threadUm, ruleOfN, and dpi (pins the resolved values for repeatable runs)', () => {
             const filePath = path.join(tmpDir, 'out.json');
-            saveRecipe(filePath, { archetype: 'chameleon', meshTpi: 355, dpi: 300 });
+            saveRecipe(filePath, { archetype: 'chameleon', meshTpi: 305, threadUm: 40, ruleOfN: 5.5, dpi: 300 });
 
             const saved = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-            expect(saved.meshTpi).toBe(355);
+            expect(saved.meshTpi).toBe(305);
+            expect(saved.threadUm).toBe(40);
+            expect(saved.ruleOfN).toBe(5.5);
             expect(saved.dpi).toBe(300);
+
+            const reloaded = loadRecipe(filePath);
+            expect(reloaded.meshTpi).toBe(305);
+            expect(reloaded.threadUm).toBe(40);
+            expect(reloaded.ruleOfN).toBe(5.5);
         });
     });
 

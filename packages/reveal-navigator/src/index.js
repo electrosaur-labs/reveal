@@ -234,17 +234,17 @@ function initPlugin() {
 
         // ─── Advanced Panel: Dropdowns & Checkboxes ───────────────
         // Wire all <select> dropdowns (change → updateParameter)
+        // Note: 'meshSize' is intentionally excluded here — MechanicalKnobs owns
+        // #picker-meshSize ('355-31' paired SAATI presets + #custom-mesh-row + #revert-meshSize).
         const PICKER_DEFS = [
             'engineType', 'splitMode', 'quantizer', 'distanceMetric', 'centroidStrategy', 'vibrancyMode',
-            'substrateMode', 'ditherType', 'colorMode', 'preprocessingIntensity',
-            'meshSize'
+            'substrateMode', 'ditherType', 'colorMode', 'preprocessingIntensity'
         ];
         for (const key of PICKER_DEFS) {
             const picker = document.getElementById(`picker-${key}`);
             if (picker) {
                 picker.addEventListener('change', (e) => {
-                    const val = key === 'meshSize' ? parseInt(e.target.value, 10) : e.target.value;
-                    sessionState.updateParameter(key, val);
+                    sessionState.updateParameter(key, e.target.value);
                 });
             }
             // Revert button
@@ -755,6 +755,14 @@ function validateDocument() {
         };
     }
 
+    if (info.hasSelection) {
+        return {
+            ok: false,
+            title: 'Active Selection',
+            message: 'Reveal operates on the entire document.\n\nDeselect via Select \u2192 Deselect (Cmd/Ctrl+D) before running Reveal.'
+        };
+    }
+
     return { ok: true, info };
 }
 
@@ -855,6 +863,17 @@ async function ingestActiveDocument(showDialog) {
                 showErrorDialog(validation.title, validation.message);
             }
             setStatus(validation.title);
+            _hideProgress();
+            currentDocId = null;
+            return;
+        }
+
+        if (await PhotoshopBridge.hasActiveSelectionAsync()) {
+            const selMsg = 'Reveal operates on the entire document.\n\nDeselect via Select \u2192 Deselect (Cmd/Ctrl+D) before running Reveal.';
+            if (showDialog) {
+                showErrorDialog('Active Selection', selMsg);
+            }
+            setStatus('Active Selection');
             _hideProgress();
             currentDocId = null;
             return;
@@ -1135,8 +1154,11 @@ function _hideProgress() {
 
 function _suggestedConfigFilename() {
     const info = PhotoshopBridge.getDocumentInfo();
-    const base = info && info.name ? info.name.replace(/\.[^.]+$/, '') : 'reveal';
-    return `${base}-config.json`;
+    if (info && info.name) {
+        const base = info.name.replace(/\.[^.]+$/, '');
+        return `${base}-reveal.json`;
+    }
+    return 'reveal.json';
 }
 
 async function handleSaveConfig() {
@@ -1372,8 +1394,11 @@ function _clearUI() {
     const btnTrapInspectReset = document.getElementById('btn-trap-inspect');
     if (btnTrapInspectReset) { btnTrapInspectReset.style.display = 'none'; btnTrapInspectReset.textContent = 'Show Traps'; btnTrapInspectReset.classList.remove('active'); }
 
-    // Reset all pickers to first option (prevents stale browser/UXP cache)
+    // Reset all pickers to first option (prevents stale browser/UXP cache),
+    // then restore #picker-meshSize to its canonical 355-31 default.
     document.querySelectorAll('#knobs-panel select, #advanced-panel select').forEach(sel => { sel.selectedIndex = 0; });
+    const meshPicker = document.getElementById('picker-meshSize');
+    if (meshPicker) meshPicker.value = '355-31';
     document.querySelectorAll('#knobs-panel input[type="checkbox"], #advanced-panel input[type="checkbox"]').forEach(chk => {
         chk.checked = chk.defaultChecked;
     });
@@ -1429,6 +1454,14 @@ async function showDialog() {
         if (!validation.ok) {
             dialogOpen = false;
             await app.showAlert(validation.title + '\n\n' + validation.message);
+            return;
+        }
+
+        if (await PhotoshopBridge.hasActiveSelectionAsync()) {
+            dialogOpen = false;
+            await app.showAlert(
+                'Active Selection\n\nReveal operates on the entire document.\n\nDeselect via Select \u2192 Deselect (Cmd/Ctrl+D) before running Reveal.'
+            );
             return;
         }
 

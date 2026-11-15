@@ -108,3 +108,54 @@ describe('ProductionWorker._buildLayers — trapping', () => {
         expect(maskAt(light.mask, 0, 5)).toBe(255);
     });
 });
+
+describe('ProductionWorker._buildLayers — targetColors ceiling & _userAdded parity', () => {
+    it('enforces maxColors = targetColors + 2 + userAddedCount when minVolume is 0 while protecting _userAdded entries', async () => {
+        const worker = makeWorker();
+        const width = 20, height = 10; // 200 pixels
+        // 6 natural colors + 1 _userAdded color = 7 total.
+        // With targetColors = 3 and userAddedCount = 1, maxColors = 3 + 2 + 1 = 6,
+        // so the weakest non-exempt natural color (index 5, 2 px) MUST be merged away,
+        // while the _userAdded color (index 6, 1 px) MUST survive untouched!
+        const labPalette = [
+            { L: 10, a: 0, b: 0 },
+            { L: 30, a: 0, b: 0 },
+            { L: 50, a: 0, b: 0 },
+            { L: 70, a: 0, b: 0 },
+            { L: 85, a: 0, b: 0 },
+            { L: 88, a: 0, b: 0 }, // weakest natural color (2 px) -> merged into index 4
+            { L: 55, a: 60, b: 40, _userAdded: true }, // only 1 px, but _userAdded -> protected!
+        ];
+        const hexColors = ['#111111', '#333333', '#666666', '#999999', '#CCCCCC', '#DDDDDD', '#FF3300'];
+        const ci = new Uint8Array(width * height);
+        // Assign large blocks to 0..4, 2 pixels to 5, and 1 pixel to 6
+        for (let i = 0; i < 40; i++) ci[i] = 0;
+        for (let i = 40; i < 80; i++) ci[i] = 1;
+        for (let i = 80; i < 120; i++) ci[i] = 2;
+        for (let i = 120; i < 160; i++) ci[i] = 3;
+        for (let i = 160; i < 197; i++) ci[i] = 4;
+        ci[197] = 5;
+        ci[198] = 5;
+        ci[199] = 6;
+
+        const layers = await worker._buildLayers(
+            ci, labPalette, hexColors, width, height,
+            {
+                minVolume: 0,
+                speckleRescue: 0,
+                shadowClamp: 0,
+                trapSize: 0,
+                meshSize: 0,
+                threadDiaUm: 0,
+                imageDpi: 300,
+                targetColors: 3,
+                activeArchetypeId: 'test',
+            }
+        );
+
+        // Total surviving layers = 6 (5 natural + 1 _userAdded); index 5 (#DDDDDD) was merged away
+        expect(layers).toHaveLength(6);
+        expect(layers.some(l => l.hex === '#DDDDDD')).toBe(false);
+        expect(layers.some(l => l.hex === '#FF3300')).toBe(true);
+    });
+});
